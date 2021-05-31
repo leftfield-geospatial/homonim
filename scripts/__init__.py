@@ -16,13 +16,6 @@
     You should have received a copy of the GNU Affero General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
-import pathlib
-import os
 import logging
-
-if '__file__' in globals():
-    root_path = pathlib.Path(__file__).absolute().parents[1]
-else:
-    root_path = pathlib.Path(os.getcwd())
 
 logging.basicConfig(format='%(levelname)s %(name)s: %(message)s')
