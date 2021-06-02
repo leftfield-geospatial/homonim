@@ -36,6 +36,28 @@ class Model(Enum):
     OFFSET_AND_IMAGE_GAIN = 5
     GAIN_ZERO_MEAN_OFFSET = 6
 
+def expand_window_to_grid(win):
+    """
+    Expands float window extents to be integers that include the original extents
+
+    Parameters
+    ----------
+    win : rasterio.windows.Window
+        the window to expand
+
+    Returns
+    -------
+    exp_win: rasterio.windows.Window
+        the expanded window
+    """
+    col_off, col_frac = np.divmod(win.col_off, 1)
+    row_off, row_frac = np.divmod(win.row_off, 1)
+    width = np.ceil(win.width + col_frac)
+    height = np.ceil(win.height + row_frac)
+    exp_win = rio.windows.Window(col_off, row_off, width, height)
+    return exp_win
+
+
 class HomonIm:
     def __init__(self, src_filename, ref_filename, win_size=[3, 3], model=Model.GAIN_ONLY):
         """
@@ -116,39 +138,49 @@ class HomonIm:
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
             with rio.open(self._src_filename, 'r') as src_im:
                 with rio.open(self._ref_filename, 'r') as ref_im:
-                    # find source image bounds in DEM CRS
-                    ref_roi_bounds = transform_bounds(src_im.crs, ref_im.crs, *src_im.bounds)
-                    ref_win = rio.windows.from_bounds(*ref_roi_bounds, transform=ref_im.transform).round_shape('ceil')
+                    # find source source bounds in ref CRS  (possibly same CRS)
+                    ref_src_bounds = transform_bounds(src_im.crs, ref_im.crs, *src_im.bounds)
 
-                    # read DEM in source image ROI and find minimum
+                    # find ref window that covers source and is aligned with ref grid
+                    ref_src_win = rio.windows.from_bounds(*ref_src_bounds, transform=ref_im.transform)
+                    ref_src_win = expand_window_to_grid(ref_src_win)
+
+                    # transform and bounds of ref_src_win in ref CRS
+                    ref_src_transform = rio.windows.transform(ref_src_win, ref_im.transform)
+                    ref_src_bounds = rio.windows.bounds(ref_src_win, ref_im.transform)
+
                     # TODO: consider reading in tiles for large ref ims
                     # TODO: work in a particular dtype, or transform to a particular dtype here/somewhere?
                     # TODO: how to deal with pixel alignment i.e. if ref_win is float below,
-                    # including resampling below with a non-NN option, does resample to the float window offsets
-                    # but should we not rather resample the source to the ref grid than sort of the other way around
-                    _ref_array = ref_im.read(range(1, src_im.count+1), window=ref_win, resampling=Resampling.bilinear)
+                    #   including resampling below with a non-NN option, does resample to the float window offsets
+                    #   but should we not rather resample the source to the ref grid than sort of the other way around
+
+                    ref_bands = range(1, src_im.count + 1)
+                    _ref_array = ref_im.read(ref_bands, window=ref_src_win).astype('float32')
 
                     if src_im.crs != ref_im.crs:    # re-project the reference image to source CRS
-                        # TODO: do we need to do this, maybe just reproject back and forth from source?
+                        # TODO: here we reproject from transform on the ref grid and that include source bounds
+                        #   we could just project into src_im transform though too.
                         logger.info('Reprojecting reference image to the source CRS. \n'
-                                    'To avoid this step, provide a reference and source images should be provided in the same CRS')
-                        ref_transform, width, height = calculate_default_transform(ref_im.crs, src_im.crs, ref_win.width,
-                                                                               ref_win.height, *ref_roi_bounds)
-                        ref_array = np.zeros((height, width, src_im.count), dtype=np.float32)
-                        # TODO: source aligned pixels
-                        # TODO: another thing to think of is that we ideally shouldn't reproject the reference unnecessarilt to avoid damaging radiometric info
-                        # this could mean we reproject the source to/from ref CRS rather than just resample it
-                        reproject(_ref_array, self.ref_array, src_transform=ref_im.transform, src_crs=ref_im.crs,
+                                    '\tTo avoid this step, provide a reference and source images should be provided in the same CRS')
+
+                        # transform and dimensions of reprojected ref ROI
+                        ref_transform, width, height = calculate_default_transform(ref_im.crs, src_im.crs, ref_src_win.width,
+                                                                               ref_src_win.height, *ref_src_bounds)
+                        ref_array = np.zeros((src_im.count, height, width), dtype=np.float32)
+                        # TODO: another thing to think of is that we ideally shouldn't reproject the reference unnecessarily to avoid damaging radiometric info
+                        #  this could mean we reproject the source to/from ref CRS rather than just resample it
+                        _, _ = reproject(_ref_array, ref_array, src_transform=ref_src_transform, src_crs=ref_im.crs,
                             dst_transform=ref_transform, dst_crs=src_im.crs, resampling=Resampling.bilinear,
-                                  num_threads='all_cpus')
+                                  num_threads=multiprocessing.cpu_count())
                     else:
-                        ref_array = _ref_array.astype('float32')
-                        # TODO: the transform is calc from a float ref_win, but the pixels are read from their actual non-float locations
-                        # we need to align source and ref
-                        ref_transform = rio.windows.transform(ref_win, ref_im.transform)
+                        ref_transform = ref_src_transform
+                        ref_array = _ref_array
+
                     ref_profile = ref_im.profile
                     ref_profile['transform'] = ref_transform
                     ref_profile['res'] = list(ref_im.res)    # TODO: find a better way of passing this
+                    ref_profile['bounds'] = ref_src_bounds
 
         return ref_array, ref_profile
 
@@ -164,32 +196,20 @@ class HomonIm:
         ref_array, ref_profile = self._read_ref()
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
             with rio.open(self._src_filename, 'r') as src_im:
-                # read and process the source image in blocks to save memory
-                # TODO: the height here needs to depend on the relative res of the ref and source images, as well as the win_size
-                # i.e. we should make sure we read the right number of source pixels to downsample ~exactly to the ref resolution
-                # and have enough ref pixels to do the sliding window.  This whole tiling thing is looking a bit tricky,
-                # we would need to overlap the windows read from the source image to deal with boundary pixels being dropped
-                # in ref space due to sliding window.
-                # Perhaps we start a ref class without the tiling, and then keep that to compare to.
-                # The option 2 upsampling method will also make this a bit easier I think.
-                # Also consider looping bands rather than tiles to save mem.
-                # calculate a transform for src_win that will align it with the ref grid
-
-                src_ds_transform, src_ds_width, src_ds_height = \
-                    calculate_default_transform(src_im.crs, ref_profile['crs'], src_im.width, src_im.height,
-                                                *src_im.bounds, resolution=ref_profile['res'])
-                # rio.warp.aligned_target(src_ds_transform, src_ds_width, src_ds_height, ref_profile['res'])
+                # process by band to limit memory usage
                 bands = list(range(1, src_im.count + 1))
                 for bi in bands:
                     src_array = src_im.read(bi).astype(np.float32)  # NB bands along first dim
 
-
                     # downsample the source window into the reference CRS and gid
-                    src_ds_array = np.zeros((src_im.count, src_ds_width, src_ds_height), dtype=np.float32)
-                    # TODO: resample rather than reproject
+                    src_ds_array = np.zeros((ref_profile['count'], ref_array.shape[1], ref_array.shape[2]), dtype=np.float32)
+                    # TODO: resample rather than reproject?
+                    # TODO: also think if there is a neater way we can do this, rather than having arrays and transforms in mem
+                    #   we have datasets / memory images ?
+
                     _, xform = reproject(src_array, destination=src_ds_array,
                                          src_transform=src_im.transform, src_crs=src_im.crs,
-                                         dst_transform=src_ds_transform, dst_crs=ref_profile['crs'],
+                                         dst_transform=ref_profile['transform'], dst_crs=ref_profile['crs'],
                                          resampling=Resampling.average, num_threads=multiprocessing.cpu_count())
 
 ##
