@@ -257,7 +257,8 @@ class HomonIm:
             with rio.open(self._src_filename, 'r') as src_im:
 
                 calib_profile = src_im.profile
-                calib_profile.update(num_threads=multiprocessing.cpu_count(), compress='deflate', interleave='band')
+                calib_profile.update(num_threads=multiprocessing.cpu_count(), compress='deflate', interleave='band',
+                                     nodata=0)
                 with rio.open(out_filename, 'w', **calib_profile) as calib_im:
 
                     # process by band to limit memory usage
@@ -274,7 +275,8 @@ class HomonIm:
                         _, xform = reproject(src_array, destination=src_ds_array,
                                              src_transform=src_im.transform, src_crs=src_im.crs,
                                              dst_transform=ref_profile['transform'], dst_crs=ref_profile['crs'],
-                                             resampling=Resampling.average, num_threads=multiprocessing.cpu_count())
+                                             resampling=Resampling.average, num_threads=multiprocessing.cpu_count(),
+                                             src_nodata=0, dst_nodata=0)
 
                         # find the calibration parameters for this band
                         param_ds_array = self._find_band_params_gain_only(ref_array[bi-1, :, :], src_ds_array)
@@ -284,7 +286,8 @@ class HomonIm:
                         _, xform = reproject(param_ds_array, destination=param_array,
                                              src_transform=ref_profile['transform'], src_crs=ref_profile['crs'],
                                              dst_transform=src_im.transform, dst_crs=src_im.crs,
-                                             resampling=Resampling.cubic_spline, num_threads=multiprocessing.cpu_count())
+                                             resampling=Resampling.cubic_spline, num_threads=multiprocessing.cpu_count(),
+                                             src_nodata=0, dst_nodata=0)
 
                         # apply the calibration and write
                         calib_src_array = param_array * src_array
