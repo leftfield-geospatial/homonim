@@ -17,6 +17,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 import numpy as np
+from numpy.lib.stride_tricks import sliding_window_view
 import rasterio as rio
 # from rasterio import transform
 from rasterio.warp import reproject, Resampling, transform_geom, transform_bounds, calculate_default_transform
@@ -77,6 +78,8 @@ class HomonIm:
         self._src_filename = pathlib.Path(src_filename)
         self._ref_filename = pathlib.Path(ref_filename)
         self._check_rasters()
+        if not np.all(np.mod(win_size, 2) == 1):
+            raise Exception('win_size must be odd in both dimensions')
         self.win_size = win_size
 
     def _check_rasters(self):
@@ -184,6 +187,62 @@ class HomonIm:
 
         return ref_array, ref_profile
 
+    def _sliding_window_view(self, x):
+        """
+        Return a 3D strided view of 2D array to allow fast sliding window operations.
+        Rolling windows are stacked along the third dimension.  No data copying is involved.
+
+        Parameters
+        ----------
+        x : numpy.array_like
+            array to return view of
+
+        Returns
+        -------
+        3D rolling window view of x
+        """
+        xstep = 1
+        shape = x.shape[:-1] + (self.win_size[0], int(1 + (x.shape[-1] - self.win_size[0]) / xstep))
+        strides = x.strides[:-1] + (x.strides[-1], xstep * x.strides[-1])
+        return np.lib.stride_tricks.as_strided(x, shape=shape, strides=strides, writeable=False)
+
+    def _find_band_params_gain_only(self, ref_array, src_array):
+        """
+        Find the sliding window calibration parameters for a band
+
+        Parameters
+        ----------
+        ref_array : numpy.array_like
+            a reference band in an MxN array
+        src_array : numpy.array_like
+            a source band, collocated with ref_array and of the same MxN shape
+
+        Returns
+        -------
+        param_array : numpy.array_like
+            an M x N x P array of calibration parameters, where P is the number of parameters that varies according to
+            the selected Model
+        """
+        ratio_array = np.zeros_like(src_array, dtype=np.float32)
+        _ = np.divide(ref_array, src_array, out=ratio_array, where=(src_array!=0))   # find ratios once
+        ratio_winview = sliding_window_view(ratio_array, self.win_size)  # apply the sliding window to the ratios
+
+        param_array = np.zeros_like(ref_array, dtype=np.float32)
+        win_offset = np.floor(np.array(self.win_size)/2).astype(np.int32)      # the window center
+        _ = np.mean(ratio_winview, out=param_array[win_offset[1]:-win_offset[1], win_offset[0]:-win_offset[0]],
+                    axis=(2, 3))        # find mean ratio over sliding windows
+
+        # TODO: what is the most efficient way to iterate over these view arrays? np.nditer?
+        #   or might we use a cython inner to speed things up?  See np.nditer docs
+        #   is the above mean over sliding win views faster than the nested loop below
+        # for win_i in np.ndindex(ratio_winview.shape[2]):
+        #     for win_j in np.ndindex(ratio_winview.shape[3]):
+        #         ratio_win = ratio_winview[:, :, win_i, win_j]
+        #         param_array[win_i + win_offset[1], win_j + win_offset[0]] = np.mean(ratio_win)  # gain only
+
+        return param_array
+
+
     def homogenise(self, out_filename):
         """
         Perform homogenisation
@@ -196,21 +255,40 @@ class HomonIm:
         ref_array, ref_profile = self._read_ref()
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
             with rio.open(self._src_filename, 'r') as src_im:
-                # process by band to limit memory usage
-                bands = list(range(1, src_im.count + 1))
-                for bi in bands:
-                    src_array = src_im.read(bi).astype(np.float32)  # NB bands along first dim
 
-                    # downsample the source window into the reference CRS and gid
-                    src_ds_array = np.zeros((ref_profile['count'], ref_array.shape[1], ref_array.shape[2]), dtype=np.float32)
-                    # TODO: resample rather than reproject?
-                    # TODO: also think if there is a neater way we can do this, rather than having arrays and transforms in mem
-                    #   we have datasets / memory images ?
+                calib_profile = src_im.profile
+                calib_profile.update(num_threads=multiprocessing.cpu_count(), compress='deflate', interleave='band')
+                with rio.open(out_filename, 'w', **calib_profile) as calib_im:
 
-                    _, xform = reproject(src_array, destination=src_ds_array,
-                                         src_transform=src_im.transform, src_crs=src_im.crs,
-                                         dst_transform=ref_profile['transform'], dst_crs=ref_profile['crs'],
-                                         resampling=Resampling.average, num_threads=multiprocessing.cpu_count())
+                    # process by band to limit memory usage
+                    bands = list(range(1, src_im.count + 1))
+                    for bi in bands:
+                        src_array = src_im.read(bi)  # NB bands along first dim
+
+                        # downsample the source window into the reference CRS and gid
+                        src_ds_array = np.zeros((ref_array.shape[1], ref_array.shape[2]), dtype=np.float32)
+                        # TODO: resample rather than reproject?
+                        # TODO: also think if there is a neater way we can do this, rather than having arrays and transforms in mem
+                        #   we have datasets / memory images ?
+
+                        _, xform = reproject(src_array, destination=src_ds_array,
+                                             src_transform=src_im.transform, src_crs=src_im.crs,
+                                             dst_transform=ref_profile['transform'], dst_crs=ref_profile['crs'],
+                                             resampling=Resampling.average, num_threads=multiprocessing.cpu_count())
+
+                        # find the calibration parameters for this band
+                        param_ds_array = self._find_band_params_gain_only(ref_array[bi-1, :, :], src_ds_array)
+
+                        # upsample the parameter array
+                        param_array = np.zeros_like(src_array, dtype=np.float32)
+                        _, xform = reproject(param_ds_array, destination=param_array,
+                                             src_transform=ref_profile['transform'], src_crs=ref_profile['crs'],
+                                             dst_transform=src_im.transform, dst_crs=src_im.crs,
+                                             resampling=Resampling.cubic_spline, num_threads=multiprocessing.cpu_count())
+
+                        # apply the calibration and write
+                        calib_src_array = param_array * src_array
+                        calib_im.write(calib_src_array.astype(calib_im.dtypes[bi-1]), indexes=bi)
 
 ##
 

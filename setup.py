@@ -32,7 +32,7 @@ setup(
     packages=find_packages(),
     python_requires='>=3.8',
     install_requires=[
-        'numpy>=1.19',
+        'numpy>=1.2',
         'rasterio>=1.1',
     ],
 )
