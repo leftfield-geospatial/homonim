@@ -21,9 +21,10 @@ from numpy.lib.stride_tricks import sliding_window_view
 import rasterio as rio
 # from rasterio import transform
 from rasterio.warp import reproject, Resampling, transform_geom, transform_bounds, calculate_default_transform
+from rasterio.features import dataset_features
 from enum import Enum
 import pathlib
-from shapely.geometry import box
+from shapely.geometry import box, shape
 from homonim import get_logger
 import multiprocessing
 
@@ -59,10 +60,10 @@ def expand_window_to_grid(win):
     return exp_win
 
 
-class HomonIm:
+class HomonImBase:
     def __init__(self, src_filename, ref_filename, win_size=[3, 3], model=Model.GAIN_ONLY):
         """
-        Class for homogenising images
+        Class for homogenising images, model found in reference space as per original method
 
         Parameters
         ----------
@@ -71,7 +72,7 @@ class HomonIm:
         ref_filename: str
             Reference image filename
         win_size: numpy.array_like
-            (optional) Window size [width, height] in reference image pixels
+            (optional) Window size [height, width] in reference image pixels
         model : Model
             (optional) Model type
         """
@@ -114,7 +115,7 @@ class HomonIm:
 
                     # reproject the reference bounds if necessary
                     if src_im.crs != ref_im.crs:    # CRS's don't match
-                        ref_box = transform_geom(ref_im.crs, src_im.crs, ref_box)
+                        ref_box = shape(transform_geom(ref_im.crs, src_im.crs, ref_box))
 
                     if not ref_box.covers(src_box):
                         raise Exception(f'Reference image {self._ref_filename.stem} does not cover source image '
@@ -164,8 +165,8 @@ class HomonIm:
                     if src_im.crs != ref_im.crs:    # re-project the reference image to source CRS
                         # TODO: here we reproject from transform on the ref grid and that include source bounds
                         #   we could just project into src_im transform though too.
-                        logger.info('Reprojecting reference image to the source CRS. \n'
-                                    '\tTo avoid this step, provide a reference and source images should be provided in the same CRS')
+                        logger.warning('Reprojecting reference image to the source CRS. '
+                                       'To avoid this step, provide reference and source images in the same CRS')
 
                         # transform and dimensions of reprojected ref ROI
                         ref_transform, width, height = calculate_default_transform(ref_im.crs, src_im.crs, ref_src_win.width,
@@ -206,7 +207,141 @@ class HomonIm:
         strides = x.strides[:-1] + (x.strides[-1], xstep * x.strides[-1])
         return np.lib.stride_tricks.as_strided(x, shape=shape, strides=strides, writeable=False)
 
-    def _find_band_params_gain_only(self, ref_array, src_array):
+    def _find_gains(self, ref_array, src_array, win_size=[3,3], param_nodata=np.nan):
+        """
+        Find sliding window gains for a band
+
+        Parameters
+        ----------
+        ref_array : numpy.array_like
+            a reference band in an MxN array
+        src_array : numpy.array_like
+            a source band, collocated with ref_array and of the same MxN shape, and with nodata==0
+        win_size : numpy.array_like
+            sliding window [width, height] in pixels
+
+        Returns
+        -------
+        param_array : numpy.array_like
+            an M x N array of gains
+        """
+
+        # find ratios avoiding divide by nodata=0
+        src_nodata = 0
+        src_mask = (src_array != src_nodata).astype(np.int32)
+        ratio_array = np.zeros_like(src_array, dtype=np.float32)
+        _ = np.divide(ref_array, src_array, out=ratio_array, where=src_mask.astype('bool', copy=False))
+
+        # find the integral arrays for ratios and mask (prepend a row and column of zeros)
+        int_ratio_array = np.zeros(np.array(ratio_array.shape)+1, dtype=np.float32)
+        int_ratio_array[1:, 1:] = ratio_array
+        int_mask_array = np.zeros(np.array(ratio_array.shape)+1, dtype=np.int32)
+        int_mask_array[1:, 1:] = src_mask
+        for i in range(2):
+            int_ratio_array = int_ratio_array.cumsum(axis=i)
+            int_mask_array = int_mask_array.cumsum(axis=i)
+
+        # initialise the sliding window operation
+        win_offset = np.floor(np.array(win_size)/2).astype(np.int32)      # the window center
+        param_array = np.empty_like(ref_array, dtype=np.float32)
+        param_array[:] = param_nodata
+
+        # TODO: implement this in cython
+        # find sliding window gains using integral arrays
+        for i in range(0, int_ratio_array.shape[0] - win_size[0]):
+            i_bottom = i + win_size[0]
+            for j in range(0, int_ratio_array.shape[1] - win_size[1]):
+                j_right = j + win_size[1]
+                sum_ratio = int_ratio_array[i_bottom, j_right] - int_ratio_array[i, j_right] \
+                            - int_ratio_array[i_bottom, j] + int_ratio_array[i, j]
+                sum_mask = int_mask_array[i_bottom, j_right] - int_mask_array[i, j_right] \
+                            - int_mask_array[i_bottom, j] + int_mask_array[i, j]
+                param_array[i + win_offset[0], j + win_offset[1]] = sum_ratio/sum_mask
+
+        # param_array[np.isnan(src_array)] = param_nodata
+        return param_array
+
+    def homogenise(self, out_filename):
+        raise NotImplementedError()
+
+    def build_ortho_overviews(self, out_filename):
+        """
+        Builds internal overviews for an existing image
+        """
+        if out_filename.exists():
+            with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
+                with rio.open(out_filename, 'r+', num_threads='all_cpus') as homo_im:
+                    homo_im.build_overviews([2, 4, 8, 16, 32], Resampling.average)
+
+
+class HomonimRefSpace(HomonImBase):
+
+    def homogenise(self, out_filename):
+        """
+        Perform homogenisation
+
+        Parameters
+        ----------
+        out_filename : str
+            name of the file to save the homogenised image to
+        """
+        ref_array, ref_profile = self._read_ref()
+        with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
+            with rio.open(self._src_filename, 'r') as src_im:
+                # src_mask = src_im.dataset_mask()
+                # src_mask_poly = [poly for poly in dataset_features(src_im, sampling=10, band=False, as_mask=True,
+                #                                    with_nodata=False, geographic=False, precision=1)]
+                # src_ds_mask = np.zeros((ref_array.shape[1], ref_array.shape[2]), dtype=np.uint8)
+                #
+                # _, xform = reproject(src_mask, destination=src_ds_mask,
+                #                      src_transform=src_im.transform, src_crs=src_im.crs,
+                #                      dst_transform=ref_profile['transform'], dst_crs=ref_profile['crs'],
+                #                      resampling=Resampling.average, num_threads=multiprocessing.cpu_count())
+
+                calib_profile = src_im.profile
+                calib_profile.update(num_threads=multiprocessing.cpu_count(), compress='deflate', interleave='band',
+                                     nodata=0)
+                with rio.open(out_filename, 'w', **calib_profile) as calib_im:
+
+                    # process by band to limit memory usage
+                    bands = list(range(1, src_im.count + 1))
+                    for bi in bands:
+                        src_array = src_im.read(bi)  # NB bands along first dim
+
+                        # downsample the source window into the reference CRS and gid
+                        # specify nodata so that these pixels are excluded from calculations
+                        src_ds_array = np.zeros((ref_array.shape[1], ref_array.shape[2]), dtype=np.float32)
+                        # TODO: resample rather than reproject?
+                        # TODO: also think if there is a neater way we can do this, rather than having arrays and transforms in mem
+                        #   we have datasets / memory images ?
+
+                        _, xform = reproject(src_array, destination=src_ds_array,
+                                             src_transform=src_im.transform, src_crs=src_im.crs,
+                                             dst_transform=ref_profile['transform'], dst_crs=ref_profile['crs'],
+                                             resampling=Resampling.average, num_threads=multiprocessing.cpu_count(),
+                                             src_nodata=src_im.profile['nodata'], dst_nodata=0)
+
+                        # find the calibration parameters for this band
+                        param_ds_array = self._find_gains(ref_array[bi-1, :, :], src_ds_array,
+                                                                          win_size=self.win_size)
+
+                        # upsample the parameter array
+                        param_array = np.zeros_like(src_array, dtype=np.float32)
+                        _, xform = reproject(param_ds_array, destination=param_array,
+                                             src_transform=ref_profile['transform'], src_crs=ref_profile['crs'],
+                                             dst_transform=src_im.transform, dst_crs=src_im.crs,
+                                             resampling=Resampling.cubic_spline, num_threads=multiprocessing.cpu_count(),
+                                             src_nodata=np.nan, dst_nodata=0)
+
+                        # apply the calibration and write
+                        calib_src_array = param_array * src_array
+                        calib_im.write(calib_src_array.astype(calib_im.dtypes[bi-1]), indexes=bi)
+
+##
+
+class HomonimSrcSpace(HomonImBase):
+
+    def __find_band_params_gain_only(self, ref_array, src_array):
         """
         Find the sliding window calibration parameters for a band
 
@@ -224,13 +359,15 @@ class HomonIm:
             the selected Model
         """
         ratio_array = np.zeros_like(src_array, dtype=np.float32)
-        _ = np.divide(ref_array, src_array, out=ratio_array, where=(src_array!=0))   # find ratios once
+        _ = np.divide(ref_array, src_array, out=ratio_array)  # find ratios once
         ratio_winview = sliding_window_view(ratio_array, self.win_size)  # apply the sliding window to the ratios
 
-        param_array = np.zeros_like(ref_array, dtype=np.float32)
-        win_offset = np.floor(np.array(self.win_size)/2).astype(np.int32)      # the window center
-        _ = np.mean(ratio_winview, out=param_array[win_offset[1]:-win_offset[1], win_offset[0]:-win_offset[0]],
-                    axis=(2, 3))        # find mean ratio over sliding windows
+        param_array = np.empty_like(ref_array, dtype=np.float32)
+        param_array[:] = np.nan
+        win_offset = np.floor(np.array(self.win_size) / 2).astype(np.int32)  # the window center
+        # TODO: how to do nodata masking with numpy.ma and masked arrays, nans, or what?
+        _ = np.nanmean(ratio_winview, out=param_array[win_offset[0]:-win_offset[0], win_offset[1]:-win_offset[1]],
+                       axis=(2, 3))  # find mean ratio over sliding windows
 
         # TODO: what is the most efficient way to iterate over these view arrays? np.nditer?
         #   or might we use a cython inner to speed things up?  See np.nditer docs
@@ -238,10 +375,9 @@ class HomonIm:
         # for win_i in np.ndindex(ratio_winview.shape[2]):
         #     for win_j in np.ndindex(ratio_winview.shape[3]):
         #         ratio_win = ratio_winview[:, :, win_i, win_j]
-        #         param_array[win_i + win_offset[1], win_j + win_offset[0]] = np.mean(ratio_win)  # gain only
-
+        #         param_array[win_i + win_offset[0], win_j + win_offset[1]] = np.mean(ratio_win)  # gain only
+        param_array[np.isnan(src_array)] = np.nan
         return param_array
-
 
     def homogenise(self, out_filename):
         """
@@ -255,43 +391,43 @@ class HomonIm:
         ref_array, ref_profile = self._read_ref()
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
             with rio.open(self._src_filename, 'r') as src_im:
+                src_mask = src_im.dataset_mask()
+                # src_mask_poly = [poly for poly in dataset_features(src_im, sampling=10, band=False, as_mask=True,
+                #                                    with_nodata=False, geographic=False, precision=1)]
+                # src_ds_mask = np.zeros((ref_array.shape[1], ref_array.shape[2]), dtype=np.uint8)
+                #
+                # _, xform = reproject(src_mask, destination=src_ds_mask,
+                #                      src_transform=src_im.transform, src_crs=src_im.crs,
+                #                      dst_transform=ref_profile['transform'], dst_crs=ref_profile['crs'],
+                #                      resampling=Resampling.average, num_threads=multiprocessing.cpu_count())
 
                 calib_profile = src_im.profile
                 calib_profile.update(num_threads=multiprocessing.cpu_count(), compress='deflate', interleave='band',
                                      nodata=0)
                 with rio.open(out_filename, 'w', **calib_profile) as calib_im:
-
                     # process by band to limit memory usage
                     bands = list(range(1, src_im.count + 1))
                     for bi in bands:
-                        src_array = src_im.read(bi)  # NB bands along first dim
+                        src_array = src_im.read(bi, out_dtype=np.float32)  # NB bands along first dim
 
-                        # downsample the source window into the reference CRS and gid
-                        src_ds_array = np.zeros((ref_array.shape[1], ref_array.shape[2]), dtype=np.float32)
-                        # TODO: resample rather than reproject?
-                        # TODO: also think if there is a neater way we can do this, rather than having arrays and transforms in mem
-                        #   we have datasets / memory images ?
-
-                        _, xform = reproject(src_array, destination=src_ds_array,
-                                             src_transform=src_im.transform, src_crs=src_im.crs,
-                                             dst_transform=ref_profile['transform'], dst_crs=ref_profile['crs'],
-                                             resampling=Resampling.average, num_threads=multiprocessing.cpu_count(),
-                                             src_nodata=0, dst_nodata=0)
-
-                        # find the calibration parameters for this band
-                        param_ds_array = self._find_band_params_gain_only(ref_array[bi-1, :, :], src_ds_array)
-
-                        # upsample the parameter array
-                        param_array = np.zeros_like(src_array, dtype=np.float32)
-                        _, xform = reproject(param_ds_array, destination=param_array,
+                        # upsample ref to source CRS and grid
+                        ref_src_array = np.zeros_like(src_array, dtype=np.float32)
+                        _, xform = reproject(ref_array[bi-1, :, :], destination=ref_src_array,
                                              src_transform=ref_profile['transform'], src_crs=ref_profile['crs'],
                                              dst_transform=src_im.transform, dst_crs=src_im.crs,
-                                             resampling=Resampling.cubic_spline, num_threads=multiprocessing.cpu_count(),
-                                             src_nodata=0, dst_nodata=0)
+                                             resampling=Resampling.cubic_spline,
+                                             num_threads=multiprocessing.cpu_count(),
+                                             src_nodata=ref_profile['nodata'], dst_nodata=np.nan)
+
+                        # find the calibration parameters for this band
+                        win_size = self.win_size * np.round(np.array(ref_profile['res'])/np.array(src_im.res)).astype(int)
+                        src_array[np.logical_not(src_mask)] = np.nan    # TODO get rid of this step
+                        # TODO parallelise this, use opencv and or gpu, and or use integral image!
+                        param_array = self._find_band_params_gain_only(ref_src_array, src_array, win_size=win_size)
 
                         # apply the calibration and write
                         calib_src_array = param_array * src_array
-                        calib_im.write(calib_src_array.astype(calib_im.dtypes[bi-1]), indexes=bi)
+                        calib_im.write(calib_src_array.astype(calib_im.dtypes[bi - 1]), indexes=bi)
 
 ##
 
