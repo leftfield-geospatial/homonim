@@ -291,7 +291,7 @@ class HomonImBase:
         # sum the ratio and mask over sliding windows (uses DFT for large kernels)
         kernel = np.ones(win_size, dtype=np.float32)
         ratio_winsums = cv.filter2D(ratio_array, -1, kernel, borderType=cv.BORDER_CONSTANT)
-        mask_winsums = cv.filter2D(src_mask, -1, kernel, borderType=cv.BORDER_CONSTANT)
+        mask_winsums = cv.filter2D(src_mask.astype('uint8', copy=False), cv.CV_32F, kernel, borderType=cv.BORDER_CONSTANT)
 
         # calculate gains, ignoring invalid pixels
         param_array = np.zeros_like(src_array, dtype=np.float32)
