@@ -27,6 +27,7 @@ import pathlib
 from shapely.geometry import box, shape
 from homonim import get_logger
 import multiprocessing
+import cv2 as cv
 
 logger = get_logger(__name__)
 
@@ -207,9 +208,9 @@ class HomonImBase:
         strides = x.strides[:-1] + (x.strides[-1], xstep * x.strides[-1])
         return np.lib.stride_tricks.as_strided(x, shape=shape, strides=strides, writeable=False)
 
-    def _find_gains(self, ref_array, src_array, win_size=[3,3], param_nodata=np.nan):
+    def _find_gains_int_arr(self, ref_array, src_array, win_size=[3,3], param_nodata=np.nan):
         """
-        Find sliding window gains for a band
+        Find sliding window gains for a band using integral arrays
 
         Parameters
         ----------
@@ -247,6 +248,7 @@ class HomonImBase:
         param_array[:] = param_nodata
 
         # TODO: implement this in cython
+        # TODO: compare speed to a similar algorithm with cv.filter2d (i.e. filter2d on mask and ratio)
         # find sliding window gains using integral arrays
         for i in range(0, int_ratio_array.shape[0] - win_size[0]):
             i_bottom = i + win_size[0]
@@ -257,6 +259,44 @@ class HomonImBase:
                 sum_mask = int_mask_array[i_bottom, j_right] - int_mask_array[i, j_right] \
                             - int_mask_array[i_bottom, j] + int_mask_array[i, j]
                 param_array[i + win_offset[0], j + win_offset[1]] = sum_ratio/sum_mask
+
+        # param_array[np.isnan(src_array)] = param_nodata
+        return param_array
+
+    def _find_gains_cv(self, ref_array, src_array, win_size=[3,3], param_nodata=np.nan):
+        """
+        Find sliding window gains for a band using opencv filter2D
+
+        Parameters
+        ----------
+        ref_array : numpy.array_like
+            a reference band in an MxN array
+        src_array : numpy.array_like
+            a source band, collocated with ref_array and of the same MxN shape, and with nodata==0
+        win_size : numpy.array_like
+            sliding window [width, height] in pixels
+
+        Returns
+        -------
+        param_array : numpy.array_like
+            an M x N array of gains
+        """
+
+        # find ratios avoiding divide by nodata=0
+        src_nodata = 0
+        src_mask = (src_array != src_nodata).astype(np.int32)
+        ratio_array = np.zeros_like(src_array, dtype=np.float32)
+        _ = np.divide(ref_array, src_array, out=ratio_array, where=src_mask.astype('bool', copy=False))
+
+        # sum the ratio and mask over sliding windows (uses DFT for large kernels)
+        kernel = np.ones(win_size, dtype=np.float32)
+        ratio_winsums = cv.filter2D(ratio_array, -1, kernel, borderType=cv.BORDER_CONSTANT)
+        mask_winsums = cv.filter2D(src_mask, -1, kernel, borderType=cv.BORDER_CONSTANT)
+
+        # calculate gains, ignoring invalid pixels
+        param_array = np.zeros_like(src_array, dtype=np.float32)
+        _ = np.divide(ratio_winsums, mask_winsums, out=param_array, where=src_mask.astype('bool', copy=False))
+        # cv.divide(ratio_winsums, mask_winsums, dst=param_array, dtype=np.float32)
 
         # param_array[np.isnan(src_array)] = param_nodata
         return param_array
@@ -322,7 +362,7 @@ class HomonimRefSpace(HomonImBase):
                                              src_nodata=src_im.profile['nodata'], dst_nodata=0)
 
                         # find the calibration parameters for this band
-                        param_ds_array = self._find_gains(ref_array[bi-1, :, :], src_ds_array,
+                        param_ds_array = self._find_gains_cv(ref_array[bi-1, :, :], src_ds_array,
                                                                           win_size=self.win_size)
 
                         # upsample the parameter array
@@ -417,13 +457,13 @@ class HomonimSrcSpace(HomonImBase):
                                              dst_transform=src_im.transform, dst_crs=src_im.crs,
                                              resampling=Resampling.cubic_spline,
                                              num_threads=multiprocessing.cpu_count(),
-                                             src_nodata=ref_profile['nodata'], dst_nodata=np.nan)
+                                             src_nodata=ref_profile['nodata'], dst_nodata=0)
 
                         # find the calibration parameters for this band
                         win_size = self.win_size * np.round(np.array(ref_profile['res'])/np.array(src_im.res)).astype(int)
-                        src_array[np.logical_not(src_mask)] = np.nan    # TODO get rid of this step
+                        # src_array[np.logical_not(src_mask)] = np.nan    # TODO get rid of this step
                         # TODO parallelise this, use opencv and or gpu, and or use integral image!
-                        param_array = self._find_band_params_gain_only(ref_src_array, src_array, win_size=win_size)
+                        param_array = self._find_gains_cv(ref_src_array, src_array, win_size=win_size)
 
                         # apply the calibration and write
                         calib_src_array = param_array * src_array
