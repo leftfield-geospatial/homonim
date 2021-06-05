@@ -371,7 +371,7 @@ class HomonimRefSpace(HomonImBase):
                                              src_transform=ref_profile['transform'], src_crs=ref_profile['crs'],
                                              dst_transform=src_im.transform, dst_crs=src_im.crs,
                                              resampling=Resampling.cubic_spline, num_threads=multiprocessing.cpu_count(),
-                                             src_nodata=np.nan, dst_nodata=0)
+                                             src_nodata=0, dst_nodata=0)
 
                         # apply the calibration and write
                         calib_src_array = param_array * src_array
