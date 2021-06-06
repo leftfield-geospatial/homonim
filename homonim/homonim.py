@@ -301,6 +301,44 @@ class HomonImBase:
         # param_array[np.isnan(src_array)] = param_nodata
         return param_array
 
+    def __find_gains_winview(self, ref_array, src_array):
+        """
+        Find the sliding window calibration parameters for a band
+
+        Parameters
+        ----------
+        ref_array : numpy.array_like
+            a reference band in an MxN array
+        src_array : numpy.array_like
+            a source band, collocated with ref_array and of the same MxN shape
+
+        Returns
+        -------
+        param_array : numpy.array_like
+            an M x N  array of gains with nodata = nan
+        """
+        ratio_array = np.zeros_like(src_array, dtype=np.float32)
+        _ = np.divide(ref_array, src_array, out=ratio_array)  # find ratios once
+        ratio_winview = sliding_window_view(ratio_array, self.win_size)  # apply the sliding window to the ratios
+
+        param_array = np.empty_like(ref_array, dtype=np.float32)
+        param_array[:] = np.nan
+        win_offset = np.floor(np.array(self.win_size) / 2).astype(np.int32)  # the window center
+        # TODO: how to do nodata masking with numpy.ma and masked arrays, nans, or what?
+        _ = np.nanmean(ratio_winview, out=param_array[win_offset[0]:-win_offset[0], win_offset[1]:-win_offset[1]],
+                       axis=(2, 3))  # find mean ratio over sliding windows
+
+        # TODO: what is the most efficient way to iterate over these view arrays? np.nditer?
+        #   or might we use a cython inner to speed things up?  See np.nditer docs
+        #   is the above mean over sliding win views faster than the nested loop below
+        # for win_i in np.ndindex(ratio_winview.shape[2]):
+        #     for win_j in np.ndindex(ratio_winview.shape[3]):
+        #         ratio_win = ratio_winview[:, :, win_i, win_j]
+        #         param_array[win_i + win_offset[0], win_j + win_offset[1]] = np.mean(ratio_win)  # gain only
+        param_array[np.isnan(src_array)] = np.nan
+        return param_array
+
+
     def homogenise(self, out_filename):
         raise NotImplementedError()
 
@@ -381,43 +419,6 @@ class HomonimRefSpace(HomonImBase):
 
 class HomonimSrcSpace(HomonImBase):
 
-    def __find_band_params_gain_only(self, ref_array, src_array):
-        """
-        Find the sliding window calibration parameters for a band
-
-        Parameters
-        ----------
-        ref_array : numpy.array_like
-            a reference band in an MxN array
-        src_array : numpy.array_like
-            a source band, collocated with ref_array and of the same MxN shape
-
-        Returns
-        -------
-        param_array : numpy.array_like
-            an M x N x P array of calibration parameters, where P is the number of parameters that varies according to
-            the selected Model
-        """
-        ratio_array = np.zeros_like(src_array, dtype=np.float32)
-        _ = np.divide(ref_array, src_array, out=ratio_array)  # find ratios once
-        ratio_winview = sliding_window_view(ratio_array, self.win_size)  # apply the sliding window to the ratios
-
-        param_array = np.empty_like(ref_array, dtype=np.float32)
-        param_array[:] = np.nan
-        win_offset = np.floor(np.array(self.win_size) / 2).astype(np.int32)  # the window center
-        # TODO: how to do nodata masking with numpy.ma and masked arrays, nans, or what?
-        _ = np.nanmean(ratio_winview, out=param_array[win_offset[0]:-win_offset[0], win_offset[1]:-win_offset[1]],
-                       axis=(2, 3))  # find mean ratio over sliding windows
-
-        # TODO: what is the most efficient way to iterate over these view arrays? np.nditer?
-        #   or might we use a cython inner to speed things up?  See np.nditer docs
-        #   is the above mean over sliding win views faster than the nested loop below
-        # for win_i in np.ndindex(ratio_winview.shape[2]):
-        #     for win_j in np.ndindex(ratio_winview.shape[3]):
-        #         ratio_win = ratio_winview[:, :, win_i, win_j]
-        #         param_array[win_i + win_offset[0], win_j + win_offset[1]] = np.mean(ratio_win)  # gain only
-        param_array[np.isnan(src_array)] = np.nan
-        return param_array
 
     def homogenise(self, out_filename):
         """
