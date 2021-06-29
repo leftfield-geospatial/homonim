@@ -123,14 +123,14 @@ def main(args):
                 try:
                     # set homogenised filename
                     if args.homo_dir is not None:
-                        homo_filename = pathlib.Path(args.homo_dir).joinpath(src_filename.stem + '_HOMO_SRC_w33.tif')
+                        homo_filename = pathlib.Path(args.homo_dir).joinpath(src_filename.stem + '_HOMO_REF_w11.tif')
                     else:
-                        homo_filename = src_filename.parent.joinpath(src_filename.stem + '_HOMO_SRC_w33.tif')
+                        homo_filename = src_filename.parent.joinpath(src_filename.stem + '_HOMO_REF_w11.tif')
 
                     # create OrthoIm  and orthorectify
                     logger.info(f'Homogenising {src_filename.name}')
                     start_ttl = datetime.datetime.now()
-                    him = homonim.HomonimSrcSpace(src_filename, args.ref_file, win_size=args.win_size)
+                    him = homonim.HomonimRefSpace(src_filename, args.ref_file, win_size=args.win_size)
                     him.homogenise(homo_filename)
 
                     ttl_time = (datetime.datetime.now() - start_ttl)

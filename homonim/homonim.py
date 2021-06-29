@@ -301,7 +301,7 @@ class HomonImBase:
         # param_array[np.isnan(src_array)] = param_nodata
         return param_array
 
-    def __find_gains_winview(self, ref_array, src_array):
+    def __find_gains_winview(self, ref_array, src_array, win_size=[3,3]):
         """
         Find the sliding window calibration parameters for a band
 
@@ -311,6 +311,8 @@ class HomonImBase:
             a reference band in an MxN array
         src_array : numpy.array_like
             a source band, collocated with ref_array and of the same MxN shape
+        win_size : numpy.array_like
+            sliding window [width, height] in pixels
 
         Returns
         -------
@@ -319,16 +321,16 @@ class HomonImBase:
         """
         ratio_array = np.zeros_like(src_array, dtype=np.float32)
         _ = np.divide(ref_array, src_array, out=ratio_array)  # find ratios once
-        ratio_winview = sliding_window_view(ratio_array, self.win_size)  # apply the sliding window to the ratios
+        ratio_winview = sliding_window_view(ratio_array, win_size)  # apply the sliding window to the ratios
 
         param_array = np.empty_like(ref_array, dtype=np.float32)
         param_array[:] = np.nan
-        win_offset = np.floor(np.array(self.win_size) / 2).astype(np.int32)  # the window center
-        # TODO: how to do nodata masking with numpy.ma and masked arrays, nans, or what?
+        win_offset = np.floor(np.array(win_size) / 2).astype(np.int32)  # the window center
+        # TODO : how to do nodata masking with numpy.ma and masked arrays, nans, or what?
         _ = np.nanmean(ratio_winview, out=param_array[win_offset[0]:-win_offset[0], win_offset[1]:-win_offset[1]],
                        axis=(2, 3))  # find mean ratio over sliding windows
 
-        # TODO: what is the most efficient way to iterate over these view arrays? np.nditer?
+        # TODO : what is the most efficient way to iterate over these view arrays? np.nditer?
         #   or might we use a cython inner to speed things up?  See np.nditer docs
         #   is the above mean over sliding win views faster than the nested loop below
         # for win_i in np.ndindex(ratio_winview.shape[2]):
@@ -337,6 +339,34 @@ class HomonImBase:
         #         param_array[win_i + win_offset[0], win_j + win_offset[1]] = np.mean(ratio_win)  # gain only
         param_array[np.isnan(src_array)] = np.nan
         return param_array
+
+    def _find_gains_and_image_offset(self, ref_array, src_array, win_size=[3,3], param_nodata=np.nan):
+        """
+        Find image wide offset and sliding window gains for a band using opencv filter2D
+
+        Parameters
+        ----------
+        ref_array : numpy.array_like
+            a reference band in an MxN array
+        src_array : numpy.array_like
+            a source band, collocated with ref_array and of the same MxN shape
+        win_size : numpy.array_like
+            sliding window [width, height] in pixels
+        param_nodata
+
+        Returns
+        -------
+        param_array : numpy.array_like
+            an M x N x 2 array of gains and offsets
+        """
+        # find image offset
+        src_nodata = 0
+        src_mask = (src_array != src_nodata).astype(np.int32)
+        src_mean = np.mean(src_array, where=src_mask.astype('bool', copy=False))
+        ref_mean = ref_array.mean()
+        array_offset = ref_mean - src_mean
+
+        src_array += array_offset       # TODO: should not be uint for this
 
 
     def homogenise(self, out_filename):
@@ -471,4 +501,3 @@ class HomonimSrcSpace(HomonImBase):
                         calib_im.write(calib_src_array.astype(calib_im.dtypes[bi - 1]), indexes=bi)
 
 ##
-
