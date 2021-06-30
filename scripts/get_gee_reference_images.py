@@ -15,15 +15,24 @@ ee.Authenticate()
 ee.Initialize()
 
 with rio.open(src_filename) as src_im:
-    src_bbox = geometry.shape(transform_geom(src_im.crs, 'WGS84', geometry.box(*src_im.bounds)))
+    src_bbox_m = geometry.box(*src_im.bounds)
+    src_bbox_m = src_bbox_m.buffer(2000)
+    src_bbox = geometry.shape(transform_geom(src_im.crs, 'WGS84', src_bbox_m))
 
-l7_sr_images = ee.ImageCollection("LANDSAT/LE07/C01/T1_SR").filterDate('2010-01-12', '2010-02-11').filterBounds(geometry.mapping(src_bbox))
+l7_sr_images = ee.ImageCollection("LANDSAT/LE07/C01/T1_SR").\
+    filterDate('2010-01-02', '2010-02-21').\
+    filter(ee.Filter.lt('CLOUD_COVER', 10)).\
+    filterBounds(geometry.mapping(src_bbox))
 print(f'Number of images: {l7_sr_images.size().getInfo()}')
 
-link = l7_sr_images.median().getDownloadURL({
+image = l7_sr_images.median()   #.select(['B4', 'B3', 'B2', 'B1'])
+
+link = image.getDownloadURL({
     'scale': 30,
-    'crs': 'EPSG:4326',
+    'crs': src_im.crs.to_wkt(),
     'fileFormat': 'GeoTIFF',
+    'bands': [{'id': 'B3'}, {'id': 'B2'}, {'id': 'B1'}, {'id': 'B4'}],
+    'filePerBand': False,
     'region': geometry.mapping(src_bbox)})
 
 print(f'Download link: {link}')

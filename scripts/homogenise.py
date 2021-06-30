@@ -123,9 +123,9 @@ def main(args):
                 try:
                     # set homogenised filename
                     if args.homo_dir is not None:
-                        homo_filename = pathlib.Path(args.homo_dir).joinpath(src_filename.stem + '_HOMO_REF_w11.tif')
+                        homo_filename = pathlib.Path(args.homo_dir).joinpath(src_filename.stem + f'_HOMO_REF_w{args.win_size[0]}{args.win_size[1]}.tif')
                     else:
-                        homo_filename = src_filename.parent.joinpath(src_filename.stem + '_HOMO_REF_w11.tif')
+                        homo_filename = src_filename.parent.joinpath(src_filename.stem + f'_HOMO_REF_w{args.win_size[0]}{args.win_size[1]}.tif')
 
                     # create OrthoIm  and orthorectify
                     logger.info(f'Homogenising {src_filename.name}')
