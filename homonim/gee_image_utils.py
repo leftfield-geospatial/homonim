@@ -16,6 +16,7 @@
     You should have received a copy of the GNU Affero General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
+import json
 from datetime import datetime, timedelta
 from urllib import request
 from rasterio.warp import transform_geom
@@ -24,7 +25,8 @@ from shapely import geometry
 import pathlib
 import sys
 import ee
-from homonim import get_logger
+from homonim import get_logger, root_path
+import pandas as pd
 logger = get_logger(__name__)
 
 def cloud_mask_landsat_c2(image):
@@ -67,7 +69,7 @@ def cloud_mask_landsat_c1(image):
     qa = image.select('pixel_qa')
     return image.updateMask(qa.bitwiseAnd(mask_bit).eq(0))
 
-def cloud_mask_s2(image):
+def cloud_mask_sentinel2(image):
     """
     Cloud mask sentinel-2 TOA and SR image
     i.e. (ee.ImageCollection("COPERNICUS/S2") and ee.ImageCollection("COPERNICUS/S2_SR"))
@@ -87,6 +89,23 @@ def cloud_mask_s2(image):
     # bits 10 and 11 are opaque and cirrus clouds respectively
     bit_mask = (1 << 11) | (1 << 10)
     return image.updateMask(qa.bitwiseAnd(bit_mask).eq(0).focal_min(10))
+
+def cloud_mask_modis(image):
+    """
+    Dummy function to cloud mask MODIS NBAR data
+    i.e. (ee.ImageCollection("MODIS/006/MCD43A4")))
+
+    Parameters
+    ----------
+    image:  ee.Image
+            the GEE image to mask
+
+    Returns
+    -------
+    ee.Image
+    The masked image
+    """
+    return image
 
 def get_image_bounds(filename, expand=10):
     """
@@ -152,36 +171,128 @@ def download_link(link, filename):
             sys.stdout.flush()
         sys.stdout.write('\n')
 
+def load_collection_info():
+    """
+    Loads the satellite band etc information from json file into a dict
+    """
+    with open(root_path.joinpath('data/inputs/satellite_info.json')) as f:
+        satellite_info = json.load(f)
+    return satellite_info
+
+def get_image_link(collection, bounds, date, cloud_mask=None, min_images=1, crs=None, bands=None):
+    """
+    Search a GEE image collection, returning an image download link where possible
+
+    Parameters
+    ----------
+    collection : str
+                Name of GEE image collection to search ('landsat7', 'landsat8', 'sentinel2_toa', 'sentinel2_sr',
+                'modis') (default: landsat8)
+    cloud_mask : function
+                 function to cloud mask ee.Image (default: None = select automatically)
+    bounds : geojson polygon
+             bounds of the source image(s) to be covered
+    date : datetime.datetime
+           capture date of source image
+    min_images : int
+                 minimum number of images allowed for composite formation (default=1)
+    crs : str
+          WKT or EPSG string specifying the CRS of download image (default: WGS84)
+    bands : list
+            list of dicts specifying bands to download (default: None = all)
+            e.g. bands=[{'id': 'B3'}, {'id': 'B2'}, {'id': 'B1'}, {'id': 'B4'}]
+
+    Returns
+    -------
+    link :  str
+            a download link for the image
+    image : ee.Image
+            a composite image matching the search criteria, or None if they could not be satisfied
+    """
+
+    # parse arguments
+    if cloud_mask is None:
+        if (collection == 'landsat7') or (collection == 'landsat8'):
+            cloud_mask = cloud_mask_landsat_c2
+        elif (collection == 'sentinel2_toa') or (collection == 'sentinel2_sr'):
+            cloud_mask = cloud_mask_sentinel2()
+        elif (collection == 'modis'):
+            cloud_mask = None  # MODIS NBAR has already been cloud masked
+        else:
+            raise ValueError(f'Unknown GEE image collection: {collection}')
+    collection_info = load_collection_info()
+    if not collection in [collection_info.keys()]:
+        raise ValueError(f'Unknown collection: {collection}')
+    collection_info = collection_info[collection]
+    band_df = pd.DataFrame(collection_info['bands'])
+
+    if crs is None:
+        crs = 'WGS84'
+
+    # expand the date range in powers of 2 until we find an image
+    start_date = date
+    end_date  = date
+    num_images = 0
+    expand_pow = 0
+    while (num_images < min_images) and (expand_pow <= 5):
+        logger.info(f'Searching for images between {start_date.strftime("%Y-%m-%d")} and {end_date.strftime("%Y-%m-%d")}')
+        im_collection = ee.ImageCollection(self.im_collection_str).\
+            filterDate(start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')).\
+            filterBounds(bounds).map(self.cloud_mask)
+
+        num_images = im_collection.size().getInfo()
+        start_date -= timedelta(days=2**expand_pow)
+        end_date += timedelta(days=2**expand_pow)
+        expand_pow += 1
+
+    if num_images == 0:
+        logger.info(f'Could not find any images within {2**5} days of {start_date.strftime("%Y-%m-%d")}')
+        return None
+
+    logger.info(f'Found {num_images} images')
+
+    # form composite image and get download link
+    image = im_collection.median()
+    link = image.getDownloadURL({
+        'scale': band_df['res'].min(),
+        'crs': crs,
+        'fileFormat': 'GeoTIFF',
+        'bands': bands,
+        'filePerBand': False,
+        'region': bounds})
+
+    return link, image
+
+
 class GeeRefImage:
-    def __init__(self, collection_str='', scale=30, bands=None):
+    def __init__(self, collection='landsat8', cloud_mask=None):
         """
         Class to assist the search and download of GEE Landsat 7/8 and Sentinel-2 surface reflectance imagery
 
         Parameters
         ----------
-        im_collection_str : str
-                            Name of a valid GEE image collection e.g. "LANDSAT/LC08/C01/T1_L2"
+        collection : str
+                    Name of a image collection to search ('landsat7', 'landsat8', 'sentinel2_toa', 'sentinel2_sr',
+                    'modis') (default: landsat8)
+        cloud_mask : function
+                     function to cloud mask ee.Image (default: None = select automatically)
         """
+        self.collection_info = load_collection_info()[collection]
+        band_df = pd.DataFrame(satellite_info['bands'])
+
         self.im_collection_str = collection_str
-        self.im_scale = scale   # the native spatial resolution of the image in meters
-        self.im_bands = bands   # subset of bands to retrieve
+        self.im_scale = band_df['res'].min()
+        self.im_bands = band_df['id'].to_dict()
 
-    @staticmethod
-    def cloud_mask(image):
-        """
-        Mask cloudy pixels in image
+        if (collection == 'landsat7') or (collection == 'landsat8'):
+            self.cloud_mask = cloud_mask_landsat_c2
+        elif (collection == 'sentinel2_toa') or (collection == 'sentinel2_sr'):
+            self.cloud_mask = cloud_mask_sentinel2()
+        elif (collection == 'modis'):
+            self.cloud_mask = None      # MODIS NBAR has already been cloud masked
+        else:
+            raise ValueError(f'Unknown GEE image collection: {collection}')
 
-        Parameters
-        ----------
-        image:  ee.Image
-                the GEE image to mask
-
-        Returns
-        -------
-        image:  ee.Image
-                the masked image
-        """
-        raise NotImplementedError
 
     def get_image_link(self, bounds, date, min_images=1, crs=None, bands=None):
         """
@@ -243,17 +354,3 @@ class GeeRefImage:
             'region': bounds})
 
         return link, image
-
-class GeeLandsat7Image(GeeRefImage):
-    def __init__(self):
-        """
-        Class to assist the search and download of GEE Landsat 7/8 and Sentinel-2 surface reflectance imagery
-
-        Parameters
-        ----------
-        im_collection_str : str
-                            Name of a valid GEE image collection e.g. "LANDSAT/LC08/C01/T1_L2"
-        """
-
-        GeeRefImage.__init__('LANDSAT/LT05/C02/T1_L2', scale=30, bands=)
-
