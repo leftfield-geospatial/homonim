@@ -23,10 +23,10 @@ import os
 import pathlib
 import ee
 from shapely import geometry
-import fiona
 import rasterio as rio
-from rasterio.warp import reproject, Resampling, transform_geom, transform_bounds
+from rasterio.warp import transform_geom
 from homonim import root_path, get_logger
+from homonim import gee_image_utils as imutil
 from urllib import request
 import sys
 
@@ -46,32 +46,29 @@ import sys
 # TODO: write cloud masking and band matching backend based on my GEE code
 
 logger = get_logger(__name__)
-
 def parse_arguments():
-    parser = argparse.ArgumentParser(description='Download reference Landsat and Sentinel imagery from Google Earth Engine (GEE).\n')
+    collection_info = imutil.load_collection_info()
+    parser = argparse.ArgumentParser(description='Search and download surface reflectance imagery from Google Earth Engine (GEE)')
     # parser.add_argument('extent_file', help='path specifying source image/vector file whose spatial extent should be covered', type=str,
     #                     metavar='extent_file', nargs='+')
-    parser.add_argument('extent_file', help='path specifying source image/vector file whose spatial extent should be covered',
+    parser.add_argument('extent_file', help='image file whose spatial extent should be covered',
                         type=str)
-    parser.add_argument('-d', '--date', help='capture date of source image e.g. \'2015-01-28\' '
+    parser.add_argument('-d', '--date', help='capture date to search around e.g. \'2015-01-28\' '
                                              '(default: use creation time of the <extent_file>)', type=str)
-    parser.add_argument('-s', '--satellite',
-                        help='name of the data collection: \'L5\'=Landsat5, \'L7\'=LANDSAT/LE07/C02/T1_L2, \'L8\'=LANDSAT/LC08/C02/T1_L2, '
-                             '\'S2\'=Sentinel2, ...=any name of a valid GEE image collection (default: \'L8\')',
-                        choices=['L5', 'L7', 'L8', 'S2'], type=str)
-    parser.add_argument('-od', '--output_dir',
-                        help='save downloaded image in this directory (default: save to current directory)',
+    parser.add_argument('-c', '--collection',
+                        help='image collection to search: \'landsat7\'=LANDSAT/LE07/C02/T1_L2, '
+                             '\'landsat8\'=LANDSAT/LC08/C02/T1_L2, \'sentinel2_toa\'=COPERNICUS/S2, \'sentinel2_sr\'=COPERNICUS/S2_SR, '
+                             '\'modis\'=MODIS/006/MCD43A4, *=valid GEE image collection name',
+                        choices=list(collection_info.keys()), type=str)
+    parser.add_argument('-o', '--output_filename',
+                        help='download zipfile name (default: save zip to current directory)',
                         type=str)
     return parser.parse_args()
-
-# ee.ImageCollection('LANDSAT/LC08/C01/T1_SR')  # Landsat 8 SR
-# ee.ImageCollection('LANDSAT/LE07/C01/T1_SR')  # Landsat 7 SR
-# ee.ImageCollection('COPERNICUS/S2')           # Sentinel-2 SR
 
 
 def main(args):
     """
-    Download reference Landsat and Sentinel imagery from Google Earth Engine (GEE)
+    Search and download surface reflectance imagery from Google Earth Engine (GEE)
 
     Parameters
     ----------
@@ -80,100 +77,34 @@ def main(args):
     """
 
     ## check arguments
-    # for extent_file_spec in args.extent_file:
-    #     extent_file_path = pathlib.Path(extent_file_spec)
-    #     if len(list(extent_file_path.parent.glob(extent_file_path.name))) == 0:
-    #         raise Exception(f'Could not find any files matching {extent_file_spec}')
-
-    # if pathlib.Path(args.output_file).exists():
-    #     raise Exception(f'Reference file {args.ref_file} exists already')
     if not pathlib.Path(args.extent_file).exists():
         raise Exception(f'Extent file {args.extent_file} does not exist')
 
-    if args.output_dir is None:
-        args.output_dir = pathlib.Path(args.extent_file).cwd()
+    if args.output_filename is None:
+        args.output_filename = pathlib.Path(args.extent_file).cwd().joinpath(f'{args.collection}.zip')
+    else:
+        args.output_filename = pathlib.Path(args.output_filename)
 
     if args.date is None:
         extent_ctime = pathlib.Path(args.extent_file).stat().st_ctime
-        args.date = datetime.fromtimestamp(extent_ctime).strftime('%Y-%m-%d')
+        args.date = datetime.fromtimestamp(extent_ctime)
         logger.warning(f'No date specified, using file creation date: {args.date}')
 
-    src_date = dateutil.parser.parse(args.date)
+    args.date = dateutil.parser.parse(args.date)
 
     ## initialise GEE
     ee.Authenticate()
     ee.Initialize()
 
-    if args.satellite == 'L5':
-        im_collection = ee.ImageCollection('LANDSAT/LT05/C01/T1_SR').map(cloud_mask_landsat_c2)    #LANDSAT/LT05/C01/T1_SR
-    elif args.satellite == 'L7':
-        # im_collection = ee.ImageCollection('LANDSAT/LE07/C02/T1_L2').map(cloud_mask_landsat_c2)    #.filter(ee.Filter.lt('CLOUD_COVER', 10))    #LANDSAT/LE07/C01/T1_SR LANDSAT/LE07/C02/T1_L2
-        im_collection = ee.ImageCollection('LANDSAT/LE07/C01/T1_SR').map(cloud_mask_landsat_c2)
-    elif args.satellite == 'L8':
-        im_collection = ee.ImageCollection('LANDSAT/LC08/C02/T1_L2').map(cloud_mask_landsat_c2)    #LANDSAT/LC08/C02/T1_L2 #LANDSAT/LC08/C01/T1_SR
-    elif args.satellite == 'S2':
-        im_collection = ee.ImageCollection('COPERNICUS/S2_SR').map(s2_cloud_mask)
-        # im_collection = ee.ImageCollection('COPERNICUS/S2').map(s2_cloud_mask) #TOA
+    ## get extents and search
+    src_bbox_wgs84, crs = imutil.get_image_bounds(args.extent_file, expand=10)
+    if args.collection == 'landsat7':
+        min_images = 2  # composite of >1 image to get rid of scanline error
     else:
-        im_collection = ee.ImageCollection(args.satellite)
-
-    # for extent_file_spec in args.extent_file:
-    #     extent_file_path = pathlib.Path(extent_file_spec)
-    #     if len(list(extent_file_path.parent.glob(extent_file_path.name))) == 0:
-    #         raise Exception(f'Could not find any files matching {extent_file_spec}')
-
-    # get extents from source image
-    with rio.open(args.extent_file) as src_im:
-        src_bbox = geometry.box(*src_im.bounds)
-        if src_im.crs.linear_units == 'metre':
-            src_bbox = src_bbox.buffer(2000)    # expand the bounding box 2km beyond the extents (for visualisation)
-        src_bbox_wgs84 = geometry.shape(transform_geom(src_im.crs, 'WGS84', src_bbox))
-
-    # search for images
-    start_date = src_date - timedelta(days=7)
-    end_date = src_date + timedelta(days=7)
-
-    images = im_collection.filterDate(start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')).\
-        filterBounds(geometry.mapping(src_bbox_wgs84))
-
-    logger.info(f'Found {images.size().getInfo()} images')
-
-    image = images.median()   #.select(['B4', 'B3', 'B2', 'B1'])
-
-    link = image.getDownloadURL({
-        'scale': 30,    # TODO fix for different satellites
-        'crs': src_im.crs.to_wkt(),
-        'fileFormat': 'GeoTIFF',
-        # 'bands': [{'id': 'B3'}, {'id': 'B2'}, {'id': 'B1'}, {'id': 'B4'}],
-        'filePerBand': False,
-        'region': geometry.mapping(src_bbox_wgs84)})
-
-    logger.info(f'Opening link: {link}')
-
-    file_link = request.urlopen(link)
-    meta = file_link.info()
-    file_size = int(meta['Content-Length'])
-    logger.info(f'Download size: {file_size/(1024**2):.2f} MB')
-
-    download_filename = pathlib.Path(args.output_dir).joinpath('gee_reference.zip')
-    logger.info(f'Downloading to {download_filename}')
-
-    with open(download_filename, 'wb') as f:
-        file_size_dl = 0
-        block_size = 8192
-        while (file_size_dl <= file_size):
-            buffer = file_link.read(block_size)
-            if not buffer:
-                break
-            file_size_dl += len(buffer)
-            f.write(buffer)
-
-            # block_count += 1
-            progress = (file_size_dl / file_size)
-            sys.stdout.write('\r')
-            sys.stdout.write('[%-50s] %d%%' % ('=' * int(50 * progress), 100 * progress))
-            sys.stdout.flush()
-        sys.stdout.write('\n')
+        min_images = 1
+    link, image = imutil.search_image_collection(args.collection, src_bbox_wgs84, args.date, min_images=min_images,
+                                                 crs=crs, bands=None)
+    imutil.download_image(link, args.output_filename)
 
 if __name__ == "__main__":
     args = parse_arguments()

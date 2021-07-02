@@ -27,7 +27,17 @@ import sys
 import ee
 from homonim import get_logger, root_path
 import pandas as pd
+import numpy as np
+
 logger = get_logger(__name__)
+
+def load_collection_info():
+    """
+    Loads the satellite band etc information from json file into a dict
+    """
+    with open(root_path.joinpath('data/inputs/satellite_info.json')) as f:
+        satellite_info = json.load(f)
+    return satellite_info
 
 def cloud_mask_landsat_c2(image):
     """
@@ -120,7 +130,10 @@ def get_image_bounds(filename, expand=10):
 
     Returns
     -------
-    bounds : geojson polygon of bounds in WGS84
+    bounds : geojson
+             polygon of bounds in WGS84
+    crs: str
+         WKT CRS of image file
     """
     with rio.open(filename) as im:
         src_bbox = geometry.box(*im.bounds)
@@ -128,58 +141,10 @@ def get_image_bounds(filename, expand=10):
             expand_m = np.sqrt(src_bbox.area) * expand / 100.
             src_bbox = src_bbox.buffer(expand_m)    # expand the bounding box 2km beyond the extents (for visualisation)
         src_bbox_wgs84 = geometry.shape(transform_geom(im.crs, 'WGS84', src_bbox))
-    return geometry.mapping(src_bbox_wgs84)
+    return geometry.mapping(src_bbox_wgs84), im.crs.to_wkt()
 
-def download_link(link, filename):
-    """
-    Download a GEE image link to a zip file
 
-    Parameters
-    ----------
-    link :  str
-            link to GEE image to download
-    filename :  str
-                Path of the zip file to download to.  Extension will be renamed to .zip if necessary.
-    """
-    logger.info(f'Opening link: {link}')
-
-    file_link = request.urlopen(link)
-    meta = file_link.info()
-    file_size = int(meta['Content-Length'])
-    logger.info(f'Download size: {file_size / (1024 ** 2):.2f} MB')
-
-    filename = pathlib.Path(filename)
-    filename = filename.joinpath(filename.parent, filename.stem, '.zip')    # force to zip file
-
-    if filename.exists():
-        logger.warning()
-    logger.info(f'Downloading to {filename}')
-
-    with open(filename, 'wb') as f:
-        file_size_dl = 0
-        block_size = 8192
-        while (file_size_dl <= file_size):
-            buffer = file_link.read(block_size)
-            if not buffer:
-                break
-            file_size_dl += len(buffer)
-            f.write(buffer)
-
-            progress = (file_size_dl / file_size)
-            sys.stdout.write('\r')
-            sys.stdout.write('[%-50s] %d%%' % ('=' * int(50 * progress), 100 * progress))
-            sys.stdout.flush()
-        sys.stdout.write('\n')
-
-def load_collection_info():
-    """
-    Loads the satellite band etc information from json file into a dict
-    """
-    with open(root_path.joinpath('data/inputs/satellite_info.json')) as f:
-        satellite_info = json.load(f)
-    return satellite_info
-
-def get_image_link(collection, bounds, date, cloud_mask=None, min_images=1, crs=None, bands=None):
+def search_image_collection(collection, bounds, date, cloud_mask=None, min_images=1, crs=None, bands=[]):
     """
     Search a GEE image collection, returning an image download link where possible
 
@@ -221,7 +186,7 @@ def get_image_link(collection, bounds, date, cloud_mask=None, min_images=1, crs=
         else:
             raise ValueError(f'Unknown GEE image collection: {collection}')
     collection_info = load_collection_info()
-    if not collection in [collection_info.keys()]:
+    if not collection in collection_info.keys():
         raise ValueError(f'Unknown collection: {collection}')
     collection_info = collection_info[collection]
     band_df = pd.DataFrame(collection_info['bands'])
@@ -229,16 +194,19 @@ def get_image_link(collection, bounds, date, cloud_mask=None, min_images=1, crs=
     if crs is None:
         crs = 'WGS84'
 
+    if bands is None:
+        bands = []
+
     # expand the date range in powers of 2 until we find an image
-    start_date = date
-    end_date  = date
+    start_date = date - timedelta(hours=12)
+    end_date  = date + timedelta(hours=12)
     num_images = 0
     expand_pow = 0
     while (num_images < min_images) and (expand_pow <= 5):
         logger.info(f'Searching for images between {start_date.strftime("%Y-%m-%d")} and {end_date.strftime("%Y-%m-%d")}')
-        im_collection = ee.ImageCollection(self.im_collection_str).\
+        im_collection = ee.ImageCollection(collection_info['ee_collection']).\
             filterDate(start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')).\
-            filterBounds(bounds).map(self.cloud_mask)
+            filterBounds(bounds).map(cloud_mask)
 
         num_images = im_collection.size().getInfo()
         start_date -= timedelta(days=2**expand_pow)
@@ -254,7 +222,7 @@ def get_image_link(collection, bounds, date, cloud_mask=None, min_images=1, crs=
     # form composite image and get download link
     image = im_collection.median()
     link = image.getDownloadURL({
-        'scale': band_df['res'].min(),
+        'scale': int(band_df['res'].min()),
         'crs': crs,
         'fileFormat': 'GeoTIFF',
         'bands': bands,
@@ -263,94 +231,43 @@ def get_image_link(collection, bounds, date, cloud_mask=None, min_images=1, crs=
 
     return link, image
 
+def download_image(link, filename):
+    """
+    Download a GEE image link to a zip file
 
-class GeeRefImage:
-    def __init__(self, collection='landsat8', cloud_mask=None):
-        """
-        Class to assist the search and download of GEE Landsat 7/8 and Sentinel-2 surface reflectance imagery
+    Parameters
+    ----------
+    link :  str
+            link to GEE image to download
+    filename :  str
+                Path of the zip file to download to.  Extension will be renamed to .zip if necessary.
+    """
+    logger.info(f'Opening link: {link}')
 
-        Parameters
-        ----------
-        collection : str
-                    Name of a image collection to search ('landsat7', 'landsat8', 'sentinel2_toa', 'sentinel2_sr',
-                    'modis') (default: landsat8)
-        cloud_mask : function
-                     function to cloud mask ee.Image (default: None = select automatically)
-        """
-        self.collection_info = load_collection_info()[collection]
-        band_df = pd.DataFrame(satellite_info['bands'])
+    file_link = request.urlopen(link)
+    meta = file_link.info()
+    file_size = int(meta['Content-Length'])
+    logger.info(f'Download size: {file_size / (1024 ** 2):.2f} MB')
 
-        self.im_collection_str = collection_str
-        self.im_scale = band_df['res'].min()
-        self.im_bands = band_df['id'].to_dict()
+    filename = pathlib.Path(filename)
+    filename = filename.joinpath(filename.parent, filename.stem + '.zip')    # force to zip file
 
-        if (collection == 'landsat7') or (collection == 'landsat8'):
-            self.cloud_mask = cloud_mask_landsat_c2
-        elif (collection == 'sentinel2_toa') or (collection == 'sentinel2_sr'):
-            self.cloud_mask = cloud_mask_sentinel2()
-        elif (collection == 'modis'):
-            self.cloud_mask = None      # MODIS NBAR has already been cloud masked
-        else:
-            raise ValueError(f'Unknown GEE image collection: {collection}')
+    if filename.exists():
+        logger.warning(f'{filename} exists, overwriting...')
+    logger.info(f'Downloading to {filename}')
 
+    with open(filename, 'wb') as f:
+        file_size_dl = 0
+        block_size = 8192
+        while (file_size_dl <= file_size):
+            buffer = file_link.read(block_size)
+            if not buffer:
+                break
+            file_size_dl += len(buffer)
+            f.write(buffer)
 
-    def get_image_link(self, bounds, date, min_images=1, crs=None, bands=None):
-        """
-        Search for and return a link to download a GEE reference image
-
-        Parameters
-        ----------
-        bounds : geojson polygon
-                 bounds of the source image(s) to be covered
-        date : datetime.datetime
-               capture date of source image
-        min_images : int
-                     minimum number of images to form composite of
-        crs : str
-              WKT or EPSG string specifying the CRS of reference image (default: WGS84)
-        bands : list
-                bands of reference image to download (default: all)
-                e.g. 'bands': [{'id': 'B3'}, {'id': 'B2'}, {'id': 'B1'}, {'id': 'B4'}],
-
-        Returns
-        -------
-        link :  str
-                a download link for the image
-        image : ee.Image
-                a composite image matching the search criteria, or None if they could not be satisfied
-        """
-        if crs is None:
-            crs = 'WGS84'
-        # expand the date range in powers of 2 until we find an image
-        start_date = date
-        end_date  = date
-        num_images = 0
-        expand_pow = 0
-        while (num_images < min_images) and (expand_pow <= 5):
-            logger.info(f'Searching for images between {start_date.strftime("%Y-%m-%d")} and {end_date.strftime("%Y-%m-%d")}')
-            im_collection = ee.ImageCollection(self.im_collection_str).\
-                filterDate(start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')).\
-                filterBounds(bounds).map(self.cloud_mask)
-
-            num_images = im_collection.size().getInfo()
-            start_date -= timedelta(days=2**expand_pow)
-            end_date += timedelta(days=2**expand_pow)
-            expand_pow += 1
-
-        if num_images == 0:
-            logger.info(f'Could not find any images within {2**5} days of {start_date.strftime("%Y-%m-%d")}')
-            return None
-
-        logger.info(f'Found {num_images} images')
-
-        # form composite image and get download link
-        image = im_collection.median()
-        link = image.getDownloadURL({
-            'scale': self.scale,
-            'crs': crs,
-            'fileFormat': 'GeoTIFF',
-            'bands': bands,
-            'filePerBand': False,
-            'region': bounds})
-
-        return link, image
+            progress = (file_size_dl / file_size)
+            sys.stdout.write('\r')
+            sys.stdout.write('[%-50s] %d%%' % ('=' * int(50 * progress), 100 * progress))
+            sys.stdout.flush()
+        sys.stdout.write('\n')
