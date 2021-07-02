@@ -67,23 +67,6 @@ def parse_arguments():
 # ee.ImageCollection('LANDSAT/LC08/C01/T1_SR')  # Landsat 8 SR
 # ee.ImageCollection('LANDSAT/LE07/C01/T1_SR')  # Landsat 7 SR
 # ee.ImageCollection('COPERNICUS/S2')           # Sentinel-2 SR
-def cloud_mask_landsat(image):
-    # Bits 3 and 5 are cloud shadow and cloud, respectively.
-    mask_bit = (1 << 5) | (1 << 3)
-    qa = image.select('QA_PIXEL')
-    return image.updateMask(qa.bitwiseAnd(mask_bit).eq(0))
-
-    # # If the cloud bit (5) is set and the cloud confidence (7) is high
-    # # or the cloud shadow bit is set (3), then it's a bad pixel.
-    # cloud = qa.bitwiseAnd(1 << 5) and (qa.bitwiseAnd(1 << 7)) or (qa.bitwiseAnd(1 << 3))
-    # # Remove edge pixels that don't occur in all bands
-    # mask2 = image.mask().reduce(ee.Reducer.min())
-    # return image.updateMask(not cloud).updateMask(mask2)
-
-def s2_cloud_mask(image):
-  qa = image.select('QA60');
-  bit_mask = (1 << 11) | (1 << 10)
-  return image.updateMask(qa.bitwiseAnd(bit_mask).eq(0).focal_min(10))
 
 
 def main(args):
@@ -122,12 +105,12 @@ def main(args):
     ee.Initialize()
 
     if args.satellite == 'L5':
-        im_collection = ee.ImageCollection('LANDSAT/LT05/C01/T1_SR').map(cloud_mask_landsat)    #LANDSAT/LT05/C01/T1_SR
+        im_collection = ee.ImageCollection('LANDSAT/LT05/C01/T1_SR').map(cloud_mask_landsat_c2)    #LANDSAT/LT05/C01/T1_SR
     elif args.satellite == 'L7':
-        im_collection = ee.ImageCollection('LANDSAT/LE07/C02/T1_L2').map(cloud_mask_landsat)    #.filter(ee.Filter.lt('CLOUD_COVER', 10))    #LANDSAT/LE07/C01/T1_SR LANDSAT/LE07/C02/T1_L2
-        # im_collection = ee.ImageCollection('LANDSAT/LE07/C01/T1_SR').map(cloud_mask_landsat)
+        # im_collection = ee.ImageCollection('LANDSAT/LE07/C02/T1_L2').map(cloud_mask_landsat_c2)    #.filter(ee.Filter.lt('CLOUD_COVER', 10))    #LANDSAT/LE07/C01/T1_SR LANDSAT/LE07/C02/T1_L2
+        im_collection = ee.ImageCollection('LANDSAT/LE07/C01/T1_SR').map(cloud_mask_landsat_c2)
     elif args.satellite == 'L8':
-        im_collection = ee.ImageCollection('LANDSAT/LC08/C02/T1_L2').map(cloud_mask_landsat)    #LANDSAT/LC08/C02/T1_L2 #LANDSAT/LC08/C01/T1_SR
+        im_collection = ee.ImageCollection('LANDSAT/LC08/C02/T1_L2').map(cloud_mask_landsat_c2)    #LANDSAT/LC08/C02/T1_L2 #LANDSAT/LC08/C01/T1_SR
     elif args.satellite == 'S2':
         im_collection = ee.ImageCollection('COPERNICUS/S2_SR').map(s2_cloud_mask)
         # im_collection = ee.ImageCollection('COPERNICUS/S2').map(s2_cloud_mask) #TOA
