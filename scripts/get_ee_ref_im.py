@@ -17,18 +17,13 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 import argparse
-from datetime import datetime, timedelta
-import dateutil
-import os
 import pathlib
+from datetime import datetime
+
+import dateutil
 import ee
-from shapely import geometry
-import rasterio as rio
-from rasterio.warp import transform_geom
-from homonim import root_path, get_logger
 from homonim import gee_image_utils as imutil
-from urllib import request
-import sys
+from homonim import get_logger
 
 # conda install -c conda-forge earthengine-api
 # conda install -c conda-forge folium
@@ -97,13 +92,24 @@ def main(args):
     ee.Initialize()
 
     ## get extents and search
-    src_bbox_wgs84, crs = imutil.get_image_bounds(args.extent_file, expand=10)
     if args.collection == 'landsat7':
         min_images = 2  # composite of >1 image to get rid of scanline error
     else:
         min_images = 1
-    link, image = imutil.search_image_collection(args.collection, src_bbox_wgs84, args.date, min_images=min_images,
-                                                 crs=crs, bands=None)
+    if False:
+        src_bbox_wgs84, crs = imutil.get_image_bounds(args.extent_file, expand=5)
+        link, image = imutil.search_image_collection(args.collection, src_bbox_wgs84, args.date, min_images=min_images,
+                                                     crs=crs, bands=None, cloud_mask=lambda x: x)
+    else:
+        if 'landsat' in args.collection:
+            ref_image = imutil.EeLandsatRefImage(args.extent_file, collection=args.collection)
+        elif 'sentinel' in args.collection:
+            ref_image = imutil.EeSentinelRefImage(args.extent_file, collection=args.collection)
+        else:
+            ref_image = imutil.EeRefImage(args.extent_file, collection=args.collection)
+
+        link, image = ref_image.search(args.date, min_images=min_images)
+
     imutil.download_image(link, args.output_filename)
 
 if __name__ == "__main__":
