@@ -17,6 +17,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 import json
+import os
 import pathlib
 import sys
 from datetime import timedelta
@@ -29,6 +30,7 @@ import rasterio as rio
 from homonim import get_logger, root_path
 from rasterio.warp import transform_geom
 from shapely import geometry
+import zipfile
 
 logger = get_logger(__name__)
 
@@ -248,16 +250,18 @@ def search_image_collection(collection, bounds, date, cloud_mask=True, min_image
 
     return link, image
 
-def download_image(link, filename):
+def download_image(link, filename, band_labels=None):
     """
-    Download a GEE image link to a zip file
+    Download a GEE image download.zip file and extract to a geotiff file
 
     Parameters
     ----------
     link :  str
             link to GEE image to download
     filename :  str
-                Path of the zip file to download to.  Extension will be renamed to .zip if necessary.
+                Path of the geotiff file to extract to.  Extension will be renamed to .tif if necessary.
+    band_labels: list
+                 Optional list of band labels to apply to the destination geotiff
     """
     logger.info(f'Opening link: {link}')
 
@@ -266,14 +270,17 @@ def download_image(link, filename):
     file_size = int(meta['Content-Length'])
     logger.info(f'Download size: {file_size / (1024 ** 2):.2f} MB')
 
-    filename = pathlib.Path(filename)
-    filename = filename.joinpath(filename.parent, filename.stem + '.zip')    # force to zip file
+    tif_filename = pathlib.Path(filename)
+    tif_filename = tif_filename.joinpath(tif_filename.parent, tif_filename.stem + '.tif')    # force to zip file
+    zip_filename = tif_filename.parent.joinpath('gee_image_download.zip')
 
-    if filename.exists():
-        logger.warning(f'{filename} exists, overwriting...')
-    logger.info(f'Downloading to {filename}')
+    for fn in (zip_filename, tif_filename):
+        if fn.exists():
+            logger.warning(f'{fn} exists, overwriting...')
 
-    with open(filename, 'wb') as f:
+    logger.info(f'Downloading to {zip_filename}')
+
+    with open(zip_filename, 'wb') as f:
         file_size_dl = 0
         block_size = 8192
         while (file_size_dl <= file_size):
@@ -289,21 +296,38 @@ def download_image(link, filename):
             sys.stdout.flush()
         sys.stdout.write('\n')
 
+    # extract download.zip -> download.tif and rename to tif_filename
+    logger.info(f'Extracting {zip_filename} to {zip_filename.parent}')
+    with zipfile.ZipFile(zip_filename,"r") as zip_file:
+        zip_file.extractall(zip_filename.parent)
+
+    os.rename(zip_filename.parent.joinpath('download.tif'), tif_filename)
+
+    # label the bands if specified
+    if band_labels is not None:
+        with rio.open(tif_filename, 'r+') as im:
+            if len(band_labels) > im.count:
+                raise ValueError(f'band_labels contains more elements than bands in {tif_filename}')
+            if len(band_labels) < im.count:
+                logger.warning(f'band_labels contains less elements than bands in {tif_filename}')
+
+            for band_i, band_label in enumerate(band_labels):
+                im.update_tags(band_i+1, name=band_label)
 
 
 class EeRefImage:
     def __init__(self, source_image_filename, collection=''):
         self.collection = collection
-        self.bounds, self.crs = get_image_bounds(source_image_filename, expand=10)
+        self._bounds, self._crs = get_image_bounds(source_image_filename, expand=10)
         collection_info = load_collection_info()
         if not collection in collection_info.keys():
             raise ValueError(f'Unknown collection: {collection}')
         self.collection_info = collection_info[collection]
-        self.band_df = pd.DataFrame(self.collection_info['bands'])
-        self.scale = int(self.band_df['res'].min())
+        self._band_df = pd.DataFrame(self.collection_info['bands'])
+        self.scale = int(self._band_df['res'].min())
 
     def _get_init_collection(self):
-        return ee.ImageCollection(self.collection_info['ee_collection']).filterBounds(self.bounds)
+        return ee.ImageCollection(self.collection_info['ee_collection']).filterBounds(self._bounds)
 
     def search(self, date, min_images=1):
         im_collection_init = self._get_init_collection()
@@ -317,10 +341,10 @@ class EeRefImage:
             logger.info(
                 f'Searching for {self.collection_info["ee_collection"]} images between {start_date.strftime("%Y-%m-%d")} and {end_date.strftime("%Y-%m-%d")}')
 
-            im_collection = im_collection_init.filterDate(start_date.strftime('%Y-%m-%d'),
-                                                          end_date.strftime('%Y-%m-%d'))
+            self._im_collection = im_collection_init.filterDate(start_date.strftime('%Y-%m-%d'),
+                                                                end_date.strftime('%Y-%m-%d'))
 
-            num_images = im_collection.size().getInfo()
+            num_images = self._im_collection.size().getInfo()
             start_date -= timedelta(days=2 ** expand_pow)
             end_date += timedelta(days=2 ** expand_pow)
             expand_pow += 1
@@ -329,21 +353,102 @@ class EeRefImage:
             logger.info(f'Could not find any images within {2 ** 5} days of {start_date.strftime("%Y-%m-%d")}')
             return None, None
 
-        logger.info(f'Found {num_images} images')
+        date_range = self._im_collection.reduceColumns(ee.Reducer.minMax(), ["system:time_start"])
+        start_date_str = ee.Date(date_range.get('min')).format('YYYY-MM-dd').getInfo()
+        end_date_str = ee.Date(date_range.get('max')).format('YYYY-MM-dd').getInfo()
+        logger.info(f'Found {num_images} images, from {start_date_str} to {end_date_str}')
 
-        # form composite image and get download link
-        image = im_collection.median()
-        # image.select(self.band_df['id'].tolist(), self.band_df['abbrev'].tolist())
-        # TODO: can we rename bands here according to satellite_info?
+        # form composite image
+        image = self._im_collection.median()
+
+        # set some metadata
+        # image.set('system:time_start', ee.Date(date_range.get('min')))
+        # image.set('system:time_end', ee.Date(date_range.get('max')))
+        # image.set('n_components', num_images)
+
+        # get download link
         link = image.getDownloadURL({
             'scale': self.scale,
-            'crs': self.crs,
+            'crs': self._crs,
             'fileFormat': 'GeoTIFF',
             'bands':  [],
             'filePerBand': False,
-            'region': self.bounds})
+            'region': self._bounds})
 
         return link, image
+
+    def download_image(self, link, filename):
+        """
+        Download a GEE image download.zip file and extract to a geotiff file
+
+        Parameters
+        ----------
+        link :  str
+                link to GEE image to download
+        filename :  str
+                    Path of the geotiff file to extract to.  Extension will be renamed to .tif if necessary.
+        band_labels: list
+                     Optional list of band labels to apply to the destination geotiff
+        """
+        logger.info(f'Opening link: {link}')
+
+        file_link = request.urlopen(link)
+        meta = file_link.info()
+        file_size = int(meta['Content-Length'])
+        logger.info(f'Download size: {file_size / (1024 ** 2):.2f} MB')
+
+        tif_filename = pathlib.Path(filename)
+        tif_filename = tif_filename.joinpath(tif_filename.parent, tif_filename.stem + '.tif')    # force to zip file
+        zip_filename = tif_filename.parent.joinpath('gee_image_download.zip')
+
+        if zip_filename.exists():
+            logger.warning(f'{zip_filename} exists, overwriting...')
+
+        logger.info(f'Downloading to {zip_filename}')
+
+        with open(zip_filename, 'wb') as f:
+            file_size_dl = 0
+            block_size = 8192
+            while (file_size_dl <= file_size):
+                buffer = file_link.read(block_size)
+                if not buffer:
+                    break
+                file_size_dl += len(buffer)
+                f.write(buffer)
+
+                progress = (file_size_dl / file_size)
+                sys.stdout.write('\r')
+                sys.stdout.write('[%-50s] %d%%' % ('=' * int(50 * progress), 100 * progress))
+                sys.stdout.flush()
+            sys.stdout.write('\n')
+
+        # extract download.zip -> download.tif and rename to tif_filename
+        logger.info(f'Extracting {zip_filename}')
+        with zipfile.ZipFile(zip_filename,"r") as zip_file:
+            zip_file.extractall(zip_filename.parent)
+
+        if tif_filename.exists():
+            logger.warning(f'{tif_filename} exists, overwriting...')
+            os.remove(tif_filename)
+
+        os.rename(zip_filename.parent.joinpath('download.tif'), tif_filename)
+
+        # write metadata to geotiff
+        date_range = self._im_collection.reduceColumns(ee.Reducer.minMax(), ["system:time_start"])
+        start_date_str = ee.Date(date_range.get('min')).format('YYYY-MM-dd').getInfo()
+        end_date_str = ee.Date(date_range.get('max')).format('YYYY-MM-dd').getInfo()
+        with rio.open(tif_filename, 'r+') as im:
+            # TODO: add capture date range, and composite type?
+            im.update_tags(EE_COLLECTION=self.collection_info['ee_collection'])
+            im.update_tags(START_CAPTURE_DATE=start_date_str)
+            im.update_tags(END_CAPTURE_DATE=end_date_str)
+            im.update_tags(N_COMPONENT_IMS=self._im_collection.size().getInfo())
+
+            for band_i, band_row in self._band_df.iterrows():
+                im.update_tags(band_i+1, ID=band_row['id'])
+                im.update_tags(band_i+1, NAME=band_row['name'])
+                im.update_tags(band_i+1, ABBREV=band_row['abbrev'])
+
 
 class EeLandsatRefImage(EeRefImage):
     def __init__(self, source_image_filename, collection='landsat8'):
@@ -354,12 +459,12 @@ class EeLandsatRefImage(EeRefImage):
         qa = image.select('QA_PIXEL')
         qa = qa.rename('CLOUD_PORTION')     # ??
         cloud_mask = qa.bitwiseAnd(mask_bit).neq(0)
-        cloud_portion = cloud_mask.reduceRegion(reducer='mean', geometry=self.bounds, scale=self.scale)
+        cloud_portion = cloud_mask.reduceRegion(reducer='mean', geometry=self._bounds, scale=self.scale)
         return image.set(cloud_portion)
 
     def _get_init_collection(self):
         return ee.ImageCollection(self.collection_info['ee_collection']).\
-            filterBounds(self.bounds).\
+            filterBounds(self._bounds).\
             map(self._add_cloudscore).\
             filter(ee.Filter.lt('CLOUD_PORTION', 0.05))
 
@@ -371,11 +476,11 @@ class EeSentinelRefImage(EeRefImage):
         bit_mask = (1 << 11) | (1 << 10)
         qa = image.select('QA60')
         cloud_mask = qa.bitwiseAnd(bit_mask).neq(0)
-        cloud_portion = cloud_mask.reduceRegion(reducer='mean', geometry=self.bounds, scale=self.scale)
+        cloud_portion = cloud_mask.reduceRegion(reducer='mean', geometry=self._bounds, scale=self.scale)
         return image.set('CLOUD_PORTION', cloud_portion)
 
     def _get_init_collection(self):
         return ee.ImageCollection(self.collection_info['ee_collection']).\
-            filterBounds(self.bounds).\
+            filterBounds(self._bounds).\
             map(self._add_cloudscore).\
             filter(ee.Filter.lt('CLOUD_PORTION', 0.05))
