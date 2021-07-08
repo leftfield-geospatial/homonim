@@ -344,11 +344,20 @@ class EeRefImage:
             logger.info(f'Could not find any images within {2 ** 6} days of {start_date.strftime("%Y-%m-%d")}')
             return None, None
 
-        date_range = self._im_collection.reduceColumns(ee.Reducer.minMax(), ["system:time_start"])
-        start_date_str = ee.Date(date_range.get('min')).format('YYYY-MM-dd').getInfo()
-        end_date_str = ee.Date(date_range.get('max')).format('YYYY-MM-dd').getInfo()
-
-        logger.info(f'Found {num_images} images, starting {start_date_str}, and ending {end_date_str}')
+        # print image dates
+        logger.info(f'Found {num_images} images in {self.collection_info["ee_collection"]}:')
+        im_list = self._im_collection.toList(num_images)
+        for i in range(num_images):
+            im_i = ee.Image(im_list.get(i))
+            date_str = ee.Date(im_i.get("system:time_start")).format().getInfo()    # UTC/GMT
+            index_str = im_i.get("system:index").getInfo()
+            # cloud_portion = im_i.get('CLOUD_PORTION').getInfo()
+            # SUN_AZIMUTH
+            # SUN_ELEVATION
+            # GEOMETRIC_RMSE_MODEL_Y & X
+            # 'system:index'
+            # 'CLOUD_PORTION' or similar
+            logger.info(f'{index_str} captured on {date_str}')
 
         return self._im_collection
 
@@ -486,16 +495,90 @@ class EeRefImage:
 
 
 
-class EeLandsatRefImage(EeRefImage):
-    def __init__(self, source_image_filename, collection='landsat8'):
-        EeRefImage.__init__(self, source_image_filename, collection=collection)
+class Landsat8EeImage(EeRefImage):
+    def __init__(self, source_image_filename, apply_mask=True):
+        self.apply_mask = apply_mask
+        EeRefImage.__init__(self, source_image_filename, apply_mask=apply_mask, collection='landsat8')
+
+    def _add_validmask(self, image):
+        # Notes
+        # - QA_PIXEL The *conf bit pairs (8-9,10-11,12-13,14-15) will always be 1 or more, unless it is a fill pixel -
+        # i.e. the fill bit 0 is set.  Values are higher where there are cloud, cloud shadow etc.  The water bit 7, is
+        # seems to be set incorrectly quite often, but with the rest of the bits ok/sensible.
+        # - SR_QA_AEROSOL bits 6-7 can have a value of 0, and this 0 can occur in e.g. an area of QA_PIXEL=cloud shadow,
+        # NB this is not band 9 as on GEE site, but band 8.
+        # - The behaviour of updateMask in combination with ImageCollection qualityMosaic (and perhaps median and mosaic
+        # ) is weird: updateMask always masks bands added with addBands, but only masks the original SR etc bands after
+        # a call to qualityMosaic (or perhaps median etc)
+
+
+        # create a mask of valid (non cloud, shadow and aerosol) pixels
+        # bits 1-4 of QA_PIXEL are dilated cloud, cirrus, cloud & cloud shadow, respectively
+        qa_pixel_bitmask = (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4)
+        qa_pixel = image.select('QA_PIXEL')
+        cloud_mask = qa_pixel.bitwiseAnd(qa_pixel_bitmask).eq(0)
+
+        # bits 6-7 of SR_QA_AEROSOL, are aerosol level where 3 = high, 2=medium, 1=low
+        sr_qa_aerosol_bitmask = (1 << 6) | (1 << 7)
+        sr_qa_aerosol = image.select('SR_QA_AEROSOL')
+        # aerosol_prob = sr_qa_aerosol.bitwiseAnd(sr_qa_aerosol_bitmask).rightShift(6)
+        aerosol_prob = sr_qa_aerosol.rightShift(6).bitwiseAnd(3)
+        aerosol_mask = aerosol_prob.lt(3)
+
+        # TODO: figure out why we need this weird rename here
+        # TODO: is aerosol_mask helpful in general, it looks suspect for GEF NGI ims
+        valid_mask = cloud_mask.And(aerosol_mask).rename('VALID_PORTION')
+        valid_portion = valid_mask.Not().reduceRegion(reducer='mean', geometry=self._bounds, scale=self.scale)
+
+        # create a pixel quallity score (higher is better)
+        cloud_conf = qa_pixel.rightShift(8).bitwiseAnd(3)
+        cloud_shadow_conf = qa_pixel.rightShift(10).bitwiseAnd(3)
+        cirrus_conf = qa_pixel.rightShift(14).bitwiseAnd(3)
+        q_score = cloud_conf.add(cloud_shadow_conf).add(cirrus_conf).add(aerosol_prob).multiply(-1).rename('Q_SCORE')
+
+        if False:
+            image = image.addBands(sr_qa_aerosol)
+            image = image.addBands(cloud_conf)
+            image = image.addBands(cloud_shadow_conf)
+            image = image.addBands(cirrus_conf)
+            image = image.addBands(aerosol_prob)
+
+        if self.apply_mask:
+            return image.set(valid_portion).addBands(q_score).updateMask(valid_mask)
+        else:
+            return image.set(valid_portion).addBands(q_score)
+
+    def _get_init_collection(self):
+        return ee.ImageCollection(self.collection_info['ee_collection']).\
+            filterBounds(self._bounds).\
+            map(self._add_validmask).\
+            filter(ee.Filter.lt('VALID_PORTION', 0.05))
+
+    def create_composite_image(self):
+        if self._im_collection is None:
+            raise Exception('First generate a valid image collection with search(...) method')
+
+        # form composite image
+        # self._composite_im = self._im_collection.mosaic()
+        self._composite_im = self._im_collection.qualityMosaic('Q_SCORE')
+
+        # set some metadata
+        # image.set('system:time_start', ee.Date(date_range.get('min')))
+        # image.set('system:time_end', ee.Date(date_range.get('max')))
+        # image.set('n_components', num_images)
+        # qualityMosaic(qualityBand)
+        return self._composite_im
+
+class Landsat7EeImage(EeRefImage):
+    def __init__(self, source_image_filename):
+        EeRefImage.__init__(self, source_image_filename, collection='landsat7')
 
     def _add_cloudmask(self, image):
         mask_bit = (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4)
-        qa = image.select('QA_PIXEL')
-        qa = qa.rename('CLOUD_PORTION')     # ??
+        qa_pixel = image.select('QA_PIXEL')
+        qa_pixel = qa_pixel.rename('CLOUD_PORTION')     # ??
         # qa.bitwiseAnd(mask_bit).eq(0)
-        cloud_mask = qa.bitwiseAnd(mask_bit).eq(0)
+        cloud_mask = qa_pixel.bitwiseAnd(mask_bit).eq(0)
         cloud_portion = cloud_mask.Not().reduceRegion(reducer='mean', geometry=self._bounds, scale=self.scale)
         return image.set(cloud_portion).updateMask(cloud_mask)
 
@@ -505,7 +588,22 @@ class EeLandsatRefImage(EeRefImage):
             map(self._add_cloudmask).\
             filter(ee.Filter.lt('CLOUD_PORTION', 0.05))
 
-class EeSentinelRefImage(EeRefImage):
+    def create_composite_image(self):
+        if self._im_collection is None:
+            raise Exception('First generate a valid image collection with search(...) method')
+
+        # form composite image
+        self._composite_im = self._im_collection.mosaic()
+
+        # set some metadata
+        # image.set('system:time_start', ee.Date(date_range.get('min')))
+        # image.set('system:time_end', ee.Date(date_range.get('max')))
+        # image.set('n_components', num_images)
+
+        return self._composite_im
+
+
+class Sentinel2EeImage(EeRefImage):
     def __init__(self, source_image_filename, collection='sentinel2_toa'):
         EeRefImage.__init__(self, source_image_filename, collection=collection)
 

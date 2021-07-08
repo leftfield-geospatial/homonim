@@ -104,7 +104,7 @@ def main(args):
         if 'landsat' in args.collection:
             ref_image = imutil.EeLandsatRefImage(args.extent_file, collection=args.collection)
         elif 'sentinel' in args.collection:
-            ref_image = imutil.EeSentinelRefImage(args.extent_file, collection=args.collection)
+            ref_image = imutil.Sentinel2EeImage(args.extent_file, collection=args.collection)
         else:
             ref_image = imutil.EeRefImage(args.extent_file, collection=args.collection)
 
