@@ -20,17 +20,18 @@ import json
 import os
 import pathlib
 import sys
-from datetime import timedelta
+import zipfile
+from datetime import timedelta, datetime
 from urllib import request
 
 import ee
 import numpy as np
+import pandas
 import pandas as pd
 import rasterio as rio
 from homonim import get_logger, root_path
 from rasterio.warp import transform_geom
 from shapely import geometry
-import zipfile
 
 logger = get_logger(__name__)
 
@@ -305,85 +306,116 @@ def download_image(link, filename):
 
 
 class EeRefImage:
-    def __init__(self, source_image_filename, collection=''):
+    def __init__(self, collection=''):
         self.collection = collection
-        self._bounds, self._crs = get_image_bounds(source_image_filename, expand=10)
+        # self._search_region, self._crs = get_image_bounds(source_image_filename, expand=10)
         collection_info = load_collection_info()
         if not collection in collection_info.keys():
             raise ValueError(f'Unknown collection: {collection}')
         self.collection_info = collection_info[collection]
         self._band_df = pd.DataFrame(self.collection_info['bands'])
-        self.scale = int(self._band_df['res'].min())
+        self.scale = int(self._band_df['res'].min())    # TODO: some way to get this from EE?
+        self._display_properties = []
         self._im_collection = None
         self._composite_im = None
+        self._im_df = None
+        self._search_region = None
+        self._search_date = None
+
+    def _add_timedelta(self, image):
+        return image.set('TIME_DIST', ee.Number(image.get('system:time_start')).
+                         subtract(self._search_date.timestamp()*1000).abs())
 
     def _get_init_collection(self):
-        return ee.ImageCollection(self.collection_info['ee_collection']).filterBounds(self._bounds)
+        return ee.ImageCollection(self.collection_info['ee_collection']).\
+            filterBounds(self._search_region).\
+            map(self._add_timedelta)
 
-    def search(self, date, min_images=1):
+    def search(self, date, region, day_range=16):
+        self._search_region = region
+        self._search_date = date
+        self._im_df = None
+
         im_collection_init = self._get_init_collection()
-
-        # expand the date range in powers of 2 until we find an image
-        start_date = date - timedelta(hours=12)
-        end_date = date + timedelta(hours=12)
+        start_date = date - timedelta(days=day_range)
+        end_date = date + timedelta(days=day_range)
         num_images = 0
-        expand_pow = 0
-        while (num_images < min_images) and (expand_pow <= 6):
-            logger.info(
-                f'Searching for {self.collection_info["ee_collection"]} images between {start_date.strftime("%Y-%m-%d")} and {end_date.strftime("%Y-%m-%d")}')
 
-            self._im_collection = im_collection_init.filterDate(start_date.strftime('%Y-%m-%d'),
-                                                                end_date.strftime('%Y-%m-%d'))
-
-            num_images = self._im_collection.size().getInfo()
-            start_date -= timedelta(days=2 ** expand_pow)
-            end_date += timedelta(days=2 ** expand_pow)
-            expand_pow += 1
+        logger.info(f'Searching for {self.collection_info["ee_collection"]} images between '
+                    f'{start_date.strftime("%Y-%m-%d")} and {end_date.strftime("%Y-%m-%d")}')
+        self._im_collection = im_collection_init.filterDate(start_date.strftime('%Y-%m-%d'),
+                                                            end_date.strftime('%Y-%m-%d'))
+        num_images = self._im_collection.size().getInfo()
 
         if num_images == 0:
-            logger.info(f'Could not find any images within {2 ** 6} days of {start_date.strftime("%Y-%m-%d")}')
-            return None, None
+            logger.info(f'Could not find any images in that date range')
+            return None
 
-        # print image dates
-        logger.info(f'Found {num_images} images in {self.collection_info["ee_collection"]}:')
-        im_list = self._im_collection.toList(num_images)
-        for i in range(num_images):
-            im_i = ee.Image(im_list.get(i))
-            date_str = ee.Date(im_i.get("system:time_start")).format().getInfo()    # UTC/GMT
-            index_str = im_i.get("system:index").getInfo()
-            # cloud_portion = im_i.get('CLOUD_PORTION').getInfo()
-            # SUN_AZIMUTH
-            # SUN_ELEVATION
-            # GEOMETRIC_RMSE_MODEL_Y & X
-            # 'system:index'
-            # 'CLOUD_PORTION' or similar
-            logger.info(f'{index_str} captured on {date_str}')
+        logger.info(f'Found {num_images} images:')
+        self._im_df = self._display_search_results()
 
-        return self._im_collection
+        return self._im_df.to_dict(orient='index')
 
-    def create_composite_image(self):
+    def _display_search_results(self):
+        im_timestamps = self._im_collection.aggregate_array('system:time_start').getInfo()
+        im_datetimes = [datetime.utcfromtimestamp(timestamp/1000.) for timestamp in im_timestamps]
+        im_ids = self._im_collection.aggregate_array('system:index').getInfo()
+
+        res_dict = dict(EE_ID=im_ids, DATE=im_datetimes)
+        for property in self._display_properties:
+            res_dict[property] = self._im_collection.aggregate_array(property).getInfo()
+
+        im_df = pandas.DataFrame.from_dict(res_dict).sort_values(by='DATE').reset_index(drop=True)
+        logger.info('Search results:\n' + im_df.to_string())
+        return im_df
+
+    def get_auto_image(self):
+        if (self._im_df is None) or (self._im_collection is None):
+            raise Exception('First generate valid search results with search(...) method')
+        return self._im_collection.sort('TIME_DIST', True).first()
+
+    def get_single_image(self, image_num):
+        if (self._im_df is None) or (self._im_collection is None):
+            raise Exception('First generate valid search results with search(...) method')
+
+        image = None
+        if isinstance(image_num, str):
+            if image_num not in self._im_df['EE_ID']:
+                raise ValueError(f'{image_num} does not exist in search results')
+            image = self._im_collection.filterMetadata('system:index', 'equals', image_num).first()
+        elif isinstance(image_num, int):
+            if (image_num >= 0) and (image_num < self._im_df.shape[0]):
+                image_num = self._im_df.loc[image_num]['EE_ID']
+                image = self._im_collection.filterMetadata('system:index', 'equals', image_num).first()
+            else:
+                raise ValueError(f'image_num={image_num} out of range')
+        else:
+            raise TypeError(f'Unknown image_num type')
+        return image
+
+    def get_composite_image(self):
         if self._im_collection is None:
-            raise Exception('First generate a valid image collection with search(...) method')
+            raise Exception('First generate valid search results with search(...) method')
 
-        # form composite image
-        self._composite_im = self._im_collection.mosaic()
+        return self._im_collection.median()
 
-        # set some metadata
-        # image.set('system:time_start', ee.Date(date_range.get('min')))
-        # image.set('system:time_end', ee.Date(date_range.get('max')))
-        # image.set('n_components', num_images)
+    def download_image(self, image, filename, crs=None, region=None, scale=None):
 
-        return self._composite_im
+        im_info = image.getInfo()   #GRID_CELL_SIZE_REFLECTIVE
+        if crs is None:
+            crs = im_info['bands'][0]['crs']
+        if region is None:
+            region = self._search_region
+        if scale is None:
+            scale = abs(im_info['bands'][0]['crs_transform'][0])
 
-    def _download_im(self, image, filename, is_composite=False):
-        # create download link
         link = image.getDownloadURL({
-            'scale': self.scale,
-            'crs': self._crs,
+            'scale': scale,
+            'crs': crs,
             'fileFormat': 'GeoTIFF',
             'bands':  [],
             'filePerBand': False,
-            'region': self._bounds})
+            'region': region})
 
         logger.info(f'Opening link: {link}')
 
@@ -429,43 +461,34 @@ class EeRefImage:
         _tif_filename = zipfile.ZipFile(zip_filename, "r").namelist()[0]
         os.rename(zip_filename.parent.joinpath(_tif_filename), tif_filename)
 
-        # write metadata to geotiff
-        date_range = self._im_collection.reduceColumns(ee.Reducer.minMax(), ["system:time_start"])
-        start_date_str = ee.Date(date_range.get('min')).format('YYYY-MM-dd').getInfo()
-        end_date_str = ee.Date(date_range.get('max')).format('YYYY-MM-dd').getInfo()
+        # copy metadata to geotiff
+        # date_range = self._im_collection.reduceColumns(ee.Reducer.minMax(), ["system:time_start"])
+        # start_date_str = ee.Date(date_range.get('min')).format('YYYY-MM-dd').getInfo()
+        # end_date_str = ee.Date(date_range.get('max')).format('YYYY-MM-dd').getInfo()
+        im_info['properties'].pop('system:footprint')
+
         with rio.open(tif_filename, 'r+') as im:
             # TODO: add capture date range, and composite type?
-            im.update_tags(EE_COLLECTION=self.collection_info['ee_collection'])
-            if is_composite:
-                im.update_tags(START_CAPTURE_DATE=start_date_str)
-                im.update_tags(END_CAPTURE_DATE=end_date_str)
-                im.update_tags(N_COMPONENT_IMS=self._im_collection.size().getInfo())
-
-            for band_i, band_row in self._band_df.iterrows():
-                im.update_tags(band_i+1, ID=band_row['id'])
-                im.update_tags(band_i+1, NAME=band_row['name'])
-                im.update_tags(band_i+1, ABBREV=band_row['abbrev'])
-
+            im.update_tags(**im_info['properties'])
+            # if is_composite:
+            #     im.update_tags(START_CAPTURE_DATE=start_date_str)
+            #     im.update_tags(END_CAPTURE_DATE=end_date_str)
+            #     im.update_tags(N_COMPONENT_IMS=self._im_collection.size().getInfo())
+            # for band_i, band_row in self._band_df.iterrows():
+            #     im.update_tags(band_i+1, ID=band_row['id'])
+            #     im.update_tags(band_i+1, NAME=band_row['name'])
+            #     im.update_tags(band_i+1, ABBREV=band_row['abbrev'])
+            for band_i, band_info in enumerate(im_info['bands']):
+                im.update_tags(band_i + 1, ID=band_info['id'])
+                if band_info['id'] in self._band_df['id'].to_list():
+                    band_row = self._band_df.loc[self._band_df['id'] == band_info['id']].iloc[0]
+                    # band_row = band_row[['abbrev', 'name', 'bw_start', 'bw_end']]
+                    im.update_tags(band_i + 1, ABBREV=band_row['abbrev'])
+                    im.update_tags(band_i + 1, DESC=band_row['name'])
+                    im.update_tags(band_i + 1, BW_START=band_row['bw_start'])
+                    im.update_tags(band_i + 1, BW_END=band_row['bw_end'])
         return link
 
-    def download_composite_im(self, filename):
-        """
-        Download a GEE image download.zip file and extract to a geotiff file
-
-        Parameters
-        ----------
-        filename :  str
-                    Path of the geotiff file to extract to.  Extension will be renamed to .tif if necessary.
-
-        Returns
-        -------
-        link :  str
-                link of the downloaded image
-        """
-        if self._composite_im is None:
-            raise Exception('First generate a valid image collection with search(...) method')
-
-        return self._download_im(self._composite_im, filename, is_composite=True)
 
     def _download_im_collection(self, filename):
         """
@@ -490,15 +513,18 @@ class EeRefImage:
             im_i = ee.Image(ee_im_list.get(i))
             im_date_i = ee.Date(im_i.get('system:time_start')).format('YYYY-MM-dd').getInfo()
             filename_i = filename.parent.joinpath(f'{filename.stem}_{i}_{im_date_i}.tif')
-            logger.info(f'Downloading {filename_i.stem}')
-            self._download_im(im_i, filename_i, is_composite=False)
+            logger.info(f'Downloading {filename_i.stem}...')
+            self.download_image(im_i, filename_i)
 
 
 
 class Landsat8EeImage(EeRefImage):
-    def __init__(self, source_image_filename, apply_mask=True):
+    def __init__(self, apply_mask=True):
+        EeRefImage.__init__(self, collection='landsat8')
         self.apply_mask = apply_mask
-        EeRefImage.__init__(self, source_image_filename, apply_mask=apply_mask, collection='landsat8')
+        self._display_properties = ['LANDSAT_PRODUCT_ID', 'DATE_ACQUIRED', 'SCENE_CENTER_TIME', 'VALID_PORTION',
+                                    'CLOUD_COVER_LAND', 'IMAGE_QUALITY_OLI', 'GEOMETRIC_RMSE_MODEL',
+                                    'GEOMETRIC_RMSE_VERIFY', 'SUN_AZIMUTH', 'SUN_ELEVATION', 'ROLL_ANGLE', 'NADIR_OFFNADIR']
 
     def _add_validmask(self, image):
         # Notes
@@ -511,7 +537,7 @@ class Landsat8EeImage(EeRefImage):
         # ) is weird: updateMask always masks bands added with addBands, but only masks the original SR etc bands after
         # a call to qualityMosaic (or perhaps median etc)
 
-
+        image = self._add_timedelta(image)
         # create a mask of valid (non cloud, shadow and aerosol) pixels
         # bits 1-4 of QA_PIXEL are dilated cloud, cirrus, cloud & cloud shadow, respectively
         qa_pixel_bitmask = (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4)
@@ -528,13 +554,13 @@ class Landsat8EeImage(EeRefImage):
         # TODO: figure out why we need this weird rename here
         # TODO: is aerosol_mask helpful in general, it looks suspect for GEF NGI ims
         valid_mask = cloud_mask.And(aerosol_mask).rename('VALID_PORTION')
-        valid_portion = valid_mask.Not().reduceRegion(reducer='mean', geometry=self._bounds, scale=self.scale)
+        valid_portion = valid_mask.multiply(100).reduceRegion(reducer='mean', geometry=self._search_region, scale=self.scale)
 
         # create a pixel quallity score (higher is better)
         cloud_conf = qa_pixel.rightShift(8).bitwiseAnd(3)
         cloud_shadow_conf = qa_pixel.rightShift(10).bitwiseAnd(3)
         cirrus_conf = qa_pixel.rightShift(14).bitwiseAnd(3)
-        q_score = cloud_conf.add(cloud_shadow_conf).add(cirrus_conf).add(aerosol_prob).multiply(-1).rename('Q_SCORE')
+        q_score = cloud_conf.add(cloud_shadow_conf).add(cirrus_conf).add(aerosol_prob).multiply(-1).rename('QA_SCORE')
 
         if False:
             image = image.addBands(sr_qa_aerosol)
@@ -550,28 +576,21 @@ class Landsat8EeImage(EeRefImage):
 
     def _get_init_collection(self):
         return ee.ImageCollection(self.collection_info['ee_collection']).\
-            filterBounds(self._bounds).\
+            filterBounds(self._search_region).\
             map(self._add_validmask).\
-            filter(ee.Filter.lt('VALID_PORTION', 0.05))
+            filter(ee.Filter.gt('VALID_PORTION', 95))
 
-    def create_composite_image(self):
+    def get_composite_image(self):
         if self._im_collection is None:
             raise Exception('First generate a valid image collection with search(...) method')
 
-        # form composite image
-        # self._composite_im = self._im_collection.mosaic()
-        self._composite_im = self._im_collection.qualityMosaic('Q_SCORE')
-
-        # set some metadata
-        # image.set('system:time_start', ee.Date(date_range.get('min')))
-        # image.set('system:time_end', ee.Date(date_range.get('max')))
-        # image.set('n_components', num_images)
-        # qualityMosaic(qualityBand)
+        self._composite_im = self._im_collection.qualityMosaic('QA_SCORE')
         return self._composite_im
 
+
 class Landsat7EeImage(EeRefImage):
-    def __init__(self, source_image_filename):
-        EeRefImage.__init__(self, source_image_filename, collection='landsat7')
+    def __init__(self):
+        EeRefImage.__init__(self, collection='landsat7')
 
     def _add_cloudmask(self, image):
         mask_bit = (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4)
@@ -579,16 +598,16 @@ class Landsat7EeImage(EeRefImage):
         qa_pixel = qa_pixel.rename('CLOUD_PORTION')     # ??
         # qa.bitwiseAnd(mask_bit).eq(0)
         cloud_mask = qa_pixel.bitwiseAnd(mask_bit).eq(0)
-        cloud_portion = cloud_mask.Not().reduceRegion(reducer='mean', geometry=self._bounds, scale=self.scale)
+        cloud_portion = cloud_mask.Not().reduceRegion(reducer='mean', geometry=self._search_region, scale=self.scale)
         return image.set(cloud_portion).updateMask(cloud_mask)
 
     def _get_init_collection(self):
         return ee.ImageCollection(self.collection_info['ee_collection']).\
-            filterBounds(self._bounds).\
+            filterBounds(self._search_region).\
             map(self._add_cloudmask).\
             filter(ee.Filter.lt('CLOUD_PORTION', 0.05))
 
-    def create_composite_image(self):
+    def get_composite_image(self):
         if self._im_collection is None:
             raise Exception('First generate a valid image collection with search(...) method')
 
@@ -604,19 +623,19 @@ class Landsat7EeImage(EeRefImage):
 
 
 class Sentinel2EeImage(EeRefImage):
-    def __init__(self, source_image_filename, collection='sentinel2_toa'):
-        EeRefImage.__init__(self, source_image_filename, collection=collection)
+    def __init__(self, collection='sentinel2_toa'):
+        EeRefImage.__init__(self, collection=collection)
 
     def _add_cloudmask(self, image):
         bit_mask = (1 << 11) | (1 << 10)
         qa = image.select('QA60')
         # qa.bitwiseAnd(mask_bit).eq(0)
         cloud_mask = qa.bitwiseAnd(bit_mask).eq(0)
-        cloud_portion = cloud_mask.Not().reduceRegion(reducer='mean', geometry=self._bounds, scale=self.scale)
+        cloud_portion = cloud_mask.Not().reduceRegion(reducer='mean', geometry=self._search_region, scale=self.scale)
         return image.set('CLOUD_PORTION', cloud_portion).updateMask(cloud_mask)
 
     def _get_init_collection(self):
         return ee.ImageCollection(self.collection_info['ee_collection']).\
-            filterBounds(self._bounds).\
+            filterBounds(self._search_region).\
             map(self._add_cloudmask).\
             filter(ee.Filter.lt('CLOUD_PORTION', 0.05))
