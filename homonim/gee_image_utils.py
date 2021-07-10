@@ -356,11 +356,34 @@ class EeRefImage:
 
         return self._im_df.to_dict(orient='index')
 
+    def _display_search_results2(self):
+        res_list = []   #dict(EE_ID=im_ids, DATE=im_datetimes)
+        def aggregrate_props(image, self):
+            prop_dict = image.getInfo()['properties']
+            res_dict = dict(EE_ID=prop_dict['system:index'], DATE=datetime.utcfromtimestamp(prop_dict['system:time_start']/1000))
+            for prop_key in self._display_properties:
+                res_dict[prop_key] = prop_dict[prop_key]
+            res_list.append(res_dict)
+            print(prop_dict['system:index'])
+            return None
+
+        self._im_collection.iterate(aggregrate_props, self)
+
+        im_df = pandas.DataFrame(res_list).sort_values(by='DATE').reset_index(drop=True)
+        logger.info('Search results:\n' + im_df.to_string())
+        return im_df
+
     def _display_search_results(self):
         im_timestamps = self._im_collection.aggregate_array('system:time_start').getInfo()
         im_datetimes = [datetime.utcfromtimestamp(timestamp/1000.) for timestamp in im_timestamps]
         im_ids = self._im_collection.aggregate_array('system:index').getInfo()
 
+        res_list = []   #dict(EE_ID=im_ids, DATE=im_datetimes)
+        def aggregrate_props(image, first):
+            props = image.getInfo()
+
+
+        # TODO: speedup?
         res_dict = dict(EE_ID=im_ids, DATE=im_datetimes)
         for property in self._display_properties:
             res_dict[property] = self._im_collection.aggregate_array(property).getInfo()
@@ -518,9 +541,8 @@ class Landsat8EeImage(EeRefImage):
     def __init__(self, apply_valid_mask=True):
         EeRefImage.__init__(self, collection='landsat8')
         self.apply_valid_mask = apply_valid_mask
-        self._display_properties = ['LANDSAT_PRODUCT_ID', 'DATE_ACQUIRED', 'SCENE_CENTER_TIME', 'VALID_PORTION',
-                                    'CLOUD_COVER_LAND', 'IMAGE_QUALITY_OLI', 'GEOMETRIC_RMSE_MODEL',
-                                    'GEOMETRIC_RMSE_VERIFY', 'SUN_AZIMUTH', 'SUN_ELEVATION', 'ROLL_ANGLE', 'NADIR_OFFNADIR']
+        self._display_properties = ['VALID_PORTION', 'QA_SCORE_AVG', 'GEOMETRIC_RMSE_VERIFY', 'SUN_AZIMUTH', 'SUN_ELEVATION']
+        # 'LANDSAT_PRODUCT_ID', 'DATE_ACQUIRED', 'SCENE_CENTER_TIME', 'CLOUD_COVER_LAND', 'IMAGE_QUALITY_OLI', 'ROLL_ANGLE', 'NADIR_OFFNADIR', 'GEOMETRIC_RMSE_MODEL',
 
     def _check_validity(self, image):
         # Notes
@@ -539,29 +561,31 @@ class Landsat8EeImage(EeRefImage):
         # bits 1-4 of QA_PIXEL are dilated cloud, cirrus, cloud & cloud shadow, respectively
         qa_pixel_bitmask = (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4)
         qa_pixel = image.select('QA_PIXEL')
-        cloud_mask = qa_pixel.bitwiseAnd(qa_pixel_bitmask).eq(0)
-        fill_mask = qa_pixel.bitwiseAnd(1).eq(0)
+        cloud_mask = qa_pixel.bitwiseAnd(qa_pixel_bitmask).eq(0).rename('CLOUD_MASK')
+        fill_mask = qa_pixel.bitwiseAnd(1).eq(0).rename('FILL_MASK')
 
         # bits 6-7 of SR_QA_AEROSOL, are aerosol level where 3 = high, 2=medium, 1=low
         sr_qa_aerosol_bitmask = (1 << 6) | (1 << 7)
         sr_qa_aerosol = image.select('SR_QA_AEROSOL')
         # aerosol_prob = sr_qa_aerosol.bitwiseAnd(sr_qa_aerosol_bitmask).rightShift(6)
         aerosol_prob = sr_qa_aerosol.rightShift(6).bitwiseAnd(3)
-        aerosol_mask = aerosol_prob.lt(3)
+        aerosol_mask = aerosol_prob.lt(3).rename('AEROSOL_MASK')
 
         # TODO: figure out why we need this weird rename here
         # TODO: is aerosol_mask helpful in general, it looks suspect for GEF NGI ims
-        valid_mask = cloud_mask.And(aerosol_mask).And(fill_mask).rename('VALID_PORTION')
+        valid_mask = cloud_mask.And(aerosol_mask).And(fill_mask).rename('VALID_MASK')
         # use unmask below as a workaround to prevent valid_portion only reducing the region masked below
-        valid_portion = valid_mask.unmask().multiply(100).reduceRegion(reducer='mean', geometry=self._search_region, scale=self.scale)
+        valid_portion = valid_mask.unmask().multiply(100).reduceRegion(reducer='mean', geometry=self._search_region,
+                                                                       scale=self.scale).rename(['VALID_MASK'], ['VALID_PORTION'])
 
         # create a pixel quallity score (higher is better)
-        cloud_conf = qa_pixel.rightShift(8).bitwiseAnd(3)
-        cloud_shadow_conf = qa_pixel.rightShift(10).bitwiseAnd(3)
-        cirrus_conf = qa_pixel.rightShift(14).bitwiseAnd(3)
-        q_score = cloud_conf.add(cloud_shadow_conf).add(cirrus_conf).add(aerosol_prob).multiply(-1).rename('QA_SCORE')
+        cloud_conf = qa_pixel.rightShift(8).bitwiseAnd(3).rename('CLOUD_CONF')
+        cloud_shadow_conf = qa_pixel.rightShift(10).bitwiseAnd(3).rename('CLOUD_SHADOW_CONF')
+        cirrus_conf = qa_pixel.rightShift(14).bitwiseAnd(3).rename('CIRRUS_CONF')
+        q_score = cloud_conf.add(cloud_shadow_conf).add(cirrus_conf).add(aerosol_prob).multiply(-1).add(12)
         # set q_score lowest where fill_mask==0
-        q_score = q_score.where(fill_mask.Not(), -15)
+        q_score = q_score.where(fill_mask.Not(), 0).rename('QA_SCORE')
+        q_score_avg = q_score.unmask().reduceRegion(reducer='mean', geometry=self._search_region, scale=self.scale).rename(['QA_SCORE'], ['QA_SCORE_AVG'])
 
         if False:
             image = image.addBands(cloud_conf)
@@ -576,13 +600,19 @@ class Landsat8EeImage(EeRefImage):
         else:
             image = image.updateMask(fill_mask)
 
-        return image.set(valid_portion).addBands(q_score)
+        return image.set(valid_portion).set(q_score_avg).addBands(q_score)
 
     def _get_init_collection(self):
         return ee.ImageCollection(self.collection_info['ee_collection']).\
             filterBounds(self._search_region).\
             map(self._check_validity).\
             filter(ee.Filter.gt('VALID_PORTION', 95))
+
+    # TODO: consider making a generic version of this in the base class, perhaps with a self.key=... defaults
+    def get_auto_image(self, key='QA_SCORE_AVG', ascending=False):
+        if (self._im_df is None) or (self._im_collection is None):
+            raise Exception('First generate valid search results with search(...) method')
+        return self._im_collection.sort(key, ascending).first()
 
     def get_composite_image(self):
         if self._im_collection is None:
