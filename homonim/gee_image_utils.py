@@ -407,7 +407,7 @@ class EeRefImage:
         if region is None:
             region = self._search_region
         if scale is None:
-            scale = abs(im_info['bands'][0]['crs_transform'][0])
+            scale = self.scale  # abs(im_info['bands'][0]['crs_transform'][0])
 
         link = image.getDownloadURL({
             'scale': scale,
@@ -465,28 +465,24 @@ class EeRefImage:
         # date_range = self._im_collection.reduceColumns(ee.Reducer.minMax(), ["system:time_start"])
         # start_date_str = ee.Date(date_range.get('min')).format('YYYY-MM-dd').getInfo()
         # end_date_str = ee.Date(date_range.get('max')).format('YYYY-MM-dd').getInfo()
-        im_info['properties'].pop('system:footprint')
+        if ('properties' in im_info) and ('system:footprint' in im_info['properties']):
+            im_info['properties'].pop('system:footprint')
 
         with rio.open(tif_filename, 'r+') as im:
             # TODO: add capture date range, and composite type?
-            im.update_tags(**im_info['properties'])
-            # if is_composite:
-            #     im.update_tags(START_CAPTURE_DATE=start_date_str)
-            #     im.update_tags(END_CAPTURE_DATE=end_date_str)
-            #     im.update_tags(N_COMPONENT_IMS=self._im_collection.size().getInfo())
-            # for band_i, band_row in self._band_df.iterrows():
-            #     im.update_tags(band_i+1, ID=band_row['id'])
-            #     im.update_tags(band_i+1, NAME=band_row['name'])
-            #     im.update_tags(band_i+1, ABBREV=band_row['abbrev'])
-            for band_i, band_info in enumerate(im_info['bands']):
-                im.update_tags(band_i + 1, ID=band_info['id'])
-                if band_info['id'] in self._band_df['id'].to_list():
-                    band_row = self._band_df.loc[self._band_df['id'] == band_info['id']].iloc[0]
-                    # band_row = band_row[['abbrev', 'name', 'bw_start', 'bw_end']]
-                    im.update_tags(band_i + 1, ABBREV=band_row['abbrev'])
-                    im.update_tags(band_i + 1, DESC=band_row['name'])
-                    im.update_tags(band_i + 1, BW_START=band_row['bw_start'])
-                    im.update_tags(band_i + 1, BW_END=band_row['bw_end'])
+            if 'properties' in im_info:
+                im.update_tags(**im_info['properties'])
+
+            if 'bands' in im_info:
+                for band_i, band_info in enumerate(im_info['bands']):
+                    im.update_tags(band_i + 1, ID=band_info['id'])
+                    if band_info['id'] in self._band_df['id'].to_list():
+                        band_row = self._band_df.loc[self._band_df['id'] == band_info['id']].iloc[0]
+                        # band_row = band_row[['abbrev', 'name', 'bw_start', 'bw_end']]
+                        im.update_tags(band_i + 1, ABBREV=band_row['abbrev'])
+                        im.update_tags(band_i + 1, DESC=band_row['name'])
+                        im.update_tags(band_i + 1, BW_START=band_row['bw_start'])
+                        im.update_tags(band_i + 1, BW_END=band_row['bw_end'])
         return link
 
 
@@ -519,14 +515,14 @@ class EeRefImage:
 
 
 class Landsat8EeImage(EeRefImage):
-    def __init__(self, apply_mask=True):
+    def __init__(self, apply_valid_mask=True):
         EeRefImage.__init__(self, collection='landsat8')
-        self.apply_mask = apply_mask
+        self.apply_valid_mask = apply_valid_mask
         self._display_properties = ['LANDSAT_PRODUCT_ID', 'DATE_ACQUIRED', 'SCENE_CENTER_TIME', 'VALID_PORTION',
                                     'CLOUD_COVER_LAND', 'IMAGE_QUALITY_OLI', 'GEOMETRIC_RMSE_MODEL',
                                     'GEOMETRIC_RMSE_VERIFY', 'SUN_AZIMUTH', 'SUN_ELEVATION', 'ROLL_ANGLE', 'NADIR_OFFNADIR']
 
-    def _add_validmask(self, image):
+    def _check_validity(self, image):
         # Notes
         # - QA_PIXEL The *conf bit pairs (8-9,10-11,12-13,14-15) will always be 1 or more, unless it is a fill pixel -
         # i.e. the fill bit 0 is set.  Values are higher where there are cloud, cloud shadow etc.  The water bit 7, is
@@ -536,6 +532,7 @@ class Landsat8EeImage(EeRefImage):
         # - The behaviour of updateMask in combination with ImageCollection qualityMosaic (and perhaps median and mosaic
         # ) is weird: updateMask always masks bands added with addBands, but only masks the original SR etc bands after
         # a call to qualityMosaic (or perhaps median etc)
+        # - Pixels in Fill bit QA_* masks seem to refer to nodata / uncovered pixels only.  They don't occur amongst valid data
 
         image = self._add_timedelta(image)
         # create a mask of valid (non cloud, shadow and aerosol) pixels
@@ -543,6 +540,7 @@ class Landsat8EeImage(EeRefImage):
         qa_pixel_bitmask = (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4)
         qa_pixel = image.select('QA_PIXEL')
         cloud_mask = qa_pixel.bitwiseAnd(qa_pixel_bitmask).eq(0)
+        fill_mask = qa_pixel.bitwiseAnd(1).eq(0)
 
         # bits 6-7 of SR_QA_AEROSOL, are aerosol level where 3 = high, 2=medium, 1=low
         sr_qa_aerosol_bitmask = (1 << 6) | (1 << 7)
@@ -553,31 +551,37 @@ class Landsat8EeImage(EeRefImage):
 
         # TODO: figure out why we need this weird rename here
         # TODO: is aerosol_mask helpful in general, it looks suspect for GEF NGI ims
-        valid_mask = cloud_mask.And(aerosol_mask).rename('VALID_PORTION')
-        valid_portion = valid_mask.multiply(100).reduceRegion(reducer='mean', geometry=self._search_region, scale=self.scale)
+        valid_mask = cloud_mask.And(aerosol_mask).And(fill_mask).rename('VALID_PORTION')
+        # use unmask below as a workaround to prevent valid_portion only reducing the region masked below
+        valid_portion = valid_mask.unmask().multiply(100).reduceRegion(reducer='mean', geometry=self._search_region, scale=self.scale)
 
         # create a pixel quallity score (higher is better)
         cloud_conf = qa_pixel.rightShift(8).bitwiseAnd(3)
         cloud_shadow_conf = qa_pixel.rightShift(10).bitwiseAnd(3)
         cirrus_conf = qa_pixel.rightShift(14).bitwiseAnd(3)
         q_score = cloud_conf.add(cloud_shadow_conf).add(cirrus_conf).add(aerosol_prob).multiply(-1).rename('QA_SCORE')
+        # set q_score lowest where fill_mask==0
+        q_score = q_score.where(fill_mask.Not(), -15)
 
         if False:
-            image = image.addBands(sr_qa_aerosol)
             image = image.addBands(cloud_conf)
             image = image.addBands(cloud_shadow_conf)
             image = image.addBands(cirrus_conf)
             image = image.addBands(aerosol_prob)
+            image = image.addBands(fill_mask)
+            image = image.addBands(valid_mask)
 
-        if self.apply_mask:
-            return image.set(valid_portion).addBands(q_score).updateMask(valid_mask)
+        if self.apply_valid_mask:
+            image = image.updateMask(valid_mask)
         else:
-            return image.set(valid_portion).addBands(q_score)
+            image = image.updateMask(fill_mask)
+
+        return image.set(valid_portion).addBands(q_score)
 
     def _get_init_collection(self):
         return ee.ImageCollection(self.collection_info['ee_collection']).\
             filterBounds(self._search_region).\
-            map(self._add_validmask).\
+            map(self._check_validity).\
             filter(ee.Filter.gt('VALID_PORTION', 95))
 
     def get_composite_image(self):
