@@ -326,8 +326,9 @@ class EeRefImage:
         return image.set('TIME_DIST', ee.Number(image.get('system:time_start')).
                          subtract(self._search_date.timestamp()*1000).abs())
 
-    def _get_init_collection(self):
+    def _get_im_collection(self, start_date, end_date):
         return ee.ImageCollection(self.collection_info['ee_collection']).\
+            filterDate(start_date, end_date).\
             filterBounds(self._search_region).\
             map(self._add_timedelta)
 
@@ -336,15 +337,13 @@ class EeRefImage:
         self._search_date = date
         self._im_df = None
 
-        im_collection_init = self._get_init_collection()
         start_date = date - timedelta(days=day_range)
         end_date = date + timedelta(days=day_range)
         num_images = 0
 
         logger.info(f'Searching for {self.collection_info["ee_collection"]} images between '
                     f'{start_date.strftime("%Y-%m-%d")} and {end_date.strftime("%Y-%m-%d")}')
-        self._im_collection = im_collection_init.filterDate(start_date.strftime('%Y-%m-%d'),
-                                                            end_date.strftime('%Y-%m-%d'))
+        self._im_collection = self._get_im_collection(start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d"))
         num_images = self._im_collection.size().getInfo()
 
         if num_images == 0:
@@ -357,7 +356,7 @@ class EeRefImage:
         return self._im_df.to_dict(orient='index')
 
     def _display_search_results(self):
-        init_list = ee.List([])   #dict(EE_ID=im_ids, DATE=im_datetimes)
+        init_list = ee.List([])
         display_properties = self._display_properties
 
         def aggregrate_props(image, res_list):
@@ -423,10 +422,10 @@ class EeRefImage:
         return image
 
     def get_composite_image(self):
-        if self._im_collection is None:
+        if self._im_collection is None or self._im_df is None:
             raise Exception('First generate valid search results with search(...) method')
 
-        return self._im_collection.median()
+        return self._im_collection.median().set('COMPOSITE_IMAGES', self._im_df.to_string())
 
     def download_image(self, image, filename, crs=None, region=None, scale=None):
 
@@ -608,8 +607,9 @@ class Landsat8EeImage(EeRefImage):
 
         return image.set(valid_portion).set(q_score_avg).addBands(q_score)
 
-    def _get_init_collection(self):
+    def _get_im_collection(self, start_date, end_date):
         return ee.ImageCollection(self.collection_info['ee_collection']).\
+            filterDate(start_date, end_date).\
             filterBounds(self._search_region).\
             map(self._check_validity).\
             filter(ee.Filter.gt('VALID_PORTION', 95))
@@ -623,9 +623,7 @@ class Landsat8EeImage(EeRefImage):
     def get_composite_image(self):
         if self._im_collection is None:
             raise Exception('First generate a valid image collection with search(...) method')
-
-        self._composite_im = self._im_collection.qualityMosaic('QA_SCORE')
-        return self._composite_im
+        return self._im_collection.qualityMosaic('QA_SCORE').set('COMPOSITE_IMAGES', self._im_df.to_string())
 
 
 class Landsat7EeImage(EeRefImage):
@@ -641,7 +639,7 @@ class Landsat7EeImage(EeRefImage):
         cloud_portion = cloud_mask.Not().reduceRegion(reducer='mean', geometry=self._search_region, scale=self.scale)
         return image.set(cloud_portion).updateMask(cloud_mask)
 
-    def _get_init_collection(self):
+    def _get_im_collection(self, start_date, end_date):
         return ee.ImageCollection(self.collection_info['ee_collection']).\
             filterBounds(self._search_region).\
             map(self._add_cloudmask).\
@@ -674,7 +672,7 @@ class Sentinel2EeImage(EeRefImage):
         cloud_portion = cloud_mask.Not().reduceRegion(reducer='mean', geometry=self._search_region, scale=self.scale)
         return image.set('CLOUD_PORTION', cloud_portion).updateMask(cloud_mask)
 
-    def _get_init_collection(self):
+    def _get_im_collection(self, start_date, end_date):
         return ee.ImageCollection(self.collection_info['ee_collection']).\
             filterBounds(self._search_region).\
             map(self._add_cloudmask).\
