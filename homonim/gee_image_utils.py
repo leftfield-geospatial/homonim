@@ -356,24 +356,30 @@ class EeRefImage:
 
         return self._im_df.to_dict(orient='index')
 
-    def _display_search_results2(self):
-        res_list = []   #dict(EE_ID=im_ids, DATE=im_datetimes)
-        def aggregrate_props(image, self):
-            prop_dict = image.getInfo()['properties']
-            res_dict = dict(EE_ID=prop_dict['system:index'], DATE=datetime.utcfromtimestamp(prop_dict['system:time_start']/1000))
-            for prop_key in self._display_properties:
-                res_dict[prop_key] = prop_dict[prop_key]
-            res_list.append(res_dict)
-            print(prop_dict['system:index'])
-            return None
+    def _display_search_results(self):
+        init_list = ee.List([])   #dict(EE_ID=im_ids, DATE=im_datetimes)
+        display_properties = self._display_properties
 
-        self._im_collection.iterate(aggregrate_props, self)
+        def aggregrate_props(image, res_list):
+            res_dict = ee.Dictionary()
+            res_dict = res_dict.set('EE_ID', image.get('system:index'))
+            res_dict = res_dict.set('DATE', image.get('system:time_start'))
+            for prop_key in display_properties:
+                res_dict = res_dict.set(prop_key, image.get(prop_key))
+            return ee.List(res_list).add(res_dict)
 
-        im_df = pandas.DataFrame(res_list).sort_values(by='DATE').reset_index(drop=True)
+        # retrieve properties of search result images for display
+        res_list = ee.List(self._im_collection.iterate(aggregrate_props, init_list)).getInfo()
+
+        # create dataframe of search results
+        im_df = pandas.DataFrame(res_list)
+        im_df['DATE'] = [datetime.utcfromtimestamp(ts/1000) for ts in im_df['DATE']]    # convert timestamp to datetime
+        cols = ['EE_ID', 'DATE'] + self._display_properties     # re-order columns
+        im_df = im_df[cols].sort_values(by='DATE').reset_index(drop=True)
         logger.info('Search results:\n' + im_df.to_string())
         return im_df
 
-    def _display_search_results(self):
+    def _display_search_results2(self):
         im_timestamps = self._im_collection.aggregate_array('system:time_start').getInfo()
         im_datetimes = [datetime.utcfromtimestamp(timestamp/1000.) for timestamp in im_timestamps]
         im_ids = self._im_collection.aggregate_array('system:index').getInfo()
