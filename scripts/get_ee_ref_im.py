@@ -35,10 +35,6 @@ from homonim import get_logger
 # src_filename = pathlib.Path(r'V:\Data\HomonimEgs\NGI_3323D_2015_GefSite\Source\NGI_3323DA_2015_GefSite_Source.vrt')    #2010-01-22 - 2010-02-01
 # src_date = '2015-05-08'
 ##
-# TODO: update this to an 'intelligent' version that chooses the best of L8, L7 etc based on image date,
-#  then searches and expands the date range until it finds something, and chooses appropriate cloud masking, perhaps reducing criteria etc
-#  also avoid median over cloudy images, and or do a better cloud mask
-# TODO: write cloud masking and band matching backend based on my GEE code
 
 logger = get_logger(__name__)
 def parse_arguments():
