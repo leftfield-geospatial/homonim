@@ -22,7 +22,7 @@ import pathlib
 import sys
 import zipfile
 from datetime import timedelta, datetime
-from urllib import request
+import urllib
 
 import ee
 import numpy as np
@@ -95,6 +95,21 @@ class EeRefImage:
             filterBounds(self._search_region).\
             map(self._add_timedelta)
             # filter(ee.Filter.contains('system:footprint'), self._search_region).\
+
+    def get_image_info(self, image):
+        im_info = image.getInfo()
+
+        band_info_df = pd.DataFrame(im_info['bands'])
+        crs_transforms = np.array(band_info_df['crs_transform'].to_list())
+        scales = np.abs(crs_transforms[:, 0])
+        min_scale_i = np.argmin(scales)
+        # crs = image.select(min_scale_i).projection().crs()
+        # scale = image.select(min_scale_i).projection().nominalScale()
+        min_crs = band_info_df.iloc[min_scale_i]['crs']
+        min_scale = scales[min_scale_i]
+
+        return im_info, min_crs, min_scale
+
 
     def search(self, date, region, day_range=16):
         self._search_region = region
@@ -174,24 +189,60 @@ class EeRefImage:
 
     def download_image(self, image, filename, crs=None, region=None, scale=None):
 
+        im_info, min_crs, min_scale = self.get_image_info(image)
+
+        # check if scale is same across bands
+        band_info_df = pd.DataFrame(im_info['bands'])
+        scales = np.array(band_info_df['crs_transform'].to_list())[:, 0]
+
+        # min_scale_i = np.argmin(scales) #.astype(float)
+        if np.all(band_info_df['crs'] == 'EPSG:4326') and np.all(scales == 1):
+            # set the crs and and scale if it is a composite image
+            if crs is None or scale is None:
+                _image = self._im_collection.first()
+                _im_info, min_crs, min_scale = self.get_image_info(_image)
+                logger.warning(f'This appears to be a composite image in WGS84, reprojecting all bands to {min_crs} at {min_scale}m resolution')
+
         if crs is None:
-            crs = self._im_collection.first().projection().crs()
+            # crs = image.select(min_scale_i).projection().crs()
+            crs = min_crs
         if region is None:
             region = self._search_region
         if scale is None:
-            scale = self._im_collection.first().projection().nominalScale()
+            # scale = image.select(min_scale_i).projection().nominalScale()
+            scale = float(min_scale)
+
+        if (band_info_df['crs'].unique().size > 1) or (np.unique(scales).size > 1):
+            logger.warning(f'Image bands have different scales, reprojecting all to {crs} at {scale}m resolution')
+
+        # force all bands into same crs and scale
+        band_info_df['crs'] = crs
+        band_info_df['scale'] = scale
+        bands_dict = band_info_df[['id', 'crs', 'scale', 'data_type']].to_dict('records')
 
         link = image.getDownloadURL({
             'scale': scale,
             'crs': crs,
             'fileFormat': 'GeoTIFF',
-            'bands':  [],
+            'bands':  bands_dict,
             'filePerBand': False,
             'region': region})
 
         logger.info(f'Opening link: {link}')
 
-        file_link = request.urlopen(link)
+        try:
+            file_link = urllib.request.urlopen(link)
+        except urllib.error.HTTPError as ex:
+            logger.error(f'Could not open URL: HHTP error {ex.code} - {ex.reason}')
+            response = json.loads(ex.read())
+            if ('error' in response) and ('message' in response['error']):
+                msg = response['error']['message']
+                logger.error(msg)
+                if (msg == 'User memory limit exceeded.'):
+                    logger.error('There is a 10MB Earth Engine limit on image downloads, either decrease image size, or use export(...)')
+                    return
+            raise ex
+
         meta = file_link.info()
         file_size = int(meta['Content-Length'])
         logger.info(f'Download size: {file_size / (1024 ** 2):.2f} MB')
@@ -233,7 +284,6 @@ class EeRefImage:
         _tif_filename = zipfile.ZipFile(zip_filename, "r").namelist()[0]
         os.rename(zip_filename.parent.joinpath(_tif_filename), tif_filename)
 
-        im_info = image.getInfo()
         if ('properties' in im_info) and ('system:footprint' in im_info['properties']):
             im_info['properties'].pop('system:footprint')
 
@@ -254,7 +304,7 @@ class EeRefImage:
         return link
 
 
-    def _download_im_collection(self, filename):
+    def _download_im_collection(self, filename, band_list=None):
         """
         Download all images in the collection
 
@@ -275,6 +325,8 @@ class EeRefImage:
 
         for i in range(num_images):
             im_i = ee.Image(ee_im_list.get(i))
+            if band_list is not None:
+                im_i = im_i.select(*band_list)
             im_date_i = ee.Date(im_i.get('system:time_start')).format('YYYY-MM-dd').getInfo()
             filename_i = filename.parent.joinpath(f'{filename.stem}_{i}_{im_date_i}.tif')
             logger.info(f'Downloading {filename_i.stem}...')
@@ -380,64 +432,36 @@ class LandsatEeImage(EeRefImage):
             raise Exception('First generate a valid image collection with search(...) method')
         return self._im_collection.qualityMosaic('QA_SCORE').set('COMPOSITE_IMAGES', self._im_df.to_string())
 
-# TODO: make one landsat class
-class Landsat7EeImage(EeRefImage):
-    def __init__(self, apply_valid_mask=True):
-        EeRefImage.__init__(self, collection='landsat7')
-        self.apply_valid_mask = apply_valid_mask
-        self._display_properties = ['VALID_PORTION', 'QA_SCORE_AVG', 'GEOMETRIC_RMSE_MODEL', 'SUN_AZIMUTH', 'SUN_ELEVATION']
-        # 'LANDSAT_PRODUCT_ID', 'DATE_ACQUIRED', 'SCENE_CENTER_TIME', 'CLOUD_COVER_LAND', 'IMAGE_QUALITY_OLI', 'ROLL_ANGLE', 'NADIR_OFFNADIR', 'GEOMETRIC_RMSE_MODEL',
-        self._valid_portion = 70
+
+class Sentinel2EeImage(EeRefImage):
+    def __init__(self, collection='sentinel2_toa', valid_portion=90):
+        EeRefImage.__init__(self, collection=collection)
+        self._valid_portion = valid_portion
+        self._display_properties = ['VALID_PORTION', 'GEOMETRIC_QUALITY_FLAG', 'RADIOMETRIC_QUALITY_FLAG', 'MEAN_SOLAR_AZIMUTH_ANGLE', 'MEAN_SOLAR_ZENITH_ANGLE']
 
     def _check_validity(self, image):
-        # as for Landsat8EeImage but without SR_QA_AEROSOL
         image = self._add_timedelta(image)
-        # create a mask of valid (non cloud, shadow and aerosol) pixels
-        # bits 1-4 of QA_PIXEL are dilated cloud, cirrus, cloud & cloud shadow, respectively
-        qa_pixel_bitmask = (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4)
-        qa_pixel = image.select('QA_PIXEL')
-        cloud_mask = qa_pixel.bitwiseAnd(qa_pixel_bitmask).eq(0).rename('CLOUD_MASK')
-        fill_mask = qa_pixel.bitwiseAnd(1).eq(0).rename('FILL_MASK')
-
-        valid_mask = cloud_mask.And(fill_mask).rename('VALID_MASK')
-        # use unmask below as a workaround to prevent valid_portion only reducing the region masked below
+        bit_mask = (1 << 11) | (1 << 10)
+        qa = image.select('QA60')
+        valid_mask = qa.bitwiseAnd(bit_mask).eq(0).rename('VALID_MASK')
         valid_portion = valid_mask.unmask().multiply(100).reduceRegion(reducer='mean', geometry=self._search_region,
-                                                                       scale=image.projection().nominalScale()).rename(['VALID_MASK'], ['VALID_PORTION'])
+                                                                       scale=image.select(1).projection().nominalScale()).rename(['VALID_MASK'], ['VALID_PORTION'])
 
-        # create a pixel quallity score (higher is better)
-        cloud_conf = qa_pixel.rightShift(8).bitwiseAnd(3).rename('CLOUD_CONF')
-        cloud_shadow_conf = qa_pixel.rightShift(10).bitwiseAnd(3).rename('CLOUD_SHADOW_CONF')
-        cirrus_conf = qa_pixel.rightShift(14).bitwiseAnd(3).rename('CIRRUS_CONF')
-        q_score = cloud_conf.add(cloud_shadow_conf).add(cirrus_conf).multiply(-1).add(9)
-        # set q_score lowest where fill_mask==0
-        q_score = q_score.where(fill_mask.Not(), 0).rename('QA_SCORE')
-        q_score_avg = q_score.unmask().reduceRegion(reducer='mean', geometry=self._search_region, scale=image.projection().nominalScale()).rename(['QA_SCORE'], ['QA_SCORE_AVG'])
+        return image.set(valid_portion).updateMask(valid_mask)
 
-        if False:
-            image = image.addBands(cloud_conf)
-            image = image.addBands(cloud_shadow_conf)
-            image = image.addBands(cirrus_conf)
-            image = image.addBands(aerosol_prob)
-            image = image.addBands(fill_mask)
-            image = image.addBands(valid_mask)
-
-        if self.apply_valid_mask:
-            image = image.updateMask(valid_mask)
-        else:
-            image = image.updateMask(fill_mask)
-
-        return image.set(valid_portion).set(q_score_avg).addBands(q_score)
-
-    # TODO: how to set VALID_PORTION with scan line error
     def _get_im_collection(self, start_date, end_date):
         return ee.ImageCollection(self._collection_info['ee_collection']).\
             filterDate(start_date, end_date).\
             filterBounds(self._search_region).\
             map(self._check_validity).\
-            filter(ee.Filter.gt('VALID_PORTION', 90))
+            filter(ee.Filter.gt('VALID_PORTION', self._valid_portion))
+
+    def search(self, date, region, day_range=16, valid_portion=90):
+        self._valid_portion = valid_portion
+        EeRefImage.search(self, date, region, day_range=day_range)
 
     # TODO: consider making a generic version of this in the base class, perhaps with a self.key=... defaults
-    def get_auto_image(self, key='QA_SCORE_AVG', ascending=False):
+    def get_auto_image(self, key='VALID_PORTION', ascending=False):
         if (self._im_df is None) or (self._im_collection is None):
             raise Exception('First generate valid search results with search(...) method')
         return self._im_collection.sort(key, ascending).first()
@@ -445,23 +469,4 @@ class Landsat7EeImage(EeRefImage):
     def get_composite_image(self):
         if self._im_collection is None:
             raise Exception('First generate a valid image collection with search(...) method')
-        return self._im_collection.qualityMosaic('QA_SCORE').set('COMPOSITE_IMAGES', self._im_df.to_string())
-
-
-class Sentinel2EeImage(EeRefImage):
-    def __init__(self, collection='sentinel2_toa'):
-        EeRefImage.__init__(self, collection=collection)
-
-    def _add_cloudmask(self, image):
-        bit_mask = (1 << 11) | (1 << 10)
-        qa = image.select('QA60')
-        # qa.bitwiseAnd(mask_bit).eq(0)
-        cloud_mask = qa.bitwiseAnd(bit_mask).eq(0)
-        cloud_portion = cloud_mask.Not().reduceRegion(reducer='mean', geometry=self._search_region, scale=image.projection().nominalScale())
-        return image.set('CLOUD_PORTION', cloud_portion).updateMask(cloud_mask)
-
-    def _get_im_collection(self, start_date, end_date):
-        return ee.ImageCollection(self._collection_info['ee_collection']).\
-            filterBounds(self._search_region).\
-            map(self._add_cloudmask).\
-            filter(ee.Filter.lt('CLOUD_PORTION', 0.05))
+        return self._im_collection.mosaic().set('COMPOSITE_IMAGES', self._im_df.to_string())
