@@ -32,6 +32,7 @@ import rasterio as rio
 from homonim import get_logger, root_path
 from rasterio.warp import transform_geom
 from shapely import geometry
+import time
 
 logger = get_logger(__name__)
 
@@ -187,6 +188,73 @@ class EeRefImage:
 
         return self._im_collection.median().set('COMPOSITE_IMAGES', self._im_df.to_string())
 
+    def export_image(self, image, description, folder=None, crs=None, region=None, scale=None, wait=True):
+
+        im_info, min_crs, min_scale = self.get_image_info(image)
+
+        # check if scale is same across bands
+        band_info_df = pd.DataFrame(im_info['bands'])
+        scales = np.array(band_info_df['crs_transform'].to_list())[:, 0]
+
+        # min_scale_i = np.argmin(scales) #.astype(float)
+        if np.all(band_info_df['crs'] == 'EPSG:4326') and np.all(scales == 1):
+            # set the crs and and scale if it is a composite image
+            if crs is None or scale is None:
+                _image = self._im_collection.first()
+                _im_info, min_crs, min_scale = self.get_image_info(_image)
+                logger.warning(f'This appears to be a composite image in WGS84, reprojecting all bands to {min_crs} at {min_scale}m resolution')
+
+        if crs is None:
+            # crs = image.select(min_scale_i).projection().crs()
+            crs = min_crs
+        if region is None:
+            region = ee.Geometry(self._search_region)
+        if scale is None:
+            # scale = image.select(min_scale_i).projection().nominalScale()
+            scale = float(min_scale)
+
+        if (band_info_df['crs'].unique().size > 1) or (np.unique(scales).size > 1):
+            logger.warning(f'Image bands have different scales, reprojecting all to {crs} at {scale}m resolution')
+
+        # force all bands into same crs and scale
+        band_info_df['crs'] = crs
+        band_info_df['scale'] = scale
+        bands_dict = band_info_df[['id', 'crs', 'scale', 'data_type']].to_dict('records')
+
+        # TODO: make sure the cast to uint16 below is valid for new collections
+        task = ee.batch.Export.image.toDrive(image=image.toUint16(),
+                                             region=region,
+                                             description=description,
+                                             folder=folder,
+                                             fileNamePrefix=description,
+                                             scale=scale,
+                                             crs=crs,
+                                             maxPixels=1e9)
+
+        logger.info(f'Starting export task {description}...')
+        task.start()
+        if wait:
+            status = ee.data.getOperation(task.name)
+            toggles = '-\|/'
+            toggle_count = 0
+            while ('done' not in status) or (not status['done']):
+                time.sleep(1)
+                status = ee.data.getOperation(task.name)
+                status_str = status['metadata']['state']
+                # if ('stages' in status['metadata']):
+                #     stage_name = status['metadata']['stages'][-1]['displayName']
+                #     status_str = status_str + f': {stage_name}'
+                status_str += toggles[toggle_count%4]
+                toggle_count += 1
+                sys.stdout.write('\r')
+                sys.stdout.write(status_str)
+                sys.stdout.flush()
+            sys.stdout.write('\r')
+            sys.stdout.write(status['metadata']['state'])
+            sys.stdout.flush()
+            sys.stdout.write('\n')
+
+
     def download_image(self, image, filename, crs=None, region=None, scale=None):
 
         im_info, min_crs, min_scale = self.get_image_info(image)
@@ -220,7 +288,8 @@ class EeRefImage:
         band_info_df['scale'] = scale
         bands_dict = band_info_df[['id', 'crs', 'scale', 'data_type']].to_dict('records')
 
-        link = image.getDownloadURL({
+        # TODO: make sure the cast to uint16 is ok for any new collections
+        link = image.toUint16().getDownloadURL({
             'scale': scale,
             'crs': crs,
             'fileFormat': 'GeoTIFF',
