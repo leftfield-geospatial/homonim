@@ -144,7 +144,7 @@ class EeRefImage:
             res_dict = res_dict.set('EE_ID', image.get('system:index'))
             res_dict = res_dict.set('DATE', image.get('system:time_start'))
             for prop_key in display_properties:
-                res_dict = res_dict.set(prop_key, image.get(prop_key))
+                res_dict = res_dict.set(prop_key, ee.Algorithms.If(image.get(prop_key), image.get(prop_key), ee.String('None')))
             return ee.List(res_list).add(res_dict)
 
         # retrieve properties of search result images for display
@@ -238,21 +238,20 @@ class EeRefImage:
             toggles = '-\|/'
             toggle_count = 0
             while ('done' not in status) or (not status['done']):
-                time.sleep(1)
+                time.sleep(.5)
                 status = ee.data.getOperation(task.name)
-                status_str = status['metadata']['state']
                 # if ('stages' in status['metadata']):
                 #     stage_name = status['metadata']['stages'][-1]['displayName']
                 #     status_str = status_str + f': {stage_name}'
-                status_str += toggles[toggle_count%4]
-                toggle_count += 1
-                sys.stdout.write('\r')
-                sys.stdout.write(status_str)
+                # sys.stdout.write(f'\rExport image status: {str(status["metadata"]["state"]).lower()} {toggles[toggle_count%4]}')
+                # TODO: interpret totalWorkUnits and completeWorkUnits
+                sys.stdout.write(f'\rExport image {str(status["metadata"]["state"]).lower()} [ {toggles[toggle_count%4]} ]')
                 sys.stdout.flush()
-            sys.stdout.write('\r')
-            sys.stdout.write(status['metadata']['state'])
-            sys.stdout.flush()
-            sys.stdout.write('\n')
+                toggle_count += 1
+            sys.stdout.write(f'\rExport image {str(status["metadata"]["state"]).lower()}\n')
+            if status['metadata']['state'] != 'SUCCEEDED':
+                logger.error(f'Export failed \n{status}')
+                raise Exception(f'Export failed \n{status}')
 
 
     def download_image(self, image, filename, crs=None, region=None, scale=None):
@@ -359,15 +358,16 @@ class EeRefImage:
         with rio.open(tif_filename, 'r+') as im:
             if 'properties' in im_info:
                 im.update_tags(**im_info['properties'])
-
+            # im.profile['photometric'] = None    # fix warning
             if 'bands' in im_info:
                 for band_i, band_info in enumerate(im_info['bands']):
+                    im.set_band_description(band_i + 1, band_info['id'])
                     im.update_tags(band_i + 1, ID=band_info['id'])
                     if band_info['id'] in self._band_df['id'].to_list():
                         band_row = self._band_df.loc[self._band_df['id'] == band_info['id']].iloc[0]
                         # band_row = band_row[['abbrev', 'name', 'bw_start', 'bw_end']]
                         im.update_tags(band_i + 1, ABBREV=band_row['abbrev'])
-                        im.update_tags(band_i + 1, DESC=band_row['name'])
+                        im.update_tags(band_i + 1, NAME=band_row['name'])
                         im.update_tags(band_i + 1, BW_START=band_row['bw_start'])
                         im.update_tags(band_i + 1, BW_END=band_row['bw_end'])
         return link
@@ -506,7 +506,7 @@ class Sentinel2EeImage(EeRefImage):
     def __init__(self, collection='sentinel2_toa', valid_portion=90):
         EeRefImage.__init__(self, collection=collection)
         self._valid_portion = valid_portion
-        self._display_properties = ['VALID_PORTION', 'GEOMETRIC_QUALITY_FLAG', 'RADIOMETRIC_QUALITY_FLAG', 'MEAN_SOLAR_AZIMUTH_ANGLE', 'MEAN_SOLAR_ZENITH_ANGLE']
+        self._display_properties = ['VALID_PORTION', 'GEOMETRIC_QUALITY_FLAG', 'RADIOMETRIC_QUALITY_FLAG', 'MEAN_SOLAR_AZIMUTH_ANGLE', 'MEAN_SOLAR_ZENITH_ANGLE', 'MEAN_INCIDENCE_AZIMUTH_ANGLE_B1', 'MEAN_INCIDENCE_ZENITH_ANGLE_B1']
 
     def _check_validity(self, image):
         image = self._add_timedelta(image)
@@ -539,3 +539,172 @@ class Sentinel2EeImage(EeRefImage):
         if self._im_collection is None:
             raise Exception('First generate a valid image collection with search(...) method')
         return self._im_collection.mosaic().set('COMPOSITE_IMAGES', self._im_df.to_string())
+
+class Sentinel2CloudlessEeImage(EeRefImage):
+    def __init__(self, apply_valid_mask=True, collection='sentinel2_toa', valid_portion=60):
+        EeRefImage.__init__(self, collection=collection)
+        self.apply_valid_mask = apply_valid_mask
+        self.scale = 10
+        self._valid_portion = valid_portion
+        self._display_properties = ['VALID_PORTION', 'QA_SCORE_AVG', 'GEOMETRIC_QUALITY_FLAG', 'RADIOMETRIC_QUALITY_FLAG', 'MEAN_SOLAR_AZIMUTH_ANGLE', 'MEAN_SOLAR_ZENITH_ANGLE', 'MEAN_INCIDENCE_AZIMUTH_ANGLE_B1', 'MEAN_INCIDENCE_ZENITH_ANGLE_B1']
+        self._cloud_filter = 60         # Maximum image cloud cover percent allowed in image collection
+        self._cloud_prob_thresh = 50    # Cloud probability (%); values greater than are considered cloud
+        self._nir_drk_thresh = 0.15     # Near-infrared reflectance; values less than are considered potential cloud shadow
+        self._cloud_proj_dist = 1       # Maximum distance (km) to search for cloud shadows from cloud edges
+        self._buffer = 50               # Distance (m) to dilate the edge of cloud-identified objects
+
+    def _check_validity(self, image):
+        image = self._add_timedelta(image)
+        bit_mask = (1 << 11) | (1 << 10)
+        qa = image.select('QA60')
+        valid_mask = qa.bitwiseAnd(bit_mask).eq(0).rename('VALID_MASK')
+        valid_portion = valid_mask.unmask().multiply(100).reduceRegion(reducer='mean', geometry=self._search_region,
+                                                                       scale=image.select(1).projection().nominalScale()).rename(['VALID_MASK'], ['VALID_PORTION'])
+
+        cloud_prob = ee.Image(image.get('s2cloudless')).select('probability')
+        q_score = cloud_prob.multiply(-1).add(100).rename('QA_SCORE')
+
+        cloud_mask = cloud_prob.gt(self._cloud_prob_thresh).rename('CLOUD_MASK')
+        # TODO: what are the co-ord systems here?  For N hemisphere it seems to be 90-azimuth
+        # https://en.wikipedia.org/wiki/Solar_azimuth_angle perhaps it is the angle between south and shadow cast by vertical rod, clockwise +ve
+        shadow_azimuth = ee.Number(-90).add(ee.Number(image.get('MEAN_SOLAR_AZIMUTH_ANGLE')))
+        shadow_mask = (cloud_mask.directionalDistanceTransform(shadow_azimuth, self._cloud_proj_dist * 100)
+                    # .reproject(**{'crs': image.select(0).projection(), 'scale': 100}) # necessary?
+                    .select('distance')
+                    .mask()             # applies cloud_mask?
+                    .rename('SHADOW_MASK'))
+
+        # shadow_mask = shadow_mask.multiply(dark_pixels).rename('shadow_mask')
+        # TODO: dilate valid_mask by _buffer ?
+        # TODO: do we need fill_mask with s2 ?
+        valid_mask = (cloud_mask.Or(shadow_mask)).Not().rename('VALID_MASK')
+
+        valid_portion = valid_mask.unmask().multiply(100).reduceRegion(reducer='mean', geometry=self._search_region,
+                                                                       scale=image.select(1).projection().nominalScale()).rename(['VALID_MASK'], ['VALID_PORTION'])
+
+        # create a pixel quallity score (higher is better)
+        # set q_score lowest where fill_mask==0
+        # q_score = q_score.where(fill_mask.Not(), 0).rename('QA_SCORE')
+        q_score_avg = q_score.unmask().reduceRegion(reducer='mean', geometry=self._search_region, scale=image.select(1).projection().nominalScale()).rename(['QA_SCORE'], ['QA_SCORE_AVG'])
+
+        if True:
+            image = image.addBands(cloud_prob)
+            image = image.addBands(cloud_mask)
+            image = image.addBands(shadow_mask)
+            image = image.addBands(valid_mask)
+
+        if self.apply_valid_mask:
+            image = image.updateMask(valid_mask)
+        else:
+            image = image.unmask()
+        # else:
+        #     image = image.updateMask(fill_mask)
+
+        return image.set(valid_portion).set(q_score_avg).addBands(q_score)
+
+    # def add_cloud_bands(self, image):
+    #     # Get s2cloudless image, subset the probability band.
+    #     cld_prb = ee.Image(image.get('s2cloudless')).select('probability')
+    #
+    #     # Condition s2cloudless by the probability threshold value.
+    #     is_cloud = cld_prb.gt(self._cloud_prob_thresh).rename('clouds')
+    #
+    #     # Add the cloud probability layer and cloud mask as image bands.
+    #     return image.addBands(ee.Image([cld_prb, is_cloud]))
+    #
+    # def add_shadow_bands(self, image):
+    #     # Identify water pixels from the SCL band.
+    #     not_water = image.select('SCL').neq(6)
+    #
+    #     # Identify dark NIR pixels that are not water (potential cloud shadow pixels).
+    #     SR_BAND_SCALE = 1e4
+    #     dark_pixels = image.select('B8').lt(self._nir_drk_thresh * SR_BAND_SCALE).multiply(not_water).rename('dark_pixels')
+    #
+    #     # Determine the direction to project cloud shadow from clouds (assumes UTM projection).
+    #     shadow_azimuth = ee.Number(90).subtract(ee.Number(image.get('MEAN_SOLAR_AZIMUTH_ANGLE')));
+    #
+    #     # Project shadows from clouds for the distance specified by the CLD_PRJ_DIST input.
+    #     cld_proj = (image.select('clouds').directionalDistanceTransform(shadow_azimuth, self._cloud_proj_dist * 10)
+    #                 .reproject(**{'crs': image.select(0).projection(), 'scale': 100})
+    #                 .select('distance')
+    #                 .mask()
+    #                 .rename('cloud_transform'))
+    #
+    #     # Identify the intersection of dark pixels with cloud shadow projection.
+    #     shadows = cld_proj.multiply(dark_pixels).rename('shadows')
+    #
+    #     # Add dark pixels, cloud projection, and identified shadows as image bands.
+    #     return image.addBands(ee.Image([dark_pixels, cld_proj, shadows]))
+    #
+    # def add_cld_shdw_mask(self, image):
+    #     # Add cloud component bands.
+    #     img_cloud = self.add_cloud_bands(image)
+    #
+    #     # Add cloud shadow component bands.
+    #     img_cloud_shadow = self.add_shadow_bands(img_cloud)
+    #
+    #     # Combine cloud and shadow mask, set cloud and shadow as value 1, else 0.
+    #     is_cld_shdw = img_cloud_shadow.select('clouds').add(img_cloud_shadow.select('shadows')).gt(0)
+    #
+    #     # Remove small cloud-shadow patches and dilate remaining pixels by BUFFER input.
+    #     # 20 m scale is for speed, and assumes clouds don't require 10 m precision.
+    #     is_cld_shdw = (is_cld_shdw.focal_min(2).focal_max(self._buffer * 2 / 20)
+    #                    .reproject(**{'crs': image.select([0]).projection(), 'scale': 20})
+    #                    .rename('cloudmask'))
+    #
+    #     # Add the final cloud-shadow mask to the image.
+    #     return img_cloud_shadow.addBands(is_cld_shdw)
+    #
+    # def apply_cld_shdw_mask(self, image):
+    #     # Subset the cloudmask band and invert it so clouds/shadow are 0, else 1.
+    #     not_cld_shdw = image.select('cloudmask').Not()
+    #
+    #     # Subset reflectance bands and update their masks, return the result.
+    #     return image.select('B.*').updateMask(not_cld_shdw)
+
+    # s2_sr_median = (s2_sr_cld_col.map(add_cld_shdw_mask)
+    #                 .map(apply_cld_shdw_mask)
+    #                 .median())
+
+
+    def _get_im_collection(self, start_date, end_date):
+        # adapted from https://developers.google.com/earth-engine/tutorials/community/sentinel-2-s2cloudless
+        # Import and filter S2 SR.
+        s2_sr_toa_col = (ee.ImageCollection(self._collection_info['ee_collection'])
+                     .filterBounds(self._search_region)
+                     .filterDate(start_date, end_date)
+                     .filter(ee.Filter.lte('CLOUDY_PIXEL_PERCENTAGE', self._cloud_filter)))
+
+        # Import and filter s2cloudless.
+        s2_cloudless_col = (ee.ImageCollection('COPERNICUS/S2_CLOUD_PROBABILITY')
+                            .filterBounds(self._search_region)
+                            .filterDate(start_date, end_date))
+
+        # Join the filtered s2cloudless collection to the SR collection by the 'system:index' property.
+        return ee.ImageCollection(ee.Join.saveFirst('s2cloudless').apply(**{
+            'primary': s2_sr_toa_col,
+            'secondary': s2_cloudless_col,
+            'condition': ee.Filter.equals(**{
+                'leftField': 'system:index',
+                'rightField': 'system:index'
+            })
+        })).map(self._check_validity).filter(ee.Filter.gt('VALID_PORTION', self._valid_portion))
+
+    def search(self, date, region, day_range=16, valid_portion=90):
+        self._valid_portion = valid_portion
+        EeRefImage.search(self, date, region, day_range=day_range)
+
+    # TODO: consider making a generic version of this in the base class, perhaps with a self.key=... defaults
+    def get_auto_image(self, key='VALID_PORTION', ascending=False):
+        if (self._im_df is None) or (self._im_collection is None):
+            raise Exception('First generate valid search results with search(...) method')
+        return self._im_collection.sort(key, ascending).first()
+
+    def get_composite_image(self):
+        if self._im_collection is None:
+            raise Exception('First generate a valid image collection with search(...) method')
+        return self._im_collection.qualityMosaic('QA_SCORE').set('COMPOSITE_IMAGES', self._im_df.to_string())
+
+
+##
+
