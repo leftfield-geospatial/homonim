@@ -548,124 +548,71 @@ class Sentinel2CloudlessEeImage(EeRefImage):
         self._valid_portion = valid_portion
         self._display_properties = ['VALID_PORTION', 'QA_SCORE_AVG', 'GEOMETRIC_QUALITY_FLAG', 'RADIOMETRIC_QUALITY_FLAG', 'MEAN_SOLAR_AZIMUTH_ANGLE', 'MEAN_SOLAR_ZENITH_ANGLE', 'MEAN_INCIDENCE_AZIMUTH_ANGLE_B1', 'MEAN_INCIDENCE_ZENITH_ANGLE_B1']
         self._cloud_filter = 60         # Maximum image cloud cover percent allowed in image collection
-        self._cloud_prob_thresh = 50    # Cloud probability (%); values greater than are considered cloud
+        self._cloud_prob_thresh = 40    # Cloud probability (%); values greater than are considered cloud
         self._nir_drk_thresh = 0.15     # Near-infrared reflectance; values less than are considered potential cloud shadow
         self._cloud_proj_dist = 1       # Maximum distance (km) to search for cloud shadows from cloud edges
-        self._buffer = 50               # Distance (m) to dilate the edge of cloud-identified objects
+        self._buffer = 100               # Distance (m) to dilate the edge of cloud-identified objects
 
     def _check_validity(self, image):
+        # adapted from https://developers.google.com/earth-engine/tutorials/community/sentinel-2-s2cloudless
+        # highest res of s2 image, that all bands of this image will be reprojected to if it is downloaded
+        scale = image.select(1).projection().nominalScale()
         image = self._add_timedelta(image)
-        bit_mask = (1 << 11) | (1 << 10)
-        qa = image.select('QA60')
-        valid_mask = qa.bitwiseAnd(bit_mask).eq(0).rename('VALID_MASK')
-        valid_portion = valid_mask.unmask().multiply(100).reduceRegion(reducer='mean', geometry=self._search_region,
-                                                                       scale=image.select(1).projection().nominalScale()).rename(['VALID_MASK'], ['VALID_PORTION'])
 
         cloud_prob = ee.Image(image.get('s2cloudless')).select('probability')
         q_score = cloud_prob.multiply(-1).add(100).rename('QA_SCORE')
 
         cloud_mask = cloud_prob.gt(self._cloud_prob_thresh).rename('CLOUD_MASK')
-        # TODO: what are the co-ord systems here?  For N hemisphere it seems to be 90-azimuth
         # https://en.wikipedia.org/wiki/Solar_azimuth_angle perhaps it is the angle between south and shadow cast by vertical rod, clockwise +ve
-        shadow_azimuth = ee.Number(-90).add(ee.Number(image.get('MEAN_SOLAR_AZIMUTH_ANGLE')))
-        shadow_mask = (cloud_mask.directionalDistanceTransform(shadow_azimuth, self._cloud_proj_dist * 100)
-                    # .reproject(**{'crs': image.select(0).projection(), 'scale': 100}) # necessary?
-                    .select('distance')
-                    .mask()             # applies cloud_mask?
-                    .rename('SHADOW_MASK'))
-
         # shadow_mask = shadow_mask.multiply(dark_pixels).rename('shadow_mask')
         # TODO: dilate valid_mask by _buffer ?
         # TODO: do we need fill_mask with s2 ?
+        # TODO: does below work in N hemisphere?
+        shadow_azimuth = ee.Number(-90).add(ee.Number(image.get('MEAN_SOLAR_AZIMUTH_ANGLE')))
+
+        # project the the cloud mask in the direction of shadows for self._cloud_proj_dist
+        proj_cloud_mask = (cloud_mask.directionalDistanceTransform(shadow_azimuth, self._cloud_proj_dist * 1000/10)
+                       # .reproject(**{'crs': image.select(0).projection(), 'scale': 100}) # necessary?
+                       .select('distance')
+                       .mask()  # applies cloud_mask?
+                       .rename('PROJ_CLOUD_MASK'))
+
+        if self.collection == 'sentinel2_sr':
+            # Note: SCL does not classify cloud shadows well, they are often labelled "dark".  Instead of using only
+            # cloud shadow areas from this band, we combine it with the projected dark and shadow areas from SCL band
+            scl = image.select('SCL')
+            dark_shadow_mask = scl.eq(3).Or(scl.eq(2)).focal_max(self._buffer, 'circle', 'meters')     # dilate
+            shadow_mask = proj_cloud_mask.And(dark_shadow_mask).rename('SHADOW_MASK')
+        else:
+            shadow_mask = proj_cloud_mask.rename('SHADOW_MASK')   # mask all areas that could be cloud shadow
+
+        # combine cloud and cloud shadow masks into one
         valid_mask = (cloud_mask.Or(shadow_mask)).Not().rename('VALID_MASK')
 
         valid_portion = valid_mask.unmask().multiply(100).reduceRegion(reducer='mean', geometry=self._search_region,
-                                                                       scale=image.select(1).projection().nominalScale()).rename(['VALID_MASK'], ['VALID_PORTION'])
+                                                                       scale=scale).rename(['VALID_MASK'], ['VALID_PORTION'])
 
         # create a pixel quallity score (higher is better)
         # set q_score lowest where fill_mask==0
         # q_score = q_score.where(fill_mask.Not(), 0).rename('QA_SCORE')
-        q_score_avg = q_score.unmask().reduceRegion(reducer='mean', geometry=self._search_region, scale=image.select(1).projection().nominalScale()).rename(['QA_SCORE'], ['QA_SCORE_AVG'])
+        q_score_avg = q_score.unmask().reduceRegion(reducer='mean', geometry=self._search_region, scale=scale).rename(['QA_SCORE'], ['QA_SCORE_AVG'])
 
-        if True:
+        if False:
             image = image.addBands(cloud_prob)
             image = image.addBands(cloud_mask)
+            image = image.addBands(proj_cloud_mask)
             image = image.addBands(shadow_mask)
             image = image.addBands(valid_mask)
 
         if self.apply_valid_mask:
+            # NOTE: for export_image, updateMask sets pixels to 0, for download_image, it does the same and sets nodata=0
             image = image.updateMask(valid_mask)
-        else:
-            image = image.unmask()
+        # else:
+        #     image = image.unmask()        # TODO: why is this necessary
         # else:
         #     image = image.updateMask(fill_mask)
 
         return image.set(valid_portion).set(q_score_avg).addBands(q_score)
-
-    # def add_cloud_bands(self, image):
-    #     # Get s2cloudless image, subset the probability band.
-    #     cld_prb = ee.Image(image.get('s2cloudless')).select('probability')
-    #
-    #     # Condition s2cloudless by the probability threshold value.
-    #     is_cloud = cld_prb.gt(self._cloud_prob_thresh).rename('clouds')
-    #
-    #     # Add the cloud probability layer and cloud mask as image bands.
-    #     return image.addBands(ee.Image([cld_prb, is_cloud]))
-    #
-    # def add_shadow_bands(self, image):
-    #     # Identify water pixels from the SCL band.
-    #     not_water = image.select('SCL').neq(6)
-    #
-    #     # Identify dark NIR pixels that are not water (potential cloud shadow pixels).
-    #     SR_BAND_SCALE = 1e4
-    #     dark_pixels = image.select('B8').lt(self._nir_drk_thresh * SR_BAND_SCALE).multiply(not_water).rename('dark_pixels')
-    #
-    #     # Determine the direction to project cloud shadow from clouds (assumes UTM projection).
-    #     shadow_azimuth = ee.Number(90).subtract(ee.Number(image.get('MEAN_SOLAR_AZIMUTH_ANGLE')));
-    #
-    #     # Project shadows from clouds for the distance specified by the CLD_PRJ_DIST input.
-    #     cld_proj = (image.select('clouds').directionalDistanceTransform(shadow_azimuth, self._cloud_proj_dist * 10)
-    #                 .reproject(**{'crs': image.select(0).projection(), 'scale': 100})
-    #                 .select('distance')
-    #                 .mask()
-    #                 .rename('cloud_transform'))
-    #
-    #     # Identify the intersection of dark pixels with cloud shadow projection.
-    #     shadows = cld_proj.multiply(dark_pixels).rename('shadows')
-    #
-    #     # Add dark pixels, cloud projection, and identified shadows as image bands.
-    #     return image.addBands(ee.Image([dark_pixels, cld_proj, shadows]))
-    #
-    # def add_cld_shdw_mask(self, image):
-    #     # Add cloud component bands.
-    #     img_cloud = self.add_cloud_bands(image)
-    #
-    #     # Add cloud shadow component bands.
-    #     img_cloud_shadow = self.add_shadow_bands(img_cloud)
-    #
-    #     # Combine cloud and shadow mask, set cloud and shadow as value 1, else 0.
-    #     is_cld_shdw = img_cloud_shadow.select('clouds').add(img_cloud_shadow.select('shadows')).gt(0)
-    #
-    #     # Remove small cloud-shadow patches and dilate remaining pixels by BUFFER input.
-    #     # 20 m scale is for speed, and assumes clouds don't require 10 m precision.
-    #     is_cld_shdw = (is_cld_shdw.focal_min(2).focal_max(self._buffer * 2 / 20)
-    #                    .reproject(**{'crs': image.select([0]).projection(), 'scale': 20})
-    #                    .rename('cloudmask'))
-    #
-    #     # Add the final cloud-shadow mask to the image.
-    #     return img_cloud_shadow.addBands(is_cld_shdw)
-    #
-    # def apply_cld_shdw_mask(self, image):
-    #     # Subset the cloudmask band and invert it so clouds/shadow are 0, else 1.
-    #     not_cld_shdw = image.select('cloudmask').Not()
-    #
-    #     # Subset reflectance bands and update their masks, return the result.
-    #     return image.select('B.*').updateMask(not_cld_shdw)
-
-    # s2_sr_median = (s2_sr_cld_col.map(add_cld_shdw_mask)
-    #                 .map(apply_cld_shdw_mask)
-    #                 .median())
-
 
     def _get_im_collection(self, start_date, end_date):
         # adapted from https://developers.google.com/earth-engine/tutorials/community/sentinel-2-s2cloudless
