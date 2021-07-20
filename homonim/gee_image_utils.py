@@ -70,6 +70,95 @@ def get_image_bounds(filename, expand=10):
         src_bbox_wgs84 = geometry.shape(transform_geom(im.crs, 'WGS84', src_bbox))
     return geometry.mapping(src_bbox_wgs84), im.crs.to_wkt()
 
+# from https://github.com/gee-community/gee_tools, MIT license
+def minscale(image):
+    """ Get the minimal scale of an Image, looking at all Image's bands.
+    For example if:
+        B1 = 30
+        B2 = 60
+        B3 = 10
+    the function will return 10
+    :return: the minimal scale
+    :rtype: ee.Number
+    """
+    bands = image.bandNames()
+
+    first = image.select([ee.String(bands.get(0))])
+    ini = ee.Number(first.projection().nominalScale())
+
+    def wrap(name, i):
+        i = ee.Number(i)
+        scale = ee.Number(image.select([name]).projection().nominalScale())
+        condition = scale.lte(i)
+        newscale = ee.Algorithms.If(condition, scale, i)
+        return newscale
+
+    return ee.Number(bands.slice(1).iterate(wrap, ini))
+
+# from https://github.com/gee-community/gee_tools, MIT license
+def parametrize(image, range_from, range_to, bands=None, drop=False):
+    """ Parametrize from a original **known** range to a fixed new range
+    :param range_from: Original range. example: (0, 5000)
+    :type range_from: tuple
+    :param range_to: Fixed new range. example: (500, 1000)
+    :type range_to: tuple
+    :param bands: bands to parametrize. If *None* all bands will be
+        parametrized.
+    :type bands: list
+    :param drop: drop the bands that will not be parametrized
+    :type drop: bool
+    :return: the parsed image with the parsed bands parametrized
+    :rtype: ee.Image
+    """
+    original_range = range_from if isinstance(range_from, ee.List) \
+        else ee.List(range_from)
+
+    final_range = range_to if isinstance(range_to, ee.List) \
+        else ee.List(range_to)
+
+    # original min and max
+    min0 = ee.Image.constant(original_range.get(0))
+    max0 = ee.Image.constant(original_range.get(1))
+
+    # range from min to max
+    rango0 = max0.subtract(min0)
+
+    # final min max images
+    min1 = ee.Image.constant(final_range.get(0))
+    max1 = ee.Image.constant(final_range.get(1))
+
+    # final range
+    rango1 = max1.subtract(min1)
+
+    # all bands
+    all = image.bandNames()
+
+    # bands to parametrize
+    if bands:
+        bands_ee = ee.List(bands)
+    else:
+        bands_ee = image.bandNames()
+
+    inter = ee_list.intersection(bands_ee, all)
+    diff = ee_list.difference(all, inter)
+    image_ = image.select(inter)
+
+    # Percentage corresponding to the actual value
+    percent = image_.subtract(min0).divide(rango0)
+
+    # Taking count of the percentage of the original value in the original
+    # range compute the final value corresponding to the final range.
+    # Percentage * final_range + final_min
+
+    final = percent.multiply(rango1).add(min1)
+
+    if not drop:
+        # Add the rest of the bands (no parametrized)
+        final = image.select(diff).addBands(final)
+
+    # return passProperty(image, final, 'system:time_start')
+    return ee.Image(final.copyProperties(source=image))
+
 
 class EeRefImage:
     def __init__(self, collection=''):
@@ -501,6 +590,24 @@ class LandsatEeImage(EeRefImage):
             raise Exception('First generate a valid image collection with search(...) method')
         return self._im_collection.qualityMosaic('QA_SCORE').set('COMPOSITE_IMAGES', self._im_df.to_string())
 
+    def calibrate(self, image):
+        # convert DN to float SR
+        # copyProperties
+        all_bands = image.bandNames()
+        refl_bands = ee.List([])
+        def add_refl_bands(band, refl_bands):
+            refl_bands = ee.Algorithms.If(ee.String(band).rindex('SR_B').eq(0), ee.List(refl_bands).add(band), refl_bands)
+            return refl_bands
+        refl_bands = ee.List(all_bands.iterate(add_refl_bands, refl_bands))
+
+        non_refl_bands = all_bands.removeAll(refl_bands)
+
+        refl_mult = ee.Number(image.get('REFLECTANCE_MULT_BAND_1'))
+        refl_add = ee.Number(image.get('REFLECTANCE_ADD_BAND_1'))
+        calib_image = ((image.select(refl_bands).multiply(refl_mult)).add(refl_add)).toFloat()
+        calib_image = calib_image.addBands(image.select(non_refl_bands))
+        return calib_image.copyProperties(image)
+
 
 class Sentinel2EeImage(EeRefImage):
     def __init__(self, collection='sentinel2_toa', valid_portion=90):
@@ -650,7 +757,8 @@ class Sentinel2CloudlessEeImage(EeRefImage):
     def get_composite_image(self):
         if self._im_collection is None:
             raise Exception('First generate a valid image collection with search(...) method')
-        return self._im_collection.qualityMosaic('QA_SCORE').set('COMPOSITE_IMAGES', self._im_df.to_string())
+        # return self._im_collection.qualityMosaic('QA_SCORE').set('COMPOSITE_IMAGES', self._im_df.to_string())
+        return self._im_collection.median().set('COMPOSITE_IMAGES', self._im_df.to_string())
 
 
 ##
