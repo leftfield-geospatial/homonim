@@ -377,7 +377,7 @@ class EeRefImage:
         bands_dict = band_info_df[['id', 'crs', 'scale', 'data_type']].to_dict('records')
 
         # TODO: make sure the cast to uint16 is ok for any new collections
-        link = image.toUint16().getDownloadURL({
+        link = image.getDownloadURL({
             'scale': scale,
             'crs': crs,
             'fileFormat': 'GeoTIFF',
@@ -604,9 +604,46 @@ class LandsatEeImage(EeRefImage):
 
         refl_mult = ee.Number(image.get('REFLECTANCE_MULT_BAND_1'))
         refl_add = ee.Number(image.get('REFLECTANCE_ADD_BAND_1'))
-        calib_image = ((image.select(refl_bands).multiply(refl_mult)).add(refl_add)).toFloat()
+        calib_image = ((image.select(refl_bands).multiply(refl_mult)).add(refl_add)).multiply(10000.0)
         calib_image = calib_image.addBands(image.select(non_refl_bands))
-        return calib_image.copyProperties(image)
+        calib_image = calib_image.updateMask(image.mask())
+
+        return ee.Image(calib_image.copyProperties(image)).toFloat()    # call toFloat after updateMask
+
+    def calibrate2(self, image):
+        # convert DN to float SR
+        # copyProperties
+        all_bands = image.bandNames()
+        refl_bands = ee.List([])
+
+        def add_refl_bands(band, refl_bands):
+            refl_bands = ee.Algorithms.If(ee.String(band).rindex('SR_B').eq(0), ee.List(refl_bands).add(band), refl_bands)
+            return refl_bands
+
+        refl_bands = ee.List(all_bands.iterate(add_refl_bands, refl_bands))
+        non_refl_bands = all_bands.removeAll(refl_bands)
+
+        param_dict = ee.Dictionary(dict(mult=ee.Image().select([]), add=ee.Image().select([])))
+
+        def add_refl_params(band, param_dict):
+            param_dict = ee.Dictionary(param_dict)
+            band_num = ee.String(band).slice(-1)
+            refl_mult_str = ee.String('REFLECTANCE_MULT_BAND_').cat(band_num)
+            refl_add_str = ee.String('REFLECTANCE_ADD_BAND_').cat(band_num)
+            refl_mult = ee.Image.constant(image.get(refl_mult_str)).rename(refl_mult_str)
+            refl_add = ee.Image.constant(image.get(refl_add_str)).rename(refl_add_str)
+            param_dict = param_dict.set('mult', ee.Image(param_dict.get('mult')).addBands(refl_mult))
+            param_dict = param_dict.set('add', ee.Image(param_dict.get('add')).addBands(refl_add))
+            return param_dict
+
+        param_dict = ee.Dictionary(refl_bands.iterate(add_refl_params, param_dict))
+
+        calib_image = image.select(refl_bands).multiply(param_dict.get('mult'))
+        calib_image = (calib_image.add(param_dict.get('add'))).multiply(10000.0)
+        calib_image = calib_image.addBands(image.select(non_refl_bands))
+        calib_image = calib_image.updateMask(image.mask())
+
+        return ee.Image(calib_image.copyProperties(image)).toFloat()    # call toFloat after updateMask
 
 
 class Sentinel2EeImage(EeRefImage):
@@ -715,7 +752,7 @@ class Sentinel2CloudlessEeImage(EeRefImage):
             # NOTE: for export_image, updateMask sets pixels to 0, for download_image, it does the same and sets nodata=0
             image = image.updateMask(valid_mask)
         # else:
-        #     image = image.unmask()        # TODO: why is this necessary
+        #     image = image.unmask()
         # else:
         #     image = image.updateMask(fill_mask)
 
