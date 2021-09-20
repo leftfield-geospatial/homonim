@@ -175,7 +175,7 @@ class HomonImBase:
                         ref_array = np.zeros((src_im.count, height, width), dtype=np.float32)
                         # TODO: another thing to think of is that we ideally shouldn't reproject the reference unnecessarily to avoid damaging radiometric info
                         #  this could mean we reproject the source to/from ref CRS rather than just resample it
-                        _, _ = reproject(_ref_array, ref_array, src_transform=ref_src_transform, src_crs=ref_im.crs,
+                        _, xform = reproject(_ref_array, ref_array, src_transform=ref_src_transform, src_crs=ref_im.crs,
                             dst_transform=ref_transform, dst_crs=src_im.crs, resampling=Resampling.bilinear,
                                   num_threads=multiprocessing.cpu_count())
                     else:
@@ -186,6 +186,7 @@ class HomonImBase:
                     ref_profile['transform'] = ref_transform
                     ref_profile['res'] = list(ref_im.res)    # TODO: find a better way of passing this
                     ref_profile['bounds'] = ref_src_bounds
+                    ref_profile['crs'] = src_im.crs
 
         return ref_array, ref_profile
 
@@ -263,7 +264,7 @@ class HomonImBase:
         # param_array[np.isnan(src_array)] = param_nodata
         return param_array
 
-    def _find_gains_cv(self, ref_array, src_array, win_size=[3,3], param_nodata=np.nan):
+    def _find_gains_cv(self, ref_array, src_array, win_size=[3,3], image_offset=False, param_nodata=np.nan):
         """
         Find sliding window gains for a band using opencv filter2D
 
@@ -282,9 +283,19 @@ class HomonImBase:
             an M x N array of gains
         """
 
-        # find ratios avoiding divide by nodata=0
         src_nodata = 0
         src_mask = (src_array != src_nodata).astype(np.int32)
+
+        if image_offset:    # find image-wide offset
+            _src_array = src_array[src_mask.astype('bool', copy=False)].reshape(-1, 1)
+            _src_array = np.hstack((_src_array, np.ones_like(_src_array)))
+            res = np.linalg.lstsq(_src_array, ref_array[src_mask.astype('bool', copy=False)].flatten(), rcond=None)
+            logger.info(f'Image wide gain / offset: {res[0][0]:.4f} / {res[0][1]:.4f}')
+
+            src_array[src_mask.astype('bool', copy=False)] = np.dot(_src_array, res[0])
+
+
+        # find ratios avoiding divide by nodata=0
         ratio_array = np.zeros_like(src_array, dtype=np.float32)
         _ = np.divide(ref_array, src_array, out=ratio_array, where=src_mask.astype('bool', copy=False))
 
@@ -294,9 +305,12 @@ class HomonImBase:
         mask_winsums = cv.filter2D(src_mask.astype('uint8', copy=False), cv.CV_32F, kernel, borderType=cv.BORDER_CONSTANT)
 
         # calculate gains, ignoring invalid pixels
-        param_array = np.zeros_like(src_array, dtype=np.float32)
-        _ = np.divide(ratio_winsums, mask_winsums, out=param_array, where=src_mask.astype('bool', copy=False))
+        param_array = np.zeros((2, *src_array.shape), dtype=np.float32)
+        _ = np.divide(ratio_winsums, mask_winsums, out=param_array[0, :, :], where=src_mask.astype('bool', copy=False))
         # cv.divide(ratio_winsums, mask_winsums, dst=param_array, dtype=np.float32)
+        if image_offset:
+            param_array[1, :, :] = param_array[0, :, :] * res[0][1]
+            param_array[0, :, :] *= res[0][0]
 
         # param_array[np.isnan(src_array)] = param_nodata
         return param_array
@@ -414,7 +428,7 @@ class HomonimRefSpace(HomonImBase):
                     # process by band to limit memory usage
                     bands = list(range(1, src_im.count + 1))
                     for bi in bands:
-                        src_array = src_im.read(bi)  # NB bands along first dim
+                        src_array = src_im.read(bi, out_dtype=np.float32)  # NB bands along first dim
 
                         # downsample the source window into the reference CRS and gid
                         # specify nodata so that these pixels are excluded from calculations
@@ -431,10 +445,10 @@ class HomonimRefSpace(HomonImBase):
 
                         # find the calibration parameters for this band
                         param_ds_array = self._find_gains_cv(ref_array[bi-1, :, :], src_ds_array,
-                                                                          win_size=self.win_size)
+                                                                          win_size=self.win_size, image_offset=True)
 
                         # upsample the parameter array
-                        param_array = np.zeros_like(src_array, dtype=np.float32)
+                        param_array = np.zeros((2, *src_array.shape), dtype=np.float32)
                         _, xform = reproject(param_ds_array, destination=param_array,
                                              src_transform=ref_profile['transform'], src_crs=ref_profile['crs'],
                                              dst_transform=src_im.transform, dst_crs=src_im.crs,
@@ -442,7 +456,7 @@ class HomonimRefSpace(HomonImBase):
                                              src_nodata=0, dst_nodata=0)
 
                         # apply the calibration and write
-                        calib_src_array = param_array * src_array
+                        calib_src_array = (param_array[0, :, :] * src_array) + param_array[1, :, :]
                         calib_im.write(calib_src_array.astype(calib_im.dtypes[bi-1]), indexes=bi)
 
 ##

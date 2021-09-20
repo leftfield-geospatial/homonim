@@ -17,8 +17,6 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
-
-
 import argparse
 import datetime
 import os
@@ -153,7 +151,9 @@ def main(args):
         logger.error('Exception: ' + str(ex))
         raise ex
 
-
-if __name__ == "__main__":
+def main_entry():
     args = parse_arguments()
     main(args)
+
+if __name__ == "__main__":
+    main_entry()
