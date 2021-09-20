@@ -35,4 +35,5 @@ setup(
         'numpy>=1.2',
         'rasterio>=1.1',
     ],
+    entry_points={"console_scripts": ["homonim=homonim.cli:main_entry"]},
 )
