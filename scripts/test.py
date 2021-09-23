@@ -28,8 +28,8 @@ src_filename = pathlib.Path(r"V:\Data\HomonimEgs\NGI_3322A_2010_HotSpotSeamLineE
 # ref_filename = pathlib.Path(r"V:\Data\HomonimEgs\NGI_3322A_2010_HotSpotSeamLineEg\Reference\MCD43A4.A2010025.h19v12.005.2010043064233.Lo23.RGBN.tif")
 ref_filename = pathlib.Path(r"V:\Data\HomonimEgs\NGI_3322A_2010_HotSpotSeamLineEg\Reference\LANDSAT-LE07-C02-T1_L2-2010_02_03-2010_02_19-Q_MOSAIC_COMP_B3214.tif")
 
-hom = homonim.HomonimRefSpace(src_filename, ref_filename, win_size=[9, 9])
-hom.homogenise(src_filename.parent.joinpath(src_filename.stem + '_HOMO_REF_L7_GainAndImOffset' + src_filename.suffix))
+hom = homonim.HomonimRefSpace(src_filename, ref_filename, win_size=[15, 15])
+hom.homogenise(src_filename.parent.joinpath(src_filename.stem + '_HOMO_REF_L7_GainAndOffset' + src_filename.suffix))
 
 
 ##
