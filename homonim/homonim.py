@@ -395,12 +395,24 @@ class HomonImBase:
             for win_j in np.ndindex(src_winview.shape[1]):
                 src_win = src_winview[win_i, win_j, :, :]
                 ref_win = ref_winview[win_i, win_j, :, :]
-                a = np.hstack((src_win.reshape(-1, 1), a_const))
-                if False:
-                    res_ls = np.linalg.lstsq(a, ref_win.flatten(), rcond=None)[0]
+                src_win_mask = src_mask_winview[win_i, win_j, :, :]
+                src_win_v = src_win[src_win_mask].reshape(-1, 1)
+                ref_win_v = ref_win[src_win_mask].reshape(-1, 1)
+                src_const = np.ones(src_win_v.shape)
+
+                src_a = np.hstack((src_win_v.reshape(-1, 1), src_const.reshape(-1, 1)))
+                if True:
+                    soln = np.linalg.lstsq(src_a, ref_win_v, rcond=None)
+                    params = soln[0]
+                    r2 = 1 - (soln[1] / (ref_win_v.size * ref_win_v.var()))
+                    if (r2 < 0.3) or np.any(params < 0):
+                        soln = np.linalg.lstsq(src_win_v, ref_win_v, rcond=None)
+                        params = np.append(soln[0], 0)
+
                 else:
-                    res_ls = lsq_linear(a, ref_win.flatten(), bounds=[[0, 0], [np.inf, np.inf]]).x
-                param_array[:, win_i + win_offset[0], win_j + win_offset[1]] = res_ls.reshape(-1, 1)
+                    res_ls = lsq_linear(a, ref_win[src_win_mask], bounds=[[0, 0], [np.inf, np.inf]]).x
+
+                param_array[:, win_i + win_offset[0], win_j + win_offset[1]] = params.reshape(-1, 1)
 
         # param_array[~src_mask] = src_nodata
         return param_array
