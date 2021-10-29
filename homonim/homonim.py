@@ -401,16 +401,20 @@ class HomonImBase:
                 src_const = np.ones(src_win_v.shape)
 
                 src_a = np.hstack((src_win_v.reshape(-1, 1), src_const.reshape(-1, 1)))
-                if True:
+                if False:
                     soln = np.linalg.lstsq(src_a, ref_win_v, rcond=None)
                     params = soln[0]
                     r2 = 1 - (soln[1] / (ref_win_v.size * ref_win_v.var()))
-                    if (r2 < 0.3) or np.any(params < 0):
+                    if False: #(r2 < 0.1) or np.any(params < 0):
                         soln = np.linalg.lstsq(src_win_v, ref_win_v, rcond=None)
                         params = np.append(soln[0], 0)
 
                 else:
-                    res_ls = lsq_linear(a, ref_win[src_win_mask], bounds=[[0, 0], [np.inf, np.inf]]).x
+                    soln = lsq_linear(src_a, ref_win_v.ravel(), bounds=[[0, 0], [np.inf, np.inf]])
+                    params = soln.x
+                    r2 = 1 - (sum(soln.fun**2) / (ref_win_v.size * ref_win_v.var()))
+
+                    # r2 = 1 - (soln[1] / (ref_win_v.size * ref_win_v.var()))
 
                 param_array[:, win_i + win_offset[0], win_j + win_offset[1]] = params.reshape(-1, 1)
 
