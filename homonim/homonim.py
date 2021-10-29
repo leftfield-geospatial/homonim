@@ -483,7 +483,7 @@ class HomonimRefSpace(HomonImBase):
                                              src_nodata=src_im.profile['nodata'], dst_nodata=0)
 
                         # find the calibration parameters for this band
-                        if False:
+                        if True:
                             param_ds_array = self._find_gains_cv(ref_array[bi-1, :, :], src_ds_array,
                                                                  win_size=self.win_size, normalise=True)
                         else:

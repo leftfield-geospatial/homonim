@@ -141,16 +141,13 @@ if False:
 
 
 @click.command()
-# @click.argument('src-file', type=click.Path(exists=True))
-# @click.argument('ref-file', type=click.Path(exists=True))
-
 @click.option(
     "-s",
     "--src-file",
-    type=click.STRING,
-    nargs=-1,
+    type=click.Path(exists=False),  # check below
     help="path(s) or wildcard pattern(s) specifying the source image file(s)",
-    required=True
+    required=True,
+    multiple=True
 )
 @click.option(
     "-r",
@@ -172,7 +169,7 @@ if False:
 @click.option(
     "-m",
     "--method",
-    type=click.Choice(['GAIN_ONLY|GAIN_OFFSET|GAIN_BANDOFFSET'], case_sensitive=False),
+    type=click.Choice(['GAIN_ONLY', 'GAIN_OFFSET', 'GAIN_BANDOFFSET'], case_sensitive=False),
     help="homogenisation method",
     default='GAIN_ONLY',
     show_default=True,
