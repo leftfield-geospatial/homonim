@@ -314,8 +314,8 @@ class HomonImBase:
             _ = np.divide(ratio_winsums, mask_winsums, out=param_array[0, :, :],
                           where=src_mask.astype('bool', copy=False))
 
-            param_array[0, :, :] *= norm_model[0]
             param_array[1, :, :] = param_array[0, :, :] * norm_model[1]
+            param_array[0, :, :] *= norm_model[0]
         else:
             param_array = np.zeros((1, *src_array.shape), dtype=np.float32)
             _ = np.divide(ratio_winsums, mask_winsums, out=param_array[0, :, :],
@@ -422,7 +422,7 @@ class HomonImBase:
         return param_array
 
 
-    def homogenise(self, out_filename):
+    def homogenise(self, out_filename, method=None, normalise=False):
         raise NotImplementedError()
 
     def build_ortho_overviews(self, out_filename):
@@ -437,7 +437,7 @@ class HomonImBase:
 
 class HomonimRefSpace(HomonImBase):
 
-    def homogenise(self, out_filename):
+    def homogenise(self, out_filename, method='gain_only', normalise=False):
         """
         Perform homogenisation
 
@@ -483,9 +483,9 @@ class HomonimRefSpace(HomonImBase):
                                              src_nodata=src_im.profile['nodata'], dst_nodata=0)
 
                         # find the calibration parameters for this band
-                        if True:
+                        if method.lower() == 'gain_only':
                             param_ds_array = self._find_gains_cv(ref_array[bi-1, :, :], src_ds_array,
-                                                                 win_size=self.win_size, normalise=True)
+                                                                 win_size=self.win_size, normalise=normalise)
                         else:
                             param_ds_array = self._find_gain_and_offset_winview(ref_array[bi - 1, :, :], src_ds_array,
                                                                                 win_size=self.win_size)
@@ -509,7 +509,7 @@ class HomonimRefSpace(HomonImBase):
 class HomonimSrcSpace(HomonImBase):
 
 
-    def homogenise(self, out_filename):
+    def homogenise(self, out_filename, method=None, normalise=False):
         """
         Perform homogenisation
 

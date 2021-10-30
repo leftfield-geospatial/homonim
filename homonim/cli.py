@@ -169,10 +169,17 @@ if False:
 @click.option(
     "-m",
     "--method",
-    type=click.Choice(['GAIN_ONLY', 'GAIN_OFFSET', 'GAIN_BANDOFFSET'], case_sensitive=False),
+    type=click.Choice(['GAIN_ONLY', 'GAIN_OFFSET'], case_sensitive=False),
     help="homogenisation method",
     default='GAIN_ONLY',
     show_default=True,
+)
+@click.option(
+    "-n/-nn",
+    "--norm/--no-norm",
+    default=False,
+    help="Do/don't pre-process with image-wide normalisation.  [default: --no-norm]",
+    required=False,
 )
 @click.option(
     "-od",
@@ -181,7 +188,14 @@ if False:
     help="directory to write homogenised image(s) in [default: use src-file directory]",
     required=False,
 )
-def cli(src_file=None, ref_file=None, win_size=(3, 3), method="gain_only", output_dir=None):
+@click.option(
+    "-bo/-nbo",
+    "--build-ovw/--no-build-ovw",
+    default=True,
+    help="Do/don't build overviews for the homogenised image.  [default: --build-ovw]",
+    required=False,
+)
+def cli(src_file=None, ref_file=None, win_size=(3, 3), method="gain_only", norm=False, output_dir=None, build_ovw=True):
     """Radiometrically homogenise image(s) by fusion with reference satellite data"""
 
     # check src_file points to exisiting file(s)
@@ -202,11 +216,11 @@ def cli(src_file=None, ref_file=None, win_size=(3, 3), method="gain_only", outpu
                 logger.info(f'Homogenising {src_filename.name}')
                 start_ttl = datetime.datetime.now()
                 him = homonim.HomonimRefSpace(src_filename, ref_file, win_size=win_size)
-                him.homogenise(homo_filename)
+                him.homogenise(homo_filename, method=method, normalise=norm)
                 ttl_time = (datetime.datetime.now() - start_ttl)
                 logger.info(f'Completed in {ttl_time.total_seconds():.2f} secs')
 
-                if True:
+                if build_ovw:
                     start_ttl = datetime.datetime.now()
                     logger.info(f'Building overviews for {homo_filename.name}')
                     him.build_ortho_overviews(homo_filename)
