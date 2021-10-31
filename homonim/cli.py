@@ -204,30 +204,30 @@ def cli(src_file=None, ref_file=None, win_size=(3, 3), method="gain_only", norm=
         if len(list(src_file_path.parent.glob(src_file_path.name))) == 0:
             raise Exception(f'Could not find any source image(s) matching {src_file_spec}')
         for src_filename in src_file_path.parent.glob(src_file_path.name):
-            try:
-                # set homogenised filename
-                if output_dir is not None:
-                    homo_root = pathlib.Path(output_dir)
-                else:
-                    homo_root = src_filename.parent
-                homo_filename = homo_root.joinpath(src_filename.stem +
-                                                   f'_HOMO_REF_m{method.upper()}_w{win_size[0]}{win_size[1]}.tif')
+            # try:
+            # set homogenised filename
+            if output_dir is not None:
+                homo_root = pathlib.Path(output_dir)
+            else:
+                homo_root = src_filename.parent
+            post_fix = f'_HOMO_REF_m{method.upper()}_n{"ON" if norm else "OFF"}_w{win_size[0]}_{win_size[1]}.tif'
+            homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
 
-                logger.info(f'Homogenising {src_filename.name}')
+            logger.info(f'Homogenising {src_filename.name}')
+            start_ttl = datetime.datetime.now()
+            him = homonim.HomonimRefSpace(src_filename, ref_file, win_size=win_size)
+            him.homogenise(homo_filename, method=method, normalise=norm)
+            ttl_time = (datetime.datetime.now() - start_ttl)
+            logger.info(f'Completed in {ttl_time.total_seconds():.2f} secs')
+
+            if build_ovw:
                 start_ttl = datetime.datetime.now()
-                him = homonim.HomonimRefSpace(src_filename, ref_file, win_size=win_size)
-                him.homogenise(homo_filename, method=method, normalise=norm)
+                logger.info(f'Building overviews for {homo_filename.name}')
+                him.build_ortho_overviews(homo_filename)
                 ttl_time = (datetime.datetime.now() - start_ttl)
                 logger.info(f'Completed in {ttl_time.total_seconds():.2f} secs')
 
-                if build_ovw:
-                    start_ttl = datetime.datetime.now()
-                    logger.info(f'Building overviews for {homo_filename.name}')
-                    him.build_ortho_overviews(homo_filename)
-                    ttl_time = (datetime.datetime.now() - start_ttl)
-                    logger.info(f'Completed in {ttl_time.total_seconds():.2f} secs')
-
-            except Exception as ex:
-                # catch exceptions so that problem image(s) don't prevent processing of a batch
-                logger.error('Exception: ' + str(ex))
+            # except Exception as ex:
+            #     # catch exceptions so that problem image(s) don't prevent processing of a batch
+            #     logger.error('Exception: ' + str(ex))
 

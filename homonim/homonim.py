@@ -21,6 +21,7 @@ from numpy.lib.stride_tricks import sliding_window_view
 import rasterio as rio
 # from rasterio import transform
 from rasterio.warp import reproject, Resampling, transform_geom, transform_bounds, calculate_default_transform
+from rasterio.fill import fillnodata
 from rasterio.features import dataset_features
 from enum import Enum
 import pathlib
@@ -188,6 +189,8 @@ class HomonImBase:
                     ref_profile['res'] = list(ref_im.res)    # TODO: find a better way of passing this
                     ref_profile['bounds'] = ref_src_bounds
                     ref_profile['crs'] = src_im.crs
+                    ref_profile['width'] = ref_array.shape[2]
+                    ref_profile['height'] = ref_array.shape[1]
 
         return ref_array, ref_profile
 
@@ -363,7 +366,7 @@ class HomonImBase:
         param_array[np.isnan(src_array)] = np.nan
         return param_array
 
-    def _find_gain_and_offset_winview(self, ref_array, src_array, win_size=[3, 3]):
+    def _find_gain_and_offset_winview(self, ref_array, src_array, win_size=[15, 15], normalise=False):
         """
         Find the sliding window calibration parameters for a band.  Brute force.
 
@@ -384,6 +387,13 @@ class HomonImBase:
         src_nodata = 0
         src_mask = (src_array != src_nodata)
 
+        if normalise:    # find image-wide offset
+            _src_array = src_array[src_mask.astype('bool', copy=False)].reshape(-1, 1)
+            _src_array = np.hstack((_src_array, np.ones_like(_src_array)))
+            norm_model = np.linalg.lstsq(_src_array, ref_array[src_mask.astype('bool', copy=False)].flatten(), rcond=None)[0]
+            logger.info(f'Image normalisation gain / offset: {norm_model[0]:.4f} / {norm_model[1]:.4f}')
+            # src_array[src_mask.astype('bool', copy=False)] = np.dot(_src_array, norm_model)
+
         src_winview = sliding_window_view(src_array, win_size)
         ref_winview = sliding_window_view(ref_array, win_size)
         src_mask_winview = sliding_window_view(src_mask, win_size)
@@ -401,16 +411,28 @@ class HomonImBase:
                 src_const = np.ones(src_win_v.shape)
 
                 src_a = np.hstack((src_win_v.reshape(-1, 1), src_const.reshape(-1, 1)))
-                if False:
+                if True:
                     soln = np.linalg.lstsq(src_a, ref_win_v, rcond=None)
                     params = soln[0]
                     r2 = 1 - (soln[1] / (ref_win_v.size * ref_win_v.var()))
-                    if False: #(r2 < 0.1) or np.any(params < 0):
-                        soln = np.linalg.lstsq(src_win_v, ref_win_v, rcond=None)
-                        params = np.append(soln[0], 0)
+                    # if poor model fit, find image-wide normlised gain-only model
+                    if False and ((r2 < 0.01) or params[0] < 0):
+                        soln_n = np.linalg.lstsq(np.dot(src_a, norm_model).reshape(-1, 1), ref_win_v, rcond=None)
+                        params = (soln_n[0]*norm_model).T
+                        _ = _
+                        if False:
+                            from matplotlib import pyplot
+                            pyplot.plot(src_win_v, ref_win_v, 'o')
+                            x = np.arange(np.stack((src_win_v, ref_win_v)).min(), np.stack((src_win_v, ref_win_v)).max())
+                            y_n = params[0] * x + params[1]
+                            y = soln[0][0] * x + soln[0][1]
+                            pyplot.plot(x, y, label='gain offset')
+                            pyplot.plot(x, y_n, label='norm')
+                            pyplot.legend()
+
 
                 else:
-                    soln = lsq_linear(src_a, ref_win_v.ravel(), bounds=[[0, 0], [np.inf, np.inf]])
+                    soln = lsq_linear(src_a, ref_win_v.ravel(), bounds=[[0, -np.inf], [np.inf, np.inf]])
                     params = soln.x
                     r2 = 1 - (sum(soln.fun**2) / (ref_win_v.size * ref_win_v.var()))
 
@@ -437,16 +459,18 @@ class HomonImBase:
 
 class HomonimRefSpace(HomonImBase):
 
-    def homogenise(self, out_filename, method='gain_only', normalise=False):
+    def homogenise(self, out_filename, method='gain_only', normalise=False, debug=True):
         """
         Perform homogenisation
 
         Parameters
         ----------
-        out_filename : str
+        out_filename : str, pathlib.Path
             name of the file to save the homogenised image to
         """
         ref_array, ref_profile = self._read_ref()
+
+
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
             with rio.open(self._src_filename, 'r') as src_im:
                 # src_mask = src_im.dataset_mask()
@@ -461,8 +485,17 @@ class HomonimRefSpace(HomonImBase):
 
                 calib_profile = src_im.profile
                 calib_profile.update(num_threads=multiprocessing.cpu_count(), compress='deflate', interleave='band',
-                                     nodata=0)
+                                     nodata=0, dtype=rio.float32)
                 with rio.open(out_filename, 'w', **calib_profile) as calib_im:
+                    if debug:
+                        param_profile = ref_profile.copy()
+                        param_profile.update(num_threads=multiprocessing.cpu_count(), compress='deflate',
+                                             interleave='band',
+                                             nodata=None, dtype=rio.float32, count=src_im.profile['count'])
+                        if method != 'gain_only':
+                            param_profile['count'] *= 2
+                        param_out_file_name = out_filename.parent.joinpath(out_filename.stem + '_PARAMS.tif')
+                        param_im = rio.open(param_out_file_name, 'w', **param_profile)
 
                     # process by band to limit memory usage
                     bands = list(range(1, src_im.count + 1))
@@ -488,7 +521,7 @@ class HomonimRefSpace(HomonImBase):
                                                                  win_size=self.win_size, normalise=normalise)
                         else:
                             param_ds_array = self._find_gain_and_offset_winview(ref_array[bi - 1, :, :], src_ds_array,
-                                                                                win_size=self.win_size)
+                                                                                win_size=self.win_size, normalise=normalise)
 
                         # upsample the parameter array
                         param_array = np.zeros((param_ds_array.shape[0], *src_array.shape), dtype=np.float32)
@@ -503,6 +536,13 @@ class HomonimRefSpace(HomonImBase):
                         if param_array.shape[0] > 1:
                             calib_src_array += param_array[1, :, :]
                         calib_im.write(calib_src_array.astype(calib_im.dtypes[bi-1]), indexes=bi)
+                        if debug:
+                            param_im.write(param_ds_array[0, :, :].astype(param_im.dtypes[bi - 1]), indexes=bi)
+                            if param_ds_array.shape[0] > 1:
+                                _bi = bi + ref_profile['count']
+                                param_im.write(param_ds_array[1, :, :].astype(param_im.dtypes[_bi - 1]), indexes=_bi)
+            if debug:
+                param_im.close()
 
 ##
 
