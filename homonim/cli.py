@@ -119,7 +119,7 @@ if False:
                         if config['homogenisation']['build_ovw']:
                             start_ttl = datetime.datetime.now()
                             logger.info(f'Building overviews for {src_filename.name}')
-                            him.build_ortho_overviews(homo_filename)
+                            him.build_overviews(homo_filename)
                             ttl_time = (datetime.datetime.now() - start_ttl)
                             logger.info(f'Completed in {ttl_time.total_seconds():.2f} secs')
 
@@ -217,13 +217,14 @@ def cli(src_file=None, ref_file=None, win_size=(3, 3), method="gain_only", norm=
             start_ttl = datetime.datetime.now()
             him = homonim.HomonimRefSpace(src_filename, ref_file, win_size=win_size)
             him.homogenise(homo_filename, method=method, normalise=norm)
+            him.copy_ref_metadata(homo_filename)
             ttl_time = (datetime.datetime.now() - start_ttl)
             logger.info(f'Completed in {ttl_time.total_seconds():.2f} secs')
 
             if build_ovw:
                 start_ttl = datetime.datetime.now()
                 logger.info(f'Building overviews for {homo_filename.name}')
-                him.build_ortho_overviews(homo_filename)
+                him.build_overviews(homo_filename)
                 ttl_time = (datetime.datetime.now() - start_ttl)
                 logger.info(f'Completed in {ttl_time.total_seconds():.2f} secs')
 

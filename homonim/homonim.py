@@ -16,6 +16,7 @@
     You should have received a copy of the GNU Affero General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
+import cv2
 import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
 import rasterio as rio
@@ -165,7 +166,7 @@ class HomonImBase:
                     ref_bands = range(1, src_im.count + 1)
                     _ref_array = ref_im.read(ref_bands, window=ref_src_win).astype('float32')
 
-                    if src_im.crs != ref_im.crs:    # re-project the reference image to source CRS
+                    if src_im.crs.to_proj4() != ref_im.crs.to_proj4():    # re-project the reference image to source CRS
                         # TODO: here we reproject from transform on the ref grid and that include source bounds
                         #   we could just project into src_im transform though too.
                         logger.warning('Reprojecting reference image to the source CRS. '
@@ -295,9 +296,15 @@ class HomonImBase:
         if normalise:    # find image-wide offset
             _src_array = src_array[src_mask.astype('bool', copy=False)].reshape(-1, 1)
             _src_array = np.hstack((_src_array, np.ones_like(_src_array)))
-            norm_model = np.linalg.lstsq(_src_array, ref_array[src_mask.astype('bool', copy=False)].flatten(), rcond=None)[0]
+            _ref_array = ref_array[src_mask.astype('bool', copy=False)].flatten()
+            if False:
+                norm_model = np.linalg.lstsq(_src_array, _ref_array, rcond=None)[0]
+            else:
+                norm_model = np.zeros(2)
+                norm_model[0] = _ref_array.std() / _src_array[:, 0].std()
+                norm_model[1] = _ref_array.mean() - (_src_array[:, 0].mean() * norm_model[0])
+                norm_model[1] = np.percentile(_ref_array, 1) - np.percentile((_src_array[:, 0] * norm_model[0]), 1)
             logger.info(f'Image normalisation gain / offset: {norm_model[0]:.4f} / {norm_model[1]:.4f}')
-
             src_array[src_mask.astype('bool', copy=False)] = np.dot(_src_array, norm_model)
 
 
@@ -390,9 +397,34 @@ class HomonImBase:
         if normalise:    # find image-wide offset
             _src_array = src_array[src_mask.astype('bool', copy=False)].reshape(-1, 1)
             _src_array = np.hstack((_src_array, np.ones_like(_src_array)))
-            norm_model = np.linalg.lstsq(_src_array, ref_array[src_mask.astype('bool', copy=False)].flatten(), rcond=None)[0]
+            _ref_array = ref_array[src_mask.astype('bool', copy=False)].flatten()
+            if False:
+                norm_model = np.linalg.lstsq(_src_array, _ref_array, rcond=None)[0]
+            else:
+                norm_model = np.zeros(2)
+                norm_model[0] = _ref_array.std() / _src_array[:, 0].std()
+                # norm_model[1] = _ref_array.mean() - (_src_array[:, 0].mean() * norm_model[0])
+                norm_model[1] = np.percentile(_ref_array, 1) - np.percentile((_src_array[:, 0] * norm_model[0]), 1)
             logger.info(f'Image normalisation gain / offset: {norm_model[0]:.4f} / {norm_model[1]:.4f}')
+
             # src_array[src_mask.astype('bool', copy=False)] = np.dot(_src_array, norm_model)
+            if False:
+                res = cv2.fitLine(np.array([_src_array[:, 0], _ref_array]).T, cv2.DIST_HUBER, 0, 1e-9, 1e-9)
+                m_cv = res[1] / res[0]
+                c_cv = res[3] - m_cv*res[2]
+                from matplotlib import pyplot
+                pyplot.figure()
+                pyplot.plot(_src_array[:, 0], ref_array[src_mask.astype('bool', copy=False)].flatten(), '.')
+                x = np.arange(_src_array[:, 0].min(), _src_array[:, 0].max())
+                y = norm_model[0] * x + norm_model[1]
+                m = ref_array[src_mask.astype('bool', copy=False)].flatten().std() / _src_array[:, 0].std()
+                c = ref_array[src_mask.astype('bool', copy=False)].flatten().mean() - (_src_array[:, 0] * m).mean()
+                y2 = m * x + c
+                y3 = m_cv * x + c_cv
+                pyplot.plot(x, y, label='ls')
+                pyplot.plot(x, y2, label='norm')
+                pyplot.plot(x, y3, label='cv')
+                pyplot.legend()
 
         src_winview = sliding_window_view(src_array, win_size)
         ref_winview = sliding_window_view(ref_array, win_size)
@@ -419,7 +451,6 @@ class HomonImBase:
                     if False and ((r2 < 0.01) or params[0] < 0):
                         soln_n = np.linalg.lstsq(np.dot(src_a, norm_model).reshape(-1, 1), ref_win_v, rcond=None)
                         params = (soln_n[0]*norm_model).T
-                        _ = _
                         if False:
                             from matplotlib import pyplot
                             pyplot.plot(src_win_v, ref_win_v, 'o')
@@ -440,14 +471,25 @@ class HomonImBase:
 
                 param_array[:, win_i + win_offset[0], win_j + win_offset[1]] = params.reshape(-1, 1)
 
-        # param_array[~src_mask] = src_nodata
-        return param_array
+        if normalise:   # inpaint negative gain areas
+            gain_mask = param_array[0, :, :] >= 0
+            se = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+            gain_mask = cv2.erode(gain_mask.astype('uint8'), se)
+            valid_mask = src_mask & (param_array[0, :, :] != 0)
+            gain_mask = gain_mask & valid_mask
+            for bi in range(param_array.shape[0]):
+                param_array[bi, :, :] = fillnodata(param_array[bi, :, :], gain_mask)
 
+            param_array[:, np.logical_not(valid_mask)] = 0
+        else:
+            param_array[:, np.logical_not(src_mask)] = src_nodata
+
+        return param_array
 
     def homogenise(self, out_filename, method=None, normalise=False):
         raise NotImplementedError()
 
-    def build_ortho_overviews(self, out_filename):
+    def build_overviews(self, out_filename):
         """
         Builds internal overviews for an existing image
         """
@@ -455,6 +497,18 @@ class HomonImBase:
             with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
                 with rio.open(out_filename, 'r+', num_threads='all_cpus') as homo_im:
                     homo_im.build_overviews([2, 4, 8, 16, 32], Resampling.average)
+
+    def copy_ref_metadata(self, out_filename):
+        """
+        Populate metadata
+        """
+        if out_filename.exists():
+            with rio.open(self._ref_filename, 'r') as ref_im:
+                with rio.open(out_filename, 'r+', num_threads='all_cpus') as homo_im:
+                    for bi in range(1, homo_im.count+1):
+                        ref_meta_dict = ref_im.tags(bi)
+                        homo_meta_dict = {k: v for k, v in ref_meta_dict.items() if k in ['ABBREV', 'ID', 'NAME']}
+                        homo_im.update_tags(bi, **homo_meta_dict)
 
 
 class HomonimRefSpace(HomonImBase):
@@ -486,7 +540,7 @@ class HomonimRefSpace(HomonImBase):
                 calib_profile = src_im.profile
                 calib_profile.update(num_threads=multiprocessing.cpu_count(), compress='deflate', interleave='band',
                                      nodata=0, dtype=rio.float32)
-                with rio.open(out_filename, 'w', **calib_profile) as calib_im:
+                with rio.open(out_filename, 'w', **calib_profile) as homo_im:
                     if debug:
                         param_profile = ref_profile.copy()
                         param_profile.update(num_threads=multiprocessing.cpu_count(), compress='deflate',
@@ -535,14 +589,19 @@ class HomonimRefSpace(HomonImBase):
                         calib_src_array = param_array[0, :, :] * src_array
                         if param_array.shape[0] > 1:
                             calib_src_array += param_array[1, :, :]
-                        calib_im.write(calib_src_array.astype(calib_im.dtypes[bi-1]), indexes=bi)
+                        homo_im.write(calib_src_array.astype(homo_im.dtypes[bi-1]), indexes=bi)
+
                         if debug:
                             param_im.write(param_ds_array[0, :, :].astype(param_im.dtypes[bi - 1]), indexes=bi)
                             if param_ds_array.shape[0] > 1:
                                 _bi = bi + ref_profile['count']
                                 param_im.write(param_ds_array[1, :, :].astype(param_im.dtypes[_bi - 1]), indexes=_bi)
-            if debug:
-                param_im.close()
+
+                    # store the homogenisation parameters as metadata in the output file
+                    homo_im.update_tags(HOMO_METHOD=method, HOMO_NORM=str(normalise), HOMO_WIN=str(self.win_size),
+                                        HOMO_SRC=self._src_filename.name, HOMO_REF=self._ref_filename.name)
+                    if debug:
+                        param_im.close()
 
 ##
 
