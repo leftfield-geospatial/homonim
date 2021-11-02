@@ -569,6 +569,15 @@ class HomonimRefSpace(HomonImBase):
                                              resampling=Resampling.average, num_threads=multiprocessing.cpu_count(),
                                              src_nodata=src_im.profile['nodata'], dst_nodata=0)
 
+                        # set partially covered pixels to nodata
+                        # TODO is this faster, or setting param_array[src_array == 0] = 0 below
+                        mask_ds_array = np.zeros((ref_array.shape[1], ref_array.shape[2]), dtype=np.float32)
+                        _, xform = reproject((src_array != 0).astype('uint8'), destination=mask_ds_array,
+                                             src_transform=src_im.transform, src_crs=src_im.crs,
+                                             dst_transform=ref_profile['transform'], dst_crs=ref_profile['crs'],
+                                             resampling=Resampling.average, num_threads=multiprocessing.cpu_count(),
+                                             src_nodata=None, dst_nodata=None)
+                        src_ds_array[np.logical_not(mask_ds_array==1)] = src_im.profile['nodata']
                         # find the calibration parameters for this band
                         if method.lower() == 'gain_only':
                             param_ds_array = self._find_gains_cv(ref_array[bi-1, :, :], src_ds_array,
@@ -584,12 +593,11 @@ class HomonimRefSpace(HomonImBase):
                                              dst_transform=src_im.transform, dst_crs=src_im.crs,
                                              resampling=Resampling.cubic_spline, num_threads=multiprocessing.cpu_count(),
                                              src_nodata=0, dst_nodata=0)
-
                         # apply the calibration and write
-                        calib_src_array = param_array[0, :, :] * src_array
+                        homo_array = param_array[0, :, :] * src_array
                         if param_array.shape[0] > 1:
-                            calib_src_array += param_array[1, :, :]
-                        homo_im.write(calib_src_array.astype(homo_im.dtypes[bi-1]), indexes=bi)
+                            homo_array += param_array[1, :, :]
+                        homo_im.write(homo_array.astype(homo_im.dtypes[bi-1]), indexes=bi)
 
                         if debug:
                             param_im.write(param_ds_array[0, :, :].astype(param_im.dtypes[bi - 1]), indexes=bi)
