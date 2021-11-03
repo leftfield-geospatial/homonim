@@ -1,4 +1,4 @@
-# homogenisation configuration
+# Homogenisation configuration
 homogenisation:
   # Interpolation type (average, bilinear, cubic, cubic_spline, gauss, lanczos) for resampling from source to reference
   #   CRS (cubic_spline recommended)
@@ -6,20 +6,19 @@ homogenisation:
   # Interpolation type (average, bilinear, cubic, cubic_spline, gauss, lanczos) for resampling from reference to source
   #   CRS  (average recommended)
   ref2src_interp: average
-  # list of 1-based indices of bands in reference image that match bands 1..n in source image
-  #   (None = same band ordering as source image)
-  ref_bands:
-  # Build internal overviews for homogenised image
-  build_ovw: True
-  # Overwrite homogenised image if it exists
-  overwrite: True
-  # Model type
-  model: gain_only
+  # Produce debug outputs (parameter rasters)
+  debug: True
+  # Mask partially covered source pixels when downsampling
+  mask_partial: True
+  # Mask extrapolated (boundary) pixels in resampled images
+  mask_extrap: True
 
-# Format of homogenised image
-output_image:
+# Format of output (homogenised) image
+output:
   # Format of homogenised raster - see www.gdal.org/formats_list.html (None = same format as source image)
   driver: GTiff
+  # Data type (be aware that homogenised reflectances may be negative in some instances)
+  dtype: float32
   # Tile/block [x, y] size in pixels  ([512, 512] recommended) (None = same as source image)
   tile_size: [512, 512]
   # GeoTIFF compress type (deflate, jpeg, jpeg2000, lzw, zstd, none) (None = same as source image)

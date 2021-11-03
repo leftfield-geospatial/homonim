@@ -195,8 +195,28 @@ if False:
     help="Do/don't build overviews for the homogenised image.  [default: --build-ovw]",
     required=False,
 )
-def cli(src_file=None, ref_file=None, win_size=(3, 3), method="gain_only", norm=False, output_dir=None, build_ovw=True):
+@click.option(
+    "-c",
+    "--conf",
+    type=click.Path(exists=True, dir_okay=False, readable=True),
+    help="path to a configuration file",
+    required=False
+)
+def cli(src_file=None, ref_file=None, win_size=(3, 3), method="gain_only", norm=False, output_dir=None, build_ovw=True,
+        conf=None):
     """Radiometrically homogenise image(s) by fusion with reference satellite data"""
+
+    # read configuration
+    if conf is None:
+        conf_filename = root_path.joinpath('config.yaml')
+    else:
+        conf_filename = pathlib.Path(conf)
+
+    if not conf_filename.exists():
+        raise Exception(f'Config file {conf_filename} does not exist')
+
+    with open(conf_filename, 'r') as f:
+        config = yaml.safe_load(f)
 
     # check src_file points to exisiting file(s)
     for src_file_spec in src_file:
@@ -215,7 +235,8 @@ def cli(src_file=None, ref_file=None, win_size=(3, 3), method="gain_only", norm=
 
             logger.info(f'Homogenising {src_filename.name}')
             start_ttl = datetime.datetime.now()
-            him = homonim.HomonimRefSpace(src_filename, ref_file, win_size=win_size)
+            him = homonim.HomonimRefSpace(src_filename, ref_file, win_size=win_size,
+                                          homo_config=config['homogenisation'], out_config=config['output'])
             him.homogenise(homo_filename, method=method, normalise=norm)
             him.copy_ref_metadata(homo_filename)
             ttl_time = (datetime.datetime.now() - start_ttl)
