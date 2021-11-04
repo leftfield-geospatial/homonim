@@ -64,15 +64,6 @@ def expand_window_to_grid(win):
     exp_win = rio.windows.Window(col_off, row_off, width, height)
     return exp_win
 
-# TODO: named tuple?
-# class RasterProps(object):
-#
-#     crs = None
-#     transform = None
-#     shape = None
-#     res = None
-#     bounds = None
-#     profile = None
 """Container for raster properties relevant to re-projection"""
 RasterProps = namedtuple('RasterProps', ['crs', 'transform', 'shape', 'res', 'bounds', 'nodata', 'profile'])
 
@@ -100,8 +91,9 @@ class HomonImBase:
             raise Exception('win_size must be odd in both dimensions')
         self.win_size = win_size
 
-        self._src_props = RasterProps(*[None]*7)
-        self._ref_props = RasterProps(*[None]*7)
+        self._src_props = None
+        self._ref_props = None
+        self._ref_array = None
 
         if homo_config is None:
             self._homo_config = {
@@ -126,6 +118,24 @@ class HomonImBase:
             }
         else:
             self._out_config = out_config
+
+    @property
+    def ref_array(self):
+        if self._ref_array is None:
+            self._ref_array = self._read_ref()
+        return self._ref_array
+
+    @property
+    def src_props(self):
+        if self._src_props is None:
+            self._read_ref()
+        return self._src_props
+
+    @property
+    def ref_props(self):
+        if self._ref_props is None:
+            self._read_ref()
+        return self._ref_props
 
     def _check_rasters(self):
         """Check bounds, band count, and compression type of source and reference images"""
@@ -223,21 +233,21 @@ class HomonImBase:
                         ref_transform = ref_src_transform
                         ref_array = _ref_array
 
-                    ref_profile = ref_im.profile
+                    # create a profile dict for ref_array
+                    ref_profile = ref_im.profile.copy()
                     ref_profile['transform'] = ref_transform
-                    ref_profile['res'] = list(ref_im.res)    # TODO: find a better way of passing this
-                    ref_profile['bounds'] = ref_src_bounds
                     ref_profile['crs'] = src_im.crs
                     ref_profile['width'] = ref_array.shape[2]
                     ref_profile['height'] = ref_array.shape[1]
+
                     self._ref_props = RasterProps(crs=src_im.crs, transform=ref_transform, shape=ref_array.shape[1:],
                                                   res=list(ref_im.res), bounds=ref_src_bounds, nodata=ref_im.nodata,
-                                                  profile=ref_im.profile)
+                                                  profile=ref_profile)
                     self._src_props = RasterProps(crs=src_im.crs, transform=src_im.transform, shape=src_im.shape,
                                                   res=list(src_im.res), bounds=src_im.bounds, nodata=src_im.nodata,
                                                   profile=src_im.profile)
 
-        return ref_array, ref_profile
+        return ref_array
 
     def _project_src_to_ref(self, src_array, src_nodata=0, dst_type=None):
         """
@@ -268,10 +278,10 @@ class HomonImBase:
         _, _ = reproject(
             src_array,
             destination=ref_array,
-            src_transform=self._src_props.transform,
-            src_crs=self._src_props.crs,
+            src_transform=self.src_props.transform,
+            src_crs=self.src_props.crs,
             dst_transform=self._ref_props.transform,
-            dst_crs=self._src_props.crs,
+            dst_crs=self.src_props.crs,
             resampling=Resampling[self._homo_config['src2ref_interp']],
             num_threads=multiprocessing.cpu_count(),
             src_nodata=src_nodata,
@@ -300,17 +310,17 @@ class HomonImBase:
         if dst_type is None:
             dst_type = ref_array.dtype
         if ref_array.ndim > 2:
-            src_array = np.zeros((ref_array.shape[0], *self._src_props.shape), dtype=dst_type)
+            src_array = np.zeros((ref_array.shape[0], *self.src_props.shape), dtype=dst_type)
         else:
-            src_array = np.zeros(self._src_props.shape, dtype=dst_type)
+            src_array = np.zeros(self.src_props.shape, dtype=dst_type)
         # TODO: checks on nodata vals, that a dest_nodata==0 will not conflict with pixel values
         _, _ = reproject(
             ref_array,
             destination=src_array,
             src_transform=self._ref_props.transform,
-            src_crs=self._src_props.crs,
-            dst_transform=self._src_props.transform,
-            dst_crs=self._src_props.crs,
+            src_crs=self.src_props.crs,
+            dst_transform=self.src_props.transform,
+            dst_crs=self.src_props.crs,
             resampling=Resampling[self._homo_config['ref2src_interp']],
             num_threads=multiprocessing.cpu_count(),
             src_nodata=ref_nodata,
@@ -646,21 +656,18 @@ class HomonimRefSpace(HomonImBase):
         out_filename : str, pathlib.Path
             name of the file to save the homogenised image to
         """
-        ref_array, ref_profile = self._read_ref()
-
 
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
             with rio.open(self._src_filename, 'r') as src_im:
                 # TODO nodata conversion to/from 0 to/from configured output format
-                out_profile = src_im.profile
+                out_profile = src_im.profile.copy()
                 out_profile.update(num_threads=multiprocessing.cpu_count(), compress='deflate', interleave='band',
                                      nodata=0, dtype=self._out_config['dtype'])
                 with rio.open(out_filename, 'w', **out_profile) as out_im:
                     if self._homo_config['debug']:
-                        param_profile = ref_profile.copy()
+                        param_profile = self.ref_props.profile
                         param_profile.update(num_threads=multiprocessing.cpu_count(), compress='deflate',
-                                             interleave='band',
-                                             nodata=None, dtype=rio.float32, count=src_im.profile['count'])
+                                             interleave='band', nodata=None, dtype=rio.float32, count=src_im.profile['count'])
                         if method != 'gain_only':
                             param_profile['count'] *= 2
                         param_out_file_name = out_filename.parent.joinpath(out_filename.stem + '_PARAMS.tif')
@@ -673,11 +680,11 @@ class HomonimRefSpace(HomonImBase):
 
                         # downsample the source window into the reference CRS and gid
                         # specify nodata so that these pixels are excluded from calculations
-                        src_ds_array = np.zeros((ref_array.shape[1], ref_array.shape[2]), dtype=np.float32)
+                        src_ds_array = np.zeros((self.ref_array.shape[1], self.ref_array.shape[2]), dtype=np.float32)
                         # TODO: resample rather than reproject?
                         # TODO: also think if there is a neater way we can do this, rather than having arrays and transforms in mem
                         #   we have datasets / memory images ?
-                        src_ds_array = self._project_src_to_ref(src_array, src_nodata=self._src_props.nodata, dst_type='float32')
+                        src_ds_array = self._project_src_to_ref(src_array, src_nodata=self.src_props.nodata, dst_type='float32')
 
                         # set partially covered pixels to nodata
                         # TODO is this faster, or setting param_array[src_array == 0] = 0 below
@@ -687,10 +694,10 @@ class HomonimRefSpace(HomonImBase):
 
                         # find the calibration parameters for this band
                         if method.lower() == 'gain_only':
-                            param_ds_array = self._find_gains_cv(ref_array[bi-1, :, :], src_ds_array,
+                            param_ds_array = self._find_gains_cv(self.ref_array[bi-1, :, :], src_ds_array,
                                                                  win_size=self.win_size, normalise=normalise)
                         else:
-                            param_ds_array = self._find_gain_and_offset_winview(ref_array[bi - 1, :, :], src_ds_array,
+                            param_ds_array = self._find_gain_and_offset_winview(self.ref_array[bi - 1, :, :], src_ds_array,
                                                                                 win_size=self.win_size, normalise=normalise)
 
                         # upsample the parameter array
@@ -728,13 +735,12 @@ class HomonimSrcSpace(HomonImBase):
         out_filename : str
             name of the file to save the homogenised image to
         """
-        ref_array, ref_profile = self._read_ref()
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
             with rio.open(self._src_filename, 'r') as src_im:
                 # src_mask = src_im.dataset_mask()
                 # src_mask_poly = [poly for poly in dataset_features(src_im, sampling=10, band=False, as_mask=True,
                 #                                    with_nodata=False, geographic=False, precision=1)]
-                # src_ds_mask = np.zeros((ref_array.shape[1], ref_array.shape[2]), dtype=np.uint8)
+                # src_ds_mask = np.zeros((self.ref_array.shape[1], self.ref_array.shape[2]), dtype=np.uint8)
                 #
                 # _, xform = reproject(src_mask, destination=src_ds_mask,
                 #                      src_transform=src_im.transform, src_crs=src_im.crs,
@@ -762,13 +768,14 @@ class HomonimSrcSpace(HomonImBase):
 
                         # upsample ref to source CRS and grid
                         ref_us_array = self._project_ref_to_src(
-                            ref_array[bi-1, :, :],
-                            ref_nodata=self._ref_props.nodata,
+                            self.ref_array[bi-1, :, :],
+                            ref_nodata=self.ref_props.nodata,
                             dst_type='float32'
                         )
 
                         # find the calibration parameters for this band
-                        win_size = self.win_size * np.round(np.array(ref_profile['res'])/np.array(src_im.res)).astype(int)
+                        win_size = self.win_size * np.round(
+                            np.array(self.ref_props.res)/np.array(self.src_props.res)).astype(int)
                         # src_array[np.logical_not(src_mask)] = np.nan    # TODO get rid of this step
                         # TODO parallelise this, use opencv and or gpu, and or use integral image!
                         param_array = self._find_gains_cv(ref_us_array, src_array, win_size=win_size, normalise=normalise)
