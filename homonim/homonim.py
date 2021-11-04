@@ -651,15 +651,6 @@ class HomonimRefSpace(HomonImBase):
 
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
             with rio.open(self._src_filename, 'r') as src_im:
-                # src_mask = src_im.dataset_mask()
-                # src_mask_poly = [poly for poly in dataset_features(src_im, sampling=10, band=False, as_mask=True,
-                #                                    with_nodata=False, geographic=False, precision=1)]
-                # src_ds_mask = np.zeros((ref_array.shape[1], ref_array.shape[2]), dtype=np.uint8)
-                #
-                # _, xform = reproject(src_mask, destination=src_ds_mask,
-                #                      src_transform=src_im.transform, src_crs=src_im.crs,
-                #                      dst_transform=ref_profile['transform'], dst_crs=ref_profile['crs'],
-                #                      resampling=Resampling.average, num_threads=multiprocessing.cpu_count())
                 # TODO nodata conversion to/from 0 to/from configured output format
                 out_profile = src_im.profile
                 out_profile.update(num_threads=multiprocessing.cpu_count(), compress='deflate', interleave='band',
@@ -687,23 +678,13 @@ class HomonimRefSpace(HomonImBase):
                         # TODO: also think if there is a neater way we can do this, rather than having arrays and transforms in mem
                         #   we have datasets / memory images ?
                         src_ds_array = self._project_src_to_ref(src_array, src_nodata=self._src_props.nodata, dst_type='float32')
-                        # _, xform = reproject(src_array, destination=src_ds_array,
-                        #                      src_transform=src_im.transform, src_crs=src_im.crs,
-                        #                      dst_transform=ref_profile['transform'], dst_crs=ref_profile['crs'],
-                        #                      resampling=Resampling.average, num_threads=multiprocessing.cpu_count(),
-                        #                      src_nodata=src_im.profile['nodata'], dst_nodata=0)
 
                         # set partially covered pixels to nodata
                         # TODO is this faster, or setting param_array[src_array == 0] = 0 below
                         if self._homo_config['mask_partial']:
                             mask_ds_array = self._project_src_to_ref((src_array != 0).astype('uint8'), src_nodata=None, dst_type='float32')
-                            # mask_ds_array = np.zeros((ref_array.shape[1], ref_array.shape[2]), dtype=np.float32)
-                            # _, xform = reproject((src_array != 0).astype('uint8'), destination=mask_ds_array,
-                            #                      src_transform=src_im.transform, src_crs=src_im.crs,
-                            #                      dst_transform=ref_profile['transform'], dst_crs=ref_profile['crs'],
-                            #                      resampling=Resampling.average, num_threads=multiprocessing.cpu_count(),
-                            #                      src_nodata=None, dst_nodata=None)
                             src_ds_array[np.logical_not(mask_ds_array==1)] = src_im.profile['nodata']
+
                         # find the calibration parameters for this band
                         if method.lower() == 'gain_only':
                             param_ds_array = self._find_gains_cv(ref_array[bi-1, :, :], src_ds_array,
@@ -714,13 +695,8 @@ class HomonimRefSpace(HomonImBase):
 
                         # upsample the parameter array
                         param_array = self._project_ref_to_src(param_ds_array, ref_nodata=0, dst_type='float32')
-                        # param_array = np.zeros((param_ds_array.shape[0], *src_array.shape), dtype=np.float32)
-                        # _, xform = reproject(param_ds_array, destination=param_array,
-                        #                      src_transform=ref_profile['transform'], src_crs=ref_profile['crs'],
-                        #                      dst_transform=src_im.transform, dst_crs=src_im.crs,
-                        #                      resampling=Resampling.cubic_spline, num_threads=multiprocessing.cpu_count(),
-                        #                      src_nodata=0, dst_nodata=0)
-                        # apply the calibration and write
+
+                        # apply the calibration and write out the homogenised raster
                         out_array = param_array[0, :, :] * src_array
                         if param_array.shape[0] > 1:
                             out_array += param_array[1, :, :]
@@ -729,7 +705,7 @@ class HomonimRefSpace(HomonImBase):
                         if self._homo_config['debug']:
                             param_im.write(param_ds_array[0, :, :].astype(param_im.dtypes[bi - 1]), indexes=bi)
                             if param_ds_array.shape[0] > 1:
-                                _bi = bi + ref_profile['count']
+                                _bi = bi + src_im.count
                                 param_im.write(param_ds_array[1, :, :].astype(param_im.dtypes[_bi - 1]), indexes=_bi)
 
                     # store the homogenisation parameters as metadata in the output file
@@ -755,7 +731,7 @@ class HomonimSrcSpace(HomonImBase):
         ref_array, ref_profile = self._read_ref()
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
             with rio.open(self._src_filename, 'r') as src_im:
-                src_mask = src_im.dataset_mask()
+                # src_mask = src_im.dataset_mask()
                 # src_mask_poly = [poly for poly in dataset_features(src_im, sampling=10, band=False, as_mask=True,
                 #                                    with_nodata=False, geographic=False, precision=1)]
                 # src_ds_mask = np.zeros((ref_array.shape[1], ref_array.shape[2]), dtype=np.uint8)
@@ -765,34 +741,48 @@ class HomonimSrcSpace(HomonImBase):
                 #                      dst_transform=ref_profile['transform'], dst_crs=ref_profile['crs'],
                 #                      resampling=Resampling.average, num_threads=multiprocessing.cpu_count())
 
-                calib_profile = src_im.profile
-                calib_profile.update(num_threads=multiprocessing.cpu_count(), compress='deflate', interleave='band',
-                                     nodata=0)
-                with rio.open(out_filename, 'w', **calib_profile) as calib_im:
+                out_profile = src_im.profile
+                out_profile.update(num_threads=multiprocessing.cpu_count(), compress='deflate', interleave='band',
+                                     nodata=0, dtype=self._out_config['dtype'])
+
+                with rio.open(out_filename, 'w', **out_profile) as out_im:
+                    if self._homo_config['debug']:
+                        param_profile = src_im.profile.copy()
+                        param_profile.update(num_threads=multiprocessing.cpu_count(), compress='deflate',
+                                             interleave='band', nodata=None, dtype=rio.float32, count=src_im.profile['count'])
+                        if method != 'gain_only':
+                            param_profile['count'] *= 2
+                        param_out_file_name = out_filename.parent.joinpath(out_filename.stem + '_PARAMS.tif')
+                        param_im = rio.open(param_out_file_name, 'w', **param_profile)
+
                     # process by band to limit memory usage
                     bands = list(range(1, src_im.count + 1))
                     for bi in bands:
                         src_array = src_im.read(bi, out_dtype=np.float32)  # NB bands along first dim
 
                         # upsample ref to source CRS and grid
-                        ref_src_array = np.zeros_like(src_array, dtype=np.float32)
-                        _, xform = reproject(ref_array[bi-1, :, :], destination=ref_src_array,
-                                             src_transform=ref_profile['transform'], src_crs=ref_profile['crs'],
-                                             dst_transform=src_im.transform, dst_crs=src_im.crs,
-                                             resampling=Resampling.cubic_spline,
-                                             num_threads=multiprocessing.cpu_count(),
-                                             src_nodata=ref_profile['nodata'], dst_nodata=0)
+                        ref_us_array = self._project_ref_to_src(
+                            ref_array[bi-1, :, :],
+                            ref_nodata=self._ref_props.nodata,
+                            dst_type='float32'
+                        )
 
                         # find the calibration parameters for this band
                         win_size = self.win_size * np.round(np.array(ref_profile['res'])/np.array(src_im.res)).astype(int)
                         # src_array[np.logical_not(src_mask)] = np.nan    # TODO get rid of this step
                         # TODO parallelise this, use opencv and or gpu, and or use integral image!
-                        param_array = self._find_gains_cv(ref_src_array, src_array, win_size=win_size)
+                        param_array = self._find_gains_cv(ref_us_array, src_array, win_size=win_size, normalise=normalise)
 
                         # apply the calibration and write
-                        calib_src_array = param_array[0, :, :] * src_array
+                        out_array = param_array[0, :, :] * src_array
                         if param_array.shape[0] > 1:
-                            calib_src_array += param_array[1, :, :]
-                        calib_im.write(calib_src_array.astype(calib_im.dtypes[bi - 1]), indexes=bi)
+                            out_array += param_array[1, :, :]
+                        out_im.write(out_array.astype(out_im.dtypes[bi - 1]), indexes=bi)
+
+                        if self._homo_config['debug']:
+                            param_im.write(param_array[0, :, :].astype(param_im.dtypes[bi - 1]), indexes=bi)
+                            if param_array.shape[0] > 1:
+                                _bi = bi + src_im.count
+                                param_im.write(param_array[1, :, :].astype(param_im.dtypes[_bi - 1]), indexes=_bi)
 
 ##
