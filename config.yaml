@@ -2,10 +2,10 @@
 homogenisation:
   # Interpolation type (average, bilinear, cubic, cubic_spline, gauss, lanczos) for resampling from source to reference
   #   CRS (cubic_spline recommended)
-  src2ref_interp: cubic_spline
+  src2ref_interp: average
   # Interpolation type (average, bilinear, cubic, cubic_spline, gauss, lanczos) for resampling from reference to source
   #   CRS  (average recommended)
-  ref2src_interp: average
+  ref2src_interp: cubic_spline
   # Produce debug outputs (parameter rasters)
   debug: True
   # Mask partially covered source pixels when downsampling

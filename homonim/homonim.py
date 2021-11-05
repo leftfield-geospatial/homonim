@@ -67,6 +67,13 @@ def expand_window_to_grid(win):
 """Container for raster properties relevant to re-projection"""
 RasterProps = namedtuple('RasterProps', ['crs', 'transform', 'shape', 'res', 'bounds', 'nodata', 'profile'])
 
+"""Internal nodata value"""
+int_nodata = 0
+
+"""Internal type for homogenisation data"""
+int_dtype = np.float32
+
+
 class HomonImBase:
     def __init__(self, src_filename, ref_filename, win_size=[3, 3], homo_config=None, out_config=None):
         """
@@ -119,6 +126,7 @@ class HomonImBase:
         else:
             self._out_config = out_config
 
+
     @property
     def ref_array(self):
         if self._ref_array is None:
@@ -136,6 +144,7 @@ class HomonImBase:
         if self._ref_props is None:
             self._read_ref()
         return self._ref_props
+
 
     def _check_rasters(self):
         """Check bounds, band count, and compression type of source and reference images"""
@@ -171,18 +180,22 @@ class HomonImBase:
 
                     if not ref_box.covers(src_box):
                         raise Exception(f'Reference image {self._ref_filename.stem} does not cover source image '
-                                        f'{self._src_filename.stem}')
+                                        f'{self._src_filename.stem}.')
 
                     # check reference has enough bands for the source
                     if src_im.count > ref_im.count:
                         raise Exception(f'Reference image {self._ref_filename.stem} has fewer bands than source image '
-                                        f'{self._src_filename.stem}')
+                                        f'{self._src_filename.stem}.')
 
                     # if the band counts don't match assume the first src_im.count bands of ref_im match those of src_im
                     if src_im.count != ref_im.count:
                         logger.warning('Reference bands do not match source bands.  \n'
-                                       'Using the first {src_im.count} bands of reference image  {self._ref_filename.stem}')
+                                       f'Using the first {src_im.count} bands of reference image  {self._ref_filename.stem}.')
 
+                    for fn, nodata in zip([self._src_filename, self._ref_filename], [src_im.nodata, ref_im.nodata]):
+                        if nodata is None:
+                            logger.warning(f'{fn} has no nodata value, defaulting to {int_nodata}.\n'
+                                           'Any invalid pixels in this image should be first be masked with nodata.')
                 # if src_im.crs != ref_im.crs:    # CRS's don't match
                 #     logger.warning('The reference will be re-projected to the source CRS.  \n'
                 #                    'To avoid this step, provide a reference image in the source CRS')
@@ -212,7 +225,12 @@ class HomonImBase:
                     #   but should we not rather resample the source to the ref grid than sort of the other way around
 
                     ref_bands = range(1, src_im.count + 1)
-                    _ref_array = ref_im.read(ref_bands, window=ref_src_win).astype('float32')
+                    _ref_array = ref_im.read(ref_bands, window=ref_src_win).astype(int_dtype)
+
+                    # check for for valid pixel values
+                    ref_mask = ref_im.read_masks(ref_bands, window=ref_src_win).astype('bool')
+                    if np.any(_ref_array[ref_mask] <= 0):
+                        raise Exception(f'Reference image {self._ref_filename.name} contains pixel values <=0.')
 
                     if src_im.crs.to_proj4() != ref_im.crs.to_proj4():    # re-project the reference image to source CRS
                         # TODO: here we reproject from transform on the ref grid and that include source bounds
@@ -223,33 +241,38 @@ class HomonImBase:
                         # transform and dimensions of reprojected ref ROI
                         ref_transform, width, height = calculate_default_transform(ref_im.crs, src_im.crs, ref_src_win.width,
                                                                                ref_src_win.height, *ref_src_bounds)
-                        ref_array = np.zeros((src_im.count, height, width), dtype=np.float32)
+                        ref_array = np.zeros((src_im.count, height, width), dtype=int_dtype)
                         # TODO: another thing to think of is that we ideally shouldn't reproject the reference unnecessarily to avoid damaging radiometric info
                         #  this could mean we reproject the source to/from ref CRS rather than just resample it
                         _, xform = reproject(_ref_array, ref_array, src_transform=ref_src_transform, src_crs=ref_im.crs,
                             dst_transform=ref_transform, dst_crs=src_im.crs, resampling=Resampling.bilinear,
-                                  num_threads=multiprocessing.cpu_count())
+                                  num_threads=multiprocessing.cpu_count(), dst_nodata=int_nodata)
                     else:
+                        # TODO: can we allow reference nodata covering the source area or should we throw an exception if this is the case
+                        # replace reference nodata with internal nodata value
+                        if (ref_im.nodata is not None) and (ref_im.nodata != int_nodata):
+                            _ref_array[_ref_array == ref_im.nodata] = int_nodata
                         ref_transform = ref_src_transform
                         ref_array = _ref_array
-
                     # create a profile dict for ref_array
                     ref_profile = ref_im.profile.copy()
                     ref_profile['transform'] = ref_transform
                     ref_profile['crs'] = src_im.crs
                     ref_profile['width'] = ref_array.shape[2]
                     ref_profile['height'] = ref_array.shape[1]
+                    ref_nodata = int_nodata if ref_im.nodata is None else ref_im.nodata
+                    src_nodata = int_nodata if src_im.nodata is None else src_im.nodata
 
                     self._ref_props = RasterProps(crs=src_im.crs, transform=ref_transform, shape=ref_array.shape[1:],
-                                                  res=list(ref_im.res), bounds=ref_src_bounds, nodata=ref_im.nodata,
+                                                  res=list(ref_im.res), bounds=ref_src_bounds, nodata=ref_nodata,
                                                   profile=ref_profile)
                     self._src_props = RasterProps(crs=src_im.crs, transform=src_im.transform, shape=src_im.shape,
-                                                  res=list(src_im.res), bounds=src_im.bounds, nodata=src_im.nodata,
+                                                  res=list(src_im.res), bounds=src_im.bounds, nodata=src_nodata,
                                                   profile=src_im.profile)
 
         return ref_array
 
-    def _project_src_to_ref(self, src_array, src_nodata=0, dst_type=None):
+    def _project_src_to_ref(self, src_array, src_nodata=int_nodata, dst_dtype=int_dtype, dst_nodata=int_nodata):
         """
         Re-project an array from source to reference CRS
 
@@ -259,20 +282,20 @@ class HomonImBase:
                    Source raster array
         src_nodata: int, float, optional
                     Nodata value for src_array (Default: 0)
-        dst_type: str, type, optional
-                    Data type for destination array (Default: src_array.dtype)
+        dst_dtype: str, type, optional
+                    Data type for re-projected array. (Default: float32)
+        dst_nodata: int, float, optional
+                    Nodata value for re-projected array (Default: 0)
 
         Returns
         -------
         : numpy.array_like
-          Re-projected array in reference CRS
+          Re-projected array
         """
-        if dst_type is None:
-            dst_type = src_array.dtype
         if src_array.ndim > 2:
-            ref_array = np.zeros((src_array.shape[0], *self._ref_props.shape), dtype=dst_type)
+            ref_array = np.zeros((src_array.shape[0], *self.ref_props.shape), dtype=dst_dtype)
         else:
-            ref_array = np.zeros(self._ref_props.shape, dtype=dst_type)
+            ref_array = np.zeros(self.ref_props.shape, dtype=dst_dtype)
 
         # TODO: checks on nodata vals, that a dest_nodata==0 will not conflict with pixel values
         _, _ = reproject(
@@ -280,51 +303,52 @@ class HomonImBase:
             destination=ref_array,
             src_transform=self.src_props.transform,
             src_crs=self.src_props.crs,
-            dst_transform=self._ref_props.transform,
+            dst_transform=self.ref_props.transform,
             dst_crs=self.src_props.crs,
             resampling=Resampling[self._homo_config['src2ref_interp']],
             num_threads=multiprocessing.cpu_count(),
             src_nodata=src_nodata,
-            dst_nodata=0
+            dst_nodata=dst_nodata,
         )
         return ref_array
 
-    def _project_ref_to_src(self, ref_array, ref_nodata=0, dst_type=None):
+    def _project_ref_to_src(self, ref_array, ref_nodata=int_nodata, dst_dtype=int_dtype, dst_nodata=int_nodata):
         """
         Re-project an array from reference to source CRS
 
         Parameters
         ----------
         ref_array: numpy.array_like
-                   Reference raster array to re-project
+                   Reference CRS raster array to re-project
         ref_nodata: int, float, optional
                     Nodata value for ref_array (Default: 0)
-        dst_type: str, type, optional
-                    Data type for destination array. (Default: src_array.dtype)
+        dst_dtype: str, type, optional
+                    Data type for re-projected array. (Default: float32)
+        dst_nodata: int, float, optional
+                    Nodata value for re-projected array (Default: 0)
 
         Returns
         -------
         : numpy.array_like
-          Re-projected array in source CRS
+          Re-projected array
         """
-        if dst_type is None:
-            dst_type = ref_array.dtype
         if ref_array.ndim > 2:
-            src_array = np.zeros((ref_array.shape[0], *self.src_props.shape), dtype=dst_type)
+            src_array = np.zeros((ref_array.shape[0], *self.src_props.shape), dtype=dst_dtype)
         else:
-            src_array = np.zeros(self.src_props.shape, dtype=dst_type)
+            src_array = np.zeros(self.src_props.shape, dtype=dst_dtype)
+
         # TODO: checks on nodata vals, that a dest_nodata==0 will not conflict with pixel values
         _, _ = reproject(
             ref_array,
             destination=src_array,
-            src_transform=self._ref_props.transform,
+            src_transform=self.ref_props.transform,
             src_crs=self.src_props.crs,
             dst_transform=self.src_props.transform,
             dst_crs=self.src_props.crs,
             resampling=Resampling[self._homo_config['ref2src_interp']],
             num_threads=multiprocessing.cpu_count(),
             src_nodata=ref_nodata,
-            dst_nodata=0
+            dst_nodata=dst_nodata,
         )
         return src_array
 
@@ -348,6 +372,7 @@ class HomonImBase:
         strides = x.strides[:-1] + (x.strides[-1], xstep * x.strides[-1])
         return np.lib.stride_tricks.as_strided(x, shape=shape, strides=strides, writeable=False)
 
+
     def _find_gains_int_arr(self, ref_array, src_array, win_size=[3,3], param_nodata=np.nan):
         """
         Find sliding window gains for a band using integral arrays
@@ -368,13 +393,13 @@ class HomonImBase:
         """
 
         # find ratios avoiding divide by nodata=0
-        src_nodata = 0
+        src_nodata = int_nodata
         src_mask = (src_array != src_nodata).astype(np.int32)
-        ratio_array = np.zeros_like(src_array, dtype=np.float32)
+        ratio_array = np.zeros_like(src_array, dtype=int_dtype)
         _ = np.divide(ref_array, src_array, out=ratio_array, where=src_mask.astype('bool', copy=False))
 
         # find the integral arrays for ratios and mask (prepend a row and column of zeros)
-        int_ratio_array = np.zeros(np.array(ratio_array.shape)+1, dtype=np.float32)
+        int_ratio_array = np.zeros(np.array(ratio_array.shape)+1, dtype=int_dtype)
         int_ratio_array[1:, 1:] = ratio_array
         int_mask_array = np.zeros(np.array(ratio_array.shape)+1, dtype=np.int32)
         int_mask_array[1:, 1:] = src_mask
@@ -384,7 +409,7 @@ class HomonImBase:
 
         # initialise the sliding window operation
         win_offset = np.floor(np.array(win_size)/2).astype(np.int32)      # the window center
-        param_array = np.empty_like(ref_array, dtype=np.float32)
+        param_array = np.empty_like(ref_array, dtype=int_dtype)
         param_array[:] = param_nodata
 
         # TODO: implement this in cython
@@ -410,7 +435,7 @@ class HomonImBase:
         Parameters
         ----------
         ref_array : numpy.array_like
-            a reference band in an MxN array
+            a reference band in an MxN array, with nodata==0
         src_array : numpy.array_like
             a source band, collocated with ref_array and of the same MxN shape, and with nodata==0
         win_size : numpy.array_like
@@ -424,8 +449,7 @@ class HomonImBase:
             an M x N array of gains
         """
 
-        src_nodata = 0
-        src_mask = (src_array != src_nodata).astype(np.int32)   # TODO: why .astype(np.int32)?
+        src_mask = (src_array != int_nodata).astype(np.int32)   # use int32 as it needs to accumulate sums below
 
         if normalise:    # find image-wide offset
             _src_array = src_array[src_mask.astype('bool', copy=False)].reshape(-1, 1)
@@ -443,69 +467,31 @@ class HomonImBase:
 
 
         # find ratios avoiding divide by nodata=0
-        ratio_array = np.zeros_like(src_array, dtype=np.float32)
+        ratio_array = np.zeros_like(src_array, dtype=int_dtype)
         _ = np.divide(ref_array, src_array, out=ratio_array, where=src_mask.astype('bool', copy=False))
 
         # sum the ratio and mask over sliding windows (uses DFT for large kernels)
-        kernel = np.ones(win_size, dtype=np.float32)
+        kernel = np.ones(win_size, dtype=int_dtype)
         ratio_winsums = cv.filter2D(ratio_array, -1, kernel, borderType=cv.BORDER_CONSTANT)
         mask_winsums = cv.filter2D(src_mask.astype('uint8', copy=False), cv.CV_32F, kernel, borderType=cv.BORDER_CONSTANT)
 
         # calculate gains, ignoring invalid pixels
         # cv.divide(ratio_winsums, mask_winsums, dst=param_array, dtype=np.float32)
         if normalise:
-            param_array = np.zeros((2, *src_array.shape), dtype=np.float32)
+            param_array = np.zeros((2, *src_array.shape), dtype=int_dtype)
             _ = np.divide(ratio_winsums, mask_winsums, out=param_array[0, :, :],
                           where=src_mask.astype('bool', copy=False))
 
             param_array[1, :, :] = param_array[0, :, :] * norm_model[1]
             param_array[0, :, :] *= norm_model[0]
         else:
-            param_array = np.zeros((1, *src_array.shape), dtype=np.float32)
+            param_array = np.zeros((1, *src_array.shape), dtype=int_dtype)
             _ = np.divide(ratio_winsums, mask_winsums, out=param_array[0, :, :],
                           where=src_mask.astype('bool', copy=False))
 
         # param_array[np.isnan(src_array)] = param_nodata
         return param_array
 
-    def __find_gains_winview(self, ref_array, src_array, win_size=[3,3]):
-        """
-        Find the sliding window calibration parameters for a band
-
-        Parameters
-        ----------
-        ref_array : numpy.array_like
-            a reference band in an MxN array
-        src_array : numpy.array_like
-            a source band, collocated with ref_array and of the same MxN shape
-        win_size : numpy.array_like
-            sliding window [width, height] in pixels
-
-        Returns
-        -------
-        param_array : numpy.array_like
-            an M x N  array of gains with nodata = nan
-        """
-        ratio_array = np.zeros_like(src_array, dtype=np.float32)
-        _ = np.divide(ref_array, src_array, out=ratio_array)  # find ratios once
-        ratio_winview = sliding_window_view(ratio_array, win_size)  # apply the sliding window to the ratios
-
-        param_array = np.empty_like(ref_array, dtype=np.float32)
-        param_array[:] = np.nan
-        win_offset = np.floor(np.array(win_size) / 2).astype(np.int32)  # the window center
-        # TODO : how to do nodata masking with numpy.ma and masked arrays, nans, or what?
-        _ = np.nanmean(ratio_winview, out=param_array[win_offset[0]:-win_offset[0], win_offset[1]:-win_offset[1]],
-                       axis=(2, 3))  # find mean ratio over sliding windows
-
-        # TODO : what is the most efficient way to iterate over these view arrays? np.nditer?
-        #   or might we use a cython inner to speed things up?  See np.nditer docs
-        #   is the above mean over sliding win views faster than the nested loop below
-        # for win_i in np.ndindex(ratio_winview.shape[2]):
-        #     for win_j in np.ndindex(ratio_winview.shape[3]):
-        #         ratio_win = ratio_winview[:, :, win_i, win_j]
-        #         param_array[win_i + win_offset[0], win_j + win_offset[1]] = np.mean(ratio_win)  # gain only
-        param_array[np.isnan(src_array)] = np.nan
-        return param_array
 
     def _find_gain_and_offset_winview(self, ref_array, src_array, win_size=[15, 15], normalise=False):
         """
@@ -525,8 +511,7 @@ class HomonImBase:
         param_array : numpy.array_like
             an M x N  array of gains with nodata = nan
         """
-        src_nodata = 0
-        src_mask = (src_array != src_nodata)
+        src_mask = (src_array != int_nodata)
 
         if normalise:    # find image-wide offset
             _src_array = src_array[src_mask.astype('bool', copy=False)].reshape(-1, 1)
@@ -564,7 +549,7 @@ class HomonImBase:
         ref_winview = sliding_window_view(ref_array, win_size)
         src_mask_winview = sliding_window_view(src_mask, win_size)
 
-        param_array = np.zeros((2, *ref_array.shape), dtype=np.float32)
+        param_array = np.zeros((2, *ref_array.shape), dtype=int_dtype)
         win_offset = np.floor(np.array(win_size) / 2).astype(np.int32)  # the window center
         a_const = np.ones((np.prod(win_size), 1))
         for win_i in np.ndindex(src_winview.shape[0]):
@@ -614,9 +599,9 @@ class HomonImBase:
             for bi in range(param_array.shape[0]):
                 param_array[bi, :, :] = fillnodata(param_array[bi, :, :], gain_mask)
 
-            param_array[:, np.logical_not(valid_mask)] = 0
+            param_array[:, np.logical_not(valid_mask)] = int_nodata
         else:
-            param_array[:, np.logical_not(src_mask)] = src_nodata
+            param_array[:, np.logical_not(src_mask)] = int_nodata
 
         return param_array
 
@@ -662,13 +647,13 @@ class HomonimRefSpace(HomonImBase):
                 # TODO nodata conversion to/from 0 to/from configured output format
                 out_profile = src_im.profile.copy()
                 out_profile.update(num_threads=multiprocessing.cpu_count(), compress='deflate', interleave='band',
-                                     nodata=0, dtype=self._out_config['dtype'])
+                                   nodata=self._out_config['nodata'], dtype=self._out_config['dtype'])
                 with rio.open(out_filename, 'w', **out_profile) as out_im:
                     if self._homo_config['debug']:
                         param_profile = self.ref_props.profile
                         param_profile.update(num_threads=multiprocessing.cpu_count(), compress='deflate',
-                                             interleave='band', nodata=None, dtype=rio.float32, count=src_im.profile['count'])
-                        if method != 'gain_only':
+                                             interleave='band', nodata=None, dtype=int_dtype, count=src_im.profile['count'])
+                        if method.lower() != 'gain_only' or normalise:
                             param_profile['count'] *= 2
                         param_out_file_name = out_filename.parent.joinpath(out_filename.stem + '_PARAMS.tif')
                         param_im = rio.open(param_out_file_name, 'w', **param_profile)
@@ -676,21 +661,21 @@ class HomonimRefSpace(HomonImBase):
                     # process by band to limit memory usage
                     bands = list(range(1, src_im.count + 1))
                     for bi in bands:
-                        src_array = src_im.read(bi, out_dtype=np.float32)  # NB bands along first dim
+                        src_array = src_im.read(bi, out_dtype=int_dtype)  # NB bands along first dim
 
                         # downsample the source window into the reference CRS and gid
                         # specify nodata so that these pixels are excluded from calculations
-                        src_ds_array = np.zeros((self.ref_array.shape[1], self.ref_array.shape[2]), dtype=np.float32)
                         # TODO: resample rather than reproject?
                         # TODO: also think if there is a neater way we can do this, rather than having arrays and transforms in mem
                         #   we have datasets / memory images ?
-                        src_ds_array = self._project_src_to_ref(src_array, src_nodata=self.src_props.nodata, dst_type='float32')
+                        src_ds_array = self._project_src_to_ref(src_array, src_nodata=self.src_props.nodata)
 
                         # set partially covered pixels to nodata
                         # TODO is this faster, or setting param_array[src_array == 0] = 0 below
                         if self._homo_config['mask_partial']:
-                            mask_ds_array = self._project_src_to_ref((src_array != 0).astype('uint8'), src_nodata=None, dst_type='float32')
-                            src_ds_array[np.logical_not(mask_ds_array==1)] = src_im.profile['nodata']
+                            mask = (src_array != self.src_props.nodata).astype('uint8')
+                            mask_ds_array = self._project_src_to_ref(mask, src_nodata=None)
+                            src_ds_array[np.logical_not(mask_ds_array==1)] = int_nodata
 
                         # find the calibration parameters for this band
                         if method.lower() == 'gain_only':
@@ -701,12 +686,17 @@ class HomonimRefSpace(HomonImBase):
                                                                                 win_size=self.win_size, normalise=normalise)
 
                         # upsample the parameter array
-                        param_array = self._project_ref_to_src(param_ds_array, ref_nodata=0, dst_type='float32')
+                        param_array = self._project_ref_to_src(param_ds_array)
 
                         # apply the calibration and write out the homogenised raster
                         out_array = param_array[0, :, :] * src_array
                         if param_array.shape[0] > 1:
                             out_array += param_array[1, :, :]
+
+                        # convert nodata if necessary
+                        if out_im.nodata != int_nodata:
+                            out_array[out_array==int_nodata] = out_im.nodata
+
                         out_im.write(out_array.astype(out_im.dtypes[bi-1]), indexes=bi)
 
                         if self._homo_config['debug']:
@@ -749,14 +739,14 @@ class HomonimSrcSpace(HomonImBase):
 
                 out_profile = src_im.profile
                 out_profile.update(num_threads=multiprocessing.cpu_count(), compress='deflate', interleave='band',
-                                     nodata=0, dtype=self._out_config['dtype'])
+                                     nodata=self._out_config['nodata'], dtype=self._out_config['dtype'])
 
                 with rio.open(out_filename, 'w', **out_profile) as out_im:
                     if self._homo_config['debug']:
                         param_profile = src_im.profile.copy()
                         param_profile.update(num_threads=multiprocessing.cpu_count(), compress='deflate',
-                                             interleave='band', nodata=None, dtype=rio.float32, count=src_im.profile['count'])
-                        if method != 'gain_only':
+                                             interleave='band', nodata=None, dtype=int_dtype, count=src_im.profile['count'])
+                        if method.lower() != 'gain_only' or normalise:
                             param_profile['count'] *= 2
                         param_out_file_name = out_filename.parent.joinpath(out_filename.stem + '_PARAMS.tif')
                         param_im = rio.open(param_out_file_name, 'w', **param_profile)
@@ -764,26 +754,39 @@ class HomonimSrcSpace(HomonImBase):
                     # process by band to limit memory usage
                     bands = list(range(1, src_im.count + 1))
                     for bi in bands:
-                        src_array = src_im.read(bi, out_dtype=np.float32)  # NB bands along first dim
+                        src_array = src_im.read(bi, out_dtype=int_dtype)  # NB bands along first dim
+
+                        # convert nodata if necessary
+                        if self.src_props.nodata != int_nodata:
+                            src_array[src_array==self.src_props.nodata] = int_nodata
 
                         # upsample ref to source CRS and grid
                         ref_us_array = self._project_ref_to_src(
                             self.ref_array[bi-1, :, :],
-                            ref_nodata=self.ref_props.nodata,
-                            dst_type='float32'
+                            ref_nodata=self.ref_props.nodata
                         )
 
                         # find the calibration parameters for this band
                         win_size = self.win_size * np.round(
                             np.array(self.ref_props.res)/np.array(self.src_props.res)).astype(int)
-                        # src_array[np.logical_not(src_mask)] = np.nan    # TODO get rid of this step
+
                         # TODO parallelise this, use opencv and or gpu, and or use integral image!
-                        param_array = self._find_gains_cv(ref_us_array, src_array, win_size=win_size, normalise=normalise)
+                        if method.lower() == 'gain_only':
+                            param_array = self._find_gains_cv(ref_us_array, src_array, win_size=win_size,
+                                                              normalise=normalise)
+                        else:
+                            param_array = self._find_gain_and_offset_winview(ref_us_array, src_array, win_size=win_size,
+                                                                             normalise=normalise)
 
                         # apply the calibration and write
                         out_array = param_array[0, :, :] * src_array
                         if param_array.shape[0] > 1:
                             out_array += param_array[1, :, :]
+
+                        # convert nodata if necessary
+                        if out_im.nodata != int_nodata:
+                            out_array[out_array==int_nodata] = out_im.nodata
+
                         out_im.write(out_array.astype(out_im.dtypes[bi - 1]), indexes=bi)
 
                         if self._homo_config['debug']:

@@ -64,10 +64,35 @@ logger = get_logger(__name__)
 @click.option(
     "-m",
     "--method",
-    type=click.Choice(['GAIN_ONLY', 'GAIN_OFFSET'], case_sensitive=False),
+    type=click.Choice(['gain_only', 'gain_offset'], case_sensitive=False),
     help="homogenisation method",
-    default='GAIN_ONLY',
+    default='gain_only',
     show_default=True,
+)
+@click.option(
+    "-n/-nn",
+    "--norm/--no-norm",
+    default=False,
+    help="Do/don't pre-process with image-wide normalisation.  [default: --no-norm]",
+    required=False,
+)
+@click.option(
+    "-rs",
+    "--ref-space",
+    'homo_space',
+    help="Homogenise in source or reference image space.  [default: --ref-space]",
+    flag_value='ref-space',
+    default=True,
+    required = False,
+)
+@click.option(
+    "-ss",
+    "--src-space",
+    'homo_space',
+    help="Homogenise in source or reference image space.  [default: --ref-space]",
+    flag_value='src-space',
+    default=False,
+    required = False,
 )
 @click.option(
     "-n/-nn",
@@ -97,8 +122,8 @@ logger = get_logger(__name__)
     help="path to a configuration file",
     required=False
 )
-def cli(src_file=None, ref_file=None, win_size=(3, 3), method="gain_only", norm=False, output_dir=None, build_ovw=True,
-        conf=None):
+def cli(src_file=None, ref_file=None, win_size=(3, 3), method="gain_only", norm=False, homo_space='ref-space',
+        output_dir=None, build_ovw=True, conf=None):
     """Radiometrically homogenise image(s) by fusion with reference satellite data"""
 
     # read configuration
@@ -113,6 +138,7 @@ def cli(src_file=None, ref_file=None, win_size=(3, 3), method="gain_only", norm=
     with open(conf_filename, 'r') as f:
         config = yaml.safe_load(f)
 
+    method = method.lower()
     # check src_file points to exisiting file(s)
     for src_file_spec in src_file:
         src_file_path = pathlib.Path(src_file_spec)
@@ -125,13 +151,18 @@ def cli(src_file=None, ref_file=None, win_size=(3, 3), method="gain_only", norm=
                 homo_root = pathlib.Path(output_dir)
             else:
                 homo_root = src_filename.parent
-            post_fix = f'_HOMO_REF_m{method.upper()}_n{"ON" if norm else "OFF"}_w{win_size[0]}_{win_size[1]}.tif'
-            homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
 
             logger.info(f'Homogenising {src_filename.name}')
             start_ttl = datetime.datetime.now()
-            him = homonim.HomonimRefSpace(src_filename, ref_file, win_size=win_size,
-                                          homo_config=config['homogenisation'], out_config=config['output'])
+            if homo_space=='ref-space':
+                post_fix = f'_HOMO_REF_m{method.upper()}_n{"ON" if norm else "OFF"}_w{win_size[0]}_{win_size[1]}.tif'
+                him = homonim.HomonimRefSpace(src_filename, ref_file, win_size=win_size,
+                                              homo_config=config['homogenisation'], out_config=config['output'])
+            else:
+                post_fix = f'_HOMO_SRC_m{method.upper()}_n{"ON" if norm else "OFF"}_w{win_size[0]}_{win_size[1]}.tif'
+                him = homonim.HomonimSrcSpace(src_filename, ref_file, win_size=win_size,
+                                              homo_config=config['homogenisation'], out_config=config['output'])
+            homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
             him.homogenise(homo_filename, method=method, normalise=norm)
             him.copy_ref_metadata(homo_filename)
             ttl_time = (datetime.datetime.now() - start_ttl)
