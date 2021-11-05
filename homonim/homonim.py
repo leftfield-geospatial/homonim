@@ -428,7 +428,23 @@ class HomonImBase:
         # param_array[np.isnan(src_array)] = param_nodata
         return param_array
 
-    def _find_gains_cv(self, ref_array, src_array, win_size=[3,3], normalise=False, param_nodata=np.nan):
+
+    def _normalise_src(self, ref_array, src_array):
+        """Normalise source in place"""
+        src_mask = src_array != int_nodata
+        # TODO: can we avoid these masked copies?
+        _ref_array = ref_array[src_mask]
+        _src_array = src_array[src_mask]
+        norm_model = np.zeros(2)
+        norm_model[0] = _ref_array.std() / _src_array.std()
+        norm_model[1] = np.percentile(_ref_array, 1) - np.percentile(_src_array, 1) * norm_model[0]
+
+        logger.info(f'Image normalisation gain / offset: {norm_model[0]:.4f} / {norm_model[1]:.4f}')
+        src_array[src_mask] = norm_model[0]*_src_array + norm_model[1]
+        return norm_model
+
+
+    def _find_gains_cv(self, ref_array, src_array, win_size=[3,3]):
         """
         Find sliding window gains for a band using opencv filter2D
 
@@ -449,23 +465,7 @@ class HomonImBase:
             an M x N array of gains
         """
 
-        src_mask = (src_array != int_nodata).astype(np.int32)   # use int32 as it needs to accumulate sums below
-
-        if normalise:    # find image-wide offset
-            _src_array = src_array[src_mask.astype('bool', copy=False)].reshape(-1, 1)
-            _src_array = np.hstack((_src_array, np.ones_like(_src_array)))
-            _ref_array = ref_array[src_mask.astype('bool', copy=False)].flatten()
-            if False:
-                norm_model = np.linalg.lstsq(_src_array, _ref_array, rcond=None)[0]
-            else:
-                norm_model = np.zeros(2)
-                norm_model[0] = _ref_array.std() / _src_array[:, 0].std()
-                norm_model[1] = _ref_array.mean() - (_src_array[:, 0].mean() * norm_model[0])
-                norm_model[1] = np.percentile(_ref_array, 1) - np.percentile((_src_array[:, 0] * norm_model[0]), 1)
-            logger.info(f'Image normalisation gain / offset: {norm_model[0]:.4f} / {norm_model[1]:.4f}')
-            src_array[src_mask.astype('bool', copy=False)] = np.dot(_src_array, norm_model)
-
-
+        src_mask = src_array != int_nodata    #.astype(np.int32)   # use int32 as it needs to accumulate sums below
         # find ratios avoiding divide by nodata=0
         ratio_array = np.zeros_like(src_array, dtype=int_dtype)
         _ = np.divide(ref_array, src_array, out=ratio_array, where=src_mask.astype('bool', copy=False))
@@ -477,23 +477,23 @@ class HomonImBase:
 
         # calculate gains, ignoring invalid pixels
         # cv.divide(ratio_winsums, mask_winsums, dst=param_array, dtype=np.float32)
-        if normalise:
+        if False:
             param_array = np.zeros((2, *src_array.shape), dtype=int_dtype)
             _ = np.divide(ratio_winsums, mask_winsums, out=param_array[0, :, :],
                           where=src_mask.astype('bool', copy=False))
 
             param_array[1, :, :] = param_array[0, :, :] * norm_model[1]
             param_array[0, :, :] *= norm_model[0]
-        else:
-            param_array = np.zeros((1, *src_array.shape), dtype=int_dtype)
-            _ = np.divide(ratio_winsums, mask_winsums, out=param_array[0, :, :],
-                          where=src_mask.astype('bool', copy=False))
+
+        param_array = np.zeros((1, *src_array.shape), dtype=int_dtype)
+        _ = np.divide(ratio_winsums, mask_winsums, out=param_array[0, :, :],
+                      where=src_mask.astype('bool', copy=False))
 
         # param_array[np.isnan(src_array)] = param_nodata
         return param_array
 
 
-    def _find_gain_and_offset_winview(self, ref_array, src_array, win_size=[15, 15], normalise=False):
+    def _find_gain_and_offset_winview(self, ref_array, src_array, win_size=[15, 15]):
         """
         Find the sliding window calibration parameters for a band.  Brute force.
 
@@ -512,39 +512,6 @@ class HomonImBase:
             an M x N  array of gains with nodata = nan
         """
         src_mask = (src_array != int_nodata)
-
-        if normalise:    # find image-wide offset
-            _src_array = src_array[src_mask.astype('bool', copy=False)].reshape(-1, 1)
-            _src_array = np.hstack((_src_array, np.ones_like(_src_array)))
-            _ref_array = ref_array[src_mask.astype('bool', copy=False)].flatten()
-            if False:
-                norm_model = np.linalg.lstsq(_src_array, _ref_array, rcond=None)[0]
-            else:
-                norm_model = np.zeros(2)
-                norm_model[0] = _ref_array.std() / _src_array[:, 0].std()
-                # norm_model[1] = _ref_array.mean() - (_src_array[:, 0].mean() * norm_model[0])
-                norm_model[1] = np.percentile(_ref_array, 1) - np.percentile((_src_array[:, 0] * norm_model[0]), 1)
-            logger.info(f'Image normalisation gain / offset: {norm_model[0]:.4f} / {norm_model[1]:.4f}')
-
-            # src_array[src_mask.astype('bool', copy=False)] = np.dot(_src_array, norm_model)
-            if False:
-                res = cv2.fitLine(np.array([_src_array[:, 0], _ref_array]).T, cv2.DIST_HUBER, 0, 1e-9, 1e-9)
-                m_cv = res[1] / res[0]
-                c_cv = res[3] - m_cv*res[2]
-                from matplotlib import pyplot
-                pyplot.figure()
-                pyplot.plot(_src_array[:, 0], ref_array[src_mask.astype('bool', copy=False)].flatten(), '.')
-                x = np.arange(_src_array[:, 0].min(), _src_array[:, 0].max())
-                y = norm_model[0] * x + norm_model[1]
-                m = ref_array[src_mask.astype('bool', copy=False)].flatten().std() / _src_array[:, 0].std()
-                c = ref_array[src_mask.astype('bool', copy=False)].flatten().mean() - (_src_array[:, 0] * m).mean()
-                y2 = m * x + c
-                y3 = m_cv * x + c_cv
-                pyplot.plot(x, y, label='ls')
-                pyplot.plot(x, y2, label='norm')
-                pyplot.plot(x, y3, label='cv')
-                pyplot.legend()
-
         src_winview = sliding_window_view(src_array, win_size)
         ref_winview = sliding_window_view(ref_array, win_size)
         src_mask_winview = sliding_window_view(src_mask, win_size)
@@ -590,7 +557,7 @@ class HomonImBase:
 
                 param_array[:, win_i + win_offset[0], win_j + win_offset[1]] = params.reshape(-1, 1)
 
-        if normalise:   # inpaint negative gain areas
+        if False:   # inpaint negative gain areas
             gain_mask = param_array[0, :, :] >= 0
             se = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
             gain_mask = cv2.erode(gain_mask.astype('uint8'), se)
@@ -600,12 +567,11 @@ class HomonImBase:
                 param_array[bi, :, :] = fillnodata(param_array[bi, :, :], gain_mask)
 
             param_array[:, np.logical_not(valid_mask)] = int_nodata
-        else:
-            param_array[:, np.logical_not(src_mask)] = int_nodata
+        param_array[:, np.logical_not(src_mask)] = int_nodata
 
         return param_array
 
-    def homogenise(self, out_filename, method=None, normalise=False):
+    def homogenise(self, out_filename, method=None):
         raise NotImplementedError()
 
     def build_overviews(self, out_filename):
@@ -678,18 +644,31 @@ class HomonimRefSpace(HomonImBase):
                             src_ds_array[np.logical_not(mask_ds_array==1)] = int_nodata
 
                         # find the calibration parameters for this band
+                        if normalise:
+                            norm_model = self._normalise_src(self.ref_array[bi - 1, :, :], src_ds_array)
+
                         if method.lower() == 'gain_only':
+
                             param_ds_array = self._find_gains_cv(self.ref_array[bi-1, :, :], src_ds_array,
-                                                                 win_size=self.win_size, normalise=normalise)
+                                                                 win_size=self.win_size)
                         else:
                             param_ds_array = self._find_gain_and_offset_winview(self.ref_array[bi - 1, :, :], src_ds_array,
-                                                                                win_size=self.win_size, normalise=normalise)
+                                                                                win_size=self.win_size)
 
                         # upsample the parameter array
                         param_array = self._project_ref_to_src(param_ds_array)
 
                         # apply the calibration and write out the homogenised raster
-                        out_array = param_array[0, :, :] * src_array
+                        if normalise:
+                            # param_array[1, :, :] = param_array[0, :, :] * norm_model[1]
+                            # param_array[0, :, :] *= param_array[0]
+                            out_array = param_array[0, :, :] * norm_model[0] * src_array
+                            out_array += param_array[0, :, :] * norm_model[1]
+                            # if param_array.shape[0] > 1:
+                            #     out_array += param_array[1, :, :]
+                        else:
+                            out_array = param_array[0, :, :] * src_array
+
                         if param_array.shape[0] > 1:
                             out_array += param_array[1, :, :]
 
@@ -766,17 +745,18 @@ class HomonimSrcSpace(HomonImBase):
                             ref_nodata=self.ref_props.nodata
                         )
 
+                        if normalise:   # normalise source in place
+                            norm_model = self._normalise_src(ref_us_array, src_array)
+
                         # find the calibration parameters for this band
                         win_size = self.win_size * np.round(
                             np.array(self.ref_props.res)/np.array(self.src_props.res)).astype(int)
 
                         # TODO parallelise this, use opencv and or gpu, and or use integral image!
                         if method.lower() == 'gain_only':
-                            param_array = self._find_gains_cv(ref_us_array, src_array, win_size=win_size,
-                                                              normalise=normalise)
+                            param_array = self._find_gains_cv(ref_us_array, src_array, win_size=win_size)
                         else:
-                            param_array = self._find_gain_and_offset_winview(ref_us_array, src_array, win_size=win_size,
-                                                                             normalise=normalise)
+                            param_array = self._find_gain_and_offset_winview(ref_us_array, src_array, win_size=win_size)
 
                         # apply the calibration and write
                         out_array = param_array[0, :, :] * src_array
