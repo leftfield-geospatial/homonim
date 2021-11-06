@@ -513,13 +513,13 @@ class HomonImBase:
         src_mask = src_array != int_nodata    #.astype(np.int32)   # use int32 as it needs to accumulate sums below
         ref_array[~src_mask] = int_nodata
 
-
         # sum the ratio and mask over sliding windows (uses DFT for large kernels)
         kernel = np.ones(win_size, dtype=int_dtype)
         src_sum = cv.filter2D(src_array, -1, kernel, borderType=cv.BORDER_CONSTANT)
         ref_sum = cv.filter2D(ref_array, -1, kernel, borderType=cv.BORDER_CONSTANT)
         mask_sum = cv.filter2D(src_mask.astype('uint8', copy=False), cv.CV_32F, kernel, borderType=cv.BORDER_CONSTANT)
 
+        # TODO: do we need the where= clauses below?
         src_mean = np.zeros_like(src_array, dtype=int_dtype)
         _ = np.divide(src_sum, mask_sum, out=src_mean, where=src_mask.astype('bool', copy=False))
         ref_mean = np.zeros_like(ref_array, dtype=int_dtype)
@@ -527,10 +527,11 @@ class HomonImBase:
 
         src2_sum = cv.filter2D(src_array**2, -1, kernel, borderType=cv.BORDER_CONSTANT)
         den_array = src2_sum - (2 * (src_mean) * (src_sum)) + (mask_sum * (src_mean**2))
+        del(src2_sum)
 
         src_ref_sum = cv.filter2D(src_array*ref_array, -1, kernel, borderType=cv.BORDER_CONSTANT)
         num_array = src_ref_sum - (src_mean * ref_sum) - (ref_mean * src_sum) + (mask_sum * src_mean * ref_mean)
-        del(src_ref_sum)
+        del(src_ref_sum, src_sum, ref_sum, mask_sum)
 
         param_array = np.zeros((2, *src_array.shape), dtype=int_dtype)
         _ = np.divide(num_array, den_array, out=param_array[0, :, :], where=src_mask.astype('bool', copy=False))
@@ -808,6 +809,8 @@ class HomonimSrcSpace(HomonImBase):
 
                         if normalise:   # normalise source in place
                             norm_model = self._normalise_src(ref_us_array, src_array)
+                        else:
+                            logger.info(f'Processing band {bi}')
 
                         # find the calibration parameters for this band
                         win_size = self.win_size * np.round(
@@ -817,7 +820,7 @@ class HomonimSrcSpace(HomonImBase):
                         if method.lower() == 'gain_only':
                             param_array = self._find_gains_cv(ref_us_array, src_array, win_size=win_size)
                         else:
-                            param_array = self._find_gain_and_offset_winview(ref_us_array, src_array, win_size=win_size)
+                            param_array = self._find_gain_and_offset_cv(ref_us_array, src_array, win_size=win_size)
 
                         # apply the calibration and write
                         out_array = param_array[0, :, :] * src_array
