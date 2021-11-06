@@ -43,6 +43,7 @@ class Model(Enum):
     OFFSET_AND_IMAGE_GAIN = 5
     GAIN_ZERO_MEAN_OFFSET = 6
 
+
 def expand_window_to_grid(win):
     """
     Expands float window extents to be integers that include the original extents
@@ -174,7 +175,7 @@ class HomonImBase:
                 ref_box = box(*ref_im.bounds)
 
                 # reproject the reference bounds if necessary
-                if src_im.crs != ref_im.crs:    # CRS's don't match
+                if src_im.crs.to_proj4() != ref_im.crs.to_proj4():    # CRS's don't match
                     ref_box = shape(transform_geom(ref_im.crs, src_im.crs, ref_box))
 
                 if not ref_box.covers(src_box):
@@ -491,6 +492,52 @@ class HomonImBase:
         return param_array
 
 
+    def _find_gain_and_offset_cv(self, ref_array, src_array, win_size=[15, 15]):
+        """
+        Find the sliding window calibration parameters for a band.  OpenCV faster version.
+
+        Parameters
+        ----------
+        ref_array : numpy.array_like
+            a reference band in an MxN array
+        src_array : numpy.array_like
+            a source band, collocated with ref_array and of the same MxN shape
+        win_size : numpy.array_like
+            sliding window [width, height] in pixels
+
+        Returns
+        -------
+        param_array : numpy.array_like
+            an M x N  array of gains with nodata = nan
+        """
+        src_mask = src_array != int_nodata    #.astype(np.int32)   # use int32 as it needs to accumulate sums below
+        ref_array[~src_mask] = int_nodata
+
+
+        # sum the ratio and mask over sliding windows (uses DFT for large kernels)
+        kernel = np.ones(win_size, dtype=int_dtype)
+        src_sum = cv.filter2D(src_array, -1, kernel, borderType=cv.BORDER_CONSTANT)
+        ref_sum = cv.filter2D(ref_array, -1, kernel, borderType=cv.BORDER_CONSTANT)
+        mask_sum = cv.filter2D(src_mask.astype('uint8', copy=False), cv.CV_32F, kernel, borderType=cv.BORDER_CONSTANT)
+
+        src_mean = np.zeros_like(src_array, dtype=int_dtype)
+        _ = np.divide(src_sum, mask_sum, out=src_mean, where=src_mask.astype('bool', copy=False))
+        ref_mean = np.zeros_like(ref_array, dtype=int_dtype)
+        _ = np.divide(ref_sum, mask_sum, out=ref_mean, where=src_mask.astype('bool', copy=False))
+
+        src2_sum = cv.filter2D(src_array**2, -1, kernel, borderType=cv.BORDER_CONSTANT)
+        den_array = src2_sum - (2 * (src_mean) * (src_sum)) + (mask_sum * (src_mean**2))
+
+        src_ref_sum = cv.filter2D(src_array*ref_array, -1, kernel, borderType=cv.BORDER_CONSTANT)
+        num_array = src_ref_sum - (src_mean * ref_sum) - (ref_mean * src_sum) + (mask_sum * src_mean * ref_mean)
+        del(src_ref_sum)
+
+        param_array = np.zeros((2, *src_array.shape), dtype=int_dtype)
+        _ = np.divide(num_array, den_array, out=param_array[0, :, :], where=src_mask.astype('bool', copy=False))
+        _ = np.subtract(ref_mean, param_array[0, :, :] * src_mean, out=param_array[1, :, :], where=src_mask.astype('bool', copy=False))
+        return param_array
+
+
     def _find_gain_and_offset_winview(self, ref_array, src_array, win_size=[15, 15]):
         """
         Find the sliding window calibration parameters for a band.  Brute force.
@@ -530,7 +577,7 @@ class HomonImBase:
                 if True:
                     soln = np.linalg.lstsq(src_a, ref_win_v, rcond=None)
                     params = soln[0]
-                    r2 = 1 - (soln[1] / (ref_win_v.size * ref_win_v.var()))
+                    # r2 = 1 - (soln[1] / (ref_win_v.size * ref_win_v.var()))
                     # if poor model fit, find image-wide normlised gain-only model
                     if False and ((r2 < 0.01) or params[0] < 0):
                         soln_n = np.linalg.lstsq(np.dot(src_a, norm_model).reshape(-1, 1), ref_win_v, rcond=None)
@@ -546,10 +593,18 @@ class HomonImBase:
                             pyplot.legend()
 
 
-                else:
+                elif False:
                     soln = lsq_linear(src_a, ref_win_v.ravel(), bounds=[[0, -np.inf], [np.inf, np.inf]])
                     params = soln.x
                     r2 = 1 - (sum(soln.fun**2) / (ref_win_v.size * ref_win_v.var()))
+                elif False:
+                    # from https://towardsdatascience.com/linear-regression-using-least-squares-a4c3456e8570
+                    params = np.zeros(2)
+                    src_bar = src_win_v.mean()
+                    delta_src_bar = src_win_v - src_bar
+                    ref_bar = ref_win_v.mean()
+                    params[0] = np.sum(delta_src_bar * (ref_win_v - ref_bar)) / np.sum(delta_src_bar**2)
+                    params[1] = ref_bar - params[0] * src_bar
 
                     # r2 = 1 - (soln[1] / (ref_win_v.size * ref_win_v.var()))
 
@@ -568,6 +623,7 @@ class HomonImBase:
         param_array[:, np.logical_not(src_mask)] = int_nodata
 
         return param_array
+
 
     def homogenise(self, out_filename, method='gain_only', normalise=False):
         """
@@ -670,7 +726,7 @@ class HomonimRefSpace(HomonImBase):
                         param_ds_array = self._find_gains_cv(self.ref_array[bi-1, :, :], src_ds_array,
                                                              win_size=self.win_size)
                     else:
-                        param_ds_array = self._find_gain_and_offset_winview(self.ref_array[bi - 1, :, :], src_ds_array,
+                        param_ds_array = self._find_gain_and_offset_cv(self.ref_array[bi - 1, :, :], src_ds_array,
                                                                             win_size=self.win_size)
 
                     # upsample the parameter array
