@@ -7,7 +7,7 @@ homogenisation:
   #   CRS  (average recommended)
   ref2src_interp: cubic_spline
   # Produce debug outputs (parameter rasters)
-  debug: True
+  debug: False
   # Mask partially covered source pixels when downsampling
   mask_partial: True
   # Mask extrapolated (boundary) pixels in resampled images
