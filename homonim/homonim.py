@@ -492,7 +492,7 @@ class HomonImBase:
         return param_array
 
 
-    def _find_gain_and_offset_cv(self, ref_array, src_array, win_size=[15, 15]):
+    def _find_gain_and_offset_cv_old(self, ref_array, src_array, win_size=[15, 15]):
         """
         Find the sliding window calibration parameters for a band.  OpenCV faster version.
 
@@ -536,6 +536,45 @@ class HomonImBase:
         param_array = np.zeros((2, *src_array.shape), dtype=int_dtype)
         _ = np.divide(num_array, den_array, out=param_array[0, :, :], where=src_mask.astype('bool', copy=False))
         _ = np.subtract(ref_mean, param_array[0, :, :] * src_mean, out=param_array[1, :, :], where=src_mask.astype('bool', copy=False))
+        return param_array
+
+    def _find_gain_and_offset_cv(self, ref_array, src_array, win_size=[15, 15]):
+        """
+        Find the sliding window calibration parameters for a band.  OpenCV faster version.
+
+        Parameters
+        ----------
+        ref_array : numpy.array_like
+            a reference band in an MxN array
+        src_array : numpy.array_like
+            a source band, collocated with ref_array and of the same MxN shape
+        win_size : numpy.array_like
+            sliding window [width, height] in pixels
+
+        Returns
+        -------
+        param_array : numpy.array_like
+            an M x N  array of gains with nodata = nan
+        """
+        src_mask = src_array != int_nodata    #.astype(np.int32)   # use int32 as it needs to accumulate sums below
+        ref_array[~src_mask] = int_nodata
+
+        # sum the ratio and mask over sliding windows (uses DFT for large kernels)
+        kernel = np.ones(win_size, dtype=int_dtype)
+        src_sum = cv.filter2D(src_array, -1, kernel, borderType=cv.BORDER_CONSTANT)
+        ref_sum = cv.filter2D(ref_array, -1, kernel, borderType=cv.BORDER_CONSTANT)
+        src_ref_sum = cv.filter2D(src_array*ref_array, -1, kernel, borderType=cv.BORDER_CONSTANT)
+        mask_sum = cv.filter2D(src_mask.astype('uint8', copy=False), cv.CV_32F, kernel, borderType=cv.BORDER_CONSTANT)
+
+        m_num_array = (mask_sum * src_ref_sum) - (src_sum * ref_sum)
+        del(src_ref_sum)
+        src2_sum = cv.filter2D(src_array**2, -1, kernel, borderType=cv.BORDER_CONSTANT)
+        m_den_array = (mask_sum * src2_sum) - (src_sum ** 2)
+        del(src2_sum)
+
+        param_array = np.zeros((2, *src_array.shape), dtype=int_dtype)
+        _ = np.divide(m_num_array, m_den_array, out=param_array[0, :, :], where=src_mask.astype('bool', copy=False))
+        _ = np.divide(ref_sum - (param_array[0, :, :] * src_sum), mask_sum, out=param_array[1, :, :], where=src_mask.astype('bool', copy=False))
         return param_array
 
 
@@ -723,7 +762,6 @@ class HomonimRefSpace(HomonImBase):
                         norm_model = self._normalise_src(self.ref_array[bi - 1, :, :], src_ds_array)
 
                     if method.lower() == 'gain_only':
-
                         param_ds_array = self._find_gains_cv(self.ref_array[bi-1, :, :], src_ds_array,
                                                              win_size=self.win_size)
                     else:
