@@ -17,16 +17,13 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
-import argparse
 import datetime
-import os
 import pathlib
-import click
 
+import click
 import numpy as np
-import pandas as pd
-import rasterio as rio
 import yaml
+
 from homonim import homonim
 from homonim import root_path, get_logger
 
@@ -34,6 +31,7 @@ from homonim import root_path, get_logger
 np.set_printoptions(precision=4)
 np.set_printoptions(suppress=True)
 logger = get_logger(__name__)
+
 
 @click.command()
 @click.option(
@@ -49,7 +47,7 @@ logger = get_logger(__name__)
     "--ref-file",
     type=click.Path(exists=True, dir_okay=False, readable=True),
     help="path to the reference image file",
-    required=True
+    required=True,
 )
 @click.option(
     "-w",
@@ -83,7 +81,7 @@ logger = get_logger(__name__)
     help="Homogenise in source or reference image space.  [default: --ref-space]",
     flag_value='ref-space',
     default=True,
-    required = False,
+    required=False,
 )
 @click.option(
     "-ss",
@@ -92,7 +90,7 @@ logger = get_logger(__name__)
     help="Homogenise in source or reference image space.  [default: --ref-space]",
     flag_value='src-space',
     default=False,
-    required = False,
+    required=False,
 )
 @click.option(
     "-n/-nn",
@@ -154,7 +152,7 @@ def cli(src_file=None, ref_file=None, win_size=(3, 3), method="gain_only", norm=
 
             logger.info(f'Homogenising {src_filename.name}')
             start_ttl = datetime.datetime.now()
-            if homo_space=='ref-space':
+            if homo_space == 'ref-space':
                 post_fix = f'_HOMO_REF_m{method.upper()}_n{"ON" if norm else "OFF"}_w{win_size[0]}_{win_size[1]}.tif'
                 him = homonim.HomonimRefSpace(src_filename, ref_file, win_size=win_size,
                                               homo_config=config['homogenisation'], out_config=config['output'])
@@ -164,7 +162,13 @@ def cli(src_file=None, ref_file=None, win_size=(3, 3), method="gain_only", norm=
                                               homo_config=config['homogenisation'], out_config=config['output'])
             homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
             him.homogenise(homo_filename, method=method, normalise=norm)
-            him.copy_ref_metadata(homo_filename)
+
+            # set metadata in output file
+            meta_dict = dict(HOMO_SRC_FILE=src_filename.name, HOMO_REF_FILE=pathlib.Path(ref_file).name,
+                             HOMO_SPACE=homo_space, HOMO_METHOD=method, HOMO_WIN_SIZE=win_size, HOMO_NORM=norm,
+                             HOMO_CONF=str(config['homogenisation']))
+            him.set_metadata(homo_filename, **meta_dict)
+
             ttl_time = (datetime.datetime.now() - start_ttl)
             logger.info(f'Completed in {ttl_time.total_seconds():.2f} secs')
 
@@ -178,4 +182,3 @@ def cli(src_file=None, ref_file=None, win_size=(3, 3), method="gain_only", norm=
             # except Exception as ex:
             #     # catch exceptions so that problem image(s) don't prevent processing of a batch
             #     logger.error('Exception: ' + str(ex))
-

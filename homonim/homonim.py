@@ -708,7 +708,7 @@ class HomonImBase:
             homo_im.build_overviews([2, 4, 8, 16, 32], Resampling.average)
 
 
-    def copy_ref_metadata(self, filename):
+    def set_metadata(self, filename, **kwargs):
         """
         Copy geedim reference band metadata to a homogenised raster file
 
@@ -723,6 +723,7 @@ class HomonImBase:
             raise Exception(f'{filename} does not exist')
 
         with rio.open(self._ref_filename, 'r') as ref_im,rio.open(filename, 'r+') as homo_im:
+            homo_im.update_tags(**kwargs)
             for bi in range(1, homo_im.count+1):
                 ref_meta_dict = ref_im.tags(bi)
                 homo_meta_dict = {k: v for k, v in ref_meta_dict.items() if k in ['ABBREV', 'ID', 'NAME']}
@@ -815,8 +816,8 @@ class HomonimRefSpace(HomonImBase):
                             param_im.write(param_ds_array[1, :, :].astype(param_im.dtypes[_bi - 1]), indexes=_bi)
 
                 # store the homogenisation parameters as metadata in the output file
-                out_im.update_tags(HOMO_METHOD=method, HOMO_NORM=str(normalise), HOMO_WIN=str(self.win_size),
-                                    HOMO_SRC=self._src_filename.name, HOMO_REF=self._ref_filename.name)
+                # out_im.update_tags(HOMO_METHOD=method, HOMO_NORM=str(normalise), HOMO_WIN=str(self.win_size),
+                #                     HOMO_SRC=self._src_filename.name, HOMO_REF=self._ref_filename.name)
                 if self._homo_config['debug']:
                     param_im.close()
 
@@ -899,8 +900,8 @@ class HomonimSrcSpace(HomonImBase):
                                 param_im.write(param_array[1, :, :].astype(param_im.dtypes[_bi - 1]), indexes=_bi)
 
                     # store the homogenisation parameters as metadata in the output file
-                    out_im.update_tags(HOMO_METHOD=method, HOMO_NORM=str(normalise), HOMO_WIN=str(self.win_size),
-                                        HOMO_SRC=self._src_filename.name, HOMO_REF=self._ref_filename.name)
+                    # out_im.update_tags(HOMO_METHOD=method, HOMO_NORM=str(normalise), HOMO_WIN=str(self.win_size),
+                    #                     HOMO_SRC=self._src_filename.name, HOMO_REF=self._ref_filename.name)
                     if self._homo_config['debug']:
                         param_im.close()
 
