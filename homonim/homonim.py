@@ -32,6 +32,7 @@ import multiprocessing
 import cv2 as cv
 from scipy.optimize import lsq_linear
 from collections import namedtuple
+import datetime
 
 logger = get_logger(__name__)
 
@@ -108,8 +109,9 @@ class HomonImBase:
                 'src2ref_interp': 'cubic_spline',
                 'ref2src_interp': 'average',
                 'debug': False,
-                'mask_partial': True,
-                'mask_extrap': False,
+                'mask_partial_pixel': True,
+                'mask_partial_window': False,
+                'mask_partial_interp': False,
             }
         else:
             self._homo_config = homo_config
@@ -271,7 +273,7 @@ class HomonImBase:
 
         return ref_array
 
-    def _project_src_to_ref(self, src_array, src_nodata=int_nodata, dst_dtype=int_dtype, dst_nodata=int_nodata):
+    def _project_src_to_ref(self, src_array, src_nodata=int_nodata, dst_dtype=int_dtype, dst_nodata=int_nodata, resampling=None):
         """
         Re-project an array from source to reference CRS
 
@@ -296,6 +298,9 @@ class HomonImBase:
         else:
             ref_array = np.zeros(self.ref_props.shape, dtype=dst_dtype)
 
+        if resampling is None:
+            resampling = Resampling[self._homo_config['src2ref_interp']]
+
         # TODO: checks on nodata vals, that a dest_nodata==0 will not conflict with pixel values
         _, _ = reproject(
             src_array,
@@ -304,14 +309,14 @@ class HomonImBase:
             src_crs=self.src_props.crs,
             dst_transform=self.ref_props.transform,
             dst_crs=self.src_props.crs,
-            resampling=Resampling[self._homo_config['src2ref_interp']],
+            resampling=resampling,
             num_threads=multiprocessing.cpu_count(),
             src_nodata=src_nodata,
             dst_nodata=dst_nodata,
         )
         return ref_array
 
-    def _project_ref_to_src(self, ref_array, ref_nodata=int_nodata, dst_dtype=int_dtype, dst_nodata=int_nodata):
+    def _project_ref_to_src(self, ref_array, ref_nodata=int_nodata, dst_dtype=int_dtype, dst_nodata=int_nodata, resampling=None):
         """
         Re-project an array from reference to source CRS
 
@@ -336,6 +341,9 @@ class HomonImBase:
         else:
             src_array = np.zeros(self.src_props.shape, dtype=dst_dtype)
 
+        if resampling is None:
+            resampling = Resampling[self._homo_config['ref2src_interp']]
+
         # TODO: checks on nodata vals, that a dest_nodata==0 will not conflict with pixel values
         _, _ = reproject(
             ref_array,
@@ -344,7 +352,7 @@ class HomonImBase:
             src_crs=self.src_props.crs,
             dst_transform=self.src_props.transform,
             dst_crs=self.src_props.crs,
-            resampling=Resampling[self._homo_config['ref2src_interp']],
+            resampling=resampling,
             num_threads=multiprocessing.cpu_count(),
             src_nodata=ref_nodata,
             dst_nodata=dst_nodata,
@@ -464,29 +472,25 @@ class HomonImBase:
             an M x N array of gains
         """
 
-        src_mask = src_array != int_nodata    #.astype(np.int32)   # use int32 as it needs to accumulate sums below
+        mask = src_array != int_nodata    #.astype(np.int32)   # use int32 as it needs to accumulate sums below
         # find ratios avoiding divide by nodata=0
         ratio_array = np.zeros_like(src_array, dtype=int_dtype)
-        _ = np.divide(ref_array, src_array, out=ratio_array, where=src_mask.astype('bool', copy=False))
+        _ = np.divide(ref_array, src_array, out=ratio_array, where=mask.astype('bool', copy=False))
 
         # sum the ratio and mask over sliding windows (uses DFT for large kernels)
         kernel = np.ones(win_size, dtype=int_dtype)
-        ratio_winsums = cv.filter2D(ratio_array, -1, kernel, borderType=cv.BORDER_CONSTANT)
-        mask_winsums = cv.filter2D(src_mask.astype('uint8', copy=False), cv.CV_32F, kernel, borderType=cv.BORDER_CONSTANT)
+        ratio_sum = cv.filter2D(ratio_array, -1, kernel, borderType=cv.BORDER_CONSTANT)
+        mask_sum = cv.filter2D(mask.astype(int_dtype), -1, kernel, borderType=cv.BORDER_CONSTANT)
 
-        # calculate gains, ignoring invalid pixels
-        # cv.divide(ratio_winsums, mask_winsums, dst=param_array, dtype=np.float32)
-        if False:
-            param_array = np.zeros((2, *src_array.shape), dtype=int_dtype)
-            _ = np.divide(ratio_winsums, mask_winsums, out=param_array[0, :, :],
-                          where=src_mask.astype('bool', copy=False))
+        # mask out parameter pixels that were not completely covered by a window of valid data
+        # TODO: this interacts with mask_extrap, so rather do it in homogenise after --ref-space US?
+        #   this is sort of the same question as, is it better to do pure extrapolation, or interpolation with semi-covered data?
+        if self._homo_config['mask_partial_window']:
+            mask &= (mask_sum >= kernel.size)
 
-            param_array[1, :, :] = param_array[0, :, :] * norm_model[1]
-            param_array[0, :, :] *= norm_model[0]
-
+        # calculate gains, masking out invalid etc pixels
         param_array = np.zeros((1, *src_array.shape), dtype=int_dtype)
-        _ = np.divide(ratio_winsums, mask_winsums, out=param_array[0, :, :],
-                      where=src_mask.astype('bool', copy=False))
+        _ = np.divide(ratio_sum, mask_sum, out=param_array[0, :, :], where=mask.astype('bool', copy=False))
 
         # param_array[np.isnan(src_array)] = param_nodata
         return param_array
@@ -556,15 +560,15 @@ class HomonImBase:
         param_array : numpy.array_like
             an M x N  array of gains with nodata = nan
         """
-        src_mask = src_array != int_nodata    #.astype(np.int32)   # use int32 as it needs to accumulate sums below
-        ref_array[~src_mask] = int_nodata
+        mask = src_array != int_nodata   # use int32 as it needs to accumulate sums below
+        ref_array[~mask] = int_nodata
 
         # sum the ratio and mask over sliding windows (uses DFT for large kernels)
         kernel = np.ones(win_size, dtype=int_dtype)
         src_sum = cv.filter2D(src_array, -1, kernel, borderType=cv.BORDER_CONSTANT)
         ref_sum = cv.filter2D(ref_array, -1, kernel, borderType=cv.BORDER_CONSTANT)
         src_ref_sum = cv.filter2D(src_array*ref_array, -1, kernel, borderType=cv.BORDER_CONSTANT)
-        mask_sum = cv.filter2D(src_mask.astype('uint8', copy=False), cv.CV_32F, kernel, borderType=cv.BORDER_CONSTANT)
+        mask_sum = cv.filter2D(mask.astype(int_dtype), -1, kernel, borderType=cv.BORDER_CONSTANT)
 
         m_num_array = (mask_sum * src_ref_sum) - (src_sum * ref_sum)
         del(src_ref_sum)
@@ -572,9 +576,16 @@ class HomonImBase:
         m_den_array = (mask_sum * src2_sum) - (src_sum ** 2)
         del(src2_sum)
 
+        # mask out parameter pixels that were not completely covered by a window of valid data
+        # TODO: this interacts with mask_extrap, so rather do it in homogenise after --ref-space US?
+        #   this is sort of the same question as, is it better to do pure extrapolation, or interpolation with semi-covered data?
+        if self._homo_config['mask_partial_window']:
+            mask &= (mask_sum >= kernel.size)
+
         param_array = np.zeros((2, *src_array.shape), dtype=int_dtype)
-        _ = np.divide(m_num_array, m_den_array, out=param_array[0, :, :], where=src_mask.astype('bool', copy=False))
-        _ = np.divide(ref_sum - (param_array[0, :, :] * src_sum), mask_sum, out=param_array[1, :, :], where=src_mask.astype('bool', copy=False))
+        _ = np.divide(m_num_array, m_den_array, out=param_array[0, :, :], where=mask.astype('bool', copy=False))
+        _ = np.divide(ref_sum - (param_array[0, :, :] * src_sum), mask_sum, out=param_array[1, :, :], where=mask.astype('bool', copy=False))
+
         return param_array
 
 
@@ -693,8 +704,7 @@ class HomonImBase:
 
         if not filename.exists():
             raise Exception(f'{filename} does not exist')
-
-        with rio.open(filename, 'r+', num_threads='all_cpus') as homo_im:
+        with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(filename, 'r+') as homo_im:
             homo_im.build_overviews([2, 4, 8, 16, 32], Resampling.average)
 
 
@@ -725,13 +735,13 @@ class HomonimRefSpace(HomonImBase):
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
             # TODO nodata conversion to/from 0 to/from configured output format
             out_profile = src_im.profile.copy()
-            out_profile.update(compress='deflate', interleave='band', nodata=self._out_config['nodata'],
+            out_profile.update(compress=src_im.profile['compress'], interleave='band', nodata=self._out_config['nodata'],
                                dtype=self._out_config['dtype'])
 
             with rio.open(out_filename, 'w', **out_profile) as out_im:
                 if self._homo_config['debug']:
                     param_profile = self.ref_props.profile
-                    param_profile.update(compress='deflate', interleave='band', nodata=None, dtype=int_dtype,
+                    param_profile.update(compress=src_im.profile['compress'], interleave='band', nodata=None, dtype=int_dtype,
                                          count=src_im.profile['count'])
                     if method.lower() != 'gain_only' or normalise:
                         param_profile['count'] *= 2
@@ -752,7 +762,7 @@ class HomonimRefSpace(HomonImBase):
 
                     # set partially covered pixels to nodata
                     # TODO is this faster, or setting param_array[src_array == 0] = 0 below
-                    if self._homo_config['mask_partial']:
+                    if self._homo_config['mask_partial_pixel']:
                         mask = (src_array != self.src_props.nodata).astype('uint8')
                         mask_ds_array = self._project_src_to_ref(mask, src_nodata=None)
                         src_ds_array[np.logical_not(mask_ds_array==1)] = int_nodata
@@ -770,6 +780,17 @@ class HomonimRefSpace(HomonImBase):
 
                     # upsample the parameter array
                     param_array = self._project_ref_to_src(param_ds_array)
+
+                    if self._homo_config['mask_partial_interp']:
+                        #method 1
+                        # start_ttl = datetime.datetime.now()
+                        param_mask = (param_array[0, :, :] == int_nodata)
+                        kernel_size = np.ceil(np.divide(self.ref_props.res, self.src_props.res)).astype('int32')    #/2
+                        se = cv2.getStructuringElement(cv2.MORPH_RECT, tuple(kernel_size))
+                        param_mask = cv2.dilate(param_mask.astype('uint8', copy=False), se).astype('bool', copy=False)
+                        param_array[:, param_mask] = int_nodata
+                        # ttl_time = (datetime.datetime.now() - start_ttl)
+                        # logger.info(f'Method 1 completed in {ttl_time.total_seconds():.2f} secs')
 
                     # apply the calibration and write out the homogenised raster
                     if normalise:
@@ -817,13 +838,13 @@ class HomonimSrcSpace(HomonImBase):
                 #                      resampling=Resampling.average, num_threads=multiprocessing.cpu_count())
 
                 out_profile = src_im.profile
-                out_profile.update(compress='deflate', interleave='band', nodata=self._out_config['nodata'],
+                out_profile.update(compress=src_im.profile['compress'], interleave='band', nodata=self._out_config['nodata'],
                                    dtype=self._out_config['dtype'])
 
                 with rio.open(out_filename, 'w', **out_profile) as out_im:
                     if self._homo_config['debug']:
                         param_profile = src_im.profile.copy()
-                        param_profile.update(num_threads=multiprocessing.cpu_count(), compress='deflate',
+                        param_profile.update(num_threads=multiprocessing.cpu_count(), compress=src_im.profile['compress'],
                                              interleave='band', nodata=None, dtype=int_dtype, count=src_im.profile['count'])
                         if method.lower() != 'gain_only' or normalise:
                             param_profile['count'] *= 2
