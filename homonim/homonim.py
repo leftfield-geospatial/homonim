@@ -67,7 +67,7 @@ def expand_window_to_grid(win):
     return exp_win
 
 """Container for raster properties relevant to re-projection"""
-RasterProps = namedtuple('RasterProps', ['crs', 'transform', 'shape', 'res', 'bounds', 'nodata', 'profile'])
+RasterProps = namedtuple('RasterProps', ['crs', 'transform', 'shape', 'res', 'bounds', 'nodata', 'count', 'profile'])
 
 """Internal nodata value"""
 int_nodata = 0
@@ -266,10 +266,10 @@ class HomonImBase:
 
                 self._ref_props = RasterProps(crs=src_im.crs, transform=ref_transform, shape=ref_array.shape[1:],
                                               res=list(ref_im.res), bounds=ref_src_bounds, nodata=ref_nodata,
-                                              profile=ref_profile)
+                                              count=ref_im.count, profile=ref_profile)
                 self._src_props = RasterProps(crs=src_im.crs, transform=src_im.transform, shape=src_im.shape,
                                               res=list(src_im.res), bounds=src_im.bounds, nodata=src_nodata,
-                                              profile=src_im.profile)
+                                              count=src_im.count, profile=src_im.profile)
 
         return ref_array
 
@@ -691,6 +691,28 @@ class HomonImBase:
         """
         raise NotImplementedError()
 
+    def _create_out_profile(self, init_profile):
+        """Create a rasterio profile for the output raster based on a starting profile and configuration"""
+        out_profile = init_profile.copy()
+        for key, value in self._out_config.items():
+            if value is not None:
+                out_profile.update(**{key: value})
+        out_profile.update(tiled=True)
+        return out_profile
+
+    def _create_param_profile(self, init_profile):
+        """Create a rasterio profile for the debug parameter raster based on a starting profile and configuration"""
+        param_profile = init_profile.copy()
+        for key, value in self._out_config.items():
+            if value is not None:
+                param_profile.update(**{key: value})
+        param_profile.update(dtype=int_dtype, count=self.src_props.count*2, nodata=int_nodata, tiled=True)
+        return param_profile
+
+    def _create_param_filename(self, filename):
+        filename = pathlib.Path(filename)
+        return filename.parent.joinpath(f'{filename.stem}_PARAMS.{filename.suffix}')
+
     def build_overviews(self, filename):
         """
         Builds internal overviews for an existing image.
@@ -735,20 +757,14 @@ class HomonimRefSpace(HomonImBase):
     def homogenise(self, out_filename, method='gain_only', normalise=False):
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
             # TODO nodata conversion to/from 0 to/from configured output format
-            out_profile = src_im.profile.copy()
-            out_profile.update(compress=src_im.profile['compress'], interleave='band', nodata=self._out_config['nodata'],
-                               dtype=self._out_config['dtype'])
+            if self._homo_config['debug']:
+                param_profile = self._create_param_profile(self.ref_props.profile.copy())
+                param_out_file_name = self._create_param_filename(out_filename)
+                param_im = rio.open(param_out_file_name, 'w', **param_profile)
 
-            with rio.open(out_filename, 'w', **out_profile) as out_im:
-                if self._homo_config['debug']:
-                    param_profile = self.ref_props.profile
-                    param_profile.update(compress=src_im.profile['compress'], interleave='band', nodata=None, dtype=int_dtype,
-                                         count=src_im.profile['count'])
-                    if method.lower() != 'gain_only' or normalise:
-                        param_profile['count'] *= 2
-                    param_out_file_name = out_filename.parent.joinpath(out_filename.stem + '_PARAMS.tif')
-                    param_im = rio.open(param_out_file_name, 'w', **param_profile)
-
+            out_profile = self._create_out_profile(src_im.profile)
+            out_im = rio.open(out_filename, 'w', **out_profile)
+            try:
                 # process by band to limit memory usage
                 bands = list(range(1, src_im.count + 1))
                 for bi in bands:
@@ -814,10 +830,8 @@ class HomonimRefSpace(HomonImBase):
                         if param_ds_array.shape[0] > 1:
                             _bi = bi + src_im.count
                             param_im.write(param_ds_array[1, :, :].astype(param_im.dtypes[_bi - 1]), indexes=_bi)
-
-                # store the homogenisation parameters as metadata in the output file
-                # out_im.update_tags(HOMO_METHOD=method, HOMO_NORM=str(normalise), HOMO_WIN=str(self.win_size),
-                #                     HOMO_SRC=self._src_filename.name, HOMO_REF=self._ref_filename.name)
+            finally:
+                out_im.close()
                 if self._homo_config['debug']:
                     param_im.close()
 
@@ -837,20 +851,14 @@ class HomonimSrcSpace(HomonImBase):
                 #                      src_transform=src_im.transform, src_crs=src_im.crs,
                 #                      dst_transform=ref_profile['transform'], dst_crs=ref_profile['crs'],
                 #                      resampling=Resampling.average, num_threads=multiprocessing.cpu_count())
+                if self._homo_config['debug']:
+                    param_profile = self._create_param_profile(src_im.profile.copy())
+                    param_out_file_name = self._create_param_filename(out_filename)
+                    param_im = rio.open(param_out_file_name, 'w', **param_profile)
 
-                out_profile = src_im.profile
-                out_profile.update(compress=src_im.profile['compress'], interleave='band', nodata=self._out_config['nodata'],
-                                   dtype=self._out_config['dtype'])
-
-                with rio.open(out_filename, 'w', **out_profile) as out_im:
-                    if self._homo_config['debug']:
-                        param_profile = src_im.profile.copy()
-                        param_profile.update(num_threads=multiprocessing.cpu_count(), compress=src_im.profile['compress'],
-                                             interleave='band', nodata=None, dtype=int_dtype, count=src_im.profile['count'])
-                        if method.lower() != 'gain_only' or normalise:
-                            param_profile['count'] *= 2
-                        param_out_file_name = out_filename.parent.joinpath(out_filename.stem + '_PARAMS.tif')
-                        param_im = rio.open(param_out_file_name, 'w', **param_profile)
+                out_profile = self._create_out_profile(src_im.profile)
+                out_im = rio.open(out_filename, 'w', **out_profile)
+                try:
 
                     # process by band to limit memory usage
                     bands = list(range(1, src_im.count + 1))
@@ -902,6 +910,8 @@ class HomonimSrcSpace(HomonImBase):
                     # store the homogenisation parameters as metadata in the output file
                     # out_im.update_tags(HOMO_METHOD=method, HOMO_NORM=str(normalise), HOMO_WIN=str(self.win_size),
                     #                     HOMO_SRC=self._src_filename.name, HOMO_REF=self._ref_filename.name)
+                finally:
+                    out_im.close()
                     if self._homo_config['debug']:
                         param_im.close()
 

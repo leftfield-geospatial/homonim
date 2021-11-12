@@ -142,6 +142,7 @@ def cli(src_file=None, ref_file=None, win_size=(3, 3), method="gain_only", norm=
         src_file_path = pathlib.Path(src_file_spec)
         if len(list(src_file_path.parent.glob(src_file_path.name))) == 0:
             raise Exception(f'Could not find any source image(s) matching {src_file_spec}')
+
         for src_filename in src_file_path.parent.glob(src_file_path.name):
             # try:
             # set homogenised filename
@@ -176,6 +177,12 @@ def cli(src_file=None, ref_file=None, win_size=(3, 3), method="gain_only", norm=
                 start_ttl = datetime.datetime.now()
                 logger.info(f'Building overviews for {homo_filename.name}')
                 him.build_overviews(homo_filename)
+
+                if config['homogenisation']['debug']:
+                    param_out_filename = him._create_param_filename(homo_filename)
+                    logger.info(f'Building overviews for {param_out_filename.name}')
+                    him.build_overviews(param_out_filename)
+
                 ttl_time = (datetime.datetime.now() - start_ttl)
                 logger.info(f'Completed in {ttl_time.total_seconds():.2f} secs')
 

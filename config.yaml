@@ -22,7 +22,8 @@ output:
   # Data type (be aware that homogenised reflectances may be negative in some instances)
   dtype: float32
   # Tile/block [x, y] size in pixels  ([512, 512] recommended) (None = same as source image)
-  tile_size: [512, 512]
+  blockxsize: 512
+  blockysize: 512
   # GeoTIFF compress type (deflate, jpeg, jpeg2000, lzw, zstd, none) (None = same as source image)
   compress: deflate
   # Interleave by 'pixel' or 'band' (pixel, band) (None = same as source image)
