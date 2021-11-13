@@ -24,8 +24,10 @@ import click
 import numpy as np
 import yaml
 
+
 from homonim import homonim
 from homonim import root_path, get_logger
+
 
 # print formatting
 np.set_printoptions(precision=4)

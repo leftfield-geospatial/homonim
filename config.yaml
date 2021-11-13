@@ -14,6 +14,8 @@ homogenisation:
   mask_partial_window: True
   # Mask extrapolated (boundary) pixels in resampled images
   mask_partial_interp: True
+  # Use multi-threading (memory intensive)
+  multithread: False
 
 # Format of output (homogenised) image
 output:

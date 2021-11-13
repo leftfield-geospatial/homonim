@@ -34,6 +34,12 @@ from scipy.optimize import lsq_linear
 from collections import namedtuple
 import datetime
 
+import concurrent.futures
+import multiprocessing
+import threading
+import click
+from tqdm import tqdm
+
 logger = get_logger(__name__)
 
 class Model(Enum):
@@ -112,6 +118,7 @@ class HomonImBase:
                 'mask_partial_pixel': True,
                 'mask_partial_window': False,
                 'mask_partial_interp': False,
+                'multithread': True,
             }
         else:
             self._homo_config = homo_config
@@ -762,11 +769,17 @@ class HomonImBase:
 
             out_profile = self._create_out_profile(src_im.profile)
             out_im = rio.open(out_filename, 'w', **out_profile)
+            # process by band to limit memory usage
+            bands = list(range(1, src_im.count + 1))
+            bar = tqdm(total=len(bands)+1)
+            bar.update(0)
+            read_lock = threading.Lock()
+            write_lock = threading.Lock()
+            param_lock = threading.Lock()
             try:
-                # process by band to limit memory usage
-                bands = list(range(1, src_im.count + 1))
-                for bi in bands:
-                    src_array = src_im.read(bi, out_dtype=int_dtype)  # NB bands along first dim
+                def process_band(bi):
+                    with read_lock:
+                        src_array = src_im.read(bi, out_dtype=int_dtype)  # NB bands along first dim
 
                     out_array, param_array = self._homogenise_array(self.ref_array[bi - 1, :, :], src_array, method=method, normalise=normalise)
 
@@ -774,18 +787,29 @@ class HomonImBase:
                     if out_im.nodata != int_nodata:
                         out_array[out_array==int_nodata] = out_im.nodata
 
-                    out_im.write(out_array.astype(out_im.dtypes[bi-1]), indexes=bi)
-
                     if self._homo_config['debug']:
-                        param_im.write(param_array[0, :, :].astype(param_im.dtypes[bi - 1]), indexes=bi)
-                        if param_array.shape[0] > 1:
-                            _bi = bi + src_im.count
-                            param_im.write(param_array[1, :, :].astype(param_im.dtypes[_bi - 1]), indexes=_bi)
+                        with param_lock:
+                            param_im.write(param_array[0, :, :].astype(param_im.dtypes[bi - 1]), indexes=bi)
+                            if param_array.shape[0] > 1:
+                                _bi = bi + src_im.count
+                                param_im.write(param_array[1, :, :].astype(param_im.dtypes[_bi - 1]), indexes=_bi)
+
+                    with write_lock:
+                        out_im.write(out_array.astype(out_im.dtypes[bi-1]), indexes=bi)
+                        bar.update(1)  # update with progress increment
+
+                if self._homo_config['multithread']:
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
+                        executor.map(process_band, bands)
+                else:
+                    for bi in bands:
+                        process_band(bi)
             finally:
                 out_im.close()
                 if self._homo_config['debug']:
                     param_im.close()
-
+                bar.update(1)  # update with progress increment
+                bar.close()
 
 class HomonimRefSpace(HomonImBase):
 
