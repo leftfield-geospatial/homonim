@@ -480,20 +480,25 @@ class HomonImBase:
         """
 
         mask = src_array != int_nodata    #.astype(np.int32)   # use int32 as it needs to accumulate sums below
+        win_size = tuple(win_size)
+        filter_args = dict(normalize=False, borderType=cv.BORDER_CONSTANT)
+
+        # sum the ratio and mask over sliding windows (uses DFT for large kernels)
+        # kernel = np.ones(win_size, dtype=int_dtype)
         # find ratios avoiding divide by nodata=0
         ratio_array = np.full_like(src_array, fill_value=int_nodata, dtype=int_dtype)
         _ = np.divide(ref_array, src_array, out=ratio_array, where=mask.astype('bool', copy=False))
 
         # sum the ratio and mask over sliding windows (uses DFT for large kernels)
-        kernel = np.ones(win_size, dtype=int_dtype)
-        ratio_sum = cv.filter2D(ratio_array, -1, kernel, borderType=cv.BORDER_CONSTANT)
-        mask_sum = cv.filter2D(mask.astype(int_dtype), -1, kernel, borderType=cv.BORDER_CONSTANT)
+        # kernel = np.ones(win_size, dtype=int_dtype)
+        ratio_sum = cv.boxFilter(ratio_array, -1, win_size, **filter_args)
+        mask_sum = cv.boxFilter(mask.astype(int_dtype), -1, win_size, **filter_args)
 
         # mask out parameter pixels that were not completely covered by a window of valid data
         # TODO: this interacts with mask_extrap, so rather do it in homogenise after --ref-space US?
         #   this is sort of the same question as, is it better to do pure extrapolation, or interpolation with semi-covered data?
         if self._homo_config['mask_partial_window']:
-            mask &= (mask_sum >= kernel.size)
+            mask &= (mask_sum >= np.product(win_size))
 
         # calculate gains, masking out invalid etc pixels
         param_array = np.full((1, *src_array.shape), fill_value=int_nodata, dtype=int_dtype)
@@ -549,7 +554,7 @@ class HomonImBase:
         _ = np.subtract(ref_mean, param_array[0, :, :] * src_mean, out=param_array[1, :, :], where=src_mask.astype('bool', copy=False))
         return param_array
 
-    def _find_gain_and_offset_cv(self, ref_array, src_array, win_size=[15, 15]):
+    def _find_gain_and_offset_cv(self, ref_array, src_array, win_size=(15, 15)):
         """
         Find the sliding window calibration parameters for a band.  OpenCV faster version.
 
@@ -559,7 +564,7 @@ class HomonImBase:
             a reference band in an MxN array
         src_array : numpy.array_like
             a source band, collocated with ref_array and of the same MxN shape
-        win_size : numpy.array_like
+        win_size : numpy.array_like, tuple
             sliding window [width, height] in pixels
 
         Returns
@@ -570,17 +575,19 @@ class HomonImBase:
         # see https://www.mathsisfun.com/data/least-squares-regression.html
         mask = src_array != int_nodata   # use int32 as it needs to accumulate sums below
         ref_array[~mask] = int_nodata
+        win_size = tuple(win_size)
 
         # sum the ratio and mask over sliding windows (uses DFT for large kernels)
-        kernel = np.ones(win_size, dtype=int_dtype)
-        src_sum = cv.filter2D(src_array, -1, kernel, borderType=cv.BORDER_CONSTANT)
-        ref_sum = cv.filter2D(ref_array, -1, kernel, borderType=cv.BORDER_CONSTANT)
-        src_ref_sum = cv.filter2D(src_array*ref_array, -1, kernel, borderType=cv.BORDER_CONSTANT)
-        mask_sum = cv.filter2D(mask.astype(int_dtype), -1, kernel, borderType=cv.BORDER_CONSTANT)
+        # kernel = np.ones(win_size, dtype=int_dtype)
+        filter_args = dict(normalize=False, borderType=cv.BORDER_CONSTANT)
+        src_sum = cv.boxFilter(src_array, -1, win_size, **filter_args)
+        ref_sum = cv.boxFilter(ref_array, -1, win_size, **filter_args)
+        src_ref_sum = cv.boxFilter(src_array*ref_array, -1, win_size, **filter_args)
+        mask_sum = cv.boxFilter(mask.astype(int_dtype), -1, win_size, **filter_args)
 
         m_num_array = (mask_sum * src_ref_sum) - (src_sum * ref_sum)
         del(src_ref_sum)
-        src2_sum = cv.filter2D(src_array**2, -1, kernel, borderType=cv.BORDER_CONSTANT)
+        src2_sum = cv.sqrBoxFilter(src_array, -1, win_size, **filter_args)
         m_den_array = (mask_sum * src2_sum) - (src_sum ** 2)
         del(src2_sum)
 
@@ -588,24 +595,19 @@ class HomonImBase:
         # TODO: this interacts with mask_extrap, so rather do it in homogenise after --ref-space US?
         #   this is sort of the same question as, is it better to do pure extrapolation, or interpolation with semi-covered data?
         if self._homo_config['mask_partial_window']:
-            mask &= (mask_sum >= kernel.size)
+            mask &= (mask_sum >= np.product(win_size))
 
         param_array = np.full((2, *src_array.shape), fill_value=int_nodata ,dtype=int_dtype)
         _ = np.divide(m_num_array, m_den_array, out=param_array[0, :, :], where=mask.astype('bool', copy=False))
         _ = np.divide(ref_sum - (param_array[0, :, :] * src_sum), mask_sum, out=param_array[1, :, :], where=mask.astype('bool', copy=False))
 
-        param_array = np.full((2, *src_array.shape), fill_value=int_nodata, dtype=int_dtype)
-        _ = np.divide(m_num_array, m_den_array, out=param_array[0, :, :], where=mask.astype('bool', copy=False))
-        _ = np.divide(ref_sum - (param_array[0, :, :] * src_sum), mask_sum, out=param_array[1, :, :],
-                      where=mask.astype('bool', copy=False))
-
         if self._homo_config['debug']:
-            ref2_sum = cv.filter2D(ref_array ** 2, -1, kernel, borderType=cv.BORDER_CONSTANT)
+            ref2_sum = cv.boxFilter(ref_array ** 2, -1, win_size, **filter_args)
             ss_tot_array = (mask_sum * ref2_sum) - (ref_sum ** 2)
             ref_hat_array = param_array[0, :, :] * src_array + param_array[1, :, :]
             res_array = np.full(src_array.shape, fill_value=int_nodata, dtype=int_dtype)
             _ = np.subtract(ref_hat_array, ref_array, out=res_array, where=mask.astype('bool', copy=False))
-            ss_res_array = mask_sum * cv.filter2D(res_array**2, -1, kernel, borderType=cv.BORDER_CONSTANT)
+            ss_res_array = mask_sum * cv.sqrBoxFilter(res_array, -1, win_size, **filter_args)
             r2_array = np.full(src_array.shape, fill_value=int_nodata, dtype=int_dtype)
             _ = np.divide(ss_res_array, ss_tot_array, out=r2_array, where=mask.astype('bool', copy=False))
             r2_array = 1 - r2_array
