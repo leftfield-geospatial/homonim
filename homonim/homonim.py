@@ -453,7 +453,7 @@ class HomonImBase:
         norm_model[0] = _ref_array.std() / _src_array.std()
         norm_model[1] = np.percentile(_ref_array, 1) - np.percentile(_src_array, 1) * norm_model[0]
 
-        logger.info(f'Image normalisation gain / offset: {norm_model[0]:.4f} / {norm_model[1]:.4f}')
+        # logger.info(f'Image normalisation gain / offset: {norm_model[0]:.4f} / {norm_model[1]:.4f}')
         src_array[src_mask] = norm_model[0]*_src_array + norm_model[1]
         return norm_model
 
@@ -869,8 +869,6 @@ class HomonimSrcSpace(HomonImBase):
 
         if normalise:  # normalise source in place
             self._normalise_src(ref_us_array, src_array)
-        else:
-            logger.info(f'Processing band...')
 
         # find the calibration parameters for this band
         win_size = self.win_size * np.round(
