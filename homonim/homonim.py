@@ -567,6 +567,7 @@ class HomonImBase:
         param_array : numpy.array_like
             an M x N  array of gains with nodata = nan
         """
+        # see https://www.mathsisfun.com/data/least-squares-regression.html
         mask = src_array != int_nodata   # use int32 as it needs to accumulate sums below
         ref_array[~mask] = int_nodata
 
@@ -592,6 +593,23 @@ class HomonImBase:
         param_array = np.full((2, *src_array.shape), fill_value=int_nodata ,dtype=int_dtype)
         _ = np.divide(m_num_array, m_den_array, out=param_array[0, :, :], where=mask.astype('bool', copy=False))
         _ = np.divide(ref_sum - (param_array[0, :, :] * src_sum), mask_sum, out=param_array[1, :, :], where=mask.astype('bool', copy=False))
+
+        param_array = np.full((2, *src_array.shape), fill_value=int_nodata, dtype=int_dtype)
+        _ = np.divide(m_num_array, m_den_array, out=param_array[0, :, :], where=mask.astype('bool', copy=False))
+        _ = np.divide(ref_sum - (param_array[0, :, :] * src_sum), mask_sum, out=param_array[1, :, :],
+                      where=mask.astype('bool', copy=False))
+
+        if self._homo_config['debug']:
+            ref2_sum = cv.filter2D(ref_array ** 2, -1, kernel, borderType=cv.BORDER_CONSTANT)
+            ss_tot_array = (mask_sum * ref2_sum) - (ref_sum ** 2)
+            ref_hat_array = param_array[0, :, :] * src_array + param_array[1, :, :]
+            res_array = np.full(src_array.shape, fill_value=int_nodata, dtype=int_dtype)
+            _ = np.subtract(ref_hat_array, ref_array, out=res_array, where=mask.astype('bool', copy=False))
+            ss_res_array = mask_sum * cv.filter2D(res_array**2, -1, kernel, borderType=cv.BORDER_CONSTANT)
+            r2_array = np.full(src_array.shape, fill_value=int_nodata, dtype=int_dtype)
+            _ = np.divide(ss_res_array, ss_tot_array, out=r2_array, where=mask.astype('bool', copy=False))
+            r2_array = 1 - r2_array
+            param_array = np.concatenate((param_array, r2_array.reshape(1,*r2_array.shape)), axis=0)
 
         return param_array
 
@@ -699,7 +717,7 @@ class HomonImBase:
         for key, value in self._out_config.items():
             if value is not None:
                 param_profile.update(**{key: value})
-        param_profile.update(dtype=int_dtype, count=self.src_props.count*2, nodata=int_nodata, tiled=True)
+        param_profile.update(dtype=int_dtype, count=self.src_props.count*3, nodata=int_nodata, tiled=True)
         return param_profile
 
     def _create_param_filename(self, filename):
@@ -789,10 +807,9 @@ class HomonImBase:
 
                     if self._homo_config['debug']:
                         with param_lock:
-                            param_im.write(param_array[0, :, :].astype(param_im.dtypes[bi - 1]), indexes=bi)
-                            if param_array.shape[0] > 1:
-                                _bi = bi + src_im.count
-                                param_im.write(param_array[1, :, :].astype(param_im.dtypes[_bi - 1]), indexes=_bi)
+                            for pi in range(param_array.shape[0]):
+                                _bi = bi + pi*src_im.count
+                                param_im.write(param_array[pi, :, :].astype(param_im.dtypes[_bi-1]), indexes=_bi)
 
                     with write_lock:
                         out_im.write(out_array.astype(out_im.dtypes[bi-1]), indexes=bi)
@@ -833,7 +850,7 @@ class HomonimRefSpace(HomonImBase):
             param_ds_array = self._find_gain_and_offset_cv(ref_array, src_ds_array, win_size=self.win_size)
 
         # upsample the parameter array
-        param_array = self._project_ref_to_src(param_ds_array)
+        param_array = self._project_ref_to_src(param_ds_array[:2, :, :])
 
         if self._homo_config['mask_partial_interp']:
             param_mask = (param_array[0, :, :] == int_nodata)
