@@ -39,6 +39,9 @@ import multiprocessing
 import threading
 import click
 from tqdm import tqdm
+import cProfile
+import tracemalloc
+import pstats
 
 logger = get_logger(__name__)
 
@@ -594,24 +597,25 @@ class HomonImBase:
         # mask out parameter pixels that were not completely covered by a window of valid data
         # TODO: this interacts with mask_extrap, so rather do it in homogenise after --ref-space US?
         #   this is sort of the same question as, is it better to do pure extrapolation, or interpolation with semi-covered data?
-        if self._homo_config['mask_partial_window']:
-            mask &= (mask_sum >= np.product(win_size))
 
         param_array = np.full((2, *src_array.shape), fill_value=int_nodata ,dtype=int_dtype)
         _ = np.divide(m_num_array, m_den_array, out=param_array[0, :, :], where=mask.astype('bool', copy=False))
         _ = np.divide(ref_sum - (param_array[0, :, :] * src_sum), mask_sum, out=param_array[1, :, :], where=mask.astype('bool', copy=False))
 
         if self._homo_config['debug']:
-            ref2_sum = cv.boxFilter(ref_array ** 2, -1, win_size, **filter_args)
+            ref2_sum = cv.sqrBoxFilter(ref_array, -1, win_size, **filter_args)
             ss_tot_array = (mask_sum * ref2_sum) - (ref_sum ** 2)
-            ref_hat_array = param_array[0, :, :] * src_array + param_array[1, :, :]
-            res_array = np.full(src_array.shape, fill_value=int_nodata, dtype=int_dtype)
-            _ = np.subtract(ref_hat_array, ref_array, out=res_array, where=mask.astype('bool', copy=False))
+            res_array = (param_array[0, :, :] * src_array + param_array[1, :, :]) - ref_array
             ss_res_array = mask_sum * cv.sqrBoxFilter(res_array, -1, win_size, **filter_args)
+
             r2_array = np.full(src_array.shape, fill_value=int_nodata, dtype=int_dtype)
-            _ = np.divide(ss_res_array, ss_tot_array, out=r2_array, where=mask.astype('bool', copy=False))
-            r2_array = 1 - r2_array
-            param_array = np.concatenate((param_array, r2_array.reshape(1,*r2_array.shape)), axis=0)
+            np.divide(ss_res_array, ss_tot_array, out=r2_array, where=mask.astype('bool', copy=False))
+            np.subtract(1, r2_array, out=r2_array, where=mask.astype('bool', copy=False))
+            param_array = np.concatenate((param_array, r2_array.reshape(1, *r2_array.shape)), axis=0)
+
+        if self._homo_config['mask_partial_window']:
+            mask &= (mask_sum >= np.product(win_size))
+            param_array[:, ~mask] = int_nodata
 
         return param_array
 
@@ -724,7 +728,7 @@ class HomonImBase:
 
     def _create_param_filename(self, filename):
         filename = pathlib.Path(filename)
-        return filename.parent.joinpath(f'{filename.stem}_PARAMS.{filename.suffix}')
+        return filename.parent.joinpath(f'{filename.stem}_PARAMS{filename.suffix}')
 
     def build_overviews(self, filename):
         """
@@ -780,9 +784,13 @@ class HomonImBase:
         normalise: bool, optional
                    Perform image-wide normalisation prior to homogenisation.  (Default: False)
         """
+
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
             # TODO nodata conversion to/from 0 to/from configured output format
             if self._homo_config['debug']:
+                tracemalloc.start()
+                proc_profile = cProfile.Profile()
+                proc_profile.enable()
                 param_profile = self._create_param_profile(src_im.profile.copy())
                 param_out_file_name = self._create_param_filename(out_filename)
                 param_im = rio.open(param_out_file_name, 'w', **param_profile)
@@ -829,6 +837,16 @@ class HomonImBase:
                     param_im.close()
                 bar.update(1)  # update with progress increment
                 bar.close()
+        if self._homo_config['debug']:  # print profiling info
+            proc_profile.disable()
+            # tottime is the total time spent in the function alone. cumtime is the total time spent in the function
+            # plus all functions that this function called
+            proc_stats = pstats.Stats(proc_profile).sort_stats('cumtime')
+            logger.debug(f'Processing time:')
+            proc_stats.print_stats(20)
+
+            current, peak = tracemalloc.get_traced_memory()
+            logger.debug(f"Memory usage: current: {current / 10 ** 6:.1f} MB, peak: {peak / 10 ** 6:.1f} MB")
 
 class HomonimRefSpace(HomonImBase):
 
