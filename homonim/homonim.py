@@ -602,7 +602,9 @@ class HomonImBase:
         _ = np.divide(m_num_array, m_den_array, out=param_array[0, :, :], where=mask.astype('bool', copy=False))
         _ = np.divide(ref_sum - (param_array[0, :, :] * src_sum), mask_sum, out=param_array[1, :, :], where=mask.astype('bool', copy=False))
 
-        if self._homo_config['debug']:
+        # refit areas with low R2 using offset inpainting
+        if self._homo_config['r2_threshold'] is not None:
+            # Find R2 of the models for each pixel
             ref2_sum = cv.sqrBoxFilter(ref_array, -1, win_size, **filter_args)
             ss_tot_array = (mask_sum * ref2_sum) - (ref_sum ** 2)
             res_array = (param_array[0, :, :] * src_array + param_array[1, :, :]) - ref_array
@@ -611,7 +613,14 @@ class HomonImBase:
             r2_array = np.full(src_array.shape, fill_value=int_nodata, dtype=int_dtype)
             np.divide(ss_res_array, ss_tot_array, out=r2_array, where=mask.astype('bool', copy=False))
             np.subtract(1, r2_array, out=r2_array, where=mask.astype('bool', copy=False))
-            param_array = np.concatenate((param_array, r2_array.reshape(1, *r2_array.shape)), axis=0)
+
+            # fill low R2 areas in offset parameter
+            rf_mask = (r2_array < self._homo_config['r2_threshold'])
+            param_array[1, :, :] = fillnodata(param_array[1, :, :], ~rf_mask)
+            param_array[1, ~mask] = int_nodata
+            # recalculate the gain for the filled areas (fitted line must pass through the mean)
+            rf_mask &= mask
+            np.divide(ref_sum - mask_sum * param_array[1, :, :], src_sum, out=param_array[0, :, :], where=rf_mask.astype('bool', copy=False))
 
         if self._homo_config['mask_partial_window']:
             mask &= (mask_sum >= np.product(win_size))

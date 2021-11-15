@@ -16,6 +16,9 @@ homogenisation:
   mask_partial_interp: True
   # Use multi-threading (memory intensive)
   multithread: True
+  # For gain&offset model, refit pixels with model R2 values below this value, using interpolated offset
+  # and fitted gain (None = no inpainting).
+  r2_threshold: 0.25
 
 # Format of output (homogenised) image
 output:
