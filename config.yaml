@@ -15,7 +15,7 @@ homogenisation:
   # Mask extrapolated (boundary) pixels in resampled images
   mask_partial_interp: True
   # Use multi-threading (memory intensive)
-  multithread: True
+  multithread: False
   # For gain&offset model, refit pixels with model R2 values below this value, using interpolated offset
   # and fitted gain (None = no inpainting).
   r2_threshold: 0.25
