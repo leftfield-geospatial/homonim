@@ -157,14 +157,12 @@ def cli(src_file=None, ref_file=None, win_size=(3, 3), method="gain_only", norm=
             start_ttl = datetime.datetime.now()
             if homo_space == 'ref-space':
                 post_fix = f'_HOMO_REF_m{method.upper()}_n{"ON" if norm else "OFF"}_w{win_size[0]}_{win_size[1]}.tif'
-                him = homonim.HomonimRefSpace(src_filename, ref_file, win_size=win_size,
-                                              homo_config=config['homogenisation'], out_config=config['output'])
+                him = homonim.HomonimRefSpace(src_filename, ref_file, homo_config=config['homogenisation'], out_config=config['output'])
             else:
                 post_fix = f'_HOMO_SRC_m{method.upper()}_n{"ON" if norm else "OFF"}_w{win_size[0]}_{win_size[1]}.tif'
-                him = homonim.HomonimSrcSpace(src_filename, ref_file, win_size=win_size,
-                                              homo_config=config['homogenisation'], out_config=config['output'])
+                him = homonim.HomonimSrcSpace(src_filename, ref_file, homo_config=config['homogenisation'], out_config=config['output'])
             homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
-            him.homogenise(homo_filename, method=method, normalise=norm)
+            him.homogenise(homo_filename, method=method, win_size=win_size, normalise=norm)
 
             # set metadata in output file
             meta_dict = dict(HOMO_SRC_FILE=src_filename.name, HOMO_REF_FILE=pathlib.Path(ref_file).name,

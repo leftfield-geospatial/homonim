@@ -97,8 +97,6 @@ class HomonImBase:
         self._src_filename = pathlib.Path(src_filename)
         self._ref_filename = pathlib.Path(ref_filename)
         self._check_rasters()
-        if not np.all(np.mod(win_size, 2) == 1):
-            raise Exception('win_size must be odd in both dimensions')
 
         self._src_props = None
         self._ref_props = None
@@ -602,7 +600,7 @@ class HomonImBase:
     def _homogenise_array(self, ref_array, src_array, method='gain_only', normalise=False):
         raise NotImplementedError()
 
-    def homogenise(self, out_filename, method='gain_only', normalise=False):
+    def homogenise(self, out_filename, method='gain_only', win_size=(5,5), normalise=False):
         """
         Perform homogenisation.
 
@@ -612,9 +610,13 @@ class HomonImBase:
                        Name of the raster file to save the homogenised image to
         method: str, optional
                 Specify the homogenisation method: ['gain_only'|'gain_offset'].  (Default: 'gain_only')
+        win_size : numpy.array_like, list, tuple, optional
+            Sliding window [width, height] in pixels.
         normalise: bool, optional
                    Perform image-wide normalisation prior to homogenisation.  (Default: False)
         """
+        if not np.all(np.mod(win_size, 2) == 1):
+            raise Exception('win_size must be odd in both dimensions')
 
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
             # TODO nodata conversion to/from 0 to/from configured output format
@@ -641,7 +643,7 @@ class HomonImBase:
                         src_array = src_im.read(bi, out_dtype=hom_dtype)  # NB bands along first dim
 
                     out_array, param_array = self._homogenise_array(self.ref_array[bi - 1, :, :], src_array,
-                                                                    method=method, normalise=normalise)
+                                                                    method=method, win_size=win_size, normalise=normalise)
 
                     # convert nodata if necessary
                     if out_im.nodata != hom_nodata:
@@ -683,7 +685,7 @@ class HomonImBase:
 
 class HomonimRefSpace(HomonImBase):
 
-    def _homogenise_array(self, ref_array, src_array, method='gain_only', normalise=False):
+    def _homogenise_array(self, ref_array, src_array, method='gain_only', win_size=(5,5), normalise=False):
         src_ds_array = self._project_src_to_ref(src_array, src_nodata=self.src_props.nodata)
 
         # set partially covered pixels to nodata
@@ -698,9 +700,9 @@ class HomonimRefSpace(HomonImBase):
             norm_model = self._src_image_offset(ref_array, src_ds_array)
 
         if method.lower() == 'gain_only':
-            param_ds_array = self._find_gains_cv(ref_array, src_ds_array, win_size=self.win_size)
+            param_ds_array = self._find_gains_cv(ref_array, src_ds_array, win_size=win_size)
         else:
-            param_ds_array = self._find_gain_and_offset_cv(ref_array, src_ds_array, win_size=self.win_size)
+            param_ds_array = self._find_gain_and_offset_cv(ref_array, src_ds_array, win_size=win_size)
 
         # upsample the parameter array
         param_array = self._project_ref_to_src(param_ds_array[:2, :, :])
@@ -729,7 +731,7 @@ class HomonimRefSpace(HomonImBase):
 
 class HomonimSrcSpace(HomonImBase):
 
-    def _homogenise_array(self, ref_array, src_array, method='gain_only', normalise=False):
+    def _homogenise_array(self, ref_array, src_array, method='gain_only', win_size=(5,5), normalise=False):
         if self.src_props.nodata != hom_nodata:
             src_array[src_array == self.src_props.nodata] = hom_nodata
 
@@ -740,7 +742,7 @@ class HomonimSrcSpace(HomonImBase):
             self._src_image_offset(ref_us_array, src_array)
 
         # find the calibration parameters for this band
-        win_size = self.win_size * np.round(
+        win_size = win_size * np.round(
             np.array(self.ref_props.res) / np.array(self.src_props.res)).astype(int)
 
         # TODO parallelise this, use opencv and or gpu, and or use integral image!
