@@ -1,0 +1,39 @@
+# Homogenisation configuration
+homogenisation:
+  # Interpolation type (average, bilinear, cubic, cubic_spline, gauss, lanczos) for resampling from source to reference
+  #   CRS (cubic_spline recommended)
+  src2ref_interp: average
+  # Interpolation type (average, bilinear, cubic, cubic_spline, gauss, lanczos) for resampling from reference to source
+  #   CRS  (average recommended)
+  ref2src_interp: cubic_spline
+  # Produce debug outputs (parameter rasters)
+  debug: False
+  # Mask partially covered source pixels when downsampling for --ref-space
+  mask_partial_pixel: True
+    # Mask partially covered source pixels when downsampling for --ref-space
+  mask_partial_window: True
+  # Mask extrapolated (boundary) pixels in resampled images
+  mask_partial_interp: True
+  # Use multi-threading (memory intensive)
+  multithread: True
+  # For gain&offset model, refit pixels with model R2 values below this value, using interpolated offset
+  # and fitted gain (None = no inpainting).
+  r2_threshold: 0.25
+
+# Format of output (homogenised) image
+output:
+  # Format of homogenised raster - see www.gdal.org/formats_list.html (None = same format as source image)
+  driver: GTiff
+  # Data type (be aware that homogenised reflectances may be negative in some instances)
+  dtype:
+  # Tile/block [x, y] size in pixels  ([512, 512] recommended) (None = same as source image)
+  blockxsize:
+  blockysize:
+  # GeoTIFF compress type (deflate, jpeg, jpeg2000, lzw, zstd, none) (None = same as source image)
+  compress:
+  # Interleave by 'pixel' or 'band' (pixel, band) (None = same as source image)
+  interleave:
+  # Photometric interpretation, see https://gdal.org/drivers/raster/gtiff.html for options (None = same as source image)
+  photometric:
+  # NODATA value (None = same as source image)
+  nodata:
