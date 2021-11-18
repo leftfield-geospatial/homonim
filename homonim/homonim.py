@@ -507,7 +507,7 @@ class HomonImBase:
         _ = np.divide(ref_array, src_array, out=ratio_array, where=mask.astype('bool', copy=False))
 
         # sum the ratio and mask over sliding windows (uses DFT for large kernels)
-        # mask_sum effectively finds N, the number of valid pixels for each window
+        # (mask_sum effectively finds N, the number of valid pixels for each window)
         ratio_sum = cv.boxFilter(ratio_array, -1, win_size, **filter_args)
         mask_sum = cv.boxFilter(mask.astype(hom_dtype), -1, win_size, **filter_args)
 
@@ -540,9 +540,10 @@ class HomonImBase:
         2 x M x N array of gains and offsets, corresponding to M x N src_ and ref_array
         """
         # Least squares formulae adapted from https://www.mathsisfun.com/data/least-squares-regression.html
+
         mask = src_array != hom_nodata
         ref_array[~mask] = hom_nodata  # apply src mask to ref, so we are summing on same pixels
-        win_size = tuple(win_size)  # convert to tuple for opencv
+        win_size = tuple(win_size)  # force to tuple for opencv
 
         # find the numerator for the gain i.e. cov(ref, src)
         filter_args = dict(normalize=False, borderType=cv.BORDER_CONSTANT)
@@ -551,7 +552,7 @@ class HomonImBase:
         src_ref_sum = cv.boxFilter(src_array * ref_array, -1, win_size, **filter_args)
         mask_sum = cv.boxFilter(mask.astype(hom_dtype), -1, win_size, **filter_args)
         m_num_array = (mask_sum * src_ref_sum) - (src_sum * ref_sum)
-        del (src_ref_sum)  # free memory as possible
+        del (src_ref_sum)  # free memory when possible
 
         # find the denominator for the gain i.e. var(src)
         src2_sum = cv.sqrBoxFilter(src_array, -1, win_size, **filter_args)
@@ -561,11 +562,12 @@ class HomonImBase:
         # find the gain = cov(ref, src) / var(src)
         param_array = np.full((2, *src_array.shape), fill_value=hom_nodata, dtype=hom_dtype)
         _ = np.divide(m_num_array, m_den_array, out=param_array[0, :, :], where=mask.astype('bool', copy=False))
-        # find the offset c = y-mx, using the fact that the LS linear model passes through (mean(ref), mean(src))
+
+        # find the offset c = y - mx, using the fact that the LS linear model passes through (mean(ref), mean(src))
         _ = np.divide(ref_sum - (param_array[0, :, :] * src_sum), mask_sum, out=param_array[1, :, :],
                       where=mask.astype('bool', copy=False))
 
-        # refit areas with low R2 using offset "inpainting"
+        # refit any areas with low R2 using offset "inpainting"
         if self._homo_config['r2_threshold'] is not None:
             # Find R2 of the models for each pixel
             ref2_sum = cv.sqrBoxFilter(ref_array, -1, win_size, **filter_args)
@@ -580,13 +582,16 @@ class HomonImBase:
             # fill ("inpaint") low R2 areas in the offset parameter
             rf_mask = (r2_array < self._homo_config['r2_threshold']) | (param_array[0, :, :] < 0)
             param_array[1, :, :] = fillnodata(param_array[1, :, :], ~rf_mask)
-            param_array[1, ~mask] = hom_nodata  # re-set nodata as these areas will have been filled above
+            param_array[1, ~mask] = hom_nodata  # re-set nodata as nodata areas will have been filled above
+
             # recalculate the gain for the filled areas (linear LS line passes through (mean(src), mean(ref)))
             rf_mask &= mask
             np.divide(ref_sum - mask_sum * param_array[1, :, :], src_sum, out=param_array[0, :, :],
                       where=rf_mask.astype('bool', copy=False))
-            # TODO: avoid a copy here somehow?s
-            param_array = np.concatenate((param_array, r2_array.reshape(1, *r2_array.shape)), axis=0)
+            if self._homo_config['debug']:
+                # append R2 to parameters so they can all be written to a debug raster
+                # TODO: avoid a copy here somehow?
+                param_array = np.concatenate((param_array, r2_array.reshape(1, *r2_array.shape)), axis=0)
 
         # TODO: this interacts with mask_partial_interp, so rather do it in homogenise after --ref-space US?
         #   this is sort of the same question as, is it better to do pure extrapolation, or interpolation with semi-covered data?
@@ -597,40 +602,67 @@ class HomonImBase:
 
         return param_array
 
-    def _homogenise_array(self, ref_array, src_array, method='gain_only', win_size=(5,5), normalise=False):
+    def _homogenise_array(self, ref_array, src_array, method='gain_only', win_size=(5, 5), normalise=False):
+        """
+        Wrapper to homogenise an array of source image data
+
+        Parameters
+        ----------
+        ref_array: numpy.array_like
+                   M x N array of reference data, collocated, and of similar spectral content, to src_array
+        src_array: numpy.array_like
+                   M x N array of source data, collocated, and of similar spectral content, to ref_array
+        method: str, optional
+                The homogenisation method: ['gain_only'|'gain_offset'].  (Default: 'gain_only')
+        win_size : numpy.array_like, list, tuple, optional
+                   Sliding window (width, height) in pixels.
+        normalise: bool, optional
+                   Perform image-wide normalisation prior to homogenisation.  (Default: False)
+        Returns
+        -------
+        param_array: K x M x N array of linear model parameters correspinding to src_ and ref_array.
+                     K=1 for method='gain_only' i.e. the gains and K=2 for method='gain_offset'.
+                     param_array[0, :, :] contains the gains, and param_array[1, :, :] contains the offsets for
+                     method='gain_offset'.
+        """
         raise NotImplementedError()
 
-    def homogenise(self, out_filename, method='gain_only', win_size=(5,5), normalise=False):
+    def homogenise(self, out_filename, method='gain_only', win_size=(5, 5), normalise=False):
         """
-        Perform homogenisation.
+        Homogenise a raster file.
 
         Parameters
         ----------
         out_filename: str, pathlib.Path
-                       Name of the raster file to save the homogenised image to
+                      Path of the homogenised raster file to create.
         method: str, optional
-                Specify the homogenisation method: ['gain_only'|'gain_offset'].  (Default: 'gain_only')
+                The homogenisation method: ['gain_only'|'gain_offset'].  (Default: 'gain_only')
         win_size : numpy.array_like, list, tuple, optional
-            Sliding window [width, height] in pixels.
+                   Sliding window (width, height) in reference pixels.
         normalise: bool, optional
                    Perform image-wide normalisation prior to homogenisation.  (Default: False)
         """
+
         if not np.all(np.mod(win_size, 2) == 1):
             raise Exception('win_size must be odd in both dimensions')
 
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
-            # TODO nodata conversion to/from 0 to/from configured output format
             if self._homo_config['debug']:
+                # setup profiling
                 tracemalloc.start()
                 proc_profile = cProfile.Profile()
                 proc_profile.enable()
                 param_profile = self._create_param_profile(src_im.profile.copy())
+
+                # create parameter raster file
                 param_out_file_name = self._create_param_filename(out_filename)
                 param_im = rio.open(param_out_file_name, 'w', **param_profile)
 
+            # create the output raster file
             out_profile = self._create_out_profile(src_im.profile)
-            out_im = rio.open(out_filename, 'w', **out_profile)
-            # process by band to limit memory usage
+            out_im = rio.open(out_filename, 'w', **out_profile)  # avoid too many nested indents with 'with' statements
+
+            # initialise process by band
             bands = list(range(1, src_im.count + 1))
             bar = tqdm(total=len(bands) + 1)
             bar.update(0)
@@ -639,13 +671,15 @@ class HomonImBase:
             param_lock = threading.Lock()
             try:
                 def process_band(bi):
+                    """Thread-safe function to homogenise band bi of src_im"""
+
                     with read_lock:
-                        src_array = src_im.read(bi, out_dtype=hom_dtype)  # NB bands along first dim
+                        src_array = src_im.read(bi, out_dtype=hom_dtype)
 
                     out_array, param_array = self._homogenise_array(self.ref_array[bi - 1, :, :], src_array,
-                                                                    method=method, win_size=win_size, normalise=normalise)
+                                                                    method=method, win_size=win_size,
+                                                                    normalise=normalise)
 
-                    # convert nodata if necessary
                     if out_im.nodata != hom_nodata:
                         out_array[out_array == hom_nodata] = out_im.nodata
 
@@ -657,24 +691,28 @@ class HomonImBase:
 
                     with write_lock:
                         out_im.write(out_array.astype(out_im.dtypes[bi - 1]), indexes=bi)
-                        bar.update(1)  # update with progress increment
+                        bar.update(1)
 
                 if self._homo_config['multithread']:
+                    # process bands in concurrent threads
                     with concurrent.futures.ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
                         executor.map(process_band, bands)
                 else:
+                    # process bands consecutively
                     for bi in bands:
                         process_band(bi)
             finally:
                 out_im.close()
                 if self._homo_config['debug']:
                     param_im.close()
-                bar.update(1)  # update with progress increment
+                bar.update(1)
                 bar.close()
-        if self._homo_config['debug']:  # print profiling info
+
+        if self._homo_config['debug']:
+            # print profiling info
+            # (tottime is the total time spent in the function alone. cumtime is the total time spent in the function
+            # plus all functions that this function called)
             proc_profile.disable()
-            # tottime is the total time spent in the function alone. cumtime is the total time spent in the function
-            # plus all functions that this function called
             proc_stats = pstats.Stats(proc_profile).sort_stats('cumtime')
             logger.debug(f'Processing time:')
             proc_stats.print_stats(20)
@@ -684,18 +722,20 @@ class HomonImBase:
 
 
 class HomonimRefSpace(HomonImBase):
+    """Class for homogenising images in reference image space"""
 
-    def _homogenise_array(self, ref_array, src_array, method='gain_only', win_size=(5,5), normalise=False):
+    def _homogenise_array(self, ref_array, src_array, method='gain_only', win_size=(5, 5), normalise=False):
+
+        # downsample src_array to reference grid
         src_ds_array = self._project_src_to_ref(src_array, src_nodata=self.src_props.nodata)
 
-        # set partially covered pixels to nodata
-        # TODO is this faster, or setting param_array[src_array == 0] = 0 below
         if self._homo_config['mask_partial_pixel']:
+            # mask src_ds_array pixels that were not completely covered by src_array
+            # TODO is this faster, or setting param_array[src_array == 0] = 0 below
             mask = (src_array != self.src_props.nodata).astype('uint8')
             mask_ds_array = self._project_src_to_ref(mask, src_nodata=None)
             src_ds_array[np.logical_not(mask_ds_array == 1)] = hom_nodata
 
-        # find the calibration parameters for this band
         if normalise:
             norm_model = self._src_image_offset(ref_array, src_ds_array)
 
@@ -704,17 +744,18 @@ class HomonimRefSpace(HomonImBase):
         else:
             param_ds_array = self._find_gain_and_offset_cv(ref_array, src_ds_array, win_size=win_size)
 
-        # upsample the parameter array
+        # upsample the parameter array to source grid
         param_array = self._project_ref_to_src(param_ds_array[:2, :, :])
 
         if self._homo_config['mask_partial_interp']:
+            # mask boundary param_array pixels that were extrapolated ("partially interpolated") rather than interpolated
             param_mask = (param_array[0, :, :] == hom_nodata)
             kernel_size = np.ceil(np.divide(self.ref_props.res, self.src_props.res)).astype('int32')  # /2
             se = cv2.getStructuringElement(cv2.MORPH_RECT, tuple(kernel_size))
             param_mask = cv2.dilate(param_mask.astype('uint8', copy=False), se).astype('bool', copy=False)
             param_array[:, param_mask] = hom_nodata
 
-        # apply the normalisation
+        # apply the model to src_array
         if normalise:
             out_array = param_array[0, :, :] * norm_model[0] * src_array
             out_array += param_array[0, :, :] * norm_model[1]
@@ -730,31 +771,30 @@ class HomonimRefSpace(HomonImBase):
 ##
 
 class HomonimSrcSpace(HomonImBase):
+    """Class for homogenising images in source image space"""
 
-    def _homogenise_array(self, ref_array, src_array, method='gain_only', win_size=(5,5), normalise=False):
+    def _homogenise_array(self, ref_array, src_array, method='gain_only', win_size=(5, 5), normalise=False):
+        # re-assign source nodata if necessary
         if self.src_props.nodata != hom_nodata:
             src_array[src_array == self.src_props.nodata] = hom_nodata
 
-        # upsample ref to source CRS and grid
+        # upsample reference to source grid
         ref_us_array = self._project_ref_to_src(ref_array, ref_nodata=self.ref_props.nodata)
 
-        if normalise:  # normalise source in place
+        if normalise:  # normalise src_array in place
             self._src_image_offset(ref_us_array, src_array)
 
-        # find the calibration parameters for this band
-        win_size = win_size * np.round(
-            np.array(self.ref_props.res) / np.array(self.src_props.res)).astype(int)
+        # find win_size in source pixels
+        win_size = win_size * np.round(np.array(self.ref_props.res) / np.array(self.src_props.res)).astype(int)
 
-        # TODO parallelise this, use opencv and or gpu, and or use integral image!
         if method.lower() == 'gain_only':
             param_array = self._find_gains_cv(ref_us_array, src_array, win_size=win_size)
         else:
             param_array = self._find_gain_and_offset_cv(ref_us_array, src_array, win_size=win_size)
 
+        # apply the model to src_array
         out_array = param_array[0, :, :] * src_array
         if param_array.shape[0] > 1:
             out_array += param_array[1, :, :]
 
         return out_array, param_array
-
-##

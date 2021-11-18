@@ -90,7 +90,7 @@ class TestHomonim(unittest.TestCase):
             self.assertTrue(np.all(im_ref_r2[1, :] > im_ref_r2[0, :]), 'Homogenised vs reference R2 improvement')
 
     def test_api(self):
-        """Test homogenisation"""
+        """Test homogenisation API"""
         src_filename = root_path.joinpath('data/inputs/test_example/source/3324c_2015_1004_05_0182_RGB.tif')
         ref_filename = root_path.joinpath(
             'data/inputs/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif')
@@ -119,6 +119,7 @@ class TestHomonim(unittest.TestCase):
                 self._test_homo_against_ref(src_filename, homo_filename, ref2_filename)
 
     def test_cli(self):
+        """Test homogenisation CLI"""
         src_wildcard = root_path.joinpath('data/inputs/test_example/source/3324c_2015_*_RGB.tif')
         ref_filename = root_path.joinpath(
             'data/inputs/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif')
