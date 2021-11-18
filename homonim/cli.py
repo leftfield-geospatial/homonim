@@ -34,6 +34,12 @@ np.set_printoptions(precision=4)
 np.set_printoptions(suppress=True)
 logger = get_logger(__name__)
 
+def _create_homo_postfix(space=None, method=None, win_size=None, normalise=None):
+    if space == 'ref-space':
+        post_fix = f'_HOMO_sREF_m{method.upper()}_n{"ON" if normalise else "OFF"}_w{win_size[0]}_{win_size[1]}.tif'
+    else:
+        post_fix = f'_HOMO_sSRC_m{method.upper()}_n{"ON" if normalise else "OFF"}_w{win_size[0]}_{win_size[1]}.tif'
+    return post_fix
 
 @click.command()
 @click.option(
@@ -156,11 +162,11 @@ def cli(src_file=None, ref_file=None, win_size=(3, 3), method="gain_only", norm=
             logger.info(f'Homogenising {src_filename.name}')
             start_ttl = datetime.datetime.now()
             if homo_space == 'ref-space':
-                post_fix = f'_HOMO_REF_m{method.upper()}_n{"ON" if norm else "OFF"}_w{win_size[0]}_{win_size[1]}.tif'
                 him = homonim.HomonimRefSpace(src_filename, ref_file, homo_config=config['homogenisation'], out_config=config['output'])
             else:
-                post_fix = f'_HOMO_SRC_m{method.upper()}_n{"ON" if norm else "OFF"}_w{win_size[0]}_{win_size[1]}.tif'
                 him = homonim.HomonimSrcSpace(src_filename, ref_file, homo_config=config['homogenisation'], out_config=config['output'])
+
+            post_fix = _create_homo_postfix(space=homo_space, method=method, win_size=win_size, normalise=norm)
             homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
             him.homogenise(homo_filename, method=method, win_size=win_size, normalise=norm)
 

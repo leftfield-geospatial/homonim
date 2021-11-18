@@ -597,7 +597,7 @@ class HomonImBase:
 
         return param_array
 
-    def _homogenise_array(self, ref_array, src_array, method='gain_only', normalise=False):
+    def _homogenise_array(self, ref_array, src_array, method='gain_only', win_size=(5,5), normalise=False):
         raise NotImplementedError()
 
     def homogenise(self, out_filename, method='gain_only', win_size=(5,5), normalise=False):
