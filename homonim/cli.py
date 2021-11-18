@@ -35,6 +35,7 @@ np.set_printoptions(suppress=True)
 logger = get_logger(__name__)
 
 def _create_homo_postfix(space=None, method=None, win_size=None, normalise=None):
+    """Create a postfix string for the homogenised raster file"""
     if space == 'ref-space':
         post_fix = f'_HOMO_sREF_m{method.upper()}_n{"ON" if normalise else "OFF"}_w{win_size[0]}_{win_size[1]}.tif'
     else:
@@ -145,15 +146,14 @@ def cli(src_file=None, ref_file=None, win_size=(3, 3), method="gain_only", norm=
         config = yaml.safe_load(f)
 
     method = method.lower()
-    # check src_file points to exisiting file(s)
+
+    # iterate over and homogenise source file(s)
     for src_file_spec in src_file:
         src_file_path = pathlib.Path(src_file_spec)
         if len(list(src_file_path.parent.glob(src_file_path.name))) == 0:
             raise Exception(f'Could not find any source image(s) matching {src_file_spec}')
 
         for src_filename in src_file_path.parent.glob(src_file_path.name):
-            # try:
-            # set homogenised filename
             if output_dir is not None:
                 homo_root = pathlib.Path(output_dir)
             else:
@@ -166,6 +166,7 @@ def cli(src_file=None, ref_file=None, win_size=(3, 3), method="gain_only", norm=
             else:
                 him = homonim.HomonimSrcSpace(src_filename, ref_file, homo_config=config['homogenisation'], out_config=config['output'])
 
+            # create output raster filename and homogenise
             post_fix = _create_homo_postfix(space=homo_space, method=method, win_size=win_size, normalise=norm)
             homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
             him.homogenise(homo_filename, method=method, win_size=win_size, normalise=norm)
@@ -180,6 +181,7 @@ def cli(src_file=None, ref_file=None, win_size=(3, 3), method="gain_only", norm=
             logger.info(f'Completed in {ttl_time.total_seconds():.2f} secs')
 
             if build_ovw:
+                # build overviews
                 start_ttl = datetime.datetime.now()
                 logger.info(f'Building overviews for {homo_filename.name}')
                 him.build_overviews(homo_filename)
@@ -191,7 +193,3 @@ def cli(src_file=None, ref_file=None, win_size=(3, 3), method="gain_only", norm=
 
                 ttl_time = (datetime.datetime.now() - start_ttl)
                 logger.info(f'Completed in {ttl_time.total_seconds():.2f} secs')
-
-            # except Exception as ex:
-            #     # catch exceptions so that problem image(s) don't prevent processing of a batch
-            #     logger.error('Exception: ' + str(ex))

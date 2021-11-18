@@ -220,7 +220,6 @@ class HomonImBase:
                 ref_src_bounds = rio.windows.bounds(ref_src_win, ref_im.transform)
 
                 # TODO: consider reading in tiles for large ref ims
-                # TODO: work in a particular dtype, or transform to a particular dtype here/somewhere?
                 # TODO: how to deal with pixel alignment i.e. if ref_win is float below,
                 #   including resampling below with a non-NN option, does resample to the float window offsets
                 #   but should we not rather resample the source to the ref grid than sort of the other way around
