@@ -36,3 +36,23 @@ hom.homogenise(src_filename.parent.joinpath(src_filename.stem + '_HOMO_REF_L7_Ga
 
 
 ##
+import numpy as np
+import cv2
+from datetime import datetime
+
+srange = np.arange(100, 2000, 200)
+durations = np.zeros(srange.shape)
+ksize = (15,15)
+for si, s in enumerate(srange):
+    x = np.random.randn(s, s).astype('float32')
+    start = datetime.now()
+    x_sum = cv2.boxFilter(x, -1, ksize, normalize=False, borderType=cv2.BORDER_CONSTANT)
+    durations[si] = (datetime.now() - start).total_seconds()
+    print(s)
+
+from matplotlib import pyplot
+
+pyplot.figure()
+pyplot.plot(srange**2, durations, 'o-')
+pyplot.xlabel('Array size')
+pyplot.ylabel('Time (secs)')

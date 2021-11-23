@@ -30,11 +30,13 @@ import cv2
 import cv2 as cv
 import numpy as np
 import rasterio as rio
-from homonim import get_logger
+from rasterio import windows
 from rasterio.fill import fillnodata
 from rasterio.warp import reproject, Resampling, transform_geom, transform_bounds, calculate_default_transform
 from shapely.geometry import box, shape
 from tqdm import tqdm
+
+from homonim import get_logger
 
 logger = get_logger(__name__)
 
@@ -69,6 +71,9 @@ def expand_window_to_grid(win):
 
 """Projection related raster properties"""
 RasterProps = namedtuple('RasterProps', ['crs', 'transform', 'shape', 'res', 'bounds', 'nodata', 'count', 'profile'])
+
+"""Overlapping window object"""
+OvlWindow = namedtuple('OvlWindow', ['ovl_win', 'out_win', 'outer'])
 
 """Internal homonim nodata value"""
 hom_nodata = 0
@@ -273,6 +278,27 @@ class HomonImBase:
                                               count=src_im.count, profile=src_im.profile)
 
         return ref_array
+
+
+    def _overlap_blocks(self, block_size=(1024, 1024), overlap=(0, 0)):
+        overlap = np.array(overlap)
+        block_size = np.array(block_size)
+
+        ovl_win_ul = np.mgrid[0:(self.src_props.shape[0] - 2 * overlap[0]):(block_size[0] - 2 * overlap[0]),
+                     0:(self.src_props.shape[1] - 2 * overlap[1]):(block_size[1] - 2 * overlap[1])]
+        ovl_win_br = ovl_win_ul + block_size.reshape(-1, 1, 1)
+        ovl_win_br[0, -1, :] = self.src_props.shape[0]
+        ovl_win_br[1, :, -1] = self.src_props.shape[1]
+
+        windows = []
+        for ovl_ul, ovl_br in zip(ovl_win_ul.reshape(2, -1).T, ovl_win_br.reshape(2, -1).T):
+            ovl_win = rio.windows.Window.from_slices((ovl_ul[0], ovl_br[0]), (ovl_ul[1], ovl_br[1]))
+            valid_win = rio.windows.Window.from_slices((ovl_ul[0] + overlap[0], ovl_br[0] -  overlap[0]),
+                                                          (ovl_ul[1] + overlap[1], ovl_br[1] - overlap[1]))
+            outer = np.any(ovl_ul==0) or np.any(ovl_br==self.src_props.shape)
+            win = OvlWindow(ovl_win, valid_win, outer)
+            windows.append(win)
+        return windows
 
     def _create_out_profile(self, init_profile):
         """Create a rasterio profile for the output raster based on a starting profile and configuration"""
@@ -732,7 +758,7 @@ class HomonimRefSpace(HomonImBase):
             # mask src_ds_array pixels that were not completely covered by src_array
             # TODO is this faster, or setting param_array[src_array == 0] = 0 below
             mask = (src_array != self.src_props.nodata).astype('uint8')
-            mask_ds_array = self._project_src_to_ref(mask, src_nodata=None)
+            mask_ds_array = self._project_src_to_ref(mask, src_nodata=None, resampling=Resampling.average)
             src_ds_array[np.logical_not(mask_ds_array == 1)] = hom_nodata
 
         if normalise:
