@@ -170,7 +170,7 @@ def cli(src_file=None, ref_file=None, win_size=(3, 3), method="gain_only", norm=
             # create output raster filename and homogenise
             post_fix = _create_homo_postfix(space=homo_space, method=method, win_size=win_size, normalise=norm)
             homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
-            him.homogenise(homo_filename, method=method, win_size=win_size, normalise=norm)
+            him.homogenise_by_band(homo_filename, method=method, win_size=win_size, normalise=norm)
 
             # set metadata in output file
             meta_dict = dict(HOMO_SRC_FILE=src_filename.name, HOMO_REF_FILE=pathlib.Path(ref_file).name,

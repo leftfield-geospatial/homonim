@@ -32,7 +32,7 @@ ref_filename = pathlib.Path(r"V:/Data/HomonimEgs/Sequoia_2017_02_28_JonasKop/Ref
 # ref_filename = pathlib.Path(r"V:\Data\HomonimEgs\NGI_3322A_2010_HotSpotSeamLineEg\Reference\LANDSAT-LE07-C02-T1_L2-2010_02_03-2010_02_19-Q_MOSAIC_COMP_B3214.tif")
 
 hom = homonim.HomonimRefSpace(src_filename, ref_filename, win_size=[15, 15])
-hom.homogenise(src_filename.parent.joinpath(src_filename.stem + '_HOMO_REF_L7_GainAndOffset' + src_filename.suffix))
+hom.homogenise_by_band(src_filename.parent.joinpath(src_filename.stem + '_HOMO_REF_L7_GainAndOffset' + src_filename.suffix))
 
 
 ##

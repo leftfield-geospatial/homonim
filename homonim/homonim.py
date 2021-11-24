@@ -33,6 +33,7 @@ import rasterio as rio
 from rasterio import windows
 from rasterio.fill import fillnodata
 from rasterio.warp import reproject, Resampling, transform_geom, transform_bounds, calculate_default_transform
+from rasterio.vrt import WarpedVRT
 from shapely.geometry import box, shape
 from tqdm import tqdm
 
@@ -65,7 +66,7 @@ def expand_window_to_grid(win):
     row_off, row_frac = np.divmod(win.row_off, 1)
     width = np.ceil(win.width + col_frac)
     height = np.ceil(win.height + row_frac)
-    exp_win = rio.windows.Window(col_off, row_off, width, height)
+    exp_win = rio.windows.Window(col_off.astype('int'), row_off.astype('int'), width.astype('int'), height.astype('int'))
     return exp_win
 
 
@@ -73,7 +74,7 @@ def expand_window_to_grid(win):
 RasterProps = namedtuple('RasterProps', ['crs', 'transform', 'shape', 'res', 'bounds', 'nodata', 'count', 'profile'])
 
 """Overlapping window object"""
-OvlWindow = namedtuple('OvlWindow', ['ovl_win', 'out_win', 'outer'])
+OvlWindow = namedtuple('OvlWindow', ['src_win', 'src_transform', 'ref_win', 'ref_transform', 'out_win', 'outer'])
 
 """Internal homonim nodata value"""
 hom_nodata = 0
@@ -213,54 +214,28 @@ class HomonImBase:
         """
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
             with rio.open(self._ref_filename, 'r') as ref_im:
-                # find source source bounds in ref CRS  (possibly same CRS)
-                ref_src_bounds = transform_bounds(src_im.crs, ref_im.crs, *src_im.bounds)
-
-                # find ref window that covers source and is aligned with ref grid
-                ref_src_win = rio.windows.from_bounds(*ref_src_bounds, transform=ref_im.transform)
-                ref_src_win = expand_window_to_grid(ref_src_win)
-
-                # transform and bounds of ref_src_win in ref CRS
-                ref_src_transform = rio.windows.transform(ref_src_win, ref_im.transform)
-                ref_src_bounds = rio.windows.bounds(ref_src_win, ref_im.transform)
-
-                # TODO: consider reading in tiles for large ref ims
-                # TODO: how to deal with pixel alignment i.e. if ref_win is float below,
-                #   including resampling below with a non-NN option, does resample to the float window offsets
-                #   but should we not rather resample the source to the ref grid than sort of the other way around
-
-                ref_bands = range(1, src_im.count + 1)
-                _ref_array = ref_im.read(ref_bands, window=ref_src_win).astype(hom_dtype)
-
-                # check for for valid pixel values
-                ref_mask = ref_im.read_masks(ref_bands, window=ref_src_win).astype('bool')
-                if np.any(_ref_array[ref_mask] <= 0):
-                    raise Exception(f'Reference image {self._ref_filename.name} contains pixel values <=0.')
-
                 if src_im.crs.to_proj4() != ref_im.crs.to_proj4():  # re-project the reference image to source CRS
                     # TODO: here we reproject from transform on the ref grid and that include source bounds
                     #   we could just project into src_im transform though too.
                     logger.warning('Reprojecting reference image to the source CRS. '
                                    'To avoid this step, provide reference and source images in the same CRS')
+                with WarpedVRT(ref_im, crs=src_im.crs, resampling=Resampling.bilinear) as ref_vrt:
+                    ref_win = ref_vrt.window(*src_im.bounds)
+                    ref_win = expand_window_to_grid(ref_win)
+                    ref_transform = ref_vrt.window_transform(ref_win)
+                    ref_bounds = ref_vrt.window_bounds(ref_win)
 
-                    # transform and dimensions of reprojected ref ROI
-                    ref_transform, width, height = calculate_default_transform(ref_im.crs, src_im.crs,
-                                                                               ref_src_win.width,
-                                                                               ref_src_win.height, *ref_src_bounds)
-                    ref_array = np.zeros((src_im.count, height, width), dtype=hom_dtype)
-                    # TODO: another thing to think of is that we ideally shouldn't reproject the reference unnecessarily to avoid damaging radiometric info
-                    #  this could mean we reproject the source to/from ref CRS rather than just resample it
-                    _, xform = reproject(_ref_array, ref_array, src_transform=ref_src_transform, src_crs=ref_im.crs,
-                                         dst_transform=ref_transform, dst_crs=src_im.crs,
-                                         resampling=Resampling.bilinear,
-                                         num_threads=multiprocessing.cpu_count(), dst_nodata=hom_nodata)
-                else:
-                    # TODO: can we allow reference nodata covering the source area or should we throw an exception if this is the case
-                    # replace reference nodata with internal nodata value
+                    ref_bands = range(1, src_im.count + 1)
+                    ref_array = ref_im.read(ref_bands, window=ref_win).astype(hom_dtype)
+
+                    # check for for valid pixel values
+                    ref_mask = ref_im.read_masks(ref_bands, window=ref_win).astype('bool')
+                    if np.any(ref_array[ref_mask] <= 0):
+                        raise Exception(f'Reference image {self._ref_filename.name} contains pixel values <=0.')
+
                     if (ref_im.nodata is not None) and (ref_im.nodata != hom_nodata):
-                        _ref_array[_ref_array == ref_im.nodata] = hom_nodata
-                    ref_transform = ref_src_transform
-                    ref_array = _ref_array
+                        ref_array[ref_array == ref_im.nodata] = hom_nodata
+
                 # create a profile dict for ref_array
                 ref_profile = ref_im.profile.copy()
                 ref_profile['transform'] = ref_transform
@@ -271,7 +246,7 @@ class HomonImBase:
                 src_nodata = hom_nodata if src_im.nodata is None else src_im.nodata
 
                 self._ref_props = RasterProps(crs=src_im.crs, transform=ref_transform, shape=ref_array.shape[1:],
-                                              res=list(ref_im.res), bounds=ref_src_bounds, nodata=ref_nodata,
+                                              res=list(ref_im.res), bounds=ref_bounds, nodata=ref_nodata,
                                               count=ref_im.count, profile=ref_profile)
                 self._src_props = RasterProps(crs=src_im.crs, transform=src_im.transform, shape=src_im.shape,
                                               res=list(src_im.res), bounds=src_im.bounds, nodata=src_nodata,
@@ -284,21 +259,40 @@ class HomonImBase:
         overlap = np.array(overlap)
         block_size = np.array(block_size)
 
-        ovl_win_ul = np.mgrid[0:(self.src_props.shape[0] - 2 * overlap[0]):(block_size[0] - 2 * overlap[0]),
+        src_win_ul = np.mgrid[0:(self.src_props.shape[0] - 2 * overlap[0]):(block_size[0] - 2 * overlap[0]),
                      0:(self.src_props.shape[1] - 2 * overlap[1]):(block_size[1] - 2 * overlap[1])]
-        ovl_win_br = ovl_win_ul + block_size.reshape(-1, 1, 1)
-        ovl_win_br[0, -1, :] = self.src_props.shape[0]
-        ovl_win_br[1, :, -1] = self.src_props.shape[1]
+        src_win_br = src_win_ul + block_size.reshape(-1, 1, 1)
+        src_win_br[0, -1, :] = self.src_props.shape[0]
+        src_win_br[1, :, -1] = self.src_props.shape[1]
 
-        windows = []
-        for ovl_ul, ovl_br in zip(ovl_win_ul.reshape(2, -1).T, ovl_win_br.reshape(2, -1).T):
-            ovl_win = rio.windows.Window.from_slices((ovl_ul[0], ovl_br[0]), (ovl_ul[1], ovl_br[1]))
-            valid_win = rio.windows.Window.from_slices((ovl_ul[0] + overlap[0], ovl_br[0] -  overlap[0]),
+        ovl_wins = []
+        for ovl_ul, ovl_br in zip(src_win_ul.reshape(2, -1).T, src_win_br.reshape(2, -1).T):
+            src_win = rio.windows.Window.from_slices((ovl_ul[0], ovl_br[0]), (ovl_ul[1], ovl_br[1]))
+            out_win = rio.windows.Window.from_slices((ovl_ul[0] + overlap[0], ovl_br[0] -  overlap[0]),
                                                           (ovl_ul[1] + overlap[1], ovl_br[1] - overlap[1]))
+
+            src_transform = rio.windows.transform(src_win, self.src_props.transform)
+            src_win_bounds = windows.bounds(src_win, self.src_props.transform)
+            ref_win = windows.from_bounds(*src_win_bounds, transform=self.ref_props.transform)
+            ref_win = expand_window_to_grid(ref_win)
+            ref_transform = rio.windows.transform(ref_win, self.ref_props.transform)
+
             outer = np.any(ovl_ul==0) or np.any(ovl_br==self.src_props.shape)
-            win = OvlWindow(ovl_win, valid_win, outer)
-            windows.append(win)
-        return windows
+            ovl_win = OvlWindow(src_win, src_transform, ref_win, ref_transform, out_win, outer)
+            ovl_wins.append(ovl_win)
+
+        if False:
+            ref_src_bounds = transform_bounds(src_im.crs, ref_im.crs, *src_im.bounds)
+
+            # find ref window that covers source and is aligned with ref grid
+            ref_src_win = rio.windows.from_bounds(*ref_src_bounds, transform=ref_im.transform)
+            ref_src_win = expand_window_to_grid(ref_src_win)
+
+            # transform and bounds of ref_src_win in ref CRS
+            ref_src_transform = rio.windows.transform(ref_src_win, ref_im.transform)
+            ref_src_bounds = rio.windows.bounds(ref_src_win, ref_im.transform)
+
+        return ovl_wins
 
     def _create_out_profile(self, init_profile):
         """Create a rasterio profile for the output raster based on a starting profile and configuration"""
@@ -364,8 +358,8 @@ class HomonImBase:
                 homo_meta_dict = {k: v for k, v in ref_meta_dict.items() if k in ['ABBREV', 'ID', 'NAME']}
                 homo_im.update_tags(bi, **homo_meta_dict)
 
-    def _project_src_to_ref(self, src_array, src_nodata=hom_nodata, dst_dtype=hom_dtype, dst_nodata=hom_nodata,
-                            resampling=None):
+    def _project_src_to_ref(self, src_array, src_nodata=hom_nodata, src_transform=None, dst_dtype=hom_dtype,
+                            dst_nodata=hom_nodata, dst_transform=None, resampling=None):
         """
         Re-project an array from source to reference CRS
 
@@ -375,10 +369,16 @@ class HomonImBase:
                    Source raster array
         src_nodata: int, float, optional
                     Nodata value for src_array (Default: 0)
+        src_transform: rasterio.Affine, optional
+                        Affine transform for src_array (Default: transform for the full source raster)
         dst_dtype: str, type, optional
                     Data type for re-projected array. (Default: float32)
         dst_nodata: int, float, optional
                     Nodata value for re-projected array (Default: 0)
+        dst_transform: rasterio.Affine, optional
+                        Affine transform for re-projected array (Default: transform for the reference raster)
+        resampling: rasterio.warp.Resampling, optional
+                       Resampling method (Default: configured 'ref2src_interp' value)
 
         Returns
         -------
@@ -393,13 +393,19 @@ class HomonImBase:
         if resampling is None:
             resampling = Resampling[self._homo_config['src2ref_interp']]
 
+        if src_transform is None:
+            src_transform = self.src_props.transform
+
+        if dst_transform is None:
+            dst_transform = self.ref_props.transform
+
         # TODO: checks on nodata vals, that a dest_nodata==0 will not conflict with pixel values
         _, _ = reproject(
             src_array,
             destination=ref_array,
-            src_transform=self.src_props.transform,
+            src_transform=src_transform,
             src_crs=self.src_props.crs,
-            dst_transform=self.ref_props.transform,
+            dst_transform=dst_transform,
             dst_crs=self.src_props.crs,
             resampling=resampling,
             num_threads=multiprocessing.cpu_count(),
@@ -408,8 +414,8 @@ class HomonImBase:
         )
         return ref_array
 
-    def _project_ref_to_src(self, ref_array, ref_nodata=hom_nodata, dst_dtype=hom_dtype, dst_nodata=hom_nodata,
-                            resampling=None):
+    def _project_ref_to_src(self, ref_array, ref_nodata=hom_nodata, ref_transform=None, dst_dtype=hom_dtype,
+                            dst_nodata=hom_nodata, dst_transform=None, resampling=None):
         """
         Re-project an array from reference to source CRS
 
@@ -419,10 +425,16 @@ class HomonImBase:
                    Reference CRS raster array to re-project
         ref_nodata: int, float, optional
                     Nodata value for ref_array (Default: 0)
+        ref_transform: rasterio.Affine, optional
+                        Affine transform for ref_array (Default: transform for the reference raster)
         dst_dtype: str, type, optional
                     Data type for re-projected array. (Default: float32)
         dst_nodata: int, float, optional
                     Nodata value for re-projected array (Default: 0)
+        dst_transform: rasterio.Affine, optional
+                        Affine transform for re-projected array (Default: transform for the source raster)
+        resampling: rasterio.warp.Resampling, optional
+                       Resampling method (Default: configured 'ref2src_interp' value)
 
         Returns
         -------
@@ -437,13 +449,20 @@ class HomonImBase:
         if resampling is None:
             resampling = Resampling[self._homo_config['ref2src_interp']]
 
+        if ref_transform is None:
+            ref_transform = self.ref_props.transform
+
+        if dst_transform is None:
+            dst_transform = self.src_props.transform
+
+
         # TODO: checks on nodata vals, that a dest_nodata==0 will not conflict with pixel values
         _, _ = reproject(
             ref_array,
             destination=src_array,
-            src_transform=self.ref_props.transform,
+            src_transform=ref_transform,
             src_crs=self.src_props.crs,
-            dst_transform=self.src_props.transform,
+            dst_transform=dst_transform,
             dst_crs=self.src_props.crs,
             resampling=resampling,
             num_threads=multiprocessing.cpu_count(),
@@ -652,9 +671,9 @@ class HomonImBase:
         """
         raise NotImplementedError()
 
-    def homogenise(self, out_filename, method='gain_only', win_size=(5, 5), normalise=False):
+    def homogenise_by_band(self, out_filename, method='gain_only', win_size=(5, 5), normalise=False):
         """
-        Homogenise a raster file.
+        Homogenise a raster file by band.
 
         Parameters
         ----------
@@ -732,6 +751,106 @@ class HomonImBase:
                     param_im.close()
                 bar.update(1)
                 bar.close()
+
+        if self._homo_config['debug']:
+            # print profiling info
+            # (tottime is the total time spent in the function alone. cumtime is the total time spent in the function
+            # plus all functions that this function called)
+            proc_profile.disable()
+            proc_stats = pstats.Stats(proc_profile).sort_stats('cumtime')
+            logger.debug(f'Processing time:')
+            proc_stats.print_stats(20)
+
+            current, peak = tracemalloc.get_traced_memory()
+            logger.debug(f"Memory usage: current: {current / 10 ** 6:.1f} MB, peak: {peak / 10 ** 6:.1f} MB")
+
+    def homogenise_by_block(self, out_filename, method='gain_only', win_size=(5, 5), normalise=False):
+        """
+        Homogenise a raster file by block.
+
+        Parameters
+        ----------
+        out_filename: str, pathlib.Path
+                      Path of the homogenised raster file to create.
+        method: str, optional
+                The homogenisation method: ['gain_only'|'gain_offset'].  (Default: 'gain_only')
+        win_size : numpy.array_like, list, tuple, optional
+                   Sliding window (width, height) in reference pixels.
+        normalise: bool, optional
+                   Perform image-wide normalisation prior to homogenisation.  (Default: False)
+        """
+        win_size = np.array(win_size)
+        if not np.all(np.mod(win_size, 2) == 1):
+            raise Exception('win_size must be odd in both dimensions')
+
+        with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
+            if self._homo_config['debug']:
+                # setup profiling
+                tracemalloc.start()
+                proc_profile = cProfile.Profile()
+                proc_profile.enable()
+                param_profile = self._create_param_profile(src_im.profile.copy())
+
+                # create parameter raster file
+                param_out_file_name = self._create_param_filename(out_filename)
+                param_im = rio.open(param_out_file_name, 'w', **param_profile)
+
+            # create the output raster file
+            out_profile = self._create_out_profile(src_im.profile)
+            out_im = rio.open(out_filename, 'w', **out_profile)  # avoid too many nested indents with 'with' statements
+
+            # initialise process by band
+            bands = list(range(1, src_im.count + 1))
+            # TODO: what happens when src res is not an integer factor of ref res?
+            overlap = (np.floor(win_size / 2) * np.round(np.array(self.ref_props.res) / np.array(self.src_props.res))).astype(int)
+            ovl_wins = self._overlap_blocks(block_size=(252, 252), overlap=overlap)
+            bar = tqdm(total=len(bands) + 1)
+            bar.update(0)
+            for bi in bands:
+                read_lock = threading.Lock()
+                write_lock = threading.Lock()
+                param_lock = threading.Lock()
+                try:
+                    def process_win(ovl_win):
+                        """Thread-safe function to homogenise a window of src_im"""
+
+                        with read_lock:
+                            src_array = src_im.read(bi, window=ovl_win.src_win, out_dtype=hom_dtype)
+
+                        # TODO: the below is wrong, how do we get the ref window corresponding to ovl_win.ovl_win?
+                        ref_array = self.ref_array[bi - 1, :, :][ovl_win.ref_win.toslices()]
+                        out_array, param_array = self._homogenise_array(ref_array, src_array,
+                                                                        method=method, win_size=win_size,
+                                                                        normalise=normalise)
+
+                        if out_im.nodata != hom_nodata:
+                            out_array[out_array == hom_nodata] = out_im.nodata
+
+                        if self._homo_config['debug']:
+                            with param_lock:
+                                for pi in range(param_array.shape[0]):
+                                    _bi = bi + pi * src_im.count
+                                    param_im.write(param_array[pi, :, :].astype(param_im.dtypes[_bi - 1]), indexes=_bi)
+
+                        with write_lock:
+                            _out_array = out_array[overlap[0]:-overlap[0], overlap[1]:-overlap[1]]
+                            out_im.write(out_array.astype(out_im.dtypes[bi - 1]), window=ovl_win.out_win, indexes=bi)
+                            bar.update(1)
+
+                    if self._homo_config['multithread']:
+                        # process bands in concurrent threads
+                        with concurrent.futures.ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
+                            executor.map(process_win, ovl_wins)
+                    else:
+                        # process bands consecutively
+                        for ovl_win in ovl_wins:
+                            process_win(ovl_win)
+                finally:
+                    out_im.close()
+                    if self._homo_config['debug']:
+                        param_im.close()
+                    bar.update(1)
+                    bar.close()
 
         if self._homo_config['debug']:
             # print profiling info
