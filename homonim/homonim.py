@@ -537,12 +537,6 @@ class HomonImBase:
         ratio_sum = cv.boxFilter(ratio_array, -1, win_size, **filter_args)
         mask_sum = cv.boxFilter(mask.astype(hom_dtype), -1, win_size, **filter_args)
 
-        # mask out parameter pixels that were not completely covered by a window of valid data
-        # TODO: this interacts with mask_partial_interp, so rather do it in homogenise after --ref-space US?
-        #   this is sort of the same question as, is it better to do pure extrapolation, or interpolation with semi-covered data?
-        if self._homo_config['mask_partial_window']:
-            mask &= (mask_sum >= np.product(win_size))
-
         # calculate gains for valid pixels
         param_array = np.full((1, *src_array.shape), fill_value=hom_nodata, dtype=hom_dtype)
         _ = np.divide(ratio_sum, mask_sum, out=param_array[0, :, :], where=mask.astype('bool', copy=False))
@@ -619,13 +613,6 @@ class HomonImBase:
                 # TODO: avoid a copy here somehow?
                 param_array = np.concatenate((param_array, r2_array.reshape(1, *r2_array.shape)), axis=0)
 
-        # TODO: this interacts with mask_partial_interp, so rather do it in homogenise after --ref-space US?
-        #   this is sort of the same question as, is it better to do pure extrapolation, or interpolation with semi-covered data?
-        # mask out parameter pixels that were not completely covered by a window of valid data
-        if self._homo_config['mask_partial_window']:
-            mask &= (mask_sum >= np.product(win_size))
-            param_array[:, ~mask] = hom_nodata
-
         return param_array
 
     def _homogenise_array(self, ref_array, src_array, method='gain_only', win_size=(5, 5), normalise=False,
@@ -647,7 +634,7 @@ class HomonImBase:
                    Perform image-wide normalisation prior to homogenisation.  (Default: False)
         Returns
         -------
-        param_array: K x M x N array of linear model parameters correspinding to src_ and ref_array.
+        param_array: K x M x N array of linear model parameters corresponding to src_ and ref_array.
                      K=1 for method='gain_only' i.e. the gains and K=2 for method='gain_offset'.
                      param_array[0, :, :] contains the gains, and param_array[1, :, :] contains the offsets for
                      method='gain_offset'.
@@ -679,6 +666,7 @@ class HomonImBase:
                 tracemalloc.start()
                 proc_profile = cProfile.Profile()
                 proc_profile.enable()
+                # TODO: NB adjust param_profile according to src-space or ref-space (self.ref_props.profile)
                 param_profile = self._create_param_profile(src_im.profile.copy())
 
                 # create parameter raster file
@@ -880,10 +868,16 @@ class HomonimRefSpace(HomonImBase):
         param_array = self._project_ref_to_src(param_ds_array[:2, :, :], ref_transform=ref_transform,
                                                dst_transform=src_transform)
 
-        if self._homo_config['mask_partial_interp']:
-            # mask boundary param_array pixels that were extrapolated ("partially interpolated") rather than interpolated
+        if self._homo_config['mask_partial_interp'] or self._homo_config['mask_partial_window']:
+            # mask boundary param_array pixels that not fully covered by a window, or were extrapolated
+            # ("partially interpolated") rather than purely interpolated
             param_mask = (param_array[0, :, :] == hom_nodata)
-            kernel_size = np.ceil(np.divide(self.ref_props.res, self.src_props.res)).astype('int32')  # /2
+            res_ratio = np.divide(self.ref_props.res, self.src_props.res)
+            # mask_partial_window covers mask_partial_interp, so don't do both
+            if self._homo_config['mask_partial_window']:
+                kernel_size = np.ceil(res_ratio*win_size).astype('int32')
+            elif self._homo_config['mask_partial_interp']:
+                kernel_size = np.ceil(res_ratio).astype('int32')  # /2
             se = cv2.getStructuringElement(cv2.MORPH_RECT, tuple(kernel_size))
             param_mask = cv2.dilate(param_mask.astype('uint8', copy=False), se).astype('bool', copy=False)
             param_array[:, param_mask] = hom_nodata
@@ -926,6 +920,13 @@ class HomonimSrcSpace(HomonImBase):
             param_array = self._find_gains_cv(ref_us_array, src_array, win_size=win_size)
         else:
             param_array = self._find_gain_and_offset_cv(ref_us_array, src_array, win_size=win_size)
+
+        if self._homo_config['mask_partial_window']:
+            # mask boundary param_array pixels that not fully covered by a window
+            param_mask = (param_array[0, :, :] == hom_nodata)
+            se = cv2.getStructuringElement(cv2.MORPH_RECT, tuple(win_size))
+            param_mask = cv2.dilate(param_mask.astype('uint8', copy=False), se).astype('bool', copy=False)
+            param_array[:, param_mask] = hom_nodata
 
         # apply the model to src_array
         out_array = param_array[0, :, :] * src_array
