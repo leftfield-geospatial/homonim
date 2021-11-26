@@ -32,12 +32,12 @@ import numpy as np
 import rasterio as rio
 from rasterio import windows
 from rasterio.fill import fillnodata
-from rasterio.warp import reproject, Resampling, transform_geom, transform_bounds, calculate_default_transform
 from rasterio.vrt import WarpedVRT
+from rasterio.warp import reproject, Resampling, transform_geom, transform_bounds
 from shapely.geometry import box, shape
 from tqdm import tqdm
 
-from homonim import get_logger
+from homonim import get_logger, hom_dtype, hom_nodata
 
 logger = get_logger(__name__)
 
@@ -74,13 +74,7 @@ def expand_window_to_grid(win):
 RasterProps = namedtuple('RasterProps', ['crs', 'transform', 'shape', 'res', 'bounds', 'nodata', 'count', 'profile'])
 
 """Overlapping window object"""
-OvlWindow = namedtuple('OvlWindow', ['src_win', 'src_transform', 'ref_win', 'ref_transform', 'out_win', 'outer'])
-
-"""Internal homonim nodata value"""
-hom_nodata = 0
-
-"""Internal homonim data type"""
-hom_dtype = np.float32
+OvlBlock = namedtuple('OvlBlock', ['src_block', 'src_transform', 'ref_block', 'ref_transform', 'out_block', 'outer'])
 
 
 class HomonImBase:
@@ -259,40 +253,28 @@ class HomonImBase:
         overlap = np.array(overlap)
         block_size = np.array(block_size)
 
-        src_win_ul = np.mgrid[0:(self.src_props.shape[0] - 2 * overlap[0]):(block_size[0] - 2 * overlap[0]),
+        src_block_ul = np.mgrid[0:(self.src_props.shape[0] - 2 * overlap[0]):(block_size[0] - 2 * overlap[0]),
                      0:(self.src_props.shape[1] - 2 * overlap[1]):(block_size[1] - 2 * overlap[1])]
-        src_win_br = src_win_ul + block_size.reshape(-1, 1, 1)
-        src_win_br[0, -1, :] = self.src_props.shape[0]
-        src_win_br[1, :, -1] = self.src_props.shape[1]
+        src_block_br = src_block_ul + block_size.reshape(-1, 1, 1)
+        src_block_br[0, -1, :] = self.src_props.shape[0]
+        src_block_br[1, :, -1] = self.src_props.shape[1]
 
-        ovl_wins = []
-        for ovl_ul, ovl_br in zip(src_win_ul.reshape(2, -1).T, src_win_br.reshape(2, -1).T):
-            src_win = rio.windows.Window.from_slices((ovl_ul[0], ovl_br[0]), (ovl_ul[1], ovl_br[1]))
-            out_win = rio.windows.Window.from_slices((ovl_ul[0] + overlap[0], ovl_br[0] -  overlap[0]),
+        ovl_blocks = []
+        for ovl_ul, ovl_br in zip(src_block_ul.reshape(2, -1).T, src_block_br.reshape(2, -1).T):
+            src_block = rio.windows.Window.from_slices((ovl_ul[0], ovl_br[0]), (ovl_ul[1], ovl_br[1]))
+            out_block = rio.windows.Window.from_slices((ovl_ul[0] + overlap[0], ovl_br[0] -  overlap[0]),
                                                           (ovl_ul[1] + overlap[1], ovl_br[1] - overlap[1]))
 
-            src_transform = rio.windows.transform(src_win, self.src_props.transform)
-            src_win_bounds = windows.bounds(src_win, self.src_props.transform)
-            ref_win = windows.from_bounds(*src_win_bounds, transform=self.ref_props.transform)
-            ref_win = expand_window_to_grid(ref_win)
-            ref_transform = rio.windows.transform(ref_win, self.ref_props.transform)
+            src_block_transform = rio.windows.transform(src_block, self.src_props.transform)
+            src_block_bounds = windows.bounds(src_block, self.src_props.transform)
+            ref_block = windows.from_bounds(*src_block_bounds, transform=self.ref_props.transform)
+            ref_block = expand_window_to_grid(ref_block)
+            ref_block_transform = rio.windows.transform(ref_block, self.ref_props.transform)
 
             outer = np.any(ovl_ul==0) or np.any(ovl_br==self.src_props.shape)
-            ovl_win = OvlWindow(src_win, src_transform, ref_win, ref_transform, out_win, outer)
-            ovl_wins.append(ovl_win)
-
-        if False:
-            ref_src_bounds = transform_bounds(src_im.crs, ref_im.crs, *src_im.bounds)
-
-            # find ref window that covers source and is aligned with ref grid
-            ref_src_win = rio.windows.from_bounds(*ref_src_bounds, transform=ref_im.transform)
-            ref_src_win = expand_window_to_grid(ref_src_win)
-
-            # transform and bounds of ref_src_win in ref CRS
-            ref_src_transform = rio.windows.transform(ref_src_win, ref_im.transform)
-            ref_src_bounds = rio.windows.bounds(ref_src_win, ref_im.transform)
-
-        return ovl_wins
+            ovl_win = OvlBlock(src_block, src_block_transform, ref_block, ref_block_transform, out_block, outer)
+            ovl_blocks.append(ovl_win)
+        return ovl_blocks
 
     def _create_out_profile(self, init_profile):
         """Create a rasterio profile for the output raster based on a starting profile and configuration"""
@@ -646,7 +628,8 @@ class HomonImBase:
 
         return param_array
 
-    def _homogenise_array(self, ref_array, src_array, method='gain_only', win_size=(5, 5), normalise=False):
+    def _homogenise_array(self, ref_array, src_array, method='gain_only', win_size=(5, 5), normalise=False,
+                          ref_transform=None, src_transform=None):
         """
         Wrapper to homogenise an array of source image data
 
@@ -806,22 +789,23 @@ class HomonImBase:
             ovl_wins = self._overlap_blocks(block_size=(252, 252), overlap=overlap)
             bar = tqdm(total=len(bands) + 1)
             bar.update(0)
-            for bi in bands:
-                read_lock = threading.Lock()
-                write_lock = threading.Lock()
-                param_lock = threading.Lock()
-                try:
-                    def process_win(ovl_win):
+            read_lock = threading.Lock()
+            write_lock = threading.Lock()
+            param_lock = threading.Lock()
+            try:
+                for bi in bands:
+                    def process_block(ovl_block: OvlBlock):
                         """Thread-safe function to homogenise a window of src_im"""
 
                         with read_lock:
-                            src_array = src_im.read(bi, window=ovl_win.src_win, out_dtype=hom_dtype)
+                            src_array = src_im.read(bi, window=ovl_block.src_block, out_dtype=hom_dtype)
 
-                        # TODO: the below is wrong, how do we get the ref window corresponding to ovl_win.ovl_win?
-                        ref_array = self.ref_array[bi - 1, :, :][ovl_win.ref_win.toslices()]
-                        out_array, param_array = self._homogenise_array(ref_array, src_array,
-                                                                        method=method, win_size=win_size,
-                                                                        normalise=normalise)
+                        # TODO: the below is wrong, how do we get the ref window corresponding to ovl_block.ovl_block?
+                        ref_array = self.ref_array[bi - 1, :, :][ovl_block.ref_block.toslices()]
+                        out_array, param_array = self._homogenise_array(
+                            ref_array, src_array, method=method, win_size=win_size, normalise=normalise,
+                            ref_transform=ovl_block.ref_transform, src_transform=ovl_block.src_transform
+                        )
 
                         if out_im.nodata != hom_nodata:
                             out_array[out_array == hom_nodata] = out_im.nodata
@@ -830,27 +814,28 @@ class HomonImBase:
                             with param_lock:
                                 for pi in range(param_array.shape[0]):
                                     _bi = bi + pi * src_im.count
-                                    param_im.write(param_array[pi, :, :].astype(param_im.dtypes[_bi - 1]), indexes=_bi)
+                                    _param_array = param_array[pi, overlap[0]:-overlap[0], overlap[1]:-overlap[1]]
+                                    param_im.write(_param_array.astype(param_im.dtypes[_bi - 1]), window=ovl_block.out_block, indexes=_bi)
 
                         with write_lock:
-                            _out_array = out_array[overlap[0]:-overlap[0], overlap[1]:-overlap[1]]
-                            out_im.write(out_array.astype(out_im.dtypes[bi - 1]), window=ovl_win.out_win, indexes=bi)
+                            _out_array = out_array[:, overlap[0]:-overlap[0], overlap[1]:-overlap[1]]
+                            out_im.write(_out_array.astype(out_im.dtypes[bi - 1]), window=ovl_block.out_block, indexes=bi)
                             bar.update(1)
 
                     if self._homo_config['multithread']:
                         # process bands in concurrent threads
                         with concurrent.futures.ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
-                            executor.map(process_win, ovl_wins)
+                            executor.map(process_block, ovl_wins)
                     else:
                         # process bands consecutively
                         for ovl_win in ovl_wins:
-                            process_win(ovl_win)
-                finally:
-                    out_im.close()
-                    if self._homo_config['debug']:
-                        param_im.close()
-                    bar.update(1)
-                    bar.close()
+                            process_block(ovl_win)
+            finally:
+                out_im.close()
+                if self._homo_config['debug']:
+                    param_im.close()
+                bar.update(1)
+                bar.close()
 
         if self._homo_config['debug']:
             # print profiling info
@@ -868,16 +853,19 @@ class HomonImBase:
 class HomonimRefSpace(HomonImBase):
     """Class for homogenising images in reference image space"""
 
-    def _homogenise_array(self, ref_array, src_array, method='gain_only', win_size=(5, 5), normalise=False):
+    def _homogenise_array(self, ref_array, src_array, method='gain_only', win_size=(5, 5), normalise=False,
+                          ref_transform=None, src_transform=None):
 
         # downsample src_array to reference grid
-        src_ds_array = self._project_src_to_ref(src_array, src_nodata=self.src_props.nodata)
+        src_ds_array = self._project_src_to_ref(src_array, src_nodata=self.src_props.nodata,
+                                                src_transform=src_transform, dst_transform=ref_transform)
 
         if self._homo_config['mask_partial_pixel']:
             # mask src_ds_array pixels that were not completely covered by src_array
             # TODO is this faster, or setting param_array[src_array == 0] = 0 below
             mask = (src_array != self.src_props.nodata).astype('uint8')
-            mask_ds_array = self._project_src_to_ref(mask, src_nodata=None, resampling=Resampling.average)
+            mask_ds_array = self._project_src_to_ref(mask, src_nodata=None, resampling=Resampling.average,
+                                                     src_transform=src_transform, dst_transform=ref_transform)
             src_ds_array[np.logical_not(mask_ds_array == 1)] = hom_nodata
 
         if normalise:
@@ -889,7 +877,8 @@ class HomonimRefSpace(HomonImBase):
             param_ds_array = self._find_gain_and_offset_cv(ref_array, src_ds_array, win_size=win_size)
 
         # upsample the parameter array to source grid
-        param_array = self._project_ref_to_src(param_ds_array[:2, :, :])
+        param_array = self._project_ref_to_src(param_ds_array[:2, :, :], ref_transform=ref_transform,
+                                               dst_transform=src_transform)
 
         if self._homo_config['mask_partial_interp']:
             # mask boundary param_array pixels that were extrapolated ("partially interpolated") rather than interpolated
@@ -917,13 +906,15 @@ class HomonimRefSpace(HomonImBase):
 class HomonimSrcSpace(HomonImBase):
     """Class for homogenising images in source image space"""
 
-    def _homogenise_array(self, ref_array, src_array, method='gain_only', win_size=(5, 5), normalise=False):
+    def _homogenise_array(self, ref_array, src_array, method='gain_only', win_size=(5, 5), normalise=False,
+                          ref_transform=None, src_transform=None):
         # re-assign source nodata if necessary
         if self.src_props.nodata != hom_nodata:
             src_array[src_array == self.src_props.nodata] = hom_nodata
 
         # upsample reference to source grid
-        ref_us_array = self._project_ref_to_src(ref_array, ref_nodata=self.ref_props.nodata)
+        ref_us_array = self._project_ref_to_src(ref_array, ref_nodata=self.ref_props.nodata, ref_transform=ref_transform,
+                                                dst_transform=src_transform)
 
         if normalise:  # normalise src_array in place
             self._src_image_offset(ref_us_array, src_array)
