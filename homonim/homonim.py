@@ -38,6 +38,7 @@ from shapely.geometry import box, shape
 from tqdm import tqdm
 
 from homonim import get_logger, hom_dtype, hom_nodata
+from homonim.raster_array import RasterArray
 
 logger = get_logger(__name__)
 
@@ -94,13 +95,13 @@ class HomonImBase:
             Dictionary for configuring output file format.
         """
         # TODO: refactor which parameters get passed here, and which to homogenise()
+        self._src_props = None
+        self._ref_props = None
         self._src_filename = pathlib.Path(src_filename)
         self._ref_filename = pathlib.Path(ref_filename)
         self._check_rasters()
 
-        self._src_props = None
-        self._ref_props = None
-        self._ref_array = None
+        # self._ref_array = None
 
         if homo_config is None:
             self._homo_config = {
@@ -128,25 +129,25 @@ class HomonImBase:
         else:
             self._out_config = out_config
 
-    @property
-    def ref_array(self):
-        """Reference image array collocated and covering source region in source CRS."""
-        if self._ref_array is None:
-            self._ref_array = self._read_ref()
-        return self._ref_array
+    # @property
+    # def ref_array(self):
+    #     """Reference image array collocated and covering source region in source CRS."""
+    #     if self._ref_array is None:
+    #         self._ref_array = self._read_ref()
+    #     return self._ref_array
 
     @property
     def src_props(self):
         """Source raster properties."""
         if self._src_props is None:
-            self._read_ref()
+            self._check_rasters()
         return self._src_props
 
     @property
     def ref_props(self):
         """Reference raster properties."""
         if self._ref_props is None:
-            self._read_ref()
+            self._check_rasters()
         return self._ref_props
 
     def _check_rasters(self):
@@ -171,33 +172,51 @@ class HomonImBase:
                         else:
                             raise ex
 
-            with rio.open(self._src_filename, 'r') as src_im, rio.open(self._ref_filename, 'r') as ref_im:
-                # check reference covers source
-                src_box = box(*src_im.bounds)
-                ref_box = box(*ref_im.bounds)
+            with rio.open(self._src_filename, 'r') as src_im, rio.open(self._ref_filename, 'r') as _ref_im:
+                if src_im.crs.to_proj4() != _ref_im.crs.to_proj4():  # re-project the reference image to source CRS
+                    # TODO: here we reproject from transform on the ref grid and that include source bounds
+                    #   we could just project into src_im transform though too.
+                    logger.warning('Reprojecting reference image to the source CRS. '
+                                   'To avoid this step, provide reference and source images in the same CRS')
+                with WarpedVRT(_ref_im, crs=src_im.crs, resampling=Resampling.bilinear) as ref_im:
 
-                # reproject the reference bounds if necessary
-                if src_im.crs.to_proj4() != ref_im.crs.to_proj4():  # CRS's don't match
-                    ref_box = shape(transform_geom(ref_im.crs, src_im.crs, ref_box))
+                    # check reference covers source
+                    src_box = box(*src_im.bounds)
+                    ref_box = box(*ref_im.bounds)
 
-                if not ref_box.covers(src_box):
-                    raise Exception(f'Reference image {self._ref_filename.stem} does not cover source image '
-                                    f'{self._src_filename.stem}.')
+                    if not ref_box.covers(src_box):
+                        raise Exception(f'Reference image {self._ref_filename.stem} does not cover source image '
+                                        f'{self._src_filename.stem}.')
 
-                # check reference has enough bands for the source
-                if src_im.count > ref_im.count:
-                    raise Exception(f'Reference image {self._ref_filename.stem} has fewer bands than source image '
-                                    f'{self._src_filename.stem}.')
+                    # check reference has enough bands for the source
+                    if src_im.count > ref_im.count:
+                        raise Exception(f'Reference image {self._ref_filename.stem} has fewer bands than source image '
+                                        f'{self._src_filename.stem}.')
 
-                # if the band counts don't match assume the first src_im.count bands of ref_im match those of src_im
-                if src_im.count != ref_im.count:
-                    logger.warning('Reference bands do not match source bands.  \n'
-                                   f'Using the first {src_im.count} bands of reference image  {self._ref_filename.stem}.')
+                    # if the band counts don't match assume the first src_im.count bands of ref_im match those of src_im
+                    if src_im.count != ref_im.count:
+                        logger.warning('Reference bands do not match source bands.  \n'
+                                       f'Using the first {src_im.count} bands of reference image  {self._ref_filename.stem}.')
 
-                for fn, nodata in zip([self._src_filename, self._ref_filename], [src_im.nodata, ref_im.nodata]):
-                    if nodata is None:
-                        logger.warning(f'{fn} has no nodata value, defaulting to {hom_nodata}.\n'
-                                       'Any invalid pixels in this image should be first be masked with nodata.')
+                    for fn, nodata in zip([self._src_filename, self._ref_filename], [src_im.nodata, ref_im.nodata]):
+                        if nodata is None:
+                            logger.warning(f'{fn} has no nodata value, defaulting to {hom_nodata}.\n'
+                                           'Any invalid pixels in this image should be first be masked with nodata.')
+
+                    src_nodata = hom_nodata if src_im.nodata is None else src_im.nodata
+                    ref_nodata = hom_nodata if ref_im.nodata is None else ref_im.nodata
+                    ref_win = expand_window_to_grid(ref_im.window(*src_im.bounds))
+                    ref_transform = ref_im.window_transform(ref_win)
+                    ref_shape = (ref_win.height, ref_win.width)
+                    ref_bounds = ref_im.window_bounds(ref_win)
+
+                    self._src_props = RasterProps(crs=src_im.crs, transform=src_im.transform, shape=src_im.shape,
+                                                  res=list(src_im.res), bounds=src_im.bounds, nodata=src_nodata,
+                                                  count=src_im.count, profile=src_im.profile)
+                    self._ref_props = RasterProps(crs=src_im.crs, transform=ref_transform, shape=ref_shape,
+                                                  res=list(ref_im.res), bounds=ref_bounds, nodata=ref_nodata,
+                                                  count=ref_im.count, profile=ref_im.profile)
+
                 # if src_im.crs != ref_im.crs:    # CRS's don't match
                 #     logger.warning('The reference will be re-projected to the source CRS.  \n'
                 #                    'To avoid this step, provide a reference image in the source CRS')
@@ -207,44 +226,14 @@ class HomonImBase:
         Read the source region from the reference image in the source CRS, and populate image properties.
         """
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
-            with rio.open(self._ref_filename, 'r') as ref_im:
-                if src_im.crs.to_proj4() != ref_im.crs.to_proj4():  # re-project the reference image to source CRS
-                    # TODO: here we reproject from transform on the ref grid and that include source bounds
-                    #   we could just project into src_im transform though too.
-                    logger.warning('Reprojecting reference image to the source CRS. '
-                                   'To avoid this step, provide reference and source images in the same CRS')
-                with WarpedVRT(ref_im, crs=src_im.crs, resampling=Resampling.bilinear) as ref_vrt:
-                    ref_win = ref_vrt.window(*src_im.bounds)
-                    ref_win = expand_window_to_grid(ref_win)
-                    ref_transform = ref_vrt.window_transform(ref_win)
-                    ref_bounds = ref_vrt.window_bounds(ref_win)
-
+            with rio.open(self._ref_filename, 'r') as _ref_im:
+                with WarpedVRT(_ref_im, crs=src_im.crs, resampling=Resampling.bilinear) as ref_im:
+                    ref_win = expand_window_to_grid(ref_im.window(*src_im.bounds))
                     ref_bands = range(1, src_im.count + 1)
                     ref_array = ref_im.read(ref_bands, window=ref_win).astype(hom_dtype)
 
-                    # check for for valid pixel values
-                    ref_mask = ref_im.read_masks(ref_bands, window=ref_win).astype('bool')
-                    if np.any(ref_array[ref_mask] <= 0):
-                        raise Exception(f'Reference image {self._ref_filename.name} contains pixel values <=0.')
-
                     if (ref_im.nodata is not None) and (ref_im.nodata != hom_nodata):
                         ref_array[ref_array == ref_im.nodata] = hom_nodata
-
-                # create a profile dict for ref_array
-                ref_profile = ref_im.profile.copy()
-                ref_profile['transform'] = ref_transform
-                ref_profile['crs'] = src_im.crs
-                ref_profile['width'] = ref_array.shape[2]
-                ref_profile['height'] = ref_array.shape[1]
-                ref_nodata = hom_nodata if ref_im.nodata is None else ref_im.nodata
-                src_nodata = hom_nodata if src_im.nodata is None else src_im.nodata
-
-                self._ref_props = RasterProps(crs=src_im.crs, transform=ref_transform, shape=ref_array.shape[1:],
-                                              res=list(ref_im.res), bounds=ref_bounds, nodata=ref_nodata,
-                                              count=ref_im.count, profile=ref_profile)
-                self._src_props = RasterProps(crs=src_im.crs, transform=src_im.transform, shape=src_im.shape,
-                                              res=list(src_im.res), bounds=src_im.bounds, nodata=src_nodata,
-                                              count=src_im.count, profile=src_im.profile)
 
         return ref_array
 
@@ -497,6 +486,7 @@ class HomonImBase:
         _ref_array = ref_array[src_mask]
         _src_array = src_array[src_mask]
 
+
         # find basic DOS type offset
         offset_model = np.zeros(2)
         offset_model[0] = 1
@@ -600,7 +590,7 @@ class HomonImBase:
             np.subtract(1, r2_array, out=r2_array, where=mask.astype('bool', copy=False))
 
             # fill ("inpaint") low R2 areas in the offset parameter
-            rf_mask = (r2_array < self._homo_config['r2_threshold']) | (param_array[0, :, :] < 0)
+            rf_mask = (r2_array < self._homo_config['r2_threshold']) | (param_array[0, :, :] <= 0)
             param_array[1, :, :] = fillnodata(param_array[1, :, :], ~rf_mask)
             param_array[1, ~mask] = hom_nodata  # re-set nodata as nodata areas will have been filled above
 
@@ -661,79 +651,86 @@ class HomonImBase:
             raise Exception('win_size must be odd in both dimensions')
 
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
-            if self._homo_config['debug']:
-                # setup profiling
-                tracemalloc.start()
-                proc_profile = cProfile.Profile()
-                proc_profile.enable()
-                # TODO: NB adjust param_profile according to src-space or ref-space (self.ref_props.profile)
-                param_profile = self._create_param_profile(src_im.profile.copy())
-
-                # create parameter raster file
-                param_out_file_name = self._create_param_filename(out_filename)
-                param_im = rio.open(param_out_file_name, 'w', **param_profile)
-
-            # create the output raster file
-            out_profile = self._create_out_profile(src_im.profile)
-            out_im = rio.open(out_filename, 'w', **out_profile)  # avoid too many nested indents with 'with' statements
-
-            # initialise process by band
-            bands = list(range(1, src_im.count + 1))
-            bar = tqdm(total=len(bands) + 1)
-            bar.update(0)
-            read_lock = threading.Lock()
-            write_lock = threading.Lock()
-            param_lock = threading.Lock()
-            try:
-                def process_band(bi):
-                    """Thread-safe function to homogenise band bi of src_im"""
-
-                    with read_lock:
-                        src_array = src_im.read(bi, out_dtype=hom_dtype)
-
-                    out_array, param_array = self._homogenise_array(self.ref_array[bi - 1, :, :], src_array,
-                                                                    method=method, win_size=win_size,
-                                                                    normalise=normalise)
-
-                    if out_im.nodata != hom_nodata:
-                        out_array[out_array == hom_nodata] = out_im.nodata
-
-                    if self._homo_config['debug']:
-                        with param_lock:
-                            for pi in range(param_array.shape[0]):
-                                _bi = bi + pi * src_im.count
-                                param_im.write(param_array[pi, :, :].astype(param_im.dtypes[_bi - 1]), indexes=_bi)
-
-                    with write_lock:
-                        out_im.write(out_array.astype(out_im.dtypes[bi - 1]), indexes=bi)
-                        bar.update(1)
-
-                if self._homo_config['multithread']:
-                    # process bands in concurrent threads
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
-                        executor.map(process_band, bands)
-                else:
-                    # process bands consecutively
-                    for bi in bands:
-                        process_band(bi)
-            finally:
-                out_im.close()
+            with rio.open(self._ref_filename, 'r') as _ref_im, WarpedVRT(_ref_im, crs=src_im.crs, resampling=Resampling.bilinear) as ref_im:
                 if self._homo_config['debug']:
-                    param_im.close()
-                bar.update(1)
-                bar.close()
+                    # setup profiling
+                    tracemalloc.start()
+                    proc_profile = cProfile.Profile()
+                    proc_profile.enable()
+                    # TODO: NB adjust param_profile according to src-space or ref-space (self.ref_props.profile)
+                    param_profile = self._create_param_profile(src_im.profile.copy())
 
-        if self._homo_config['debug']:
-            # print profiling info
-            # (tottime is the total time spent in the function alone. cumtime is the total time spent in the function
-            # plus all functions that this function called)
-            proc_profile.disable()
-            proc_stats = pstats.Stats(proc_profile).sort_stats('cumtime')
-            logger.debug(f'Processing time:')
-            proc_stats.print_stats(20)
+                    # create parameter raster file
+                    param_out_file_name = self._create_param_filename(out_filename)
+                    param_im = rio.open(param_out_file_name, 'w', **param_profile)
 
-            current, peak = tracemalloc.get_traced_memory()
-            logger.debug(f"Memory usage: current: {current / 10 ** 6:.1f} MB, peak: {peak / 10 ** 6:.1f} MB")
+                # create the output raster file
+                out_profile = self._create_out_profile(src_im.profile)
+                out_im = rio.open(out_filename, 'w', **out_profile)  # avoid too many nested indents with 'with' statements
+
+                # initialise process by band
+                bands = list(range(1, src_im.count + 1))
+                bar = tqdm(total=len(bands) + 1)
+                bar.update(0)
+                src_read_lock = threading.Lock()
+                ref_read_lock = threading.Lock()
+                write_lock = threading.Lock()
+                param_lock = threading.Lock()
+                try:
+                    def process_band(bi):
+                        """Thread-safe function to homogenise band bi of src_im"""
+
+                        with src_read_lock:
+                            _src_array = src_im.read(bi, out_dtype=hom_dtype)
+                            src_array = RasterArray.from_profile(_src_array, **src_im.profile)
+
+                        with ref_read_lock:
+                            ref_win = expand_window_to_grid(ref_im.window(*src_im.bounds))
+                            _ref_array = ref_im.read(bi, window=ref_win, out_dtype=hom_dtype)
+                            ref_array = RasterArray.from_profile(_ref_array, window=ref_win, **ref_im.profile)
+
+                        out_array, param_array = self._homogenise_array(ref_array, src_array, method=method,
+                                                                        win_size=win_size, normalise=normalise)
+
+                        if out_im.nodata != hom_nodata:
+                            out_array[out_array == hom_nodata] = out_im.nodata
+
+                        if self._homo_config['debug']:
+                            with param_lock:
+                                for pi in range(param_array.shape[0]):
+                                    _bi = bi + pi * src_im.count
+                                    param_im.write(param_array[pi, :, :].astype(param_im.dtypes[_bi - 1]), indexes=_bi)
+
+                        with write_lock:
+                            out_im.write(out_array.astype(out_im.dtypes[bi - 1]), indexes=bi)
+                            bar.update(1)
+
+                    if self._homo_config['multithread']:
+                        # process bands in concurrent threads
+                        with concurrent.futures.ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
+                            executor.map(process_band, bands)
+                    else:
+                        # process bands consecutively
+                        for bi in bands:
+                            process_band(bi)
+                finally:
+                    out_im.close()
+                    if self._homo_config['debug']:
+                        param_im.close()
+                    bar.update(1)
+                    bar.close()
+
+            if self._homo_config['debug']:
+                # print profiling info
+                # (tottime is the total time spent in the function alone. cumtime is the total time spent in the function
+                # plus all functions that this function called)
+                proc_profile.disable()
+                proc_stats = pstats.Stats(proc_profile).sort_stats('cumtime')
+                logger.debug(f'Processing time:')
+                proc_stats.print_stats(20)
+
+                current, peak = tracemalloc.get_traced_memory()
+                logger.debug(f"Memory usage: current: {current / 10 ** 6:.1f} MB, peak: {peak / 10 ** 6:.1f} MB")
 
     def homogenise_by_block(self, out_filename, method='gain_only', win_size=(5, 5), normalise=False):
         """
@@ -845,34 +842,42 @@ class HomonimRefSpace(HomonImBase):
                           ref_transform=None, src_transform=None):
 
         # downsample src_array to reference grid
-        src_ds_array = self._project_src_to_ref(src_array, src_nodata=self.src_props.nodata,
-                                                src_transform=src_transform, dst_transform=ref_transform)
+        # src_ds_array = self._project_src_to_ref(src_array, src_nodata=self.src_props.nodata,
+        #                                         src_transform=src_transform, dst_transform=ref_transform)
+        # src_ds_array = src_array.reproject_like(ref_array.profile, resampling=self._homo_config['src2ref_interp'])
+        src_ds_array = src_array.reproject(dst_crs=ref_array.crs, dst_transform=ref_array.transform, dst_shape=ref_array.shape,
+                                           dst_nodata=hom_nodata, resampling=self._homo_config['src2ref_interp'])
 
         if self._homo_config['mask_partial_pixel']:
             # mask src_ds_array pixels that were not completely covered by src_array
             # TODO is this faster, or setting param_array[src_array == 0] = 0 below
-            mask = (src_array != self.src_props.nodata).astype('uint8')
-            mask_ds_array = self._project_src_to_ref(mask, src_nodata=None, resampling=Resampling.average,
-                                                     src_transform=src_transform, dst_transform=ref_transform)
-            src_ds_array[np.logical_not(mask_ds_array == 1)] = hom_nodata
+            mask_ds_array = src_array.mask.reproject_like(src_ds_array.profile, resampling=Resampling.average)
+            src_ds_array.array[np.logical_not(mask_ds_array.array == 1)] = hom_nodata
+            # mask = (src_array.array != src_array.nodata).astype('uint8')
+            # mask_ds_array = self._project_src_to_ref(mask, src_nodata=None, resampling=Resampling.average,
+            #                                          src_transform=src_transform, dst_transform=ref_transform)
+            # src_ds_array[np.logical_not(mask_ds_array == 1)] = hom_nodata
 
         if normalise:
-            norm_model = self._src_image_offset(ref_array, src_ds_array)
+            norm_model = self._src_image_offset(ref_array.array, src_ds_array.array)
 
         if method.lower() == 'gain_only':
-            param_ds_array = self._find_gains_cv(ref_array, src_ds_array, win_size=win_size)
+            _param_ds_array = self._find_gains_cv(ref_array.array, src_ds_array.array, win_size=win_size)
         else:
-            param_ds_array = self._find_gain_and_offset_cv(ref_array, src_ds_array, win_size=win_size)
+            _param_ds_array = self._find_gain_and_offset_cv(ref_array.array, src_ds_array.array, win_size=win_size)
 
         # upsample the parameter array to source grid
-        param_array = self._project_ref_to_src(param_ds_array[:2, :, :], ref_transform=ref_transform,
-                                               dst_transform=src_transform)
+        # param_array = self._project_ref_to_src(param_ds_array[:2, :, :], ref_transform=ref_transform,
+        #                                        dst_transform=src_transform)
+        param_ds_array = RasterArray.from_profile(_param_ds_array, **src_ds_array.profile)
+        param_array = param_ds_array.reproject(dst_crs=src_array.crs, dst_transform=src_array.transform, dst_shape=src_array.shape,
+                                               dst_nodata=hom_nodata, resampling=self._homo_config['ref2src_interp'])
 
         if self._homo_config['mask_partial_interp'] or self._homo_config['mask_partial_window']:
             # mask boundary param_array pixels that not fully covered by a window, or were extrapolated
             # ("partially interpolated") rather than purely interpolated
-            param_mask = (param_array[0, :, :] == hom_nodata)
-            res_ratio = np.divide(self.ref_props.res, self.src_props.res)
+            param_mask = np.all(param_array.array == hom_nodata, axis=0)
+            res_ratio = np.divide(ref_array.res, param_array.res)
             # mask_partial_window covers mask_partial_interp, so don't do both
             if self._homo_config['mask_partial_window']:
                 kernel_size = np.ceil(res_ratio*win_size).astype('int32')
@@ -880,19 +885,19 @@ class HomonimRefSpace(HomonImBase):
                 kernel_size = np.ceil(res_ratio).astype('int32')  # /2
             se = cv2.getStructuringElement(cv2.MORPH_RECT, tuple(kernel_size))
             param_mask = cv2.dilate(param_mask.astype('uint8', copy=False), se).astype('bool', copy=False)
-            param_array[:, param_mask] = hom_nodata
+            param_array.array[:, param_mask] = hom_nodata
 
         # apply the model to src_array
         if normalise:
-            out_array = param_array[0, :, :] * norm_model[0] * src_array
-            out_array += param_array[0, :, :] * norm_model[1]
+            out_array = param_array.array[0, :, :] * norm_model[0] * src_array.array
+            out_array += param_array.array[0, :, :] * norm_model[1]
         else:
-            out_array = param_array[0, :, :] * src_array
+            out_array = param_array.array[0, :, :] * src_array.array
 
         if param_array.shape[0] > 1:
-            out_array += param_array[1, :, :]
+            out_array += param_array.array[1, :, :]
 
-        return out_array, param_ds_array
+        return out_array, param_ds_array.array
 
 
 ##
@@ -923,7 +928,7 @@ class HomonimSrcSpace(HomonImBase):
 
         if self._homo_config['mask_partial_window']:
             # mask boundary param_array pixels that not fully covered by a window
-            param_mask = (param_array[0, :, :] == hom_nodata)
+            param_mask = np.all(param_array == hom_nodata, axis=0)
             se = cv2.getStructuringElement(cv2.MORPH_RECT, tuple(win_size))
             param_mask = cv2.dilate(param_mask.astype('uint8', copy=False), se).astype('bool', copy=False)
             param_array[:, param_mask] = hom_nodata
