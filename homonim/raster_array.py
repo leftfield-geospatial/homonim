@@ -28,10 +28,10 @@ from rasterio.warp import reproject, Resampling
 from homonim import get_logger, hom_dtype, hom_nodata
 import multiprocessing
 
-class RasterArray(windows.WindowMethodsMixin, transform.TransformMethodsMixin):
+class RasterArray(object):
     """A class for wrapping a geo-referenced numpy array"""
     def __init__(self, array, crs, transform, nodata=hom_nodata):
-        array = np.array(array)
+        # array = np.array(array)
         if (array.ndim < 2) or (array.ndim > 3):
             raise ValueError('Array must a 2 or 3D numpy array')
         self._array = array
@@ -49,20 +49,26 @@ class RasterArray(windows.WindowMethodsMixin, transform.TransformMethodsMixin):
         self._nodata = nodata
 
     @classmethod
-    def from_window(cls, array, window, **kwargs):
-        if not ('crs' and 'transform' and 'nodata' in kwargs):
+    def from_profile(cls, array, window=None, **profile):
+        if not ('crs' and 'transform' and 'nodata' in profile):
             raise Exception('**kwargs should include crs, transform and nodata')
-        return cls(array, kwargs['crs'], windows.transform(window, kwargs['transform']), nodata=kwargs['nodata'])
 
-    @classmethod
-    def from_profile(cls, array, **kwargs):
-        if not ('crs' and 'transform' and 'nodata' in kwargs):
-            raise Exception('**kwargs should include crs, transform and nodata')
-        return cls(array, kwargs['crs'], kwargs['transform'], nodata=kwargs['nodata'])
+        if window is not None:
+            profile['transform'] = windows.transform(window, profile['transform'])
+
+        return cls(array, profile['crs'], profile['transform'], nodata=profile['nodata'])
 
     @property
     def array(self):
         return self._array
+
+    # @array.setter
+    # def array(self, array):
+    #     if array.shape != self._array.shape:
+    #         raise ValueError('Array must be same shape as RasterArray.array')
+    #     if (array.ndim < 2) or (array.ndim > 3):
+    #         raise ValueError('Array must a 2 or 3D numpy array')
+    #     self._array = array
 
     @property
     def crs(self):
@@ -75,6 +81,10 @@ class RasterArray(windows.WindowMethodsMixin, transform.TransformMethodsMixin):
     @property
     def height(self):
         return self._array.shape[-2]
+
+    @property
+    def shape(self):
+        return self._array.shape
 
     @property
     def count(self):
@@ -99,8 +109,20 @@ class RasterArray(windows.WindowMethodsMixin, transform.TransformMethodsMixin):
     def bounds(self):
         return windows.bounds(windows.Window(0, 0, self.width, self.height), self._transform)
 
+    @property
+    def profile(self):
+        return dict(crs=self.crs, transform=self.transform, count=self.count, width=self.width, height=self.height,
+                    bounds=self.bounds, nodata=self.nodata)
+
+    @property
+    def mask(self):
+        return RasterArray((self._array != self._nodata).astype('uint8'), crs=self.crs, transform=self.transform,
+                           nodata=None)
+
     def reproject(self, dst_crs=None, dst_transform=None, dst_shape=None, dst_nodata=hom_nodata, resampling=Resampling.lanczos):
 
+        if isinstance(resampling, str):
+            resampling = Resampling[resampling]
         # TODO: other argument combo checking
         if dst_transform and not dst_shape:
             raise Exception('if dst_transform is specified, dst_shape must also be specified')
@@ -110,13 +132,13 @@ class RasterArray(windows.WindowMethodsMixin, transform.TransformMethodsMixin):
         dst_shape = dst_shape or self._array.shape
 
         if self.array.ndim > 2:
-            dst_array = np.zeros((self._array.shape[0], *dst_shape), dtype=self._array.dtype)
+            _dst_array = np.zeros((self._array.shape[0], *dst_shape), dtype=self._array.dtype)
         else:
-            dst_array = np.zeros(dst_shape, dtype=self._array.dtype)
+            _dst_array = np.zeros(dst_shape, dtype=self._array.dtype)
 
         _, _ = reproject(
             self._array,
-            destination=dst_array,
+            destination=_dst_array,
             src_crs=self._crs,
             src_transform=self._transform,
             src_nodata=self._nodata,
@@ -126,4 +148,13 @@ class RasterArray(windows.WindowMethodsMixin, transform.TransformMethodsMixin):
             num_threads=multiprocessing.cpu_count(),
             resampling=resampling,
         )
-        return dst_array
+        return RasterArray(_dst_array, crs=dst_crs, transform=dst_transform, nodata=dst_nodata)
+
+    # def reproject_like_rarray(self, dst_array, resampling=Resampling.lanczos):
+    #     self.reproject(dst_crs=dst_array.crs, dst_transform=dst_array.transform, dst_shape=dst_array.shape,
+    #                    dst_nodata=dst_array.nodata, resampling=resampling)
+
+    def reproject_like(self, dst_profile, resampling=Resampling.lanczos):
+        return self.reproject(dst_crs=dst_profile['crs'], dst_transform=dst_profile['transform'],
+                       dst_shape=(dst_profile['height'], dst_profile['width']), dst_nodata=dst_profile['nodata'],
+                       resampling=resampling)
