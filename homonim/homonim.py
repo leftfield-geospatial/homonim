@@ -908,23 +908,25 @@ class HomonimSrcSpace(HomonImBase):
     def _homogenise_array(self, ref_array, src_array, method='gain_only', win_size=(5, 5), normalise=False,
                           ref_transform=None, src_transform=None):
         # re-assign source nodata if necessary
-        if self.src_props.nodata != hom_nodata:
-            src_array[src_array == self.src_props.nodata] = hom_nodata
+        if src_array.nodata != hom_nodata:
+            src_array.array[src_array.array == src_array.nodata] = hom_nodata
 
         # upsample reference to source grid
-        ref_us_array = self._project_ref_to_src(ref_array, ref_nodata=self.ref_props.nodata, ref_transform=ref_transform,
-                                                dst_transform=src_transform)
+        # ref_us_array = self._project_ref_to_src(ref_array, ref_nodata=self.ref_props.nodata, ref_transform=ref_transform,
+        #                                         dst_transform=src_transform)
+        ref_us_array = ref_array.reproject(dst_crs=src_array.crs, dst_transform=src_array.transform, dst_shape=src_array.shape,
+                                           dst_nodata=hom_nodata, resampling=self._homo_config['ref2src_interp'])
 
         if normalise:  # normalise src_array in place
-            self._src_image_offset(ref_us_array, src_array)
+            self._src_image_offset(ref_us_array.array, src_array.array)
 
         # find win_size in source pixels
-        win_size = win_size * np.round(np.array(self.ref_props.res) / np.array(self.src_props.res)).astype(int)
+        win_size = win_size * np.round(ref_array.res / src_array.res).astype(int)
 
         if method.lower() == 'gain_only':
-            param_array = self._find_gains_cv(ref_us_array, src_array, win_size=win_size)
+            param_array = self._find_gains_cv(ref_us_array.array, src_array.array, win_size=win_size)
         else:
-            param_array = self._find_gain_and_offset_cv(ref_us_array, src_array, win_size=win_size)
+            param_array = self._find_gain_and_offset_cv(ref_us_array.array, src_array.array, win_size=win_size)
 
         if self._homo_config['mask_partial_window']:
             # mask boundary param_array pixels that not fully covered by a window
@@ -934,7 +936,7 @@ class HomonimSrcSpace(HomonImBase):
             param_array[:, param_mask] = hom_nodata
 
         # apply the model to src_array
-        out_array = param_array[0, :, :] * src_array
+        out_array = param_array[0, :, :] * src_array.array
         if param_array.shape[0] > 1:
             out_array += param_array[1, :, :]
 
