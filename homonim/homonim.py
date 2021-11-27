@@ -486,14 +486,14 @@ class HomonImBase:
         _ref_array = ref_array[src_mask]
         _src_array = src_array[src_mask]
 
+        norm_model = np.zeros(2)
+        norm_model[0] = _ref_array.std() / _src_array.std()
+        norm_model[1] = np.percentile(_ref_array, 1) - np.percentile(_src_array, 1) * norm_model[0]
 
-        # find basic DOS type offset
-        offset_model = np.zeros(2)
-        offset_model[0] = 1
-        offset_model[1] = np.percentile(_ref_array, 1) - np.percentile(_src_array, 1) * offset_model[0]
+        # logger.info(f'Image normalisation gain / offset: {norm_model[0]:.4f} / {norm_model[1]:.4f}')
+        src_array[src_mask] = norm_model[0]*_src_array + norm_model[1]
+        return norm_model
 
-        src_array[src_mask] = offset_model[0] * _src_array + offset_model[1]  # apply offset in-place
-        return offset_model
 
     def _find_gains_cv(self, ref_array, src_array, win_size=(5, 5)):
         """
