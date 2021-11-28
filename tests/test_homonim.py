@@ -24,11 +24,32 @@ import warnings
 
 import numpy as np
 import rasterio as rio
+from rasterio.warp import Resampling
+from rasterio.vrt import WarpedVRT
 import yaml
 from click.testing import CliRunner
 from homonim import homonim, root_path, cli
+from homonim.raster_array import RasterArray
 from shapely.geometry import box
 from tqdm import tqdm
+
+
+def _read_ref(src_filename, ref_filename):
+    """
+    Read the source region from the reference image in the source CRS.
+    """
+    with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(src_filename, 'r') as src_im:
+        with rio.open(ref_filename, 'r') as _ref_im:
+            with WarpedVRT(_ref_im, crs=src_im.crs, resampling=Resampling.bilinear) as ref_im:
+                ref_win = homonim.expand_window_to_grid(ref_im.window(*src_im.bounds))
+                ref_bands = range(1, src_im.count + 1)
+                _ref_array = ref_im.read(ref_bands, window=ref_win).astype(homonim.hom_dtype)
+
+                if (ref_im.nodata is not None) and (ref_im.nodata != homonim.hom_nodata):
+                    _ref_array[_ref_array == ref_im.nodata] = homonim.hom_nodata
+                ref_array = RasterArray.from_profile(_ref_array, ref_im.profile, ref_win)
+
+    return ref_array
 
 
 class TestHomonim(unittest.TestCase):
@@ -73,16 +94,18 @@ class TestHomonim(unittest.TestCase):
         him = homonim.HomonimRefSpace(src_filename, ref_filename)
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
             im_ref_r2 = None
-            ref_array = him._read_ref()
+            ref_array = _read_ref(src_filename, ref_filename)
             for im_i, im_filename in enumerate([src_filename, homo_filename]):
                 with rio.open(im_filename, 'r') as im:
                     if im_ref_r2 is None:
                         im_ref_r2 = np.zeros((2, im.count))
                     for band_i in range(im.count):
-                        im_array = im.read(band_i + 1)
-                        im_ds_array = him._project_src_to_ref(im_array, src_nodata=im.nodata)
-                        mask = im_ds_array != homonim.hom_nodata
-                        im_ref_cc = np.corrcoef(im_ds_array[mask], ref_array[band_i, mask])
+                        _im_array = im.read(band_i + 1)
+                        im_array = RasterArray.from_profile(_im_array, im.profile)
+                        im_ds_array = im_array.reproject(transform=ref_array.transform, shape=ref_array.shape[-2:],
+                                                         resampling=him._homo_config['src2ref_interp'])
+                        mask = im_ds_array.mask.array.astype('bool', copy=False)
+                        im_ref_cc = np.corrcoef(im_ds_array.array[mask], ref_array.array[band_i, mask])
                         im_ref_r2[im_i, band_i] = im_ref_cc[0, 1] ** 2
 
             tqdm.write(f'Pre-homogensied R2 : {im_ref_r2[0, :]}')
