@@ -174,7 +174,7 @@ class HomonImBase:
 
             with rio.open(self._src_filename, 'r') as src_im, rio.open(self._ref_filename, 'r') as _ref_im:
                 if src_im.crs.to_proj4() != _ref_im.crs.to_proj4():  # re-project the reference image to source CRS
-                    # TODO: here we reproject from transform on the ref grid and that include source bounds
+                    # TODO: here we project from transform on the ref grid and that include source bounds
                     #   we could just project into src_im transform though too.
                     logger.warning('Reprojecting reference image to the source CRS. '
                                    'To avoid this step, provide reference and source images in the same CRS')
@@ -682,12 +682,12 @@ class HomonImBase:
 
                         with src_read_lock:
                             _src_array = src_im.read(bi, out_dtype=hom_dtype)
-                            src_array = RasterArray.from_profile(_src_array, **src_im.profile)
+                            src_array = RasterArray.from_profile(_src_array, src_im.profile)
 
                         with ref_read_lock:
                             ref_win = expand_window_to_grid(ref_im.window(*src_im.bounds))
                             _ref_array = ref_im.read(bi, window=ref_win, out_dtype=hom_dtype)
-                            ref_array = RasterArray.from_profile(_ref_array, window=ref_win, **ref_im.profile)
+                            ref_array = RasterArray.from_profile(_ref_array, ref_im.profile, window=ref_win)
 
                         out_array, param_array = self._homogenise_array(ref_array, src_array, method=method,
                                                                         win_size=win_size, normalise=normalise)
@@ -843,19 +843,19 @@ class HomonimRefSpace(HomonImBase):
 
         # downsample src_array to reference grid
         # src_ds_array = self._project_src_to_ref(src_array, src_nodata=self.src_props.nodata,
-        #                                         src_transform=src_transform, dst_transform=ref_transform)
-        # src_ds_array = src_array.reproject_like(ref_array.profile, resampling=self._homo_config['src2ref_interp'])
-        src_ds_array = src_array.reproject(dst_crs=ref_array.crs, dst_transform=ref_array.transform, dst_shape=ref_array.shape,
-                                           dst_nodata=hom_nodata, resampling=self._homo_config['src2ref_interp'])
+        #                                         src_transform=src_transform, transform=ref_transform)
+        # src_ds_array = src_array.project(crs=ref_array.crs, transform=ref_array.transform, shape=ref_array.shape,
+        #                                    nodata=hom_nodata, resampling=self._homo_config['src2ref_interp'])
+        src_ds_array = src_array.reproject(**ref_array.proj_profile, resampling=self._homo_config['src2ref_interp'])
 
         if self._homo_config['mask_partial_pixel']:
             # mask src_ds_array pixels that were not completely covered by src_array
             # TODO is this faster, or setting param_array[src_array == 0] = 0 below
-            mask_ds_array = src_array.mask.reproject_like(src_ds_array.profile, resampling=Resampling.average)
+            mask_ds_array = src_array.mask.reproject(**src_ds_array.proj_profile, resampling=Resampling.average)
             src_ds_array.array[np.logical_not(mask_ds_array.array == 1)] = hom_nodata
             # mask = (src_array.array != src_array.nodata).astype('uint8')
             # mask_ds_array = self._project_src_to_ref(mask, src_nodata=None, resampling=Resampling.average,
-            #                                          src_transform=src_transform, dst_transform=ref_transform)
+            #                                          src_transform=src_transform, transform=ref_transform)
             # src_ds_array[np.logical_not(mask_ds_array == 1)] = hom_nodata
 
         if normalise:
@@ -868,10 +868,11 @@ class HomonimRefSpace(HomonImBase):
 
         # upsample the parameter array to source grid
         # param_array = self._project_ref_to_src(param_ds_array[:2, :, :], ref_transform=ref_transform,
-        #                                        dst_transform=src_transform)
-        param_ds_array = RasterArray.from_profile(_param_ds_array, **src_ds_array.profile)
-        param_array = param_ds_array.reproject(dst_crs=src_array.crs, dst_transform=src_array.transform, dst_shape=src_array.shape,
-                                               dst_nodata=hom_nodata, resampling=self._homo_config['ref2src_interp'])
+        #                                        transform=src_transform)
+        param_ds_array = RasterArray.from_profile(_param_ds_array, src_ds_array.profile)
+        # param_array = param_ds_array.project(crs=src_array.crs, transform=src_array.transform, shape=src_array.shape,
+        #                                        nodata=hom_nodata, resampling=self._homo_config['ref2src_interp'])
+        param_array = param_ds_array.reproject(**src_array.proj_profile, resampling=self._homo_config['ref2src_interp'])
 
         if self._homo_config['mask_partial_interp'] or self._homo_config['mask_partial_window']:
             # mask boundary param_array pixels that not fully covered by a window, or were extrapolated
@@ -913,9 +914,8 @@ class HomonimSrcSpace(HomonImBase):
 
         # upsample reference to source grid
         # ref_us_array = self._project_ref_to_src(ref_array, ref_nodata=self.ref_props.nodata, ref_transform=ref_transform,
-        #                                         dst_transform=src_transform)
-        ref_us_array = ref_array.reproject(dst_crs=src_array.crs, dst_transform=src_array.transform, dst_shape=src_array.shape,
-                                           dst_nodata=hom_nodata, resampling=self._homo_config['ref2src_interp'])
+        #                                         transform=src_transform)
+        ref_us_array = ref_array.reproject(**src_array.proj_profile, resampling=self._homo_config['ref2src_interp'])
 
         if normalise:  # normalise src_array in place
             self._src_image_offset(ref_us_array.array, src_array.array)

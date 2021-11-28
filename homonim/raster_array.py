@@ -30,11 +30,15 @@ import multiprocessing
 
 class RasterArray(object):
     """A class for wrapping a geo-referenced numpy array"""
-    def __init__(self, array, crs, transform, nodata=hom_nodata):
+    def __init__(self, array, crs, transform, nodata=None, window=None):
         # array = np.array(array)
         if (array.ndim < 2) or (array.ndim > 3):
-            raise ValueError('Array must a 2 or 3D numpy array')
+            raise ValueError('`array` must be a 2D or 3D numpy array')
         self._array = array
+
+        if window is not None:
+            if (window.height, window.width) != array.shape[-2:]:
+                raise ValueError('window and array dimensions must match')
 
         if isinstance(crs, CRS):
             self._crs = crs
@@ -42,21 +46,21 @@ class RasterArray(object):
             raise TypeError('crs must be an instance of rasterio.CRS')
 
         if isinstance(transform, Affine):
-            self._transform = transform
+            if window is not None:
+                self._transform = windows.transform(window, transform)
+            else:
+                self._transform = transform
         else:
             raise TypeError('transform must be an instance of rasterio.Affine')
 
         self._nodata = nodata
+        self._nodata_mask = None
 
     @classmethod
-    def from_profile(cls, array, window=None, **profile):
+    def from_profile(cls, array, profile, window=None):
         if not ('crs' and 'transform' and 'nodata' in profile):
-            raise Exception('**kwargs should include crs, transform and nodata')
-
-        if window is not None:
-            profile['transform'] = windows.transform(window, profile['transform'])
-
-        return cls(array, profile['crs'], profile['transform'], nodata=profile['nodata'])
+            raise Exception('profile should include crs, transform and nodata keys')
+        return cls(array, profile['crs'], profile['transform'], nodata=profile['nodata'], window=window)
 
     @property
     def array(self):
@@ -88,10 +92,7 @@ class RasterArray(object):
 
     @property
     def count(self):
-        if self._array.ndim == 3:
-            return self._array.shape[0]
-        else:
-            return 1
+        return self._array.shape[0] if self._array.ndim == 3 else 1
 
     @property
     def transform(self):
@@ -111,50 +112,69 @@ class RasterArray(object):
 
     @property
     def profile(self):
-        return dict(crs=self.crs, transform=self.transform, count=self.count, width=self.width, height=self.height,
-                    bounds=self.bounds, nodata=self.nodata)
+        return dict(crs=self.crs, transform=self.transform, nodata=self.nodata, count=self.count, width=self.width,
+                    height=self.height, bounds=self.bounds)
+
+    @property
+    def proj_profile(self):
+        return dict(crs=self.crs, transform=self.transform, shape=self.shape)
 
     @property
     def mask(self):
-        return RasterArray((self._array != self._nodata).astype('uint8'), crs=self.crs, transform=self.transform,
-                           nodata=None)
+        if self._nodata is not None:
+            return RasterArray((self._array != self._nodata).astype('uint8'), crs=self.crs, transform=self.transform,
+                               nodata=None)
+        else:
+            return None
 
-    def reproject(self, dst_crs=None, dst_transform=None, dst_shape=None, dst_nodata=hom_nodata, resampling=Resampling.lanczos):
+    # @property
+    # def nodata_mask(self):
+    #     if self._nodata_mask is None and self._nodata is not None:
+    #         self._nodata_mask = (self._array == self._nodata)
+    #     return self._nodata_mask
+    #
+    # @nodata.setter
+    # def nodata(self, value):
+    #     if value != self._nodata:
+    #         self.array[self.nodata_mask] = value
+    #         self._nodata = value
+
+
+
+    def reproject(self, crs=None, transform=None, shape=None, nodata=hom_nodata, resampling=Resampling.lanczos):
+
+        if transform and not shape:
+            raise ValueError('if transform is specified, shape must also be specified')
 
         if isinstance(resampling, str):
             resampling = Resampling[resampling]
-        # TODO: other argument combo checking
-        if dst_transform and not dst_shape:
-            raise Exception('if dst_transform is specified, dst_shape must also be specified')
 
-        dst_crs = dst_crs or self._crs
-        dst_transform = dst_transform or self._transform
-        dst_shape = dst_shape or self._array.shape
+        crs = crs or self._crs
+        shape = shape or self._array.shape
 
         if self.array.ndim > 2:
-            _dst_array = np.zeros((self._array.shape[0], *dst_shape), dtype=self._array.dtype)
+            _dst_array = np.zeros((self._array.shape[0], *shape), dtype=self._array.dtype)
         else:
-            _dst_array = np.zeros(dst_shape, dtype=self._array.dtype)
+            _dst_array = np.zeros(shape, dtype=self._array.dtype)
 
-        _, _ = reproject(
+        _, _dst_transform = reproject(
             self._array,
             destination=_dst_array,
             src_crs=self._crs,
             src_transform=self._transform,
             src_nodata=self._nodata,
-            dst_crs=dst_crs,
-            dst_transform=dst_transform,
-            dst_nodata=dst_nodata,
+            dst_crs=crs,
+            dst_transform=transform,
+            dst_nodata=nodata,
             num_threads=multiprocessing.cpu_count(),
             resampling=resampling,
         )
-        return RasterArray(_dst_array, crs=dst_crs, transform=dst_transform, nodata=dst_nodata)
+        return RasterArray(_dst_array, crs=crs, transform=_dst_transform, nodata=nodata)
 
-    # def reproject_like_rarray(self, dst_array, resampling=Resampling.lanczos):
-    #     self.reproject(dst_crs=dst_array.crs, dst_transform=dst_array.transform, dst_shape=dst_array.shape,
-    #                    dst_nodata=dst_array.nodata, resampling=resampling)
-
-    def reproject_like(self, dst_profile, resampling=Resampling.lanczos):
-        return self.reproject(dst_crs=dst_profile['crs'], dst_transform=dst_profile['transform'],
-                       dst_shape=(dst_profile['height'], dst_profile['width']), dst_nodata=dst_profile['nodata'],
-                       resampling=resampling)
+    # def reproject_to_profile(self, profile, resampling=Resampling.lanczos):
+    #     reproject_keys = ['crs', 'transform', 'nodata', 'height', 'width']
+    #     if any([key not in profile for key in reproject_keys]):
+    #         raise ValueError(f'profile should include {reproject_keys}')
+    #     return self.reproject(crs=profile['crs'], transform=profile['transform'],
+    #                         shape=(profile['height'], profile['width']), nodata=profile['nodata'],
+    #                         resampling=resampling)
