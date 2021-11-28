@@ -121,11 +121,15 @@ class RasterArray(object):
 
     @property
     def mask(self):
-        if self._nodata is not None:
-            return RasterArray((self._array != self._nodata).astype('uint8'), crs=self.crs, transform=self.transform,
-                               nodata=None)
-        else:
+        if self._nodata is None:
             return None
+
+        if self._array.ndim == 3:
+            mask =  np.all(self._array != self._nodata, axis=0).astype('uint8')
+        else:
+            mask = (self._array != self._nodata).astype('uint8')
+
+        return RasterArray(mask, crs=self.crs, transform=self.transform, nodata=None)
 
     # @property
     # def nodata_mask(self):
