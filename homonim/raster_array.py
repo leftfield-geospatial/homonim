@@ -80,11 +80,11 @@ class RasterArray(object):
 
     @property
     def width(self):
-        return self._array.shape[-1]
+        return self.shape[-1]
 
     @property
     def height(self):
-        return self._array.shape[-2]
+        return self.shape[-2]
 
     @property
     def shape(self):
@@ -92,7 +92,7 @@ class RasterArray(object):
 
     @property
     def count(self):
-        return self._array.shape[0] if self._array.ndim == 3 else 1
+        return self.shape[0] if len(self.shape) == 3 else 1
 
     @property
     def transform(self):
@@ -104,11 +104,11 @@ class RasterArray(object):
 
     @property
     def res(self):
-        return np.abs((self._transform.a, self._transform.e))
+        return np.abs((self.transform.a, self.transform.e))
 
     @property
     def bounds(self):
-        return windows.bounds(windows.Window(0, 0, self.width, self.height), self._transform)
+        return windows.bounds(windows.Window(0, 0, self.width, self.height), self.transform)
 
     @property
     def profile(self):

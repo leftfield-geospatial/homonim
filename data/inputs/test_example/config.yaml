@@ -19,6 +19,8 @@ homogenisation:
   # For gain&offset model, refit pixels with model R2 values below this value, using interpolated offset
   # and fitted gain (None = no inpainting).
   r2_threshold: 0.25
+  # maximum memory for automatic block size in megabytes
+  max_block_mem: 2
 
 # Format of output (homogenised) image
 output:

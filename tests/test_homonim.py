@@ -39,15 +39,14 @@ def _read_ref(src_filename, ref_filename):
     Read the source region from the reference image in the source CRS.
     """
     with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(src_filename, 'r') as src_im:
-        with rio.open(ref_filename, 'r') as _ref_im:
-            with WarpedVRT(_ref_im, crs=src_im.crs, resampling=Resampling.bilinear) as ref_im:
-                ref_win = homonim.expand_window_to_grid(ref_im.window(*src_im.bounds))
-                ref_bands = range(1, src_im.count + 1)
-                _ref_array = ref_im.read(ref_bands, window=ref_win).astype(homonim.hom_dtype)
+        with WarpedVRT(rio.open(ref_filename, 'r'), crs=src_im.crs, resampling=Resampling.bilinear) as ref_im:
+            ref_win = homonim.expand_window_to_grid(ref_im.window(*src_im.bounds))
+            ref_bands = range(1, src_im.count + 1)
+            _ref_array = ref_im.read(ref_bands, window=ref_win).astype(homonim.hom_dtype)
 
-                if (ref_im.nodata is not None) and (ref_im.nodata != homonim.hom_nodata):
-                    _ref_array[_ref_array == ref_im.nodata] = homonim.hom_nodata
-                ref_array = RasterArray.from_profile(_ref_array, ref_im.profile, ref_win)
+            if (ref_im.nodata is not None) and (ref_im.nodata != homonim.hom_nodata):
+                _ref_array[_ref_array == ref_im.nodata] = homonim.hom_nodata
+            ref_array = RasterArray.from_profile(_ref_array, ref_im.profile, ref_win)
 
     return ref_array
 
@@ -133,8 +132,8 @@ class TestHomonim(unittest.TestCase):
             homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
             him = homonim.HomonimRefSpace(src_filename, ref_filename, homo_config=self._homo_config,
                                           out_config=self._out_config)
-            # wins = him._overlap_blocks(block_size=(256, 128), overlap=(4, 2))
-            him.homogenise_by_band(homo_filename, **param_dict)
+            # wins = him._overlap_blocks(block_shape=(256, 128), overlap=(4, 2))
+            him.homogenise_by_block(homo_filename, **param_dict)
             him.build_overviews(homo_filename)
             self.assertTrue(homo_filename.exists(), 'Homogenised file exists')
             with self.subTest('Homogenised vs Source', src_filename=src_filename, homo_filename=homo_filename):

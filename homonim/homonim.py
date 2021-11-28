@@ -75,7 +75,7 @@ def expand_window_to_grid(win):
 RasterProps = namedtuple('RasterProps', ['crs', 'transform', 'shape', 'res', 'bounds', 'nodata', 'count', 'profile'])
 
 """Overlapping window object"""
-OvlBlock = namedtuple('OvlBlock', ['src_block', 'src_transform', 'ref_block', 'ref_transform', 'out_block', 'outer'])
+OvlBlock = namedtuple('OvlBlock', ['band_i', 'src_block', 'ref_block', 'out_block', 'outer'])
 
 
 class HomonImBase:
@@ -112,6 +112,8 @@ class HomonImBase:
                 'mask_partial_window': False,
                 'mask_partial_interp': False,
                 'multithread': True,
+                'r2_threshold': 0.25,
+                'max_block_mem': 100,
             }
         else:
             self._homo_config = homo_config
@@ -213,7 +215,7 @@ class HomonImBase:
                     self._src_props = RasterProps(crs=src_im.crs, transform=src_im.transform, shape=src_im.shape,
                                                   res=list(src_im.res), bounds=src_im.bounds, nodata=src_nodata,
                                                   count=src_im.count, profile=src_im.profile)
-                    self._ref_props = RasterProps(crs=src_im.crs, transform=ref_transform, shape=ref_shape,
+                    self._ref_props = RasterProps(crs=ref_im.crs, transform=ref_transform, shape=ref_shape,
                                                   res=list(ref_im.res), bounds=ref_bounds, nodata=ref_nodata,
                                                   count=ref_im.count, profile=ref_im.profile)
 
@@ -221,31 +223,49 @@ class HomonImBase:
                 #     logger.warning('The reference will be re-projected to the source CRS.  \n'
                 #                    'To avoid this step, provide a reference image in the source CRS')
 
-    def _overlap_blocks(self, block_size=(1024, 1024), overlap=(0, 0)):
-        overlap = np.array(overlap)
-        block_size = np.array(block_size)
+    def _auto_block_shape(self, src_shape, src_win_size):
+        max_block_mem = self._homo_config['max_block_mem'] << 20
+        dtype_size = np.dtype(hom_dtype).itemsize
+        band_size_mb = np.product(src_shape)*dtype_size
+        if band_size_mb <= max_block_mem:
+            return src_shape
 
-        src_block_ul = np.mgrid[0:(self.src_props.shape[0] - 2 * overlap[0]):(block_size[0] - 2 * overlap[0]),
-                     0:(self.src_props.shape[1] - 2 * overlap[1]):(block_size[1] - 2 * overlap[1])]
-        src_block_br = src_block_ul + block_size.reshape(-1, 1, 1)
-        src_block_br[0, -1, :] = self.src_props.shape[0]
-        src_block_br[1, :, -1] = self.src_props.shape[1]
+        full_width_rows = np.floor(max_block_mem/(src_shape[1]*dtype_size))
+        if full_width_rows >= 10*src_win_size[0]:
+            return (full_width_rows, src_shape[1])
 
-        ovl_blocks = []
-        for ovl_ul, ovl_br in zip(src_block_ul.reshape(2, -1).T, src_block_br.reshape(2, -1).T):
-            src_block = rio.windows.Window.from_slices((ovl_ul[0], ovl_br[0]), (ovl_ul[1], ovl_br[1]))
-            out_block = rio.windows.Window.from_slices((ovl_ul[0] + overlap[0], ovl_br[0] -  overlap[0]),
-                                                          (ovl_ul[1] + overlap[1], ovl_br[1] - overlap[1]))
+        # TODO: extra checking that we don't end up with < win_size block
+        sqr_block_edge = np.floor(np.sqrt(max_block_mem / dtype_size))
+        return (sqr_block_edge, sqr_block_edge)
 
-            src_block_transform = rio.windows.transform(src_block, self.src_props.transform)
-            src_block_bounds = windows.bounds(src_block, self.src_props.transform)
-            ref_block = windows.from_bounds(*src_block_bounds, transform=self.ref_props.transform)
-            ref_block = expand_window_to_grid(ref_block)
-            ref_block_transform = rio.windows.transform(ref_block, self.ref_props.transform)
 
-            outer = np.any(ovl_ul==0) or np.any(ovl_br==self.src_props.shape)
-            ovl_win = OvlBlock(src_block, src_block_transform, ref_block, ref_block_transform, out_block, outer)
-            ovl_blocks.append(ovl_win)
+    def _overlap_blocks(self, block_shape, overlap=(0, 0)):
+        with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
+            with WarpedVRT(rio.open(self._ref_filename, 'r'), crs=src_im.crs) as ref_im:
+                src_shape = src_im.shape[-2:]
+                overlap = np.array(overlap)
+                if not block_shape:
+                    block_shape = self._auto_block_shape(src_shape)
+                block_shape = np.array(block_shape)
+
+                src_block_ul = np.mgrid[0:(src_shape[0] - 2 * overlap[0]):(block_shape[0] - 2 * overlap[0]),
+                             0:(src_shape[1] - 2 * overlap[1]):(block_shape[1] - 2 * overlap[1])]
+                src_block_br = src_block_ul + block_shape.reshape(-1, 1, 1)
+                src_block_br[0, -1, :] = src_shape[0]
+                src_block_br[1, :, -1] = src_shape[1]
+
+                ovl_blocks = []
+                for ovl_ul, ovl_br in zip(src_block_ul.reshape(2, -1).T, src_block_br.reshape(2, -1).T):
+                    src_block = rio.windows.Window.from_slices((ovl_ul[0], ovl_br[0]), (ovl_ul[1], ovl_br[1]))
+                    out_block = rio.windows.Window.from_slices((ovl_ul[0] + overlap[0], ovl_br[0] -  overlap[0]),
+                                                                  (ovl_ul[1] + overlap[1], ovl_br[1] - overlap[1]))
+
+                    ref_block = expand_window_to_grid(ref_im.window(*src_im.window_bounds(src_block)))
+
+                    outer = np.any(ovl_ul==0) or np.any(ovl_br==src_shape)
+                    for band_i in range(src_im.count):
+                        ovl_win = OvlBlock(band_i+1, src_block, ref_block, out_block, outer)
+                        ovl_blocks.append(ovl_win)
         return ovl_blocks
 
     def _create_out_profile(self, init_profile):
@@ -330,6 +350,8 @@ class HomonImBase:
         A two element array of linear offset model i.e. [1, offset]
         """
         src_mask = src_array != hom_nodata
+        if not np.any(src_mask):
+            return np.zeros(2)
         # TODO: can we avoid these masked copies?
         _ref_array = ref_array[src_mask]
         _src_array = src_array[src_mask]
@@ -453,8 +475,7 @@ class HomonImBase:
 
         return param_array
 
-    def _homogenise_array(self, ref_array, src_array, method='gain_only', win_size=(5, 5), normalise=False,
-                          ref_transform=None, src_transform=None):
+    def _homogenise_array(self, ref_array, src_array, method='gain_only', win_size=(5, 5), normalise=False):
         """
         Wrapper to homogenise an array of source image data
 
@@ -499,7 +520,7 @@ class HomonImBase:
             raise Exception('win_size must be odd in both dimensions')
 
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
-            with rio.open(self._ref_filename, 'r') as _ref_im, WarpedVRT(_ref_im, crs=src_im.crs, resampling=Resampling.bilinear) as ref_im:
+            with WarpedVRT(rio.open(self._ref_filename, 'r'), crs=src_im.crs, resampling=Resampling.bilinear) as ref_im:
                 if self._homo_config['debug']:
                     # setup profiling
                     tracemalloc.start()
@@ -600,44 +621,49 @@ class HomonImBase:
             raise Exception('win_size must be odd in both dimensions')
 
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
-            if self._homo_config['debug']:
-                # setup profiling
-                tracemalloc.start()
-                proc_profile = cProfile.Profile()
-                proc_profile.enable()
-                param_profile = self._create_param_profile(src_im.profile.copy())
+            with WarpedVRT(rio.open(self._ref_filename, 'r'), crs=src_im.crs, resampling=Resampling.bilinear) as ref_im:
+                src_win_size = np.ceil(np.array(ref_im.res) / np.array(src_im.res))
+                overlap = (win_size * src_win_size).astype(int)
+                block_shape = self._auto_block_shape(src_im.shape, src_win_size)
+                ovl_blocks = self._overlap_blocks(block_shape=block_shape, overlap=overlap)
 
-                # create parameter raster file
-                param_out_file_name = self._create_param_filename(out_filename)
-                param_im = rio.open(param_out_file_name, 'w', **param_profile)
+                if self._homo_config['debug']:
+                    # setup profiling
+                    tracemalloc.start()
+                    proc_profile = cProfile.Profile()
+                    proc_profile.enable()
+                    param_profile = self._create_param_profile(src_im.profile.copy())
 
-            # create the output raster file
-            out_profile = self._create_out_profile(src_im.profile)
-            out_im = rio.open(out_filename, 'w', **out_profile)  # avoid too many nested indents with 'with' statements
+                    # create parameter raster file
+                    param_out_file_name = self._create_param_filename(out_filename)
+                    param_im = rio.open(param_out_file_name, 'w', **param_profile)
 
-            # initialise process by band
-            bands = list(range(1, src_im.count + 1))
-            # TODO: what happens when src res is not an integer factor of ref res?
-            overlap = (np.floor(win_size / 2) * np.round(np.array(self.ref_props.res) / np.array(self.src_props.res))).astype(int)
-            ovl_wins = self._overlap_blocks(block_size=(252, 252), overlap=overlap)
-            bar = tqdm(total=len(bands) + 1)
-            bar.update(0)
-            read_lock = threading.Lock()
-            write_lock = threading.Lock()
-            param_lock = threading.Lock()
-            try:
-                for bi in bands:
+                # create the output raster file
+                out_profile = self._create_out_profile(src_im.profile)
+                out_im = rio.open(out_filename, 'w', **out_profile)  # avoid too many nested indents with 'with' statements
+
+                # initialise process by band
+                # bands = list(range(1, src_im.count + 1))
+                # TODO: what happens when src res is not an integer factor of ref res?
+                bar = tqdm(total=len(ovl_blocks) + 1)
+                bar.update(0)
+                src_read_lock = threading.Lock()
+                ref_read_lock = threading.Lock()
+                write_lock = threading.Lock()
+                param_lock = threading.Lock()
+                try:
                     def process_block(ovl_block: OvlBlock):
                         """Thread-safe function to homogenise a window of src_im"""
+                        with src_read_lock:
+                            _src_array = src_im.read(ovl_block.band_i, window=ovl_block.src_block, out_dtype=hom_dtype)
+                            src_array = RasterArray.from_profile(_src_array, src_im.profile, window=ovl_block.src_block)
 
-                        with read_lock:
-                            src_array = src_im.read(bi, window=ovl_block.src_block, out_dtype=hom_dtype)
+                        with ref_read_lock:
+                            _ref_array = ref_im.read(ovl_block.band_i, window=ovl_block.ref_block, out_dtype=hom_dtype)
+                            ref_array = RasterArray.from_profile(_ref_array, ref_im.profile, window=ovl_block.ref_block)
 
-                        # TODO: the below is wrong, how do we get the ref window corresponding to ovl_block.ovl_block?
-                        ref_array = self.ref_array[bi - 1, :, :][ovl_block.ref_block.toslices()]
                         out_array, param_array = self._homogenise_array(
-                            ref_array, src_array, method=method, win_size=win_size, normalise=normalise,
-                            ref_transform=ovl_block.ref_transform, src_transform=ovl_block.src_transform
+                            ref_array, src_array, method=method, win_size=win_size, normalise=normalise
                         )
 
                         if out_im.nodata != hom_nodata:
@@ -646,29 +672,29 @@ class HomonImBase:
                         if self._homo_config['debug']:
                             with param_lock:
                                 for pi in range(param_array.shape[0]):
-                                    _bi = bi + pi * src_im.count
+                                    _bi = ovl_block.band_i + pi * src_im.count
                                     _param_array = param_array[pi, overlap[0]:-overlap[0], overlap[1]:-overlap[1]]
                                     param_im.write(_param_array.astype(param_im.dtypes[_bi - 1]), window=ovl_block.out_block, indexes=_bi)
 
                         with write_lock:
-                            _out_array = out_array[:, overlap[0]:-overlap[0], overlap[1]:-overlap[1]]
-                            out_im.write(_out_array.astype(out_im.dtypes[bi - 1]), window=ovl_block.out_block, indexes=bi)
+                            _out_array = out_array[overlap[0]:-overlap[0], overlap[1]:-overlap[1]]
+                            out_im.write(_out_array.astype(out_im.dtypes[ovl_block.band_i - 1]), window=ovl_block.out_block, indexes=ovl_block.band_i)
                             bar.update(1)
 
                     if self._homo_config['multithread']:
                         # process bands in concurrent threads
                         with concurrent.futures.ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
-                            executor.map(process_block, ovl_wins)
+                            executor.map(process_block, ovl_blocks)
                     else:
                         # process bands consecutively
-                        for ovl_win in ovl_wins:
-                            process_block(ovl_win)
-            finally:
-                out_im.close()
-                if self._homo_config['debug']:
-                    param_im.close()
-                bar.update(1)
-                bar.close()
+                        for ovl_block in ovl_blocks:
+                            process_block(ovl_block)
+                finally:
+                    out_im.close()
+                    if self._homo_config['debug']:
+                        param_im.close()
+                    bar.update(1)
+                    bar.close()
 
         if self._homo_config['debug']:
             # print profiling info
@@ -686,8 +712,7 @@ class HomonImBase:
 class HomonimRefSpace(HomonImBase):
     """Class for homogenising images in reference image space"""
 
-    def _homogenise_array(self, ref_array, src_array, method='gain_only', win_size=(5, 5), normalise=False,
-                          ref_transform=None, src_transform=None):
+    def _homogenise_array(self, ref_array, src_array, method='gain_only', win_size=(5, 5), normalise=False):
 
         # downsample src_array to reference grid
         # src_ds_array = self._project_src_to_ref(src_array, src_nodata=self.src_props.nodata,
@@ -754,8 +779,7 @@ class HomonimRefSpace(HomonImBase):
 class HomonimSrcSpace(HomonImBase):
     """Class for homogenising images in source image space"""
 
-    def _homogenise_array(self, ref_array, src_array, method='gain_only', win_size=(5, 5), normalise=False,
-                          ref_transform=None, src_transform=None):
+    def _homogenise_array(self, ref_array, src_array, method='gain_only', win_size=(5, 5), normalise=False):
         # re-assign source nodata if necessary
         if src_array.nodata != hom_nodata:
             src_array.array[src_array.array == src_array.nodata] = hom_nodata
