@@ -25,12 +25,13 @@ import threading
 import tracemalloc
 from collections import namedtuple
 from enum import Enum
+from itertools import product
 
 import cv2
 import cv2 as cv
 import numpy as np
 import rasterio as rio
-from rasterio import windows
+from rasterio.windows import Window
 from rasterio.fill import fillnodata
 from rasterio.vrt import WarpedVRT
 from rasterio.warp import reproject, Resampling, transform_geom, transform_bounds
@@ -67,7 +68,7 @@ def expand_window_to_grid(win):
     row_off, row_frac = np.divmod(win.row_off, 1)
     width = np.ceil(win.width + col_frac)
     height = np.ceil(win.height + row_frac)
-    exp_win = rio.windows.Window(col_off.astype('int'), row_off.astype('int'), width.astype('int'), height.astype('int'))
+    exp_win = Window(col_off.astype('int'), row_off.astype('int'), width.astype('int'), height.astype('int'))
     return exp_win
 
 
@@ -241,31 +242,52 @@ class HomonImBase:
     def _overlap_blocks(self, block_shape, overlap=(0, 0)):
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
             with WarpedVRT(rio.open(self._ref_filename, 'r'), crs=src_im.crs) as ref_im:
-                src_shape = src_im.shape[-2:]
+                src_shape = np.array(src_im.shape)
                 overlap = np.array(overlap)
                 block_shape = np.array(block_shape)
-
-                src_block_ul = np.mgrid[-overlap[0]:(src_shape[0] - 2 * overlap[0]):block_shape[0],
-                             -overlap[1]:(src_shape[1] - 2 * overlap[1]):block_shape[1]]
-                src_block_br = src_block_ul + (block_shape + 2 * overlap).reshape(-1, 1, 1)
-                src_block_ul[0, 0, :] = 0
-                src_block_ul[1, :, 0] = 0
-                src_block_br[0, -1, :] = src_shape[0]
-                src_block_br[1, :, -1] = src_shape[1]
-
                 ovl_blocks = []
-                for ovl_ul, ovl_br in zip(src_block_ul.reshape(2, -1).T, src_block_br.reshape(2, -1).T):
-                    src_block = rio.windows.Window.from_slices((ovl_ul[0], ovl_br[0]), (ovl_ul[1], ovl_br[1]))
-                    out_block = rio.windows.Window.from_slices((ovl_ul[0] + overlap[0], ovl_br[0] -  overlap[0]),
-                                                                  (ovl_ul[1] + overlap[1], ovl_br[1] - overlap[1]))
 
-                    ref_block = expand_window_to_grid(ref_im.window(*src_im.window_bounds(src_block)))
+                for band_i in range(src_im.count):
+                    for ul_row, ul_col in product(range(-overlap[0], (src_shape[0] - 2 * overlap[0]), block_shape[0]),
+                                                  range(-overlap[1], (src_shape[1] - 2 * overlap[1]), block_shape[1])):
+                        ul = np.array((ul_row, ul_col))
+                        br = ul + block_shape + 2 * overlap
+                        src_ul = np.fmax(ul, (0, 0))
+                        src_br = np.fmin(br, src_shape - 1)
+                        out_ul = ul + overlap
+                        out_br = br - overlap
 
-                    outer = np.any(ovl_ul==0) or np.any(ovl_br==src_shape)
-                    for band_i in range(src_im.count):
-                        ovl_block = OvlBlock(band_i+1, src_block, ref_block, out_block, outer)
-                        ovl_blocks.append(ovl_block)
+                        src_block = Window.from_slices((src_ul[0], src_br[0]), (src_ul[1], src_br[1]))
+                        ref_block = expand_window_to_grid(ref_im.window(*src_im.window_bounds(src_block)))
+                        out_block = Window.from_slices((out_ul[0], out_br[0]), (out_ul[1], out_br[1]))
+
+                        outer = np.any(src_ul==0) or np.any(src_br==src_shape-1)
+                        ovl_blocks.append(OvlBlock(band_i+1, src_block, ref_block, out_block, outer))
         return ovl_blocks
+
+        #         src_block_ul = np.mgrid[-overlap[0]:(src_shape[0] - 2 * overlap[0]):block_shape[0],
+        #                      -overlap[1]:(src_shape[1] - 2 * overlap[1]):block_shape[1]]
+        #         src_block_br = src_block_ul + (block_shape + 2 * overlap).reshape(-1, 1, 1)
+        #
+        #
+        #         src_block_ul[0, 0, :] = 0
+        #         src_block_ul[1, :, 0] = 0
+        #         src_block_br[0, -1, :] = src_shape[0] - 1   #-1?
+        #         src_block_br[1, :, -1] = src_shape[1] - 1
+        #
+        #         ovl_blocks = []
+        #         for ovl_ul, ovl_br in zip(src_block_ul.reshape(2, -1).T, src_block_br.reshape(2, -1).T):
+        #             src_block = rio.windows.Window.from_slices((ovl_ul[0], ovl_br[0]), (ovl_ul[1], ovl_br[1]))
+        #             out_block = rio.windows.Window.from_slices((ovl_ul[0] + overlap[0], ovl_br[0] -  overlap[0]),
+        #                                                           (ovl_ul[1] + overlap[1], ovl_br[1] - overlap[1]))
+        #
+        #             ref_block = expand_window_to_grid(ref_im.window(*src_im.window_bounds(src_block)))
+        #
+        #             outer = np.any(ovl_ul==0) or np.any(ovl_br==src_shape)
+        #             for band_i in range(src_im.count):
+        #                 ovl_block = OvlBlock(band_i+1, src_block, ref_block, out_block, outer)
+        #                 ovl_blocks.append(ovl_block)
+        # return ovl_blocks
 
     def _create_out_profile(self, init_profile):
         """Create a rasterio profile for the output raster based on a starting profile and configuration"""
@@ -677,8 +699,11 @@ class HomonImBase:
                                     param_im.write(_param_array.astype(param_im.dtypes[_bi - 1]), window=ovl_block.out_block, indexes=_bi)
 
                         with write_lock:
-                            _out_array = out_array[overlap[0]:-overlap[0], overlap[1]:-overlap[1]]
-                            out_im.write(_out_array.astype(out_im.dtypes[ovl_block.band_i - 1]), window=ovl_block.out_block, indexes=ovl_block.band_i)
+                            out_arr_win = Window(ovl_block.out_block.col_off - ovl_block.src_block.col_off,
+                                                 ovl_block.out_block.row_off - ovl_block.src_block.row_off,
+                                                 ovl_block.out_block.width, ovl_block.out_block.height)
+                            _out_array = out_array[out_arr_win.toslices()].astype(out_im.dtypes[ovl_block.band_i - 1])
+                            out_im.write(_out_array, window=ovl_block.out_block, indexes=ovl_block.band_i)
                             bar.update(1)
 
                     if self._homo_config['multithread']:

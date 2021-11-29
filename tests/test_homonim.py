@@ -132,7 +132,6 @@ class TestHomonim(unittest.TestCase):
             homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
             him = homonim.HomonimRefSpace(src_filename, ref_filename, homo_config=self._homo_config,
                                           out_config=self._out_config)
-            # wins = him._overlap_blocks(block_shape=(256, 128), overlap=(4, 2))
             him.homogenise_by_block(homo_filename, **param_dict)
             him.build_overviews(homo_filename)
             self.assertTrue(homo_filename.exists(), 'Homogenised file exists')
