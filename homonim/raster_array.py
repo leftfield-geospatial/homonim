@@ -95,6 +95,10 @@ class RasterArray(object):
         return self.shape[0] if len(self.shape) == 3 else 1
 
     @property
+    def dtype(self):
+        return self.array.dtype
+
+    @property
     def transform(self):
         return self._transform
 
@@ -145,7 +149,7 @@ class RasterArray(object):
 
 
 
-    def reproject(self, crs=None, transform=None, shape=None, nodata=hom_nodata, resampling=Resampling.lanczos):
+    def reproject(self, crs=None, transform=None, shape=None, nodata=hom_nodata, dtype=hom_dtype, resampling=Resampling.lanczos):
 
         if transform and not shape:
             raise ValueError('if transform is specified, shape must also be specified')
@@ -155,11 +159,12 @@ class RasterArray(object):
 
         crs = crs or self._crs
         shape = shape or self._array.shape
+        dtype = dtype or self._array.dtype
 
         if self.array.ndim > 2:
-            _dst_array = np.zeros((self._array.shape[0], *shape), dtype=self._array.dtype)
+            _dst_array = np.zeros((self._array.shape[0], *shape), dtype=dtype)
         else:
-            _dst_array = np.zeros(shape, dtype=self._array.dtype)
+            _dst_array = np.zeros(shape, dtype=dtype)
 
         _, _dst_transform = reproject(
             self._array,

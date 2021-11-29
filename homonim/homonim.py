@@ -645,7 +645,7 @@ class HomonImBase:
             with WarpedVRT(rio.open(self._ref_filename, 'r'), crs=src_im.crs, resampling=Resampling.bilinear) as ref_im:
                 res_ratio = np.ceil(np.array(ref_im.res) / np.array(src_im.res))
                 src_kernel_shape = (kernel_shape * res_ratio).astype(int)
-                overlap = src_kernel_shape
+                overlap = np.ceil(src_kernel_shape/2).astype(int)
                 block_shape = self._auto_block_shape(src_im.shape, src_kernel_shape)
                 ovl_blocks = self._overlap_blocks(block_shape=block_shape, overlap=overlap)
 
@@ -751,10 +751,6 @@ class HomonimRefSpace(HomonImBase):
             # TODO is this faster, or setting param_array[src_array == 0] = 0 below
             mask_ds_array = src_array.mask.reproject(**src_ds_array.proj_profile, resampling=Resampling.average)
             src_ds_array.array[np.logical_not(mask_ds_array.array == 1)] = hom_nodata
-            # mask = (src_array.array != src_array.nodata).astype('uint8')
-            # mask_ds_array = self._project_src_to_ref(mask, src_nodata=None, resampling=Resampling.average,
-            #                                          src_transform=src_transform, transform=ref_transform)
-            # src_ds_array[np.logical_not(mask_ds_array == 1)] = hom_nodata
 
         if normalise:
             norm_model = self._src_image_offset(ref_array.array, src_ds_array.array)
