@@ -122,9 +122,9 @@ class TestHomonim(unittest.TestCase):
         homo_root = root_path.joinpath('data/outputs/test_example/homogenised')
 
         param_list = [
-            dict(method='gain_only', win_size=(3, 3), normalise=False),
-            dict(method='gain_only', win_size=(5, 5), normalise=True),
-            dict(method='gain_offset', win_size=(9, 9), normalise=False),
+            dict(method='gain_only', kernel_shape=(3, 3), normalise=False),
+            dict(method='gain_only', kernel_shape=(5, 5), normalise=True),
+            dict(method='gain_offset', kernel_shape=(9, 9), normalise=False),
         ]
 
         for param_dict in param_list:
@@ -152,15 +152,15 @@ class TestHomonim(unittest.TestCase):
         homo_root = root_path.joinpath('data/outputs/test_example/homogenised')
 
         param_list = [
-            dict(method='gain_only', win_size=(3, 3), normalise=False),
-            dict(method='gain_only', win_size=(5, 5), normalise=True),
-            dict(method='gain_offset', win_size=(9, 9), normalise=False),
+            dict(method='gain_only', kernel_shape=(3, 3), normalise=False),
+            dict(method='gain_only', kernel_shape=(5, 5), normalise=True),
+            dict(method='gain_offset', kernel_shape=(9, 9), normalise=False),
         ]
 
         for param_dict in param_list:
-            win_size_str = [str(param_dict["win_size"][0]), str(param_dict["win_size"][1])]
+            kernel_shape_str = [str(param_dict["kernel_shape"][0]), str(param_dict["kernel_shape"][1])]
             norm_str = '--norm' if param_dict['normalise'] else '--no-norm'
-            cli_params = ['-s', str(src_wildcard), '-r', str(ref_filename), '--ref-space', '-w', *win_size_str,
+            cli_params = ['-s', str(src_wildcard), '-r', str(ref_filename), '--ref-space', '-k', *kernel_shape_str,
                           '-m', param_dict['method'], norm_str, '-od', str(homo_root), '-c', str(self._conf_filename)]
             result = CliRunner().invoke(cli.cli, cli_params, terminal_width=100)
             self.assertTrue(result.exit_code == 0, result.exception)

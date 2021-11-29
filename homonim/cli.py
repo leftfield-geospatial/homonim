@@ -32,12 +32,12 @@ np.set_printoptions(suppress=True)
 logger = get_logger(__name__)
 
 
-def _create_homo_postfix(space=None, method=None, win_size=None, normalise=None):
+def _create_homo_postfix(space=None, method=None, kernel_shape=None, normalise=None):
     """Create a postfix string for the homogenised raster file"""
     if space == 'ref-space':
-        post_fix = f'_HOMO_sREF_m{method.upper()}_n{"ON" if normalise else "OFF"}_w{win_size[0]}_{win_size[1]}.tif'
+        post_fix = f'_HOMO_sREF_m{method.upper()}_n{"ON" if normalise else "OFF"}_w{kernel_shape[0]}_{kernel_shape[1]}.tif'
     else:
-        post_fix = f'_HOMO_sSRC_m{method.upper()}_n{"ON" if normalise else "OFF"}_w{win_size[0]}_{win_size[1]}.tif'
+        post_fix = f'_HOMO_sSRC_m{method.upper()}_n{"ON" if normalise else "OFF"}_w{kernel_shape[0]}_{kernel_shape[1]}.tif'
     return post_fix
 
 
@@ -58,11 +58,11 @@ def _create_homo_postfix(space=None, method=None, win_size=None, normalise=None)
     required=True,
 )
 @click.option(
-    "-w",
-    "--win-size",
+    "-k",
+    "--kernel-shape",
     type=click.Tuple([click.INT, click.INT]),
     nargs=2,
-    help="sliding window width and height (e.g. -w 3 3) [default: use source directory]",
+    help="sliding window width and height (e.g. -k 3 3) [default: (3, 3))]",
     required=False,
     default=(3, 3),
     show_default=True,
@@ -128,7 +128,7 @@ def _create_homo_postfix(space=None, method=None, win_size=None, normalise=None)
     help="path to a configuration file",
     required=False
 )
-def cli(src_file=None, ref_file=None, win_size=(3, 3), method="gain_only", norm=False, homo_space='ref-space',
+def cli(src_file=None, ref_file=None, kernel_shape=(3, 3), method="gain_only", norm=False, homo_space='ref-space',
         output_dir=None, build_ovw=True, conf=None):
     """Radiometrically homogenise image(s) by fusion with reference satellite data"""
 
@@ -168,13 +168,13 @@ def cli(src_file=None, ref_file=None, win_size=(3, 3), method="gain_only", norm=
                                               out_config=config['output'])
 
             # create output raster filename and homogenise
-            post_fix = _create_homo_postfix(space=homo_space, method=method, win_size=win_size, normalise=norm)
+            post_fix = _create_homo_postfix(space=homo_space, method=method, kernel_shape=kernel_shape, normalise=norm)
             homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
-            him.homogenise_by_block(homo_filename, method=method, win_size=win_size, normalise=norm)
+            him.homogenise_by_block(homo_filename, method=method, kernel_shape=kernel_shape, normalise=norm)
 
             # set metadata in output file
             meta_dict = dict(HOMO_SRC_FILE=src_filename.name, HOMO_REF_FILE=pathlib.Path(ref_file).name,
-                             HOMO_SPACE=homo_space, HOMO_METHOD=method, HOMO_WIN_SIZE=win_size, HOMO_NORM=norm,
+                             HOMO_SPACE=homo_space, HOMO_METHOD=method, HOMO_WIN_SIZE=kernel_shape, HOMO_NORM=norm,
                              HOMO_CONF=str(config['homogenisation']))
             him.set_metadata(homo_filename, **meta_dict)
 

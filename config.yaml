@@ -11,7 +11,7 @@ homogenisation:
   # Mask partially covered source pixels when downsampling for --ref-space
   mask_partial_pixel: True
     # Mask partially covered source pixels when downsampling for --ref-space
-  mask_partial_window: True
+  mask_partial_kernel: True
   # Mask extrapolated (boundary) pixels in resampled images
   mask_partial_interp: True
   # Use multi-threading (memory intensive)
@@ -20,7 +20,7 @@ homogenisation:
   # and fitted gain (None = no inpainting).
   r2_threshold: 0.25
   # maximum memory for automatic block size in megabytes
-  max_block_mem: 100
+  max_block_mem: 1024
 
 # Format of output (homogenised) image
 output:

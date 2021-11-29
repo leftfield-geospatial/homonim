@@ -74,7 +74,7 @@ def expand_window_to_grid(win):
 """Projection related raster properties"""
 RasterProps = namedtuple('RasterProps', ['crs', 'transform', 'shape', 'res', 'bounds', 'nodata', 'count', 'profile'])
 
-"""Overlapping window object"""
+"""Overlapping block object"""
 OvlBlock = namedtuple('OvlBlock', ['band_i', 'src_block', 'ref_block', 'out_block', 'outer'])
 
 
@@ -109,7 +109,7 @@ class HomonImBase:
                 'ref2src_interp': 'average',
                 'debug': False,
                 'mask_partial_pixel': True,
-                'mask_partial_window': False,
+                'mask_partial_kernel': False,
                 'mask_partial_interp': False,
                 'multithread': True,
                 'r2_threshold': 0.25,
@@ -223,20 +223,19 @@ class HomonImBase:
                 #     logger.warning('The reference will be re-projected to the source CRS.  \n'
                 #                    'To avoid this step, provide a reference image in the source CRS')
 
-    def _auto_block_shape(self, src_shape, src_win_size):
+    def _auto_block_shape(self, src_shape, src_kernel_shape=None):
+        if src_kernel_shape is None:
+            src_kernel_shape = (0, 0)
         max_block_mem = self._homo_config['max_block_mem'] << 20
         dtype_size = np.dtype(hom_dtype).itemsize
-        band_size_mb = np.product(src_shape)*dtype_size
-        if band_size_mb <= max_block_mem:
-            return src_shape
 
-        full_width_rows = np.floor(max_block_mem/(src_shape[1]*dtype_size))
-        if full_width_rows >= 10*src_win_size[0]:
-            return (full_width_rows, src_shape[1])
-
-        # TODO: extra checking that we don't end up with < win_size block
-        sqr_block_edge = np.floor(np.sqrt(max_block_mem / dtype_size))
-        return (sqr_block_edge, sqr_block_edge)
+        div_dim = np.argmax(src_shape)
+        block_shape = np.array(src_shape)
+        while (np.product(block_shape)*dtype_size > max_block_mem) and np.all(block_shape > src_kernel_shape):
+            block_shape[div_dim] /= 2
+            div_dim = np.mod(div_dim + 1, 2)
+        # block_shape += src_kernel_shape
+        return np.round(block_shape).astype('int')
 
 
     def _overlap_blocks(self, block_shape, overlap=(0, 0)):
@@ -244,13 +243,13 @@ class HomonImBase:
             with WarpedVRT(rio.open(self._ref_filename, 'r'), crs=src_im.crs) as ref_im:
                 src_shape = src_im.shape[-2:]
                 overlap = np.array(overlap)
-                if not block_shape:
-                    block_shape = self._auto_block_shape(src_shape)
                 block_shape = np.array(block_shape)
 
-                src_block_ul = np.mgrid[0:(src_shape[0] - 2 * overlap[0]):(block_shape[0] - 2 * overlap[0]),
-                             0:(src_shape[1] - 2 * overlap[1]):(block_shape[1] - 2 * overlap[1])]
-                src_block_br = src_block_ul + block_shape.reshape(-1, 1, 1)
+                src_block_ul = np.mgrid[-overlap[0]:(src_shape[0] - 2 * overlap[0]):block_shape[0],
+                             -overlap[1]:(src_shape[1] - 2 * overlap[1]):block_shape[1]]
+                src_block_br = src_block_ul + (block_shape + 2 * overlap).reshape(-1, 1, 1)
+                src_block_ul[0, 0, :] = 0
+                src_block_ul[1, :, 0] = 0
                 src_block_br[0, -1, :] = src_shape[0]
                 src_block_br[1, :, -1] = src_shape[1]
 
@@ -264,8 +263,8 @@ class HomonImBase:
 
                     outer = np.any(ovl_ul==0) or np.any(ovl_br==src_shape)
                     for band_i in range(src_im.count):
-                        ovl_win = OvlBlock(band_i+1, src_block, ref_block, out_block, outer)
-                        ovl_blocks.append(ovl_win)
+                        ovl_block = OvlBlock(band_i+1, src_block, ref_block, out_block, outer)
+                        ovl_blocks.append(ovl_block)
         return ovl_blocks
 
     def _create_out_profile(self, init_profile):
@@ -365,9 +364,9 @@ class HomonImBase:
         return norm_model
 
 
-    def _find_gains_cv(self, ref_array, src_array, win_size=(5, 5)):
+    def _find_gains_cv(self, ref_array, src_array, kernel_shape=(5, 5)):
         """
-        Find sliding window gains for a band using opencv convolution.
+        Find sliding kernel gains for a band using opencv convolution.
 
         Parameters
         ----------
@@ -375,8 +374,8 @@ class HomonImBase:
             Reference band in an MxN array.
         src_array : numpy.array_like
             Source band, collocated with ref_array and the same shape.
-        win_size : numpy.array_like, list, tuple, optional
-            Sliding window [width, height] in pixels.
+        kernel_shape : numpy.array_like, list, tuple, optional
+            Sliding kernel [width, height] in pixels.
 
         Returns
         -------
@@ -385,17 +384,17 @@ class HomonImBase:
         """
 
         mask = src_array != hom_nodata
-        win_size = tuple(win_size)  # convert to tuple for opencv
+        kernel_shape = tuple(kernel_shape)  # convert to tuple for opencv
         filter_args = dict(normalize=False, borderType=cv.BORDER_CONSTANT)  # common opencv arguments
 
         # find ref/src pixel ratios avoiding divide by nodata=0
         ratio_array = np.full_like(src_array, fill_value=hom_nodata, dtype=hom_dtype)
         _ = np.divide(ref_array, src_array, out=ratio_array, where=mask.astype('bool', copy=False))
 
-        # sum the ratio and mask over sliding windows (uses DFT for large kernels)
-        # (mask_sum effectively finds N, the number of valid pixels for each window)
-        ratio_sum = cv.boxFilter(ratio_array, -1, win_size, **filter_args)
-        mask_sum = cv.boxFilter(mask.astype(hom_dtype), -1, win_size, **filter_args)
+        # sum the ratio and mask over sliding kernel (uses DFT for large kernels)
+        # (mask_sum effectively finds N, the number of valid pixels for each kernel)
+        ratio_sum = cv.boxFilter(ratio_array, -1, kernel_shape, **filter_args)
+        mask_sum = cv.boxFilter(mask.astype(hom_dtype), -1, kernel_shape, **filter_args)
 
         # calculate gains for valid pixels
         param_array = np.full((1, *src_array.shape), fill_value=hom_nodata, dtype=hom_dtype)
@@ -403,16 +402,16 @@ class HomonImBase:
 
         return param_array
 
-    def _find_gain_and_offset_cv(self, ref_array, src_array, win_size=(15, 15)):
+    def _find_gain_and_offset_cv(self, ref_array, src_array, kernel_shape=(15, 15)):
         """
-        Find sliding window gain and offset for a band using opencv convolution.
+        Find sliding kernel gain and offset for a band using opencv convolution.
 
         ref_array : numpy.array_like
             Reference band in an MxN array.
         src_array : numpy.array_like
             Source band, collocated with ref_array and the same shape.
-        win_size : numpy.array_like, list, tuple, optional
-            Sliding window [width, height] in pixels.
+        kernel_shape : numpy.array_like, list, tuple, optional
+            Sliding kernel [width, height] in pixels.
 
         Returns
         -------
@@ -423,19 +422,19 @@ class HomonImBase:
 
         mask = src_array != hom_nodata
         ref_array[~mask] = hom_nodata  # apply src mask to ref, so we are summing on same pixels
-        win_size = tuple(win_size)  # force to tuple for opencv
+        kernel_shape = tuple(kernel_shape)  # force to tuple for opencv
 
         # find the numerator for the gain i.e. cov(ref, src)
         filter_args = dict(normalize=False, borderType=cv.BORDER_CONSTANT)
-        src_sum = cv.boxFilter(src_array, -1, win_size, **filter_args)
-        ref_sum = cv.boxFilter(ref_array, -1, win_size, **filter_args)
-        src_ref_sum = cv.boxFilter(src_array * ref_array, -1, win_size, **filter_args)
-        mask_sum = cv.boxFilter(mask.astype(hom_dtype), -1, win_size, **filter_args)
+        src_sum = cv.boxFilter(src_array, -1, kernel_shape, **filter_args)
+        ref_sum = cv.boxFilter(ref_array, -1, kernel_shape, **filter_args)
+        src_ref_sum = cv.boxFilter(src_array * ref_array, -1, kernel_shape, **filter_args)
+        mask_sum = cv.boxFilter(mask.astype(hom_dtype), -1, kernel_shape, **filter_args)
         m_num_array = (mask_sum * src_ref_sum) - (src_sum * ref_sum)
         del (src_ref_sum)  # free memory when possible
 
         # find the denominator for the gain i.e. var(src)
-        src2_sum = cv.sqrBoxFilter(src_array, -1, win_size, **filter_args)
+        src2_sum = cv.sqrBoxFilter(src_array, -1, kernel_shape, **filter_args)
         m_den_array = (mask_sum * src2_sum) - (src_sum ** 2)
         del (src2_sum)
 
@@ -450,10 +449,10 @@ class HomonImBase:
         # refit any areas with low R2 using offset "inpainting"
         if self._homo_config['r2_threshold'] is not None:
             # Find R2 of the models for each pixel
-            ref2_sum = cv.sqrBoxFilter(ref_array, -1, win_size, **filter_args)
+            ref2_sum = cv.sqrBoxFilter(ref_array, -1, kernel_shape, **filter_args)
             ss_tot_array = (mask_sum * ref2_sum) - (ref_sum ** 2)
             res_array = (param_array[0, :, :] * src_array + param_array[1, :, :]) - ref_array
-            ss_res_array = mask_sum * cv.sqrBoxFilter(res_array, -1, win_size, **filter_args)
+            ss_res_array = mask_sum * cv.sqrBoxFilter(res_array, -1, kernel_shape, **filter_args)
 
             r2_array = np.full(src_array.shape, fill_value=hom_nodata, dtype=hom_dtype)
             np.divide(ss_res_array, ss_tot_array, out=r2_array, where=mask.astype('bool', copy=False))
@@ -475,7 +474,7 @@ class HomonImBase:
 
         return param_array
 
-    def _homogenise_array(self, ref_array, src_array, method='gain_only', win_size=(5, 5), normalise=False):
+    def _homogenise_array(self, ref_array, src_array, method='gain_only', kernel_shape=(5, 5), normalise=False):
         """
         Wrapper to homogenise an array of source image data
 
@@ -487,8 +486,8 @@ class HomonImBase:
                    M x N array of source data, collocated, and of similar spectral content, to ref_array
         method: str, optional
                 The homogenisation method: ['gain_only'|'gain_offset'].  (Default: 'gain_only')
-        win_size : numpy.array_like, list, tuple, optional
-                   Sliding window (width, height) in pixels.
+        kernel_shape : numpy.array_like, list, tuple, optional
+                   Sliding kernel (width, height) in pixels.
         normalise: bool, optional
                    Perform image-wide normalisation prior to homogenisation.  (Default: False)
         Returns
@@ -500,7 +499,7 @@ class HomonImBase:
         """
         raise NotImplementedError()
 
-    def homogenise_by_band(self, out_filename, method='gain_only', win_size=(5, 5), normalise=False):
+    def homogenise_by_band(self, out_filename, method='gain_only', kernel_shape=(5, 5), normalise=False):
         """
         Homogenise a raster file by band.
 
@@ -510,14 +509,14 @@ class HomonImBase:
                       Path of the homogenised raster file to create.
         method: str, optional
                 The homogenisation method: ['gain_only'|'gain_offset'].  (Default: 'gain_only')
-        win_size : numpy.array_like, list, tuple, optional
-                   Sliding window (width, height) in reference pixels.
+        kernel_shape : numpy.array_like, list, tuple, optional
+                   Sliding kernel (width, height) in reference pixels.
         normalise: bool, optional
                    Perform image-wide normalisation prior to homogenisation.  (Default: False)
         """
 
-        if not np.all(np.mod(win_size, 2) == 1):
-            raise Exception('win_size must be odd in both dimensions')
+        if not np.all(np.mod(kernel_shape, 2) == 1):
+            raise Exception('kernel_shape must be odd in both dimensions')
 
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
             with WarpedVRT(rio.open(self._ref_filename, 'r'), crs=src_im.crs, resampling=Resampling.bilinear) as ref_im:
@@ -559,7 +558,7 @@ class HomonImBase:
                             ref_array = RasterArray.from_profile(_ref_array, ref_im.profile, window=ref_win)
 
                         out_array, param_array = self._homogenise_array(ref_array, src_array, method=method,
-                                                                        win_size=win_size, normalise=normalise)
+                                                                        kernel_shape=kernel_shape, normalise=normalise)
 
                         if out_im.nodata != hom_nodata:
                             out_array[out_array == hom_nodata] = out_im.nodata
@@ -601,7 +600,7 @@ class HomonImBase:
                 current, peak = tracemalloc.get_traced_memory()
                 logger.debug(f"Memory usage: current: {current / 10 ** 6:.1f} MB, peak: {peak / 10 ** 6:.1f} MB")
 
-    def homogenise_by_block(self, out_filename, method='gain_only', win_size=(5, 5), normalise=False):
+    def homogenise_by_block(self, out_filename, method='gain_only', kernel_shape=(5, 5), normalise=False):
         """
         Homogenise a raster file by block.
 
@@ -611,20 +610,21 @@ class HomonImBase:
                       Path of the homogenised raster file to create.
         method: str, optional
                 The homogenisation method: ['gain_only'|'gain_offset'].  (Default: 'gain_only')
-        win_size : numpy.array_like, list, tuple, optional
-                   Sliding window (width, height) in reference pixels.
+        kernel_shape : numpy.array_like, list, tuple, optional
+                   Sliding kernel (width, height) in reference pixels.
         normalise: bool, optional
                    Perform image-wide normalisation prior to homogenisation.  (Default: False)
         """
-        win_size = np.array(win_size)
-        if not np.all(np.mod(win_size, 2) == 1):
-            raise Exception('win_size must be odd in both dimensions')
+        kernel_shape = np.array(kernel_shape)
+        if not np.all(np.mod(kernel_shape, 2) == 1):
+            raise Exception('kernel_shape must be odd in both dimensions')
 
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
             with WarpedVRT(rio.open(self._ref_filename, 'r'), crs=src_im.crs, resampling=Resampling.bilinear) as ref_im:
-                src_win_size = np.ceil(np.array(ref_im.res) / np.array(src_im.res))
-                overlap = (win_size * src_win_size).astype(int)
-                block_shape = self._auto_block_shape(src_im.shape, src_win_size)
+                res_ratio = np.ceil(np.array(ref_im.res) / np.array(src_im.res))
+                src_kernel_shape = (kernel_shape * res_ratio).astype(int)
+                overlap = src_kernel_shape
+                block_shape = self._auto_block_shape(src_im.shape, src_kernel_shape)
                 ovl_blocks = self._overlap_blocks(block_shape=block_shape, overlap=overlap)
 
                 if self._homo_config['debug']:
@@ -653,7 +653,7 @@ class HomonImBase:
                 param_lock = threading.Lock()
                 try:
                     def process_block(ovl_block: OvlBlock):
-                        """Thread-safe function to homogenise a window of src_im"""
+                        """Thread-safe function to homogenise a block of src_im"""
                         with src_read_lock:
                             _src_array = src_im.read(ovl_block.band_i, window=ovl_block.src_block, out_dtype=hom_dtype)
                             src_array = RasterArray.from_profile(_src_array, src_im.profile, window=ovl_block.src_block)
@@ -663,7 +663,7 @@ class HomonImBase:
                             ref_array = RasterArray.from_profile(_ref_array, ref_im.profile, window=ovl_block.ref_block)
 
                         out_array, param_array = self._homogenise_array(
-                            ref_array, src_array, method=method, win_size=win_size, normalise=normalise
+                            ref_array, src_array, method=method, kernel_shape=kernel_shape, normalise=normalise
                         )
 
                         if out_im.nodata != hom_nodata:
@@ -712,7 +712,7 @@ class HomonImBase:
 class HomonimRefSpace(HomonImBase):
     """Class for homogenising images in reference image space"""
 
-    def _homogenise_array(self, ref_array, src_array, method='gain_only', win_size=(5, 5), normalise=False):
+    def _homogenise_array(self, ref_array, src_array, method='gain_only', kernel_shape=(5, 5), normalise=False):
 
         # downsample src_array to reference grid
         # src_ds_array = self._project_src_to_ref(src_array, src_nodata=self.src_props.nodata,
@@ -735,9 +735,9 @@ class HomonimRefSpace(HomonImBase):
             norm_model = self._src_image_offset(ref_array.array, src_ds_array.array)
 
         if method.lower() == 'gain_only':
-            _param_ds_array = self._find_gains_cv(ref_array.array, src_ds_array.array, win_size=win_size)
+            _param_ds_array = self._find_gains_cv(ref_array.array, src_ds_array.array, kernel_shape=kernel_shape)
         else:
-            _param_ds_array = self._find_gain_and_offset_cv(ref_array.array, src_ds_array.array, win_size=win_size)
+            _param_ds_array = self._find_gain_and_offset_cv(ref_array.array, src_ds_array.array, kernel_shape=kernel_shape)
 
         # upsample the parameter array to source grid
         # param_array = self._project_ref_to_src(param_ds_array[:2, :, :], ref_transform=ref_transform,
@@ -747,17 +747,17 @@ class HomonimRefSpace(HomonImBase):
         #                                        nodata=hom_nodata, resampling=self._homo_config['ref2src_interp'])
         param_array = param_ds_array.reproject(**src_array.proj_profile, resampling=self._homo_config['ref2src_interp'])
 
-        if self._homo_config['mask_partial_interp'] or self._homo_config['mask_partial_window']:
-            # mask boundary param_array pixels that not fully covered by a window, or were extrapolated
+        if self._homo_config['mask_partial_interp'] or self._homo_config['mask_partial_kernel']:
+            # mask boundary param_array pixels that not fully covered by a kernel, or were extrapolated
             # ("partially interpolated") rather than purely interpolated
             param_mask = np.all(param_array.array == hom_nodata, axis=0)
             res_ratio = np.divide(ref_array.res, param_array.res)
-            # mask_partial_window covers mask_partial_interp, so don't do both
-            if self._homo_config['mask_partial_window']:
-                kernel_size = np.ceil(res_ratio*win_size).astype('int32')
+            # mask_partial_kernel covers mask_partial_interp, so don't do both
+            if self._homo_config['mask_partial_kernel']:
+                src_kernel_shape = np.ceil(res_ratio * kernel_shape).astype('int32')
             elif self._homo_config['mask_partial_interp']:
-                kernel_size = np.ceil(res_ratio).astype('int32')  # /2
-            se = cv2.getStructuringElement(cv2.MORPH_RECT, tuple(kernel_size))
+                src_kernel_shape = np.ceil(res_ratio).astype('int32')  # /2
+            se = cv2.getStructuringElement(cv2.MORPH_RECT, tuple(src_kernel_shape))
             param_mask = cv2.dilate(param_mask.astype('uint8', copy=False), se).astype('bool', copy=False)
             param_array.array[:, param_mask] = hom_nodata
 
@@ -779,7 +779,7 @@ class HomonimRefSpace(HomonImBase):
 class HomonimSrcSpace(HomonImBase):
     """Class for homogenising images in source image space"""
 
-    def _homogenise_array(self, ref_array, src_array, method='gain_only', win_size=(5, 5), normalise=False):
+    def _homogenise_array(self, ref_array, src_array, method='gain_only', kernel_shape=(5, 5), normalise=False):
         # re-assign source nodata if necessary
         if src_array.nodata != hom_nodata:
             src_array.array[src_array.array == src_array.nodata] = hom_nodata
@@ -792,18 +792,18 @@ class HomonimSrcSpace(HomonImBase):
         if normalise:  # normalise src_array in place
             self._src_image_offset(ref_us_array.array, src_array.array)
 
-        # find win_size in source pixels
-        win_size = win_size * np.round(ref_array.res / src_array.res).astype(int)
+        # find kernel_shape in source pixels
+        src_kernel_shape = kernel_shape * np.round(ref_array.res / src_array.res).astype(int)
 
         if method.lower() == 'gain_only':
-            param_array = self._find_gains_cv(ref_us_array.array, src_array.array, win_size=win_size)
+            param_array = self._find_gains_cv(ref_us_array.array, src_array.array, kernel_shape=src_kernel_shape)
         else:
-            param_array = self._find_gain_and_offset_cv(ref_us_array.array, src_array.array, win_size=win_size)
+            param_array = self._find_gain_and_offset_cv(ref_us_array.array, src_array.array, kernel_shape=src_kernel_shape)
 
-        if self._homo_config['mask_partial_window']:
-            # mask boundary param_array pixels that not fully covered by a window
+        if self._homo_config['mask_partial_kernel']:
+            # mask boundary param_array pixels that not fully covered by a kernel
             param_mask = np.all(param_array == hom_nodata, axis=0)
-            se = cv2.getStructuringElement(cv2.MORPH_RECT, tuple(win_size))
+            se = cv2.getStructuringElement(cv2.MORPH_RECT, tuple(src_kernel_shape))
             param_mask = cv2.dilate(param_mask.astype('uint8', copy=False), se).astype('bool', copy=False)
             param_array[:, param_mask] = hom_nodata
 
