@@ -227,7 +227,7 @@ class HomonImBase:
     def _auto_block_shape(self, src_shape, src_kernel_shape=None):
         if src_kernel_shape is None:
             src_kernel_shape = (0, 0)
-        max_block_mem = self._homo_config['max_block_mem'] << 20
+        max_block_mem = self._homo_config['max_block_mem'] * (2**20)    # MB to Bytes
         dtype_size = np.dtype(hom_dtype).itemsize
 
         div_dim = np.argmax(src_shape)
@@ -264,30 +264,6 @@ class HomonImBase:
                         outer = np.any(src_ul==0) or np.any(src_br==src_shape-1)
                         ovl_blocks.append(OvlBlock(band_i+1, src_block, ref_block, out_block, outer))
         return ovl_blocks
-
-        #         src_block_ul = np.mgrid[-overlap[0]:(src_shape[0] - 2 * overlap[0]):block_shape[0],
-        #                      -overlap[1]:(src_shape[1] - 2 * overlap[1]):block_shape[1]]
-        #         src_block_br = src_block_ul + (block_shape + 2 * overlap).reshape(-1, 1, 1)
-        #
-        #
-        #         src_block_ul[0, 0, :] = 0
-        #         src_block_ul[1, :, 0] = 0
-        #         src_block_br[0, -1, :] = src_shape[0] - 1   #-1?
-        #         src_block_br[1, :, -1] = src_shape[1] - 1
-        #
-        #         ovl_blocks = []
-        #         for ovl_ul, ovl_br in zip(src_block_ul.reshape(2, -1).T, src_block_br.reshape(2, -1).T):
-        #             src_block = rio.windows.Window.from_slices((ovl_ul[0], ovl_br[0]), (ovl_ul[1], ovl_br[1]))
-        #             out_block = rio.windows.Window.from_slices((ovl_ul[0] + overlap[0], ovl_br[0] -  overlap[0]),
-        #                                                           (ovl_ul[1] + overlap[1], ovl_br[1] - overlap[1]))
-        #
-        #             ref_block = expand_window_to_grid(ref_im.window(*src_im.window_bounds(src_block)))
-        #
-        #             outer = np.any(ovl_ul==0) or np.any(ovl_br==src_shape)
-        #             for band_i in range(src_im.count):
-        #                 ovl_block = OvlBlock(band_i+1, src_block, ref_block, out_block, outer)
-        #                 ovl_blocks.append(ovl_block)
-        # return ovl_blocks
 
     def _create_out_profile(self, init_profile):
         """Create a rasterio profile for the output raster based on a starting profile and configuration"""
@@ -418,6 +394,12 @@ class HomonImBase:
         ratio_sum = cv.boxFilter(ratio_array, -1, kernel_shape, **filter_args)
         mask_sum = cv.boxFilter(mask.astype(hom_dtype), -1, kernel_shape, **filter_args)
 
+        # mask out parameter pixels that were not completely covered by a window of valid data
+        # TODO: this interacts with mask_partial_interp, so rather do it in homogenise after --ref-space US?
+        #   this is sort of the same question as, is it better to do pure extrapolation, or interpolation with semi-covered data?
+        if self._homo_config['mask_partial_kernel']:
+            mask &= (mask_sum >= np.product(kernel_shape))
+
         # calculate gains for valid pixels
         param_array = np.full((1, *src_array.shape), fill_value=hom_nodata, dtype=hom_dtype)
         _ = np.divide(ratio_sum, mask_sum, out=param_array[0, :, :], where=mask.astype('bool', copy=False))
@@ -493,6 +475,13 @@ class HomonImBase:
                 # append R2 to parameters so they can all be written to a debug raster
                 # TODO: avoid a copy here somehow?
                 param_array = np.concatenate((param_array, r2_array.reshape(1, *r2_array.shape)), axis=0)
+
+        # TODO: this interacts with mask_partial_interp, so rather do it in homogenise after --ref-space US?
+        #   this is sort of the same question as, is it better to do pure extrapolation, or interpolation with semi-covered data?
+        # mask out parameter pixels that were not completely covered by a window of valid data
+        if self._homo_config['mask_partial_kernel']:
+            mask &= (mask_sum >= np.product(kernel_shape))
+            param_array[:, ~mask] = hom_nodata
 
         return param_array
 
@@ -645,7 +634,7 @@ class HomonImBase:
             with WarpedVRT(rio.open(self._ref_filename, 'r'), crs=src_im.crs, resampling=Resampling.bilinear) as ref_im:
                 res_ratio = np.ceil(np.array(ref_im.res) / np.array(src_im.res))
                 src_kernel_shape = (kernel_shape * res_ratio).astype(int)
-                overlap = np.ceil(src_kernel_shape/2).astype(int)
+                overlap = np.ceil(res_ratio + src_kernel_shape/2).astype(int)
                 block_shape = self._auto_block_shape(src_im.shape, src_kernel_shape)
                 ovl_blocks = self._overlap_blocks(block_shape=block_shape, overlap=overlap)
 
@@ -768,17 +757,18 @@ class HomonimRefSpace(HomonImBase):
         #                                        nodata=hom_nodata, resampling=self._homo_config['ref2src_interp'])
         param_array = param_ds_array.reproject(**src_array.proj_profile, resampling=self._homo_config['ref2src_interp'])
 
-        if self._homo_config['mask_partial_interp'] or self._homo_config['mask_partial_kernel']:
-            # mask boundary param_array pixels that not fully covered by a kernel, or were extrapolated
+        # if self._homo_config['mask_partial_interp'] or self._homo_config['mask_partial_kernel']:
+        if self._homo_config['mask_partial_interp']:
+        # mask boundary param_array pixels that not fully covered by a kernel, or were extrapolated
             # ("partially interpolated") rather than purely interpolated
             param_mask = np.all(param_array.array == hom_nodata, axis=0)
             res_ratio = np.divide(ref_array.res, param_array.res)
             # mask_partial_kernel covers mask_partial_interp, so don't do both
-            if self._homo_config['mask_partial_kernel']:
-                src_kernel_shape = np.ceil(res_ratio * kernel_shape).astype('int32')
-            elif self._homo_config['mask_partial_interp']:
-                src_kernel_shape = np.ceil(res_ratio).astype('int32')  # /2
-            se = cv2.getStructuringElement(cv2.MORPH_RECT, tuple(src_kernel_shape))
+            # if self._homo_config['mask_partial_kernel']:
+            #     src_kernel_shape = np.ceil(res_ratio * kernel_shape / 2).astype('int32')
+            # elif self._homo_config['mask_partial_interp']:
+            src_kernel_shape = np.ceil(res_ratio).astype('int32')  # /2
+            se = cv2.getStructuringElement(cv2.MORPH_RECT, tuple(np.ceil(res_ratio).astype('int32')))
             param_mask = cv2.dilate(param_mask.astype('uint8', copy=False), se).astype('bool', copy=False)
             param_array.array[:, param_mask] = hom_nodata
 

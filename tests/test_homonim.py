@@ -22,6 +22,7 @@ import pathlib
 import unittest
 import warnings
 
+import cv2
 import numpy as np
 import rasterio as rio
 from rasterio.warp import Resampling
@@ -87,6 +88,16 @@ class TestHomonim(unittest.TestCase):
                 src_box = box(*src_im.bounds)
                 homo_box = box(*homo_im.bounds)
                 self.assertTrue(src_box.covers(homo_box), 'Source bounds cover homogenised bounds')
+                for bi in range(src_im.count):
+                    src_mask = src_im.read_masks(bi + 1)
+                    homo_mask = homo_im.read_masks(bi + 1)
+                    self.assertTrue(np.abs(src_mask.mean() - homo_mask.mean())/255 < .2, 'Source and homgenised have similar valid areas')
+
+                    # for fn in [lambda x: x, lambda x: np.bitwise_not(x)]:
+                    #     nsrc_labels, _ = cv2.connectedComponents(fn(src_mask), None, 4, cv2.CV_16U)
+                    #     nhomo_labels, _ = cv2.connectedComponents(fn(homo_mask), None, 4, cv2.CV_16U)
+                    #     self.assertTrue(nsrc_labels==nhomo_labels, 'Number of source and homgenised valid/nodata areas match')
+
 
     def _test_homo_against_ref(self, src_filename, homo_filename, ref_filename):
         """Test R2 against reference before and after homogenisation"""
