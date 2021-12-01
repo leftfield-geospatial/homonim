@@ -27,7 +27,7 @@ output:
   # Format of homogenised raster - see www.gdal.org/formats_list.html (None = same format as source image)
   driver: GTiff
   # Data type (be aware that homogenised reflectances may be negative in some instances)
-  dtype:
+  dtype: float32
   # Tile/block [x, y] size in pixels  ([512, 512] recommended) (None = same as source image)
   blockxsize:
   blockysize:
@@ -38,4 +38,4 @@ output:
   # Photometric interpretation, see https://gdal.org/drivers/raster/gtiff.html for options (None = same as source image)
   photometric:
   # NODATA value (None = same as source image)
-  nodata:
+  nodata: #.nan
