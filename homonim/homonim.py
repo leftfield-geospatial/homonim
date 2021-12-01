@@ -397,8 +397,8 @@ class HomonImBase:
         # mask out parameter pixels that were not completely covered by a window of valid data
         # TODO: this interacts with mask_partial_interp, so rather do it in homogenise after --ref-space US?
         #   this is sort of the same question as, is it better to do pure extrapolation, or interpolation with semi-covered data?
-        if self._homo_config['mask_partial_kernel']:
-            mask &= (mask_sum >= np.product(kernel_shape))
+        # if self._homo_config['mask_partial_kernel']:
+        #     mask &= (mask_sum >= np.product(kernel_shape))
 
         # calculate gains for valid pixels
         param_array = np.full((1, *src_array.shape), fill_value=hom_nodata, dtype=hom_dtype)
@@ -479,9 +479,9 @@ class HomonImBase:
         # TODO: this interacts with mask_partial_interp, so rather do it in homogenise after --ref-space US?
         #   this is sort of the same question as, is it better to do pure extrapolation, or interpolation with semi-covered data?
         # mask out parameter pixels that were not completely covered by a window of valid data
-        if self._homo_config['mask_partial_kernel']:
-            mask &= (mask_sum >= np.product(kernel_shape))
-            param_array[:, ~mask] = hom_nodata
+        # if self._homo_config['mask_partial_kernel']:
+        #     mask &= (mask_sum >= np.product(kernel_shape))
+        #     param_array[:, ~mask] = hom_nodata
 
         return param_array
 
@@ -757,20 +757,20 @@ class HomonimRefSpace(HomonImBase):
         #                                        nodata=hom_nodata, resampling=self._homo_config['ref2src_interp'])
         param_array = param_ds_array.reproject(**src_array.proj_profile, resampling=self._homo_config['ref2src_interp'])
 
-        # if self._homo_config['mask_partial_interp'] or self._homo_config['mask_partial_kernel']:
-        if self._homo_config['mask_partial_interp']:
-        # mask boundary param_array pixels that not fully covered by a kernel, or were extrapolated
-            # ("partially interpolated") rather than purely interpolated
+        if self._homo_config['mask_partial_interp'] or self._homo_config['mask_partial_kernel']:
             param_mask = np.all(param_array.array == hom_nodata, axis=0)
             res_ratio = np.divide(ref_array.res, param_array.res)
-            # mask_partial_kernel covers mask_partial_interp, so don't do both
-            # if self._homo_config['mask_partial_kernel']:
-            #     src_kernel_shape = np.ceil(res_ratio * kernel_shape / 2).astype('int32')
-            # elif self._homo_config['mask_partial_interp']:
-            src_kernel_shape = np.ceil(res_ratio).astype('int32')  # /2
-            se = cv2.getStructuringElement(cv2.MORPH_RECT, tuple(np.ceil(res_ratio).astype('int32')))
+            if self._homo_config['mask_partial_kernel']:
+                morph_kernel_shape = np.ceil(res_ratio * kernel_shape).astype('int32')
+            elif self._homo_config['mask_partial_interp'] or self._homo_config['mask_partial_pixel']:
+                # no need to do mask_partial_interp when mask_partial_kernel==True
+                morph_kernel_shape = np.ceil(res_ratio).astype('int32')
+            se = cv2.getStructuringElement(cv2.MORPH_RECT, tuple(morph_kernel_shape))
             param_mask = cv2.dilate(param_mask.astype('uint8', copy=False), se).astype('bool', copy=False)
             param_array.array[:, param_mask] = hom_nodata
+        elif not self._homo_config['mask_partial_pixel']:
+            # if no mask_partial_* was done, then mask with source mask
+            param_array.array[:, (src_array.array == src_array.nodata)] = hom_nodata
 
         # apply the model to src_array
         if normalise:
