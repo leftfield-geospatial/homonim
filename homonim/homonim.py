@@ -569,7 +569,7 @@ class HomonImBase:
                             ref_array = RasterArray.from_profile(_ref_array, ref_im.profile, window=ref_win)
 
                         out_array, param_array = self._homogenise_array(ref_array, src_array, method=method,
-                                                                        kernel_shape=kernel_shape, normalise=normalise)
+                                                                        kernel_shape=kernel_shape, normalise=normalise, mask_partial=True)
 
                         if out_im.nodata != hom_nodata:
                             out_array[out_array == hom_nodata] = out_im.nodata
@@ -674,7 +674,7 @@ class HomonImBase:
                             ref_array = RasterArray.from_profile(_ref_array, ref_im.profile, window=ovl_block.ref_block)
 
                         out_array, param_array = self._homogenise_array(
-                            ref_array, src_array, method=method, kernel_shape=kernel_shape, normalise=normalise
+                            ref_array, src_array, method=method, kernel_shape=kernel_shape, normalise=normalise, mask_partial=ovl_block.outer
                         )
 
                         if out_im.nodata != hom_nodata:
@@ -726,7 +726,7 @@ class HomonImBase:
 class HomonimRefSpace(HomonImBase):
     """Class for homogenising images in reference image space"""
 
-    def _homogenise_array(self, ref_array, src_array, method='gain_only', kernel_shape=(5, 5), normalise=False):
+    def _homogenise_array(self, ref_array, src_array, method='gain_only', kernel_shape=(5, 5), normalise=False, mask_partial=True):
 
         # downsample src_array to reference grid
         # src_ds_array = self._project_src_to_ref(src_array, src_nodata=self.src_props.nodata,
@@ -735,7 +735,7 @@ class HomonimRefSpace(HomonImBase):
         #                                    nodata=hom_nodata, resampling=self._homo_config['src2ref_interp'])
         src_ds_array = src_array.reproject(**ref_array.proj_profile, resampling=self._homo_config['src2ref_interp'])
 
-        if self._homo_config['mask_partial_pixel']:
+        if mask_partial and self._homo_config['mask_partial_pixel']:
             # mask src_ds_array pixels that were not completely covered by src_array
             # TODO is this faster, or setting param_array[src_array == 0] = 0 below
             mask_ds_array = src_array.mask.reproject(**src_ds_array.proj_profile, resampling=Resampling.average)
@@ -757,7 +757,7 @@ class HomonimRefSpace(HomonImBase):
         #                                        nodata=hom_nodata, resampling=self._homo_config['ref2src_interp'])
         param_array = param_ds_array.reproject(**src_array.proj_profile, resampling=self._homo_config['ref2src_interp'])
 
-        if self._homo_config['mask_partial_interp'] or self._homo_config['mask_partial_kernel']:
+        if mask_partial and (self._homo_config['mask_partial_interp'] or self._homo_config['mask_partial_kernel']):
             param_mask = np.all(param_array.array == hom_nodata, axis=0)
             res_ratio = np.divide(ref_array.res, param_array.res)
             if self._homo_config['mask_partial_kernel']:
@@ -790,7 +790,7 @@ class HomonimRefSpace(HomonImBase):
 class HomonimSrcSpace(HomonImBase):
     """Class for homogenising images in source image space"""
 
-    def _homogenise_array(self, ref_array, src_array, method='gain_only', kernel_shape=(5, 5), normalise=False):
+    def _homogenise_array(self, ref_array, src_array, method='gain_only', kernel_shape=(5, 5), normalise=False, mask_partial=True):
         # re-assign source nodata if necessary
         if src_array.nodata != hom_nodata:
             src_array.array[src_array.array == src_array.nodata] = hom_nodata
@@ -811,7 +811,7 @@ class HomonimSrcSpace(HomonImBase):
         else:
             param_array = self._find_gain_and_offset_cv(ref_us_array.array, src_array.array, kernel_shape=src_kernel_shape)
 
-        if self._homo_config['mask_partial_kernel']:
+        if mask_partial and self._homo_config['mask_partial_kernel']:
             # mask boundary param_array pixels that not fully covered by a kernel
             param_mask = np.all(param_array == hom_nodata, axis=0)
             se = cv2.getStructuringElement(cv2.MORPH_RECT, tuple(src_kernel_shape))
