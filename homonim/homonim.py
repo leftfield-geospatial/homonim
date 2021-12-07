@@ -595,12 +595,11 @@ class HomonImBase:
                     proc_profile = cProfile.Profile()
                     proc_profile.enable()
 
-                if self._homo_config['debug_level'] >= 2:
-                    param_profile = self._create_debug_profile(src_im.profile, ref_im.profile)
-
-                    # create parameter raster file
-                    param_out_file_name = self._create_debug_filename(out_filename)
-                    param_im = rio.open(param_out_file_name, 'w', **param_profile)
+                    if self._homo_config['debug_level'] >= 2:
+                        # create debug raster file
+                        dbg_profile = self._create_debug_profile(src_im.profile, ref_im.profile)
+                        dbg_out_file_name = self._create_debug_filename(out_filename)
+                        dbg_im = rio.open(dbg_out_file_name, 'w', **dbg_profile)
 
                 # create the output raster file
                 out_profile = self._create_out_profile(src_im.profile)
@@ -614,7 +613,7 @@ class HomonImBase:
                 src_read_lock = threading.Lock()
                 ref_read_lock = threading.Lock()
                 write_lock = threading.Lock()
-                param_lock = threading.Lock()
+                dbg_lock = threading.Lock()
                 try:
                     def process_block(ovl_block: OvlBlock):
                         """Thread-safe function to homogenise a block of src_im"""
@@ -626,7 +625,7 @@ class HomonImBase:
                             ref_array = ref_im.read(ovl_block.band_i, window=ovl_block.ref_in_block, out_dtype=hom_dtype)
                             ref_ra = RasterArray.from_profile(ref_array, ref_im.profile, window=ovl_block.ref_in_block)
 
-                        out_array, param_array = self._homogenise_array(
+                        out_array, dbg_array = self._homogenise_array(
                             ref_ra, src_ra, method=method, kernel_shape=kernel_shape, mask_partial=ovl_block.outer
                         )
 
@@ -642,18 +641,18 @@ class HomonImBase:
                             bar.update(1)
 
                         if self._homo_config['debug_level'] >= 2:
-                            with param_lock:
-                                for pi in range(param_array.shape[0]):
+                            with dbg_lock:
+                                for pi in range(dbg_array.shape[0]):
                                     _bi = ovl_block.band_i + (pi * src_im.count)
                                     dbg_in_block = ovl_block.__getattribute__(f'{self._debug_block_prefix}_in_block')
                                     dbg_out_block = ovl_block.__getattribute__(f'{self._debug_block_prefix}_out_block')
-                                    param_arr_win = Window(dbg_out_block.col_off - dbg_in_block.col_off,
+                                    dbg_arr_win = Window(dbg_out_block.col_off - dbg_in_block.col_off,
                                         dbg_out_block.row_off - dbg_in_block.row_off,
                                         dbg_out_block.width, dbg_out_block.height)
 
-                                    _param_array = param_array[(pi, *param_arr_win.toslices())].astype(
-                                        param_im.dtypes[ovl_block.band_i - 1])
-                                    param_im.write(_param_array, window=dbg_out_block, indexes=_bi)
+                                    _dbg_array = dbg_array[(pi, *dbg_arr_win.toslices())].astype(
+                                        dbg_im.dtypes[ovl_block.band_i - 1])
+                                    dbg_im.write(_dbg_array, window=dbg_out_block, indexes=_bi)
 
                     if self._homo_config['multithread']:
                         # process bands in concurrent threads
@@ -666,7 +665,7 @@ class HomonImBase:
                 finally:
                     out_im.close()
                     if self._homo_config['debug_level'] >= 2:
-                        param_im.close()
+                        dbg_im.close()
                     bar.update(1)
                     bar.close()
 
@@ -694,6 +693,7 @@ class HomonimRefSpace(HomonImBase):
     def _homogenise_array(self, ref_ra, src_ra, method='gain_im_offset', kernel_shape=(5, 5), mask_partial=True):
 
         method = method.lower()
+        norm_model = None
         # downsample src_ra to reference grid
         src_ds_ra = src_ra.reproject(**ref_ra.proj_profile, resampling=self._homo_config['src2ref_interp'])
 
@@ -705,12 +705,12 @@ class HomonimRefSpace(HomonImBase):
 
         if method == 'gain_offset':
             param_ds_array = self._find_gain_and_offset_cv(ref_ra.array, src_ds_ra.array, kernel_shape=kernel_shape)
-            param_ds_ra = RasterArray.from_profile(param_ds_array[:2, :, :], src_ds_ra.profile)
+            param_ds_ra = RasterArray.from_profile(param_ds_array[:2, :, :], src_ds_ra.profile)    # exclude dbg r2 band
         else:
             if method == 'gain_im_offset':  # normalise src_ds_ra in place
                 norm_model = self._src_image_offset(ref_ra.array, src_ds_ra.array)
             param_ds_array = self._find_gains_cv(ref_ra.array, src_ds_ra.array, kernel_shape=kernel_shape)
-            param_ds_ra = RasterArray.from_profile(param_ds_array[:1, :, :], src_ds_ra.profile)
+            param_ds_ra = RasterArray.from_profile(param_ds_array[:1, :, :], src_ds_ra.profile)    # exclude dbg r2 band
 
         # upsample the parameter array to source grid
         param_ra = param_ds_ra.reproject(**src_ra.proj_profile, resampling=self._homo_config['ref2src_interp'])
@@ -739,7 +739,15 @@ class HomonimRefSpace(HomonImBase):
         else:
             out_array = param_ra.array[0, :, :] * src_ra.array
 
-        return out_array, param_ds_array
+        if self._homo_config['debug_level'] >= 2:
+            debug_array = param_ds_array
+            if method == 'gain_im_offset':  # incorporate norm_model into parameters
+                debug_array = np.insert(debug_array, 1, debug_array[0, :, :] * norm_model[1], axis=0)
+                debug_array[0, :, :] *= norm_model[0]
+        else:
+            debug_array = None
+
+        return out_array, debug_array
 
 
 ##
@@ -762,7 +770,6 @@ class HomonimSrcSpace(HomonImBase):
         # upsample reference to source grid
         ref_us_ra = ref_ra.reproject(**src_ra.proj_profile, resampling=self._homo_config['ref2src_interp'])
 
-
         # find kernel_shape in source pixels
         src_kernel_shape = kernel_shape * np.round(ref_ra.res / src_ra.res).astype(int)
 
@@ -770,7 +777,7 @@ class HomonimSrcSpace(HomonImBase):
             param_array = self._find_gain_and_offset_cv(ref_us_ra.array, src_ra.array, kernel_shape=src_kernel_shape)
         else:
             if method == 'gain_im_offset':  # normalise src_ra in place
-                self._src_image_offset(ref_us_ra.array, src_ra.array)
+                norm_model = self._src_image_offset(ref_us_ra.array, src_ra.array)
             param_array = self._find_gains_cv(ref_us_ra.array, src_ra.array, kernel_shape=src_kernel_shape)
 
         if mask_partial and self._homo_config['mask_partial_kernel']:
@@ -785,4 +792,12 @@ class HomonimSrcSpace(HomonImBase):
         if method == 'gain_offset':
             out_array += param_array[1, :, :]
 
-        return out_array, param_array
+        if self._homo_config['debug_level'] >= 2:
+            debug_array = param_array
+            if method == 'gain_im_offset':  # incorporate norm_model into parameters
+                debug_array = np.insert(debug_array, 1, debug_array[0, :, :] * norm_model[1], axis=0)
+                debug_array[0, :, :] *= norm_model[0]
+        else:
+            debug_array = None
+
+        return out_array, debug_array
