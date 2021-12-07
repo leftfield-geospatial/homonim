@@ -170,7 +170,7 @@ def cli(src_file=None, ref_file=None, kernel_shape=(3, 3), method="gain_only", n
             # create output raster filename and homogenise
             post_fix = _create_homo_postfix(space=homo_space, method=method, kernel_shape=kernel_shape, normalise=norm)
             homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
-            him.homogenise_by_block(homo_filename, method=method, kernel_shape=kernel_shape, normalise=norm)
+            him.homogenise(homo_filename, method=method, kernel_shape=kernel_shape, normalise=norm)
 
             # set metadata in output file
             meta_dict = dict(HOMO_SRC_FILE=src_filename.name, HOMO_REF_FILE=pathlib.Path(ref_file).name,
@@ -187,7 +187,7 @@ def cli(src_file=None, ref_file=None, kernel_shape=(3, 3), method="gain_only", n
                 logger.info(f'Building overviews for {homo_filename.name}')
                 him.build_overviews(homo_filename)
 
-                if config['homogenisation']['debug']:
+                if config['homogenisation']['debug_level'] >= 2:
                     param_out_filename = him._create_param_filename(homo_filename)
                     logger.info(f'Building overviews for {param_out_filename.name}')
                     him.build_overviews(param_out_filename)

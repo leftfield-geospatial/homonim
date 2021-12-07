@@ -108,7 +108,7 @@ class HomonImBase:
             self._homo_config = {
                 'src2ref_interp': 'cubic_spline',
                 'ref2src_interp': 'average',
-                'debug': False,
+                'debug_level': 0,
                 'mask_partial_pixel': True,
                 'mask_partial_kernel': False,
                 'mask_partial_interp': False,
@@ -133,7 +133,7 @@ class HomonImBase:
             self._out_config = out_config
 
     # @property
-    # def ref_array(self):
+    # def ref_ra(self):
     #     """Reference image array collocated and covering source region in source CRS."""
     #     if self._ref_array is None:
     #         self._ref_array = self._read_ref()
@@ -357,7 +357,6 @@ class HomonImBase:
         norm_model[0] = _ref_array.std() / _src_array.std()
         norm_model[1] = np.percentile(_ref_array, 1) - np.percentile(_src_array, 1) * norm_model[0]
 
-        # logger.info(f'Image normalisation gain / offset: {norm_model[0]:.4f} / {norm_model[1]:.4f}')
         src_array[src_mask] = norm_model[0]*_src_array + norm_model[1]
         return norm_model
 
@@ -371,14 +370,14 @@ class HomonImBase:
         ref_array : numpy.array_like
             Reference band in an MxN array.
         src_array : numpy.array_like
-            Source band, collocated with ref_array and the same shape.
+            Source band, collocated with ref_ra and the same shape.
         kernel_shape : numpy.array_like, list, tuple, optional
             Sliding kernel [width, height] in pixels.
 
         Returns
         -------
         param_array : numpy.array_like
-        1 x M x N array of gains, corresponding to M x N src_ and ref_array
+        1 x M x N array of gains, corresponding to M x N src_ and ref_ra
         """
 
         mask = src_array != hom_nodata
@@ -410,17 +409,17 @@ class HomonImBase:
         """
         Find sliding kernel gain and offset for a band using opencv convolution.
 
-        ref_array : numpy.array_like
+        ref_ra : numpy.array_like
             Reference band in an MxN array.
-        src_array : numpy.array_like
-            Source band, collocated with ref_array and the same shape.
+        src_ra : numpy.array_like
+            Source band, collocated with ref_ra and the same shape.
         kernel_shape : numpy.array_like, list, tuple, optional
             Sliding kernel [width, height] in pixels.
 
         Returns
         -------
         param_array : numpy.array_like
-        2 x M x N array of gains and offsets, corresponding to M x N src_ and ref_array
+        2 x M x N array of gains and offsets, corresponding to M x N src_ and ref_ra
         """
         # Least squares formulae adapted from https://www.mathsisfun.com/data/least-squares-regression.html
 
@@ -471,7 +470,7 @@ class HomonImBase:
             rf_mask &= mask
             np.divide(ref_sum - mask_sum * param_array[1, :, :], src_sum, out=param_array[0, :, :],
                       where=rf_mask.astype('bool', copy=False))
-            if self._homo_config['debug']:
+            if self._homo_config['debug_level'] >= 2:
                 # append R2 to parameters so they can all be written to a debug raster
                 # TODO: avoid a copy here somehow?
                 param_array = np.concatenate((param_array, r2_array.reshape(1, *r2_array.shape)), axis=0)
@@ -485,16 +484,16 @@ class HomonImBase:
 
         return param_array
 
-    def _homogenise_array(self, ref_array, src_array, method='gain_only', kernel_shape=(5, 5), normalise=False):
+    def _homogenise_array(self, ref_ra, src_ra, method='gain_only', kernel_shape=(5, 5), normalise=False):
         """
         Wrapper to homogenise an array of source image data
 
         Parameters
         ----------
-        ref_array: numpy.array_like
-                   M x N array of reference data, collocated, and of similar spectral content, to src_array
-        src_array: numpy.array_like
-                   M x N array of source data, collocated, and of similar spectral content, to ref_array
+        ref_ra: homonim.RasterArray
+                   M x N RasterArray of reference data, collocated, and of similar spectral content, to src_ra
+        src_ra: homonim.RasterArray
+                   M x N RasterArray of source data, collocated, and of similar spectral content, to ref_ra
         method: str, optional
                 The homogenisation method: ['gain_only'|'gain_offset'].  (Default: 'gain_only')
         kernel_shape : numpy.array_like, list, tuple, optional
@@ -503,115 +502,14 @@ class HomonImBase:
                    Perform image-wide normalisation prior to homogenisation.  (Default: False)
         Returns
         -------
-        param_array: K x M x N array of linear model parameters corresponding to src_ and ref_array.
+        param_array: K x M x N numpy array of linear model parameters corresponding to src_ and ref_array.
                      K=1 for method='gain_only' i.e. the gains and K=2 for method='gain_offset'.
                      param_array[0, :, :] contains the gains, and param_array[1, :, :] contains the offsets for
                      method='gain_offset'.
         """
         raise NotImplementedError()
 
-    def homogenise_by_band(self, out_filename, method='gain_only', kernel_shape=(5, 5), normalise=False):
-        """
-        Homogenise a raster file by band.
-
-        Parameters
-        ----------
-        out_filename: str, pathlib.Path
-                      Path of the homogenised raster file to create.
-        method: str, optional
-                The homogenisation method: ['gain_only'|'gain_offset'].  (Default: 'gain_only')
-        kernel_shape : numpy.array_like, list, tuple, optional
-                   Sliding kernel (width, height) in reference pixels.
-        normalise: bool, optional
-                   Perform image-wide normalisation prior to homogenisation.  (Default: False)
-        """
-
-        if not np.all(np.mod(kernel_shape, 2) == 1):
-            raise Exception('kernel_shape must be odd in both dimensions')
-
-        with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
-            with WarpedVRT(rio.open(self._ref_filename, 'r'), crs=src_im.crs, resampling=Resampling.bilinear) as ref_im:
-                if self._homo_config['debug']:
-                    # setup profiling
-                    tracemalloc.start()
-                    proc_profile = cProfile.Profile()
-                    proc_profile.enable()
-                    # TODO: NB adjust param_profile according to src-space or ref-space (self.ref_props.profile)
-                    param_profile = self._create_param_profile(src_im.profile.copy())
-
-                    # create parameter raster file
-                    param_out_file_name = self._create_param_filename(out_filename)
-                    param_im = rio.open(param_out_file_name, 'w', **param_profile)
-
-                # create the output raster file
-                out_profile = self._create_out_profile(src_im.profile)
-                out_im = rio.open(out_filename, 'w', **out_profile)  # avoid too many nested indents with 'with' statements
-
-                # initialise process by band
-                bands = list(range(1, src_im.count + 1))
-                bar = tqdm(total=len(bands) + 1)
-                bar.update(0)
-                src_read_lock = threading.Lock()
-                ref_read_lock = threading.Lock()
-                write_lock = threading.Lock()
-                param_lock = threading.Lock()
-                try:
-                    def process_band(bi):
-                        """Thread-safe function to homogenise band bi of src_im"""
-
-                        with src_read_lock:
-                            _src_array = src_im.read(bi, out_dtype=hom_dtype)
-                            src_array = RasterArray.from_profile(_src_array, src_im.profile)
-
-                        with ref_read_lock:
-                            ref_win = expand_window_to_grid(ref_im.window(*src_im.bounds))
-                            _ref_array = ref_im.read(bi, window=ref_win, out_dtype=hom_dtype)
-                            ref_array = RasterArray.from_profile(_ref_array, ref_im.profile, window=ref_win)
-
-                        out_array, param_array = self._homogenise_array(ref_array, src_array, method=method,
-                                                                        kernel_shape=kernel_shape, normalise=normalise, mask_partial=True)
-
-                        if out_im.nodata != hom_nodata:
-                            out_array[out_array == hom_nodata] = out_im.nodata
-
-                        if self._homo_config['debug']:
-                            with param_lock:
-                                for pi in range(param_array.shape[0]):
-                                    _bi = bi + pi * src_im.count
-                                    param_im.write(param_array[pi, :, :].astype(param_im.dtypes[_bi - 1]), indexes=_bi)
-
-                        with write_lock:
-                            out_im.write(out_array.astype(out_im.dtypes[bi - 1]), indexes=bi)
-                            bar.update(1)
-
-                    if self._homo_config['multithread']:
-                        # process bands in concurrent threads
-                        with concurrent.futures.ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
-                            executor.map(process_band, bands)
-                    else:
-                        # process bands consecutively
-                        for bi in bands:
-                            process_band(bi)
-                finally:
-                    out_im.close()
-                    if self._homo_config['debug']:
-                        param_im.close()
-                    bar.update(1)
-                    bar.close()
-
-            if self._homo_config['debug']:
-                # print profiling info
-                # (tottime is the total time spent in the function alone. cumtime is the total time spent in the function
-                # plus all functions that this function called)
-                proc_profile.disable()
-                proc_stats = pstats.Stats(proc_profile).sort_stats('cumtime')
-                logger.debug(f'Processing time:')
-                proc_stats.print_stats(20)
-
-                current, peak = tracemalloc.get_traced_memory()
-                logger.debug(f"Memory usage: current: {current / 10 ** 6:.1f} MB, peak: {peak / 10 ** 6:.1f} MB")
-
-    def homogenise_by_block(self, out_filename, method='gain_only', kernel_shape=(5, 5), normalise=False):
+    def homogenise(self, out_filename, method='gain_only', kernel_shape=(5, 5), normalise=False):
         """
         Homogenise a raster file by block.
 
@@ -638,11 +536,13 @@ class HomonImBase:
                 block_shape = self._auto_block_shape(src_im.shape, src_kernel_shape)
                 ovl_blocks = self._overlap_blocks(block_shape=block_shape, overlap=overlap)
 
-                if self._homo_config['debug']:
+                if self._homo_config['debug_level'] >= 1:
                     # setup profiling
                     tracemalloc.start()
                     proc_profile = cProfile.Profile()
                     proc_profile.enable()
+
+                if self._homo_config['debug_level'] >= 2:
                     param_profile = self._create_param_profile(src_im.profile.copy())
 
                     # create parameter raster file
@@ -666,26 +566,19 @@ class HomonImBase:
                     def process_block(ovl_block: OvlBlock):
                         """Thread-safe function to homogenise a block of src_im"""
                         with src_read_lock:
-                            _src_array = src_im.read(ovl_block.band_i, window=ovl_block.src_block, out_dtype=hom_dtype)
-                            src_array = RasterArray.from_profile(_src_array, src_im.profile, window=ovl_block.src_block)
+                            src_array = src_im.read(ovl_block.band_i, window=ovl_block.src_block, out_dtype=hom_dtype)
+                            src_ra = RasterArray.from_profile(src_array, src_im.profile, window=ovl_block.src_block)
 
                         with ref_read_lock:
-                            _ref_array = ref_im.read(ovl_block.band_i, window=ovl_block.ref_block, out_dtype=hom_dtype)
-                            ref_array = RasterArray.from_profile(_ref_array, ref_im.profile, window=ovl_block.ref_block)
+                            ref_array = ref_im.read(ovl_block.band_i, window=ovl_block.ref_block, out_dtype=hom_dtype)
+                            ref_ra = RasterArray.from_profile(ref_array, ref_im.profile, window=ovl_block.ref_block)
 
                         out_array, param_array = self._homogenise_array(
-                            ref_array, src_array, method=method, kernel_shape=kernel_shape, normalise=normalise, mask_partial=ovl_block.outer
+                            ref_ra, src_ra, method=method, kernel_shape=kernel_shape, normalise=normalise, mask_partial=ovl_block.outer
                         )
 
                         if out_im.nodata != hom_nodata:
                             out_array[out_array == hom_nodata] = out_im.nodata
-
-                        if self._homo_config['debug']:
-                            with param_lock:
-                                for pi in range(param_array.shape[0]):
-                                    _bi = ovl_block.band_i + pi * src_im.count
-                                    _param_array = param_array[pi, overlap[0]:-overlap[0], overlap[1]:-overlap[1]]
-                                    param_im.write(_param_array.astype(param_im.dtypes[_bi - 1]), window=ovl_block.out_block, indexes=_bi)
 
                         with write_lock:
                             out_arr_win = Window(ovl_block.out_block.col_off - ovl_block.src_block.col_off,
@@ -694,6 +587,13 @@ class HomonImBase:
                             _out_array = out_array[out_arr_win.toslices()].astype(out_im.dtypes[ovl_block.band_i - 1])
                             out_im.write(_out_array, window=ovl_block.out_block, indexes=ovl_block.band_i)
                             bar.update(1)
+
+                        if self._homo_config['debug_level'] >= 2:
+                            with param_lock:
+                                for pi in range(param_array.shape[0]):
+                                    _bi = ovl_block.band_i + (pi * src_im.count)
+                                    _param_array = param_array[(pi, *out_arr_win.toslices())].astype(param_im.dtypes[ovl_block.band_i - 1])
+                                    param_im.write(_param_array, window=ovl_block.out_block, indexes=_bi)
 
                     if self._homo_config['multithread']:
                         # process bands in concurrent threads
@@ -705,12 +605,12 @@ class HomonImBase:
                             process_block(ovl_block)
                 finally:
                     out_im.close()
-                    if self._homo_config['debug']:
+                    if self._homo_config['debug_level'] >= 2:
                         param_im.close()
                     bar.update(1)
                     bar.close()
 
-        if self._homo_config['debug']:
+        if self._homo_config['debug_level'] >= 1:
             # print profiling info
             # (tottime is the total time spent in the function alone. cumtime is the total time spent in the function
             # plus all functions that this function called)
@@ -726,40 +626,32 @@ class HomonImBase:
 class HomonimRefSpace(HomonImBase):
     """Class for homogenising images in reference image space"""
 
-    def _homogenise_array(self, ref_array, src_array, method='gain_only', kernel_shape=(5, 5), normalise=False, mask_partial=True):
+    def _homogenise_array(self, ref_ra, src_ra, method='gain_only', kernel_shape=(5, 5), normalise=False, mask_partial=True):
 
-        # downsample src_array to reference grid
-        # src_ds_array = self._project_src_to_ref(src_array, src_nodata=self.src_props.nodata,
-        #                                         src_transform=src_transform, transform=ref_transform)
-        # src_ds_array = src_array.project(crs=ref_array.crs, transform=ref_array.transform, shape=ref_array.shape,
-        #                                    nodata=hom_nodata, resampling=self._homo_config['src2ref_interp'])
-        src_ds_array = src_array.reproject(**ref_array.proj_profile, resampling=self._homo_config['src2ref_interp'])
+        # downsample src_ra to reference grid
+        src_ds_ra = src_ra.reproject(**ref_ra.proj_profile, resampling=self._homo_config['src2ref_interp'])
 
         if mask_partial and self._homo_config['mask_partial_pixel']:
-            # mask src_ds_array pixels that were not completely covered by src_array
-            # TODO is this faster, or setting param_array[src_array == 0] = 0 below
-            mask_ds_array = src_array.mask.reproject(**src_ds_array.proj_profile, resampling=Resampling.average)
-            src_ds_array.array[np.logical_not(mask_ds_array.array == 1)] = hom_nodata
+            # mask src_ds_ra pixels that were not completely covered by src_ra
+            # TODO is this faster, or setting param_ra[src_ra == 0] = 0 below
+            mask_ds_ra = src_ra.mask.reproject(**src_ds_ra.proj_profile, resampling=Resampling.average)
+            src_ds_ra.array[np.logical_not(mask_ds_ra.array == 1)] = hom_nodata
 
         if normalise:
-            norm_model = self._src_image_offset(ref_array.array, src_ds_array.array)
+            norm_model = self._src_image_offset(ref_ra.array, src_ds_ra.array)
 
         if method.lower() == 'gain_only':
-            _param_ds_array = self._find_gains_cv(ref_array.array, src_ds_array.array, kernel_shape=kernel_shape)
+            param_ds_array = self._find_gains_cv(ref_ra.array, src_ds_ra.array, kernel_shape=kernel_shape)
         else:
-            _param_ds_array = self._find_gain_and_offset_cv(ref_array.array, src_ds_array.array, kernel_shape=kernel_shape)
+            param_ds_array = self._find_gain_and_offset_cv(ref_ra.array, src_ds_ra.array, kernel_shape=kernel_shape)
 
         # upsample the parameter array to source grid
-        # param_array = self._project_ref_to_src(param_ds_array[:2, :, :], ref_transform=ref_transform,
-        #                                        transform=src_transform)
-        param_ds_array = RasterArray.from_profile(_param_ds_array, src_ds_array.profile)
-        # param_array = param_ds_array.project(crs=src_array.crs, transform=src_array.transform, shape=src_array.shape,
-        #                                        nodata=hom_nodata, resampling=self._homo_config['ref2src_interp'])
-        param_array = param_ds_array.reproject(**src_array.proj_profile, resampling=self._homo_config['ref2src_interp'])
+        param_ds_ra = RasterArray.from_profile(param_ds_array, src_ds_ra.profile)
+        param_ra = param_ds_ra.reproject(**src_ra.proj_profile, resampling=self._homo_config['ref2src_interp'])
 
         if mask_partial and (self._homo_config['mask_partial_interp'] or self._homo_config['mask_partial_kernel']):
-            param_mask = np.all(param_array.array == hom_nodata, axis=0)
-            res_ratio = np.divide(ref_array.res, param_array.res)
+            param_mask = np.all(param_ra.array == hom_nodata, axis=0)
+            res_ratio = np.divide(ref_ra.res, param_ra.res)
             if self._homo_config['mask_partial_kernel']:
                 morph_kernel_shape = np.ceil(res_ratio * kernel_shape).astype('int32')
             elif self._homo_config['mask_partial_interp'] or self._homo_config['mask_partial_pixel']:
@@ -767,22 +659,22 @@ class HomonimRefSpace(HomonImBase):
                 morph_kernel_shape = np.ceil(res_ratio).astype('int32')
             se = cv2.getStructuringElement(cv2.MORPH_RECT, tuple(morph_kernel_shape))
             param_mask = cv2.dilate(param_mask.astype('uint8', copy=False), se).astype('bool', copy=False)
-            param_array.array[:, param_mask] = hom_nodata
+            param_ra.array[:, param_mask] = hom_nodata
         elif not self._homo_config['mask_partial_pixel']:
             # if no mask_partial_* was done, then mask with source mask
-            param_array.array[:, (src_array.array == src_array.nodata)] = hom_nodata
+            param_ra.array[:, (src_ra.array == src_ra.nodata)] = hom_nodata
 
-        # apply the model to src_array
+        # apply the model to src_ra
         if normalise:
-            out_array = param_array.array[0, :, :] * norm_model[0] * src_array.array
-            out_array += param_array.array[0, :, :] * norm_model[1]
+            out_array = param_ra.array[0, :, :] * norm_model[0] * src_ra.array
+            out_array += param_ra.array[0, :, :] * norm_model[1]
         else:
-            out_array = param_array.array[0, :, :] * src_array.array
+            out_array = param_ra.array[0, :, :] * src_ra.array
 
-        if param_array.shape[0] > 1:
-            out_array += param_array.array[1, :, :]
+        if param_ra.shape[0] > 1:
+            out_array += param_ra.array[1, :, :]
 
-        return out_array, param_ds_array.array
+        return out_array, param_ds_ra.array
 
 
 ##
@@ -790,26 +682,24 @@ class HomonimRefSpace(HomonImBase):
 class HomonimSrcSpace(HomonImBase):
     """Class for homogenising images in source image space"""
 
-    def _homogenise_array(self, ref_array, src_array, method='gain_only', kernel_shape=(5, 5), normalise=False, mask_partial=True):
+    def _homogenise_array(self, ref_ra, src_ra, method='gain_only', kernel_shape=(5, 5), normalise=False, mask_partial=True):
         # re-assign source nodata if necessary
-        if src_array.nodata != hom_nodata:
-            src_array.array[src_array.array == src_array.nodata] = hom_nodata
+        if src_ra.nodata != hom_nodata:
+            src_ra.array[src_ra.array == src_ra.nodata] = hom_nodata
 
         # upsample reference to source grid
-        # ref_us_array = self._project_ref_to_src(ref_array, ref_nodata=self.ref_props.nodata, ref_transform=ref_transform,
-        #                                         transform=src_transform)
-        ref_us_array = ref_array.reproject(**src_array.proj_profile, resampling=self._homo_config['ref2src_interp'])
+        ref_us_ra = ref_ra.reproject(**src_ra.proj_profile, resampling=self._homo_config['ref2src_interp'])
 
-        if normalise:  # normalise src_array in place
-            self._src_image_offset(ref_us_array.array, src_array.array)
+        if normalise:  # normalise src_ra in place
+            self._src_image_offset(ref_us_ra.array, src_ra.array)
 
         # find kernel_shape in source pixels
-        src_kernel_shape = kernel_shape * np.round(ref_array.res / src_array.res).astype(int)
+        src_kernel_shape = kernel_shape * np.round(ref_ra.res / src_ra.res).astype(int)
 
         if method.lower() == 'gain_only':
-            param_array = self._find_gains_cv(ref_us_array.array, src_array.array, kernel_shape=src_kernel_shape)
+            param_array = self._find_gains_cv(ref_us_ra.array, src_ra.array, kernel_shape=src_kernel_shape)
         else:
-            param_array = self._find_gain_and_offset_cv(ref_us_array.array, src_array.array, kernel_shape=src_kernel_shape)
+            param_array = self._find_gain_and_offset_cv(ref_us_ra.array, src_ra.array, kernel_shape=src_kernel_shape)
 
         if mask_partial and self._homo_config['mask_partial_kernel']:
             # mask boundary param_array pixels that not fully covered by a kernel
@@ -818,8 +708,8 @@ class HomonimSrcSpace(HomonImBase):
             param_mask = cv2.dilate(param_mask.astype('uint8', copy=False), se).astype('bool', copy=False)
             param_array[:, param_mask] = hom_nodata
 
-        # apply the model to src_array
-        out_array = param_array[0, :, :] * src_array.array
+        # apply the model to src_ra
+        out_array = param_array[0, :, :] * src_ra.array
         if param_array.shape[0] > 1:
             out_array += param_array[1, :, :]
 
