@@ -45,7 +45,7 @@ logger = get_logger(__name__)
 
 
 class Model(Enum):
-    gain_only = 1
+    gain = 1
     gain_and_image_offset = 2
     gain_and_offset = 3
 
@@ -384,6 +384,32 @@ class HomonImBase:
         src_array[src_mask] = norm_model[0]*_src_array + norm_model[1]
         return norm_model
 
+    def _find_r2_cv(self, ref_array, src_array, param_array, kernel_shape=(5, 5), mask=None, mask_sum=None,
+                    ref_sum=None, dest_array=None):
+        kernel_shape = tuple(kernel_shape)  # convert to tuple for opencv
+        filter_args = dict(normalize=False, borderType=cv.BORDER_CONSTANT)  # common opencv arguments
+
+        if mask is None:
+            mask = src_array != hom_nodata
+        if mask_sum is None:
+            mask_sum = cv.boxFilter(mask.astype(hom_dtype), -1, kernel_shape, **filter_args)
+        if ref_sum is None:
+            ref_sum = cv.boxFilter(ref_array, -1, kernel_shape, **filter_args)
+
+        ref2_sum = cv.sqrBoxFilter(ref_array, -1, kernel_shape, **filter_args)
+        ss_tot_array = (mask_sum * ref2_sum) - (ref_sum ** 2)
+        res_array = (param_array[0, :, :] * src_array) - ref_array
+        if param_array.shape[0] > 1:
+            res_array += param_array[1, :, :]
+        ss_res_array = mask_sum * cv.sqrBoxFilter(res_array, -1, kernel_shape, **filter_args)
+
+        if dest_array is None:
+            dest_array = np.full(src_array.shape, fill_value=hom_nodata, dtype=hom_dtype)
+        np.divide(ss_res_array, ss_tot_array, out=dest_array, where=mask.astype('bool', copy=False))
+        np.subtract(1, dest_array, out=dest_array, where=mask.astype('bool', copy=False))
+
+        return dest_array
+
 
     def _find_gains_cv(self, ref_array, src_array, kernel_shape=(5, 5)):
         """
@@ -424,8 +450,16 @@ class HomonImBase:
         #     mask &= (mask_sum >= np.product(kernel_shape))
 
         # calculate gains for valid pixels
-        param_array = np.full((1, *src_array.shape), fill_value=hom_nodata, dtype=hom_dtype)
+        if self._homo_config['debug_level'] >= 2:
+            param_array = np.full((2, *src_array.shape), fill_value=hom_nodata, dtype=hom_dtype)
+        else:
+            param_array = np.full((1, *src_array.shape), fill_value=hom_nodata, dtype=hom_dtype)
+
         _ = np.divide(ratio_sum, mask_sum, out=param_array[0, :, :], where=mask.astype('bool', copy=False))
+
+        if self._homo_config['debug_level'] >= 2:
+            self._find_r2_cv(ref_array, src_array, param_array[:1, :, :], kernel_shape=kernel_shape, mask=mask,
+                             mask_sum=mask_sum, dest_array=param_array[1, :, :])
 
         return param_array
 
@@ -466,38 +500,37 @@ class HomonImBase:
         del (src2_sum)
 
         # find the gain = cov(ref, src) / var(src)
-        param_array = np.full((2, *src_array.shape), fill_value=hom_nodata, dtype=hom_dtype)
+        if (self._homo_config['debug_level'] >= 2) or (self._homo_config['r2_threshold'] is not None):
+            param_array = np.full((3, *src_array.shape), fill_value=hom_nodata, dtype=hom_dtype)
+        else:
+            param_array = np.full((2, *src_array.shape), fill_value=hom_nodata, dtype=hom_dtype)
         _ = np.divide(m_num_array, m_den_array, out=param_array[0, :, :], where=mask.astype('bool', copy=False))
 
         # find the offset c = y - mx, using the fact that the LS linear model passes through (mean(ref), mean(src))
         _ = np.divide(ref_sum - (param_array[0, :, :] * src_sum), mask_sum, out=param_array[1, :, :],
                       where=mask.astype('bool', copy=False))
 
-        # refit any areas with low R2 using offset "inpainting"
-        if self._homo_config['r2_threshold'] is not None:
+        if (self._homo_config['debug_level'] >= 2) or (self._homo_config['r2_threshold'] is not None):
             # Find R2 of the models for each pixel
-            ref2_sum = cv.sqrBoxFilter(ref_array, -1, kernel_shape, **filter_args)
-            ss_tot_array = (mask_sum * ref2_sum) - (ref_sum ** 2)
-            res_array = (param_array[0, :, :] * src_array + param_array[1, :, :]) - ref_array
-            ss_res_array = mask_sum * cv.sqrBoxFilter(res_array, -1, kernel_shape, **filter_args)
+            self._find_r2_cv(ref_array, src_array, param_array[:2, :, :], kernel_shape=kernel_shape, mask=mask,
+                             mask_sum=mask_sum, ref_sum=ref_sum, dest_array=param_array[2, :, :])
 
-            r2_array = np.full(src_array.shape, fill_value=hom_nodata, dtype=hom_dtype)
-            np.divide(ss_res_array, ss_tot_array, out=r2_array, where=mask.astype('bool', copy=False))
-            np.subtract(1, r2_array, out=r2_array, where=mask.astype('bool', copy=False))
-
-            # fill ("inpaint") low R2 areas in the offset parameter
-            rf_mask = (r2_array < self._homo_config['r2_threshold']) | (param_array[0, :, :] <= 0)
-            param_array[1, :, :] = fillnodata(param_array[1, :, :], ~rf_mask)
+        if self._homo_config['r2_threshold'] is not None:
+            # fill ("inpaint") low R2 areas and negative gain areas in the offset parameter
+            r2_mask = (param_array[2, :, :] < self._homo_config['r2_threshold']) | (param_array[0, :, :] <= 0)
+            param_array[1, :, :] = fillnodata(param_array[1, :, :], ~r2_mask)
             param_array[1, ~mask] = hom_nodata  # re-set nodata as nodata areas will have been filled above
 
             # recalculate the gain for the filled areas (linear LS line passes through (mean(src), mean(ref)))
-            rf_mask &= mask
+            r2_mask &= mask
             np.divide(ref_sum - mask_sum * param_array[1, :, :], src_sum, out=param_array[0, :, :],
-                      where=rf_mask.astype('bool', copy=False))
-            if self._homo_config['debug_level'] >= 2:
-                # append R2 to parameters so they can all be written to a debug raster
-                # TODO: avoid a copy here somehow?
-                param_array = np.concatenate((param_array, r2_array.reshape(1, *r2_array.shape)), axis=0)
+                      where=r2_mask.astype('bool', copy=False))
+
+            if (self._homo_config['debug_level'] >= 2):
+                # Re-calculate R2 for new in-filled parameters (?)
+                self._find_r2_cv(ref_array, src_array, param_array[:2, :, :], kernel_shape=kernel_shape, mask=mask,
+                                 mask_sum=mask_sum, ref_sum=ref_sum, dest_array=param_array[2, :, :])
+
 
         # TODO: this interacts with mask_partial_interp, so rather do it in homogenise after --ref-space US?
         #   this is sort of the same question as, is it better to do pure extrapolation, or interpolation with semi-covered data?
@@ -508,7 +541,7 @@ class HomonImBase:
 
         return param_array
 
-    def _homogenise_array(self, ref_ra, src_ra, method='gain_only', kernel_shape=(5, 5), normalise=False):
+    def _homogenise_array(self, ref_ra, src_ra, method='gain', kernel_shape=(5, 5)):
         """
         Wrapper to homogenise an array of source image data
 
@@ -519,21 +552,19 @@ class HomonImBase:
         src_ra: homonim.RasterArray
                    M x N RasterArray of source data, collocated, and of similar spectral content, to ref_ra
         method: str, optional
-                The homogenisation method: ['gain_only'|'gain_offset'].  (Default: 'gain_only')
+                The homogenisation method: ['gain'|'gain_im_offset'|'gain_offset'].  (Default: 'gain')
         kernel_shape : numpy.array_like, list, tuple, optional
                    Sliding kernel (width, height) in pixels.
-        normalise: bool, optional
-                   Perform image-wide normalisation prior to homogenisation.  (Default: False)
         Returns
         -------
         param_array: K x M x N numpy array of linear model parameters corresponding to src_ and ref_array.
-                     K=1 for method='gain_only' i.e. the gains and K=2 for method='gain_offset'.
+                     K=1 for method='gain' i.e. the gains and K=2 for method='gain_offset'.
                      param_array[0, :, :] contains the gains, and param_array[1, :, :] contains the offsets for
                      method='gain_offset'.
         """
         raise NotImplementedError()
 
-    def homogenise(self, out_filename, method='gain_only', kernel_shape=(5, 5), normalise=False):
+    def homogenise(self, out_filename, method='gain', kernel_shape=(5, 5)):
         """
         Homogenise a raster file by block.
 
@@ -542,11 +573,9 @@ class HomonImBase:
         out_filename: str, pathlib.Path
                       Path of the homogenised raster file to create.
         method: str, optional
-                The homogenisation method: ['gain_only'|'gain_offset'].  (Default: 'gain_only')
+                The homogenisation method: ['gain'|'gain_im_offset'|'gain_offset'].  (Default: 'gain')
         kernel_shape : numpy.array_like, list, tuple, optional
                    Sliding kernel (width, height) in reference pixels.
-        normalise: bool, optional
-                   Perform image-wide normalisation prior to homogenisation.  (Default: False)
         """
         kernel_shape = np.array(kernel_shape)
         if not np.all(np.mod(kernel_shape, 2) == 1):
@@ -598,7 +627,7 @@ class HomonImBase:
                             ref_ra = RasterArray.from_profile(ref_array, ref_im.profile, window=ovl_block.ref_in_block)
 
                         out_array, param_array = self._homogenise_array(
-                            ref_ra, src_ra, method=method, kernel_shape=kernel_shape, normalise=normalise, mask_partial=ovl_block.outer
+                            ref_ra, src_ra, method=method, kernel_shape=kernel_shape, mask_partial=ovl_block.outer
                         )
 
                         if out_im.nodata != hom_nodata:
@@ -662,8 +691,9 @@ class HomonimRefSpace(HomonImBase):
         """Create a ref-space rasterio profile for the debug parameter raster based on a starting profile and configuration"""
         return HomonImBase._create_debug_profile(self, src_profile, ref_profile, which='ref')
 
-    def _homogenise_array(self, ref_ra, src_ra, method='gain_only', kernel_shape=(5, 5), normalise=False, mask_partial=True):
+    def _homogenise_array(self, ref_ra, src_ra, method='gain_im_offset', kernel_shape=(5, 5), mask_partial=True):
 
+        method = method.lower()
         # downsample src_ra to reference grid
         src_ds_ra = src_ra.reproject(**ref_ra.proj_profile, resampling=self._homo_config['src2ref_interp'])
 
@@ -673,16 +703,16 @@ class HomonimRefSpace(HomonImBase):
             mask_ds_ra = src_ra.mask.reproject(**src_ds_ra.proj_profile, resampling=Resampling.average)
             src_ds_ra.array[np.logical_not(mask_ds_ra.array == 1)] = hom_nodata
 
-        if normalise:
-            norm_model = self._src_image_offset(ref_ra.array, src_ds_ra.array)
-
-        if method.lower() == 'gain_only':
-            param_ds_array = self._find_gains_cv(ref_ra.array, src_ds_ra.array, kernel_shape=kernel_shape)
-        else:
+        if method == 'gain_offset':
             param_ds_array = self._find_gain_and_offset_cv(ref_ra.array, src_ds_ra.array, kernel_shape=kernel_shape)
+            param_ds_ra = RasterArray.from_profile(param_ds_array[:2, :, :], src_ds_ra.profile)
+        else:
+            if method == 'gain_im_offset':  # normalise src_ds_ra in place
+                norm_model = self._src_image_offset(ref_ra.array, src_ds_ra.array)
+            param_ds_array = self._find_gains_cv(ref_ra.array, src_ds_ra.array, kernel_shape=kernel_shape)
+            param_ds_ra = RasterArray.from_profile(param_ds_array[:1, :, :], src_ds_ra.profile)
 
         # upsample the parameter array to source grid
-        param_ds_ra = RasterArray.from_profile(param_ds_array, src_ds_ra.profile)
         param_ra = param_ds_ra.reproject(**src_ra.proj_profile, resampling=self._homo_config['ref2src_interp'])
 
         if mask_partial and (self._homo_config['mask_partial_interp'] or self._homo_config['mask_partial_kernel']):
@@ -701,16 +731,15 @@ class HomonimRefSpace(HomonImBase):
             param_ra.array[:, (src_ra.array == src_ra.nodata)] = hom_nodata
 
         # apply the model to src_ra
-        if normalise:
+        if method == 'gain_offset':
+            out_array = (param_ra.array[0, :, :] * src_ra.array) + param_ra.array[1, :, :]
+        elif method == 'gain_im_offset':
             out_array = param_ra.array[0, :, :] * norm_model[0] * src_ra.array
             out_array += param_ra.array[0, :, :] * norm_model[1]
         else:
             out_array = param_ra.array[0, :, :] * src_ra.array
 
-        if param_ra.shape[0] > 1:
-            out_array += param_ra.array[1, :, :]
-
-        return out_array, param_ds_ra.array
+        return out_array, param_ds_array
 
 
 ##
@@ -723,7 +752,9 @@ class HomonimSrcSpace(HomonImBase):
         """Create a ref-space rasterio profile for the debug parameter raster based on a starting profile and configuration"""
         return HomonImBase._create_debug_profile(self, src_profile, ref_profile, which='src')
 
-    def _homogenise_array(self, ref_ra, src_ra, method='gain_only', kernel_shape=(5, 5), normalise=False, mask_partial=True):
+    def _homogenise_array(self, ref_ra, src_ra, method='gain_im_offset', kernel_shape=(5, 5), mask_partial=True):
+        method = method.lower()
+
         # re-assign source nodata if necessary
         if src_ra.nodata != hom_nodata:
             src_ra.array[src_ra.array == src_ra.nodata] = hom_nodata
@@ -731,16 +762,16 @@ class HomonimSrcSpace(HomonImBase):
         # upsample reference to source grid
         ref_us_ra = ref_ra.reproject(**src_ra.proj_profile, resampling=self._homo_config['ref2src_interp'])
 
-        if normalise:  # normalise src_ra in place
-            self._src_image_offset(ref_us_ra.array, src_ra.array)
 
         # find kernel_shape in source pixels
         src_kernel_shape = kernel_shape * np.round(ref_ra.res / src_ra.res).astype(int)
 
-        if method.lower() == 'gain_only':
-            param_array = self._find_gains_cv(ref_us_ra.array, src_ra.array, kernel_shape=src_kernel_shape)
-        else:
+        if method == 'gain_offset':
             param_array = self._find_gain_and_offset_cv(ref_us_ra.array, src_ra.array, kernel_shape=src_kernel_shape)
+        else:
+            if method == 'gain_im_offset':  # normalise src_ra in place
+                self._src_image_offset(ref_us_ra.array, src_ra.array)
+            param_array = self._find_gains_cv(ref_us_ra.array, src_ra.array, kernel_shape=src_kernel_shape)
 
         if mask_partial and self._homo_config['mask_partial_kernel']:
             # mask boundary param_array pixels that not fully covered by a kernel
@@ -751,7 +782,7 @@ class HomonimSrcSpace(HomonImBase):
 
         # apply the model to src_ra
         out_array = param_array[0, :, :] * src_ra.array
-        if param_array.shape[0] > 1:
+        if method == 'gain_offset':
             out_array += param_array[1, :, :]
 
         return out_array, param_array

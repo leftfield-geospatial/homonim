@@ -32,12 +32,12 @@ np.set_printoptions(suppress=True)
 logger = get_logger(__name__)
 
 
-def _create_homo_postfix(space=None, method=None, kernel_shape=None, normalise=None):
+def _create_homo_postfix(space=None, method=None, kernel_shape=None):
     """Create a postfix string for the homogenised raster file"""
     if space == 'ref-space':
-        post_fix = f'_HOMO_sREF_m{method.upper()}_n{"ON" if normalise else "OFF"}_w{kernel_shape[0]}_{kernel_shape[1]}.tif'
+        post_fix = f'_HOMO_sREF_m{method.upper()}_k{kernel_shape[0]}_{kernel_shape[1]}.tif'
     else:
-        post_fix = f'_HOMO_sSRC_m{method.upper()}_n{"ON" if normalise else "OFF"}_w{kernel_shape[0]}_{kernel_shape[1]}.tif'
+        post_fix = f'_HOMO_sSRC_m{method.upper()}_k{kernel_shape[0]}_{kernel_shape[1]}.tif'
     return post_fix
 
 
@@ -70,17 +70,10 @@ def _create_homo_postfix(space=None, method=None, kernel_shape=None, normalise=N
 @click.option(
     "-m",
     "--method",
-    type=click.Choice(['gain_only', 'gain_offset'], case_sensitive=False),
+    type=click.Choice(['gain', 'gain_im_offset', 'gain_offset'], case_sensitive=False),
     help="homogenisation method",
-    default='gain_only',
+    default='gain',
     show_default=True,
-)
-@click.option(
-    "-n/-nn",
-    "--norm/--no-norm",
-    default=False,
-    help="Do/don't pre-process with image-wide normalisation.  [default: --no-norm]",
-    required=False,
 )
 @click.option(
     "-rs",
@@ -98,13 +91,6 @@ def _create_homo_postfix(space=None, method=None, kernel_shape=None, normalise=N
     help="Homogenise in source or reference image space.  [default: --ref-space]",
     flag_value='src-space',
     default=False,
-    required=False,
-)
-@click.option(
-    "-n/-nn",
-    "--norm/--no-norm",
-    default=False,
-    help="Do/don't pre-process with image-wide normalisation.  [default: --no-norm]",
     required=False,
 )
 @click.option(
@@ -128,7 +114,7 @@ def _create_homo_postfix(space=None, method=None, kernel_shape=None, normalise=N
     help="path to a configuration file",
     required=False
 )
-def cli(src_file=None, ref_file=None, kernel_shape=(3, 3), method="gain_only", norm=False, homo_space='ref-space',
+def cli(src_file=None, ref_file=None, kernel_shape=(3, 3), method="gain_im_offset", homo_space='ref-space',
         output_dir=None, build_ovw=True, conf=None):
     """Radiometrically homogenise image(s) by fusion with reference satellite data"""
 
@@ -168,13 +154,13 @@ def cli(src_file=None, ref_file=None, kernel_shape=(3, 3), method="gain_only", n
                                               out_config=config['output'])
 
             # create output raster filename and homogenise
-            post_fix = _create_homo_postfix(space=homo_space, method=method, kernel_shape=kernel_shape, normalise=norm)
+            post_fix = _create_homo_postfix(space=homo_space, method=method, kernel_shape=kernel_shape)
             homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
-            him.homogenise(homo_filename, method=method, kernel_shape=kernel_shape, normalise=norm)
+            him.homogenise(homo_filename, method=method, kernel_shape=kernel_shape)
 
             # set metadata in output file
             meta_dict = dict(HOMO_SRC_FILE=src_filename.name, HOMO_REF_FILE=pathlib.Path(ref_file).name,
-                             HOMO_SPACE=homo_space, HOMO_METHOD=method, HOMO_WIN_SIZE=kernel_shape, HOMO_NORM=norm,
+                             HOMO_SPACE=homo_space, HOMO_METHOD=method, HOMO_WIN_SIZE=kernel_shape,
                              HOMO_CONF=str(config['homogenisation']))
             him.set_metadata(homo_filename, **meta_dict)
 
