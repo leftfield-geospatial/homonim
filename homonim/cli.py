@@ -188,7 +188,7 @@ def cli(src_file=None, ref_file=None, kernel_shape=(3, 3), method="gain_only", n
                 him.build_overviews(homo_filename)
 
                 if config['homogenisation']['debug_level'] >= 2:
-                    param_out_filename = him._create_param_filename(homo_filename)
+                    param_out_filename = him._create_debug_filename(homo_filename)
                     logger.info(f'Building overviews for {param_out_filename.name}')
                     him.build_overviews(param_out_filename)
 

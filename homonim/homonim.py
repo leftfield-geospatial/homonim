@@ -72,11 +72,29 @@ def expand_window_to_grid(win):
     return exp_win
 
 
+def round_window_to_grid(win):
+    """
+    Rounds float window extents to nearest integer
+
+    Parameters
+    ----------
+    win : rasterio.windows.Window
+        the window to round
+
+    Returns
+    -------
+    exp_win: rasterio.windows.Window
+        the rounded window
+    """
+    row_range, col_range = win.toranges()
+    return Window.from_slices(slice(*np.round(row_range).astype('int')), slice(*np.round(col_range).astype('int')))
+
+
 """Projection related raster properties"""
 RasterProps = namedtuple('RasterProps', ['crs', 'transform', 'shape', 'res', 'bounds', 'nodata', 'count', 'profile'])
 
 """Overlapping block object"""
-OvlBlock = namedtuple('OvlBlock', ['band_i', 'src_block', 'ref_block', 'out_block', 'outer'])
+OvlBlock = namedtuple('OvlBlock', ['band_i', 'src_in_block', 'src_out_block', 'ref_in_block', 'ref_out_block', 'outer'])
 
 
 class HomonImBase:
@@ -138,6 +156,7 @@ class HomonImBase:
     #     if self._ref_array is None:
     #         self._ref_array = self._read_ref()
     #     return self._ref_array
+    _debug_block_prefix = None
 
     @property
     def src_props(self):
@@ -257,12 +276,13 @@ class HomonImBase:
                         out_ul = ul + overlap
                         out_br = br - overlap
 
-                        src_block = Window.from_slices((src_ul[0], src_br[0]), (src_ul[1], src_br[1]))
-                        ref_block = expand_window_to_grid(ref_im.window(*src_im.window_bounds(src_block)))
-                        out_block = Window.from_slices((out_ul[0], out_br[0]), (out_ul[1], out_br[1]))
+                        src_in_block = Window.from_slices((src_ul[0], src_br[0]), (src_ul[1], src_br[1]))
+                        src_out_block = Window.from_slices((out_ul[0], out_br[0]), (out_ul[1], out_br[1]))
+                        ref_in_block = expand_window_to_grid(ref_im.window(*src_im.window_bounds(src_in_block)))
+                        ref_out_block = round_window_to_grid(ref_im.window(*src_im.window_bounds(src_out_block)))
 
                         outer = np.any(src_ul==0) or np.any(src_br==src_shape-1)
-                        ovl_blocks.append(OvlBlock(band_i+1, src_block, ref_block, out_block, outer))
+                        ovl_blocks.append(OvlBlock(band_i+1, src_in_block, src_out_block, ref_in_block, ref_out_block, outer))
         return ovl_blocks
 
     def _create_out_profile(self, init_profile):
@@ -274,19 +294,23 @@ class HomonImBase:
         out_profile.update(tiled=True)
         return out_profile
 
-    def _create_param_profile(self, init_profile):
-        """Create a rasterio profile for the debug parameter raster based on a starting profile and configuration"""
-        param_profile = init_profile.copy()
+    def _create_debug_profile(self, src_profile, ref_profile, which='ref'):
+        """Create a rasterio profile for the debug parameter raster based on a reference or source profile"""
+        if which == 'ref':
+            debug_profile = ref_profile.copy()
+        else:
+            debug_profile = src_profile.copy()
+
         for key, value in self._out_config.items():
             if value is not None:
-                param_profile.update(**{key: value})
-        param_profile.update(dtype=hom_dtype, count=self.src_props.count * 3, nodata=hom_nodata, tiled=True)
-        return param_profile
+                debug_profile.update(**{key: value})
+        debug_profile.update(dtype=hom_dtype, count=debug_profile['count'] * 3, nodata=hom_nodata, tiled=True)
+        return debug_profile
 
-    def _create_param_filename(self, filename):
+    def _create_debug_filename(self, filename):
         """Return a debug parameter raster filename, given the homogenised raster filename"""
         filename = pathlib.Path(filename)
-        return filename.parent.joinpath(f'{filename.stem}_PARAMS{filename.suffix}')
+        return filename.parent.joinpath(f'{filename.stem}_DEBUG{filename.suffix}')
 
     def build_overviews(self, filename):
         """
@@ -543,10 +567,10 @@ class HomonImBase:
                     proc_profile.enable()
 
                 if self._homo_config['debug_level'] >= 2:
-                    param_profile = self._create_param_profile(src_im.profile.copy())
+                    param_profile = self._create_debug_profile(src_im.profile, ref_im.profile)
 
                     # create parameter raster file
-                    param_out_file_name = self._create_param_filename(out_filename)
+                    param_out_file_name = self._create_debug_filename(out_filename)
                     param_im = rio.open(param_out_file_name, 'w', **param_profile)
 
                 # create the output raster file
@@ -566,12 +590,12 @@ class HomonImBase:
                     def process_block(ovl_block: OvlBlock):
                         """Thread-safe function to homogenise a block of src_im"""
                         with src_read_lock:
-                            src_array = src_im.read(ovl_block.band_i, window=ovl_block.src_block, out_dtype=hom_dtype)
-                            src_ra = RasterArray.from_profile(src_array, src_im.profile, window=ovl_block.src_block)
+                            src_array = src_im.read(ovl_block.band_i, window=ovl_block.src_in_block, out_dtype=hom_dtype)
+                            src_ra = RasterArray.from_profile(src_array, src_im.profile, window=ovl_block.src_in_block)
 
                         with ref_read_lock:
-                            ref_array = ref_im.read(ovl_block.band_i, window=ovl_block.ref_block, out_dtype=hom_dtype)
-                            ref_ra = RasterArray.from_profile(ref_array, ref_im.profile, window=ovl_block.ref_block)
+                            ref_array = ref_im.read(ovl_block.band_i, window=ovl_block.ref_in_block, out_dtype=hom_dtype)
+                            ref_ra = RasterArray.from_profile(ref_array, ref_im.profile, window=ovl_block.ref_in_block)
 
                         out_array, param_array = self._homogenise_array(
                             ref_ra, src_ra, method=method, kernel_shape=kernel_shape, normalise=normalise, mask_partial=ovl_block.outer
@@ -581,19 +605,26 @@ class HomonImBase:
                             out_array[out_array == hom_nodata] = out_im.nodata
 
                         with write_lock:
-                            out_arr_win = Window(ovl_block.out_block.col_off - ovl_block.src_block.col_off,
-                                                 ovl_block.out_block.row_off - ovl_block.src_block.row_off,
-                                                 ovl_block.out_block.width, ovl_block.out_block.height)
+                            out_arr_win = Window(ovl_block.src_out_block.col_off - ovl_block.src_in_block.col_off,
+                                                 ovl_block.src_out_block.row_off - ovl_block.src_in_block.row_off,
+                                                 ovl_block.src_out_block.width, ovl_block.src_out_block.height)
                             _out_array = out_array[out_arr_win.toslices()].astype(out_im.dtypes[ovl_block.band_i - 1])
-                            out_im.write(_out_array, window=ovl_block.out_block, indexes=ovl_block.band_i)
+                            out_im.write(_out_array, window=ovl_block.src_out_block, indexes=ovl_block.band_i)
                             bar.update(1)
 
                         if self._homo_config['debug_level'] >= 2:
                             with param_lock:
                                 for pi in range(param_array.shape[0]):
                                     _bi = ovl_block.band_i + (pi * src_im.count)
-                                    _param_array = param_array[(pi, *out_arr_win.toslices())].astype(param_im.dtypes[ovl_block.band_i - 1])
-                                    param_im.write(_param_array, window=ovl_block.out_block, indexes=_bi)
+                                    dbg_in_block = ovl_block.__getattribute__(f'{self._debug_block_prefix}_in_block')
+                                    dbg_out_block = ovl_block.__getattribute__(f'{self._debug_block_prefix}_out_block')
+                                    param_arr_win = Window(dbg_out_block.col_off - dbg_in_block.col_off,
+                                        dbg_out_block.row_off - dbg_in_block.row_off,
+                                        dbg_out_block.width, dbg_out_block.height)
+
+                                    _param_array = param_array[(pi, *param_arr_win.toslices())].astype(
+                                        param_im.dtypes[ovl_block.band_i - 1])
+                                    param_im.write(_param_array, window=dbg_out_block, indexes=_bi)
 
                     if self._homo_config['multithread']:
                         # process bands in concurrent threads
@@ -625,6 +656,11 @@ class HomonImBase:
 
 class HomonimRefSpace(HomonImBase):
     """Class for homogenising images in reference image space"""
+    _debug_block_prefix = 'ref'
+
+    def _create_debug_profile(self, src_profile, ref_profile):
+        """Create a ref-space rasterio profile for the debug parameter raster based on a starting profile and configuration"""
+        return HomonImBase._create_debug_profile(self, src_profile, ref_profile, which='ref')
 
     def _homogenise_array(self, ref_ra, src_ra, method='gain_only', kernel_shape=(5, 5), normalise=False, mask_partial=True):
 
@@ -681,6 +717,11 @@ class HomonimRefSpace(HomonImBase):
 
 class HomonimSrcSpace(HomonImBase):
     """Class for homogenising images in source image space"""
+    _debug_block_prefix = 'src'
+
+    def _create_debug_profile(self, src_profile, ref_profile):
+        """Create a ref-space rasterio profile for the debug parameter raster based on a starting profile and configuration"""
+        return HomonImBase._create_debug_profile(self, src_profile, ref_profile, which='src')
 
     def _homogenise_array(self, ref_ra, src_ra, method='gain_only', kernel_shape=(5, 5), normalise=False, mask_partial=True):
         # re-assign source nodata if necessary

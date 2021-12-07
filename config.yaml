@@ -9,18 +9,18 @@ homogenisation:
   # Produce debug outputs (0=None, 1=profiling, 2=parameter rasters)
   debug_level: 2
   # Mask partially covered source pixels when downsampling for --ref-space
-  mask_partial_pixel: False
+  mask_partial_pixel: True
     # Mask partially covered source pixels when downsampling for --ref-space
-  mask_partial_kernel: False
+  mask_partial_kernel: True
   # Mask extrapolated (boundary) pixels in resampled images
-  mask_partial_interp: False
+  mask_partial_interp: True
   # Use multi-threading (memory intensive)
   multithread: True
   # For gain&offset model, refit pixels with model R2 values below this value, using interpolated offset
   # and fitted gain (None = no inpainting).
   r2_threshold: 0.25
   # maximum memory for automatic block size in megabytes
-  max_block_mem: 1024
+  max_block_mem: 25
 
 # Format of output (homogenised) image
 output:
