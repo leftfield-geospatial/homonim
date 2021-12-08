@@ -384,7 +384,27 @@ class HomonImBase:
         src_array[src_mask] = norm_model[0]*_src_array + norm_model[1]
         return norm_model
 
-    def _find_r2_cv(self, ref_array, src_array, param_array, kernel_shape=(5, 5), mask=None, mask_sum=None,
+    def _sliding_window_view(self, x, kernel_shape):
+        """
+        Return a 3D strided view of 2D array to allow fast sliding window operations.
+        Rolling windows are stacked along the third dimension.  No data copying is involved.
+
+        Parameters
+        ----------
+        x : numpy.array_like
+            array to return view of
+
+        Returns
+        -------
+        3D rolling window view of x
+        """
+        xstep = 1
+        shape = x.shape[:-1] + (kernel_shape[0], int(1 + (x.shape[-1] - kernel_shape[0]) / xstep))
+        strides = x.strides[:-1] + (x.strides[-1], xstep * x.strides[-1])
+        return np.lib.stride_tricks.as_strided(x, shape=shape, strides=strides, writeable=False)
+
+
+    def _find_r2_cv_old(self, ref_array, src_array, param_array, kernel_shape=(5, 5), mask=None, mask_sum=None,
                     ref_sum=None, dest_array=None):
         kernel_shape = tuple(kernel_shape)  # convert to tuple for opencv
         filter_args = dict(normalize=False, borderType=cv.BORDER_CONSTANT)  # common opencv arguments
@@ -409,8 +429,51 @@ class HomonImBase:
         np.divide(ss_res_array, ss_tot_array, out=dest_array, where=mask.astype('bool', copy=False))
         np.subtract(1, dest_array, out=dest_array, where=mask.astype('bool', copy=False))
 
-        return param_array
+        return dest_array
 
+    def _find_r2_cv(self, ref_array, src_array, param_array, kernel_shape=(5, 5), mask=None, mask_sum=None,
+                    ref_sum=None, src_sum=None, ref2_sum=None, src2_sum=None, src_ref_sum=None, dest_array=None):
+        kernel_shape = tuple(kernel_shape)  # convert to tuple for opencv
+        filter_args = dict(normalize=False, borderType=cv.BORDER_CONSTANT)  # common opencv arguments
+
+        if mask is None:
+            mask = src_array != hom_nodata
+        ref_array[~mask] = hom_nodata
+        if mask_sum is None:
+            mask_sum = cv.boxFilter(mask.astype(hom_dtype), -1, kernel_shape, **filter_args)
+        if ref2_sum is None:
+            ref2_sum = cv.sqrBoxFilter(ref_array, -1, kernel_shape, **filter_args)
+        if src2_sum is None:
+            src2_sum = cv.sqrBoxFilter(src_array, -1, kernel_shape, **filter_args)
+        if src_ref_sum is None:
+            src_ref_sum = cv.boxFilter(src_array * ref_array, -1, kernel_shape, **filter_args)
+
+        ss_tot_array = (mask_sum * ref2_sum) - (ref_sum ** 2)
+
+        if param_array.shape[0] > 1:    # gain and offset
+            if ref_sum is None:
+                ref_sum = cv.boxFilter(ref_array, -1, kernel_shape, **filter_args)
+            if src_sum is None:
+                src_sum = cv.boxFilter(src_array, -1, kernel_shape, **filter_args)
+
+            ss_res_array = (((param_array[0, :, :]**2) * src2_sum) +
+                            (2 * np.product(param_array[:2, :, :], axis=0) * src_sum) -
+                            (2 * param_array[0, :, :] * src_ref_sum) -
+                            (2 * param_array[1, :, :] * ref_sum) +
+                            ref2_sum + (mask_sum * (param_array[1, :, :]**2)))
+        else:
+            ss_res_array = (((param_array[0, :, :]**2) * src2_sum) -
+                            (2 * param_array[0, :, :] * src_ref_sum) +
+                            ref2_sum)
+
+        ss_res_array *= mask_sum
+
+        if dest_array is None:
+            dest_array = np.full(src_array.shape, fill_value=hom_nodata, dtype=hom_dtype)
+        np.divide(ss_res_array, ss_tot_array, out=dest_array, where=mask.astype('bool', copy=False))
+        np.subtract(1, dest_array, out=dest_array, where=mask.astype('bool', copy=False))
+
+        return dest_array
 
     def _find_mean_ratio_gains_cv(self, ref_array, src_array, kernel_shape=(5, 5)):
         """
@@ -513,7 +576,7 @@ class HomonImBase:
 
         if self._homo_config['debug_level'] >= 2:
             self._find_r2_cv(ref_array, src_array, param_array[:1, :, :], kernel_shape=kernel_shape, mask=mask,
-                             ref_sum=ref_sum, dest_array=param_array[1, :, :])
+                             ref_sum=ref_sum, src_sum=src_sum, dest_array=param_array[1, :, :])
 
         return param_array
 
@@ -547,12 +610,12 @@ class HomonImBase:
         src_ref_sum = cv.boxFilter(src_array * ref_array, -1, kernel_shape, **filter_args)
         mask_sum = cv.boxFilter(mask.astype(hom_dtype, copy=False), -1, kernel_shape, **filter_args)
         m_num_array = (mask_sum * src_ref_sum) - (src_sum * ref_sum)
-        del (src_ref_sum)  # free memory when possible
+        # del (src_ref_sum)  # free memory when possible
 
         # find the denominator for the gain i.e. var(src)
         src2_sum = cv.sqrBoxFilter(src_array, -1, kernel_shape, **filter_args)
         m_den_array = (mask_sum * src2_sum) - (src_sum ** 2)
-        del (src2_sum)
+        # del (src2_sum)
 
         # find the gain = cov(ref, src) / var(src)
         if (self._homo_config['debug_level'] >= 2) or (self._homo_config['r2_threshold'] is not None):
@@ -568,7 +631,8 @@ class HomonImBase:
         if (self._homo_config['debug_level'] >= 2) or (self._homo_config['r2_threshold'] is not None):
             # Find R2 of the models for each pixel
             self._find_r2_cv(ref_array, src_array, param_array[:2, :, :], kernel_shape=kernel_shape, mask=mask,
-                             mask_sum=mask_sum, ref_sum=ref_sum, dest_array=param_array[2, :, :])
+                             mask_sum=mask_sum, ref_sum=ref_sum, src_sum=src_sum, src2_sum=src2_sum,
+                             src_ref_sum=src_ref_sum, dest_array=param_array[2, :, :])
 
         if self._homo_config['r2_threshold'] is not None:
             # fill ("inpaint") low R2 areas and negative gain areas in the offset parameter
@@ -581,10 +645,11 @@ class HomonImBase:
             np.divide(ref_sum - mask_sum * param_array[1, :, :], src_sum, out=param_array[0, :, :],
                       where=r2_mask.astype('bool', copy=False))
 
-            if (self._homo_config['debug_level'] >= 2):
-                # Re-calculate R2 for new in-filled parameters (?)
-                self._find_r2_cv(ref_array, src_array, param_array[:2, :, :], kernel_shape=kernel_shape, mask=mask,
-                                 mask_sum=mask_sum, ref_sum=ref_sum, dest_array=param_array[2, :, :])
+            # if (self._homo_config['debug_level'] >= 2):
+            #     # Re-calculate R2 for new in-filled parameters (?)
+            #     self._find_r2_cv(ref_array, src_array, param_array[:2, :, :], kernel_shape=kernel_shape, mask=mask,
+            #                      mask_sum=mask_sum, ref_sum=ref_sum, src_sum=src_sum, src2_sum=src2_sum,
+            #                      src_ref_sum=src_ref_sum, dest_array=param_array[2, :, :])
 
 
         # TODO: this interacts with mask_partial_interp, so rather do it in homogenise after --ref-space US?
