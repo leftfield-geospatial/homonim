@@ -396,6 +396,7 @@ class HomonImBase:
         if ref_sum is None:
             ref_sum = cv.boxFilter(ref_array, -1, kernel_shape, **filter_args)
 
+        ref_array[~mask] = hom_nodata
         ref2_sum = cv.sqrBoxFilter(ref_array, -1, kernel_shape, **filter_args)
         ss_tot_array = (mask_sum * ref2_sum) - (ref_sum ** 2)
         res_array = (param_array[0, :, :] * src_array) - ref_array
@@ -408,10 +409,10 @@ class HomonImBase:
         np.divide(ss_res_array, ss_tot_array, out=dest_array, where=mask.astype('bool', copy=False))
         np.subtract(1, dest_array, out=dest_array, where=mask.astype('bool', copy=False))
 
-        return dest_array
+        return param_array
 
 
-    def _find_gains_cv(self, ref_array, src_array, kernel_shape=(5, 5)):
+    def _find_mean_ratio_gains_cv(self, ref_array, src_array, kernel_shape=(5, 5)):
         """
         Find sliding kernel gains for a band using opencv convolution.
 
@@ -441,7 +442,7 @@ class HomonImBase:
         # sum the ratio and mask over sliding kernel (uses DFT for large kernels)
         # (mask_sum effectively finds N, the number of valid pixels for each kernel)
         ratio_sum = cv.boxFilter(ratio_array, -1, kernel_shape, **filter_args)
-        mask_sum = cv.boxFilter(mask.astype(hom_dtype), -1, kernel_shape, **filter_args)
+        mask_sum = cv.boxFilter(mask.astype(hom_dtype, copy=False), -1, kernel_shape, **filter_args)
 
         # mask out parameter pixels that were not completely covered by a window of valid data
         # TODO: this interacts with mask_partial_interp, so rather do it in homogenise after --ref-space US?
@@ -462,6 +463,60 @@ class HomonImBase:
                              mask_sum=mask_sum, dest_array=param_array[1, :, :])
 
         return param_array
+
+    def _find_gains_cv(self, ref_array, src_array, kernel_shape=(5, 5)):
+        """
+        Find sliding kernel gains for a band using opencv convolution.
+
+        Parameters
+        ----------
+        ref_array : numpy.array_like
+            Reference band in an MxN array.
+        src_array : numpy.array_like
+            Source band, collocated with ref_ra and the same shape.
+        kernel_shape : numpy.array_like, list, tuple, optional
+            Sliding kernel [width, height] in pixels.
+
+        Returns
+        -------
+        param_array : numpy.array_like
+        1 x M x N array of gains, corresponding to M x N src_ and ref_ra
+        """
+        # adapted from https://www.mathsisfun.com/data/least-squares-regression.html with c=0
+        # m = sum(ref)/sum(src)
+        mask = src_array != hom_nodata
+        ref_array[~mask] = hom_nodata
+
+        kernel_shape = tuple(kernel_shape)  # convert to tuple for opencv
+        filter_args = dict(normalize=False, borderType=cv.BORDER_CONSTANT)  # common opencv arguments
+
+        # sum the ratio and mask over sliding kernel (uses DFT for large kernels)
+        # (mask_sum effectively finds N, the number of valid pixels for each kernel)
+        src_sum = cv.boxFilter(src_array, -1, kernel_shape, **filter_args)
+        ref_sum = cv.boxFilter(ref_array, -1, kernel_shape, **filter_args)
+        # mask_sum = cv.boxFilter(mask.astype(hom_dtype, copy=False), -1, kernel_shape, **filter_args)
+
+        # calculate gains for valid pixels
+        if self._homo_config['debug_level'] >= 2:
+            param_array = np.full((2, *src_array.shape), fill_value=hom_nodata, dtype=hom_dtype)
+        else:
+            param_array = np.full((1, *src_array.shape), fill_value=hom_nodata, dtype=hom_dtype)
+
+        # find ref/src pixel ratios avoiding divide by nodata=0
+        _ = np.divide(ref_sum, src_sum, out=param_array[0, :, :], where=mask.astype('bool', copy=False))
+
+        # mask out parameter pixels that were not completely covered by a window of valid data
+        # TODO: this interacts with mask_partial_interp, so rather do it in homogenise after --ref-space US?
+        #   this is sort of the same question as, is it better to do pure extrapolation, or interpolation with semi-covered data?
+        # if self._homo_config['mask_partial_kernel']:
+        #     mask &= (mask_sum >= np.product(kernel_shape))
+
+        if self._homo_config['debug_level'] >= 2:
+            self._find_r2_cv(ref_array, src_array, param_array[:1, :, :], kernel_shape=kernel_shape, mask=mask,
+                             ref_sum=ref_sum, dest_array=param_array[1, :, :])
+
+        return param_array
+
 
     def _find_gain_and_offset_cv(self, ref_array, src_array, kernel_shape=(15, 15)):
         """
@@ -490,7 +545,7 @@ class HomonImBase:
         src_sum = cv.boxFilter(src_array, -1, kernel_shape, **filter_args)
         ref_sum = cv.boxFilter(ref_array, -1, kernel_shape, **filter_args)
         src_ref_sum = cv.boxFilter(src_array * ref_array, -1, kernel_shape, **filter_args)
-        mask_sum = cv.boxFilter(mask.astype(hom_dtype), -1, kernel_shape, **filter_args)
+        mask_sum = cv.boxFilter(mask.astype(hom_dtype, copy=False), -1, kernel_shape, **filter_args)
         m_num_array = (mask_sum * src_ref_sum) - (src_sum * ref_sum)
         del (src_ref_sum)  # free memory when possible
 
