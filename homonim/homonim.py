@@ -262,26 +262,34 @@ class HomonImBase:
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
             with WarpedVRT(rio.open(self._ref_filename, 'r'), crs=src_im.crs) as ref_im:
                 src_shape = np.array(src_im.shape)
-                overlap = np.array(overlap)
-                block_shape = np.array(block_shape)
+                overlap = np.array(overlap).astype('int')
+                block_shape = np.array(block_shape).astype('int')
                 ovl_blocks = []
+                res_ratio = np.ceil(np.array(ref_im.res) / np.array(src_im.res)).astype('int')
 
                 for band_i in range(src_im.count):
                     for ul_row, ul_col in product(range(-overlap[0], (src_shape[0] - 2 * overlap[0]), block_shape[0]),
                                                   range(-overlap[1], (src_shape[1] - 2 * overlap[1]), block_shape[1])):
                         ul = np.array((ul_row, ul_col))
                         br = ul + block_shape + 2 * overlap
-                        src_ul = np.fmax(ul, (0, 0))
-                        src_br = np.fmin(br, src_shape - 1)
+                        # include a ref pixel beyond src boundary to allow ref-space reprojections there
+                        src_ul = np.fmax(ul, -res_ratio)
+                        # TODO is -1 correct?
+                        src_br = np.fmin(br, src_shape + res_ratio - 1)
+                        src_block_shape = np.subtract(src_br, src_ul)
+                        outer = np.any(src_ul <= 0) or np.any(src_br >= src_shape - 1)
                         out_ul = ul + overlap
                         out_br = br - overlap
 
-                        src_in_block = Window.from_slices((src_ul[0], src_br[0]), (src_ul[1], src_br[1]))
+                        src_in_block = Window.from_slices((src_ul[0], src_br[0]), (src_ul[1], src_br[1]),
+                                                          width=src_block_shape[1], height=src_block_shape[0],
+                                                          boundless=outer)
                         src_out_block = Window.from_slices((out_ul[0], out_br[0]), (out_ul[1], out_br[1]))
+
                         ref_in_block = expand_window_to_grid(ref_im.window(*src_im.window_bounds(src_in_block)))
+                        # TODO do we need to expand on outer edges and round on inner?
                         ref_out_block = round_window_to_grid(ref_im.window(*src_im.window_bounds(src_out_block)))
 
-                        outer = np.any(src_ul==0) or np.any(src_br==src_shape-1)
                         ovl_blocks.append(OvlBlock(band_i+1, src_in_block, src_out_block, ref_in_block, ref_out_block, outer))
         return ovl_blocks
 
@@ -635,7 +643,8 @@ class HomonImBase:
                     def process_block(ovl_block: OvlBlock):
                         """Thread-safe function to homogenise a block of src_im"""
                         with src_read_lock:
-                            src_array = src_im.read(ovl_block.band_i, window=ovl_block.src_in_block, out_dtype=hom_dtype)
+                            src_array = src_im.read(ovl_block.band_i, window=ovl_block.src_in_block, out_dtype=hom_dtype,
+                                                    boundless=ovl_block.outer)
                             src_ra = RasterArray.from_profile(src_array, src_im.profile, window=ovl_block.src_in_block)
 
                         with ref_read_lock:
