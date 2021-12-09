@@ -131,7 +131,7 @@ class HomonImBase:
                 'mask_partial_kernel': False,
                 'mask_partial_interp': False,
                 'multithread': True,
-                'r2_threshold': 0.25,
+                'r2_inpaint_thresh': 0.25,
                 'max_block_mem': 100,
             }
         else:
@@ -516,7 +516,7 @@ class HomonImBase:
         # del (src2_sum)
 
         # find the gain = cov(ref, src) / var(src)
-        if (self._homo_config['debug_level'] >= 2) or (self._homo_config['r2_threshold'] is not None):
+        if (self._homo_config['debug_level'] >= 2) or (self._homo_config['r2_inpaint_thresh'] is not None):
             param_array = np.full((3, *src_array.shape), fill_value=hom_nodata, dtype=hom_dtype)
         else:
             param_array = np.full((2, *src_array.shape), fill_value=hom_nodata, dtype=hom_dtype)
@@ -526,15 +526,15 @@ class HomonImBase:
         _ = np.divide(ref_sum - (param_array[0, :, :] * src_sum), mask_sum, out=param_array[1, :, :],
                       where=mask.astype('bool', copy=False))
 
-        if (self._homo_config['debug_level'] >= 2) or (self._homo_config['r2_threshold'] is not None):
+        if (self._homo_config['debug_level'] >= 2) or (self._homo_config['r2_inpaint_thresh'] is not None):
             # Find R2 of the models for each pixel
             self._find_r2_cv(ref_array, src_array, param_array[:2, :, :], kernel_shape=kernel_shape, mask=mask,
                              mask_sum=mask_sum, ref_sum=ref_sum, src_sum=src_sum, src2_sum=src2_sum,
                              src_ref_sum=src_ref_sum, dest_array=param_array[2, :, :])
 
-        if self._homo_config['r2_threshold'] is not None:
+        if self._homo_config['r2_inpaint_thresh'] is not None:
             # fill ("inpaint") low R2 areas and negative gain areas in the offset parameter
-            r2_mask = (param_array[2, :, :] < self._homo_config['r2_threshold']) | (param_array[0, :, :] <= 0)
+            r2_mask = (param_array[2, :, :] < self._homo_config['r2_inpaint_thresh']) | (param_array[0, :, :] <= 0)
             param_array[1, :, :] = fillnodata(param_array[1, :, :], ~r2_mask)
             param_array[1, ~mask] = hom_nodata  # re-set nodata as nodata areas will have been filled above
 
@@ -673,8 +673,15 @@ class HomonImBase:
 
                     if self._homo_config['multithread']:
                         # process bands in concurrent threads
+                        future_list = []
                         with concurrent.futures.ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
-                            executor.map(process_block, ovl_blocks)
+                            for ovl_block in ovl_blocks:
+                                future = executor.submit(process_block, ovl_block)
+                                future_list.append(future)
+
+                            # wait for threads and raise any thread generated exceptions
+                            for future in future_list:
+                                future.result()
                     else:
                         # process bands consecutively
                         for ovl_block in ovl_blocks:
