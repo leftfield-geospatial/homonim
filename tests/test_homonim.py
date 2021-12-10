@@ -123,6 +123,31 @@ class TestHomonim(unittest.TestCase):
             self.assertTrue(np.all(im_ref_r2[1, :] > 0.6), 'Homogenised R2 > 0.6')
             self.assertTrue(np.all(im_ref_r2[1, :] > im_ref_r2[0, :]), 'Homogenised vs reference R2 improvement')
 
+    def _test_ovl_blocks(self, ovl_blocks):
+        """ Test overlap blocks for sanity """
+        prev_ovl_block = ovl_blocks[0]
+        for ovl_block in ovl_blocks[1:]:
+            ovl_block = ovl_block
+            if ovl_block.band_i == prev_ovl_block.band_i:
+                for out_blk_fld in ('src_out_block', 'ref_out_block'):
+                    curr_blk = ovl_block.__getattribute__(out_blk_fld)
+                    prev_blk = prev_ovl_block.__getattribute__(out_blk_fld)
+                    if curr_blk.row_off == prev_blk.row_off:
+                        self.assertTrue(curr_blk.col_off == prev_blk.col_off + prev_blk.width, f'{out_blk_fld} col consecutive')
+                    else:
+                        self.assertTrue(curr_blk.row_off == prev_blk.row_off + prev_blk.height, f'{out_blk_fld} row consecutive')
+                for in_blk_fld in ('src_in_block', 'ref_in_block'):
+                    curr_blk = ovl_block.__getattribute__(in_blk_fld)
+                    prev_blk = prev_ovl_block.__getattribute__(in_blk_fld)
+                    if curr_blk.row_off == prev_blk.row_off:
+                        self.assertTrue(curr_blk.col_off < prev_blk.col_off + prev_blk.width, f'{in_blk_fld} col overlap')
+                    else:
+                        self.assertTrue(curr_blk.row_off < prev_blk.row_off + prev_blk.height, f'{in_blk_fld} row overlap')
+            else:
+                self.assertTrue(ovl_block.band_i == prev_ovl_block.band_i + 1, f'band consecutive')
+
+            prev_ovl_block = ovl_block
+
     def test_api(self):
         """Test homogenisation API"""
         src_filename = root_path.joinpath('data/inputs/test_example/source/3324c_2015_1004_05_0182_RGB.tif')
@@ -143,6 +168,8 @@ class TestHomonim(unittest.TestCase):
             homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
             him = homonim.HomonimRefSpace(src_filename, ref_filename, homo_config=self._homo_config,
                                           out_config=self._out_config)
+            with self.subTest('Overlapped Blocks', src_filename=src_filename):
+                self._test_ovl_blocks(him._create_ovl_blocks(param_dict['kernel_shape']))
             him.homogenise(homo_filename, **param_dict)
             him.build_overviews(homo_filename)
             self.assertTrue(homo_filename.exists(), 'Homogenised file exists')
