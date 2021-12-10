@@ -243,41 +243,44 @@ class HomonImBase:
                 #     logger.warning('The reference will be re-projected to the source CRS.  \n'
                 #                    'To avoid this step, provide a reference image in the source CRS')
 
-    def _auto_block_shape(self, src_shape, src_kernel_shape=None):
-        if src_kernel_shape is None:
-            src_kernel_shape = (0, 0)
+    def _auto_block_shape(self, src_shape):
         max_block_mem = self._homo_config['max_block_mem'] * (2**20)    # MB to Bytes
         dtype_size = np.dtype(hom_dtype).itemsize
 
         div_dim = np.argmax(src_shape)
         block_shape = np.array(src_shape)
-        while (np.product(block_shape)*dtype_size > max_block_mem) and np.all(block_shape > src_kernel_shape):
+        while (np.product(block_shape)*dtype_size > max_block_mem):
             block_shape[div_dim] /= 2
             div_dim = np.mod(div_dim + 1, 2)
-        # block_shape += src_kernel_shape
         return np.round(block_shape).astype('int')
 
 
-    def _overlap_blocks(self, block_shape, overlap=(0, 0)):
+    def _create_ovl_blocks(self, kernel_shape=(0, 0)):
+
+        kernel_shape = np.array(kernel_shape).astype(int)
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
             with WarpedVRT(rio.open(self._ref_filename, 'r'), crs=src_im.crs) as ref_im:
                 src_shape = np.array(src_im.shape)
-                overlap = np.array(overlap).astype('int')
-                block_shape = np.array(block_shape).astype('int')
+                res_ratio = np.ceil(np.array(ref_im.res) / np.array(src_im.res)).astype(int)
+                src_kernel_shape = (kernel_shape * res_ratio).astype(int)
+                overlap = np.ceil(res_ratio + src_kernel_shape/2).astype(int)
                 ovl_blocks = []
-                res_ratio = np.ceil(np.array(ref_im.res) / np.array(src_im.res)).astype('int')
+                block_shape = self._auto_block_shape(src_im.shape)
+                if np.any(block_shape <= src_kernel_shape):
+                    raise Exception('Block size is less than kernel size, increase `max_block_mem` or decrease '
+                                    '`kernel_shape`')
 
                 for band_i in range(src_im.count):
                     for ul_row, ul_col in product(range(-overlap[0], (src_shape[0] - 2 * overlap[0]), block_shape[0]),
                                                   range(-overlap[1], (src_shape[1] - 2 * overlap[1]), block_shape[1])):
                         ul = np.array((ul_row, ul_col))
-                        br = ul + block_shape + 2 * overlap
+                        br = ul + block_shape + (2 * overlap)
                         # include a ref pixel beyond src boundary to allow ref-space reprojections there
                         src_ul = np.fmax(ul, -res_ratio)
                         # TODO is -1 correct?
-                        src_br = np.fmin(br, src_shape + res_ratio - 1)
+                        src_br = np.fmin(br, src_shape + res_ratio)
                         src_block_shape = np.subtract(src_br, src_ul)
-                        outer = np.any(src_ul <= 0) or np.any(src_br >= src_shape - 1)
+                        outer = np.any(src_ul <= 0) or np.any(src_br >= src_shape)
                         out_ul = ul + overlap
                         out_br = br - overlap
 
@@ -286,7 +289,7 @@ class HomonImBase:
                                                           boundless=outer)
                         src_out_block = Window.from_slices((out_ul[0], out_br[0]), (out_ul[1], out_br[1]))
 
-                        ref_in_block = expand_window_to_grid(ref_im.window(*src_im.window_bounds(src_in_block)))
+                        ref_in_block = round_window_to_grid(ref_im.window(*src_im.window_bounds(src_in_block)))
                         # TODO do we need to expand on outer edges and round on inner?
                         ref_out_block = round_window_to_grid(ref_im.window(*src_im.window_bounds(src_out_block)))
 
@@ -608,11 +611,7 @@ class HomonImBase:
 
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
             with WarpedVRT(rio.open(self._ref_filename, 'r'), crs=src_im.crs, resampling=Resampling.bilinear) as ref_im:
-                res_ratio = np.ceil(np.array(ref_im.res) / np.array(src_im.res))
-                src_kernel_shape = (kernel_shape * res_ratio).astype(int)
-                overlap = np.ceil(res_ratio + src_kernel_shape/2).astype(int)
-                block_shape = self._auto_block_shape(src_im.shape, src_kernel_shape)
-                ovl_blocks = self._overlap_blocks(block_shape=block_shape, overlap=overlap)
+                ovl_blocks = self._create_ovl_blocks(kernel_shape=kernel_shape)
 
                 if self._homo_config['debug_level'] >= 1:
                     # setup profiling
