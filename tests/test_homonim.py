@@ -114,7 +114,7 @@ class TestHomonim(unittest.TestCase):
                         im_array = RasterArray.from_profile(_im_array, im.profile)
                         im_ds_array = im_array.reproject(transform=ref_array.transform, shape=ref_array.shape[-2:],
                                                          resampling=him._homo_config['src2ref_interp'])
-                        mask = im_ds_array.mask.array.astype('bool', copy=False)
+                        mask = im_ds_array.mask
                         im_ref_cc = np.corrcoef(im_ds_array.array[mask], ref_array.array[band_i, mask])
                         im_ref_r2[im_i, band_i] = im_ref_cc[0, 1] ** 2
 

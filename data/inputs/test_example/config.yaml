@@ -6,8 +6,8 @@ homogenisation:
   # Interpolation type (average, bilinear, cubic, cubic_spline, gauss, lanczos) for resampling from reference to source
   #   CRS  (average recommended)
   ref2src_interp: cubic_spline
-  # Produce debug outputs (parameter rasters)
-  debug: False
+  # Produce debug outputs (0=None, 1=profiling, 2=parameter rasters)
+  debug_level: 2
   # Mask partially covered source pixels when downsampling for --ref-space
   mask_partial_pixel: True
     # Mask partially covered source pixels when downsampling for --ref-space
@@ -18,7 +18,7 @@ homogenisation:
   multithread: False
   # For gain&offset model, refit pixels with model R2 values below this value, using interpolated offset
   # and fitted gain (None = no inpainting).
-  r2_threshold: 0.25
+  r2_inpaint_thresh: 0.25
   # maximum memory for automatic block size in megabytes
   max_block_mem: 1
 
