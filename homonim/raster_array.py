@@ -27,9 +27,18 @@ from rasterio import Affine
 from rasterio.warp import reproject, Resampling
 from homonim import get_logger, hom_dtype, hom_nodata
 import multiprocessing
+from rasterio.enums import ColorInterp
+
+def nan_equals(a, b, equal_nan=True):
+    if not equal_nan:
+        return (a == b)
+    else:
+        return ((a == b) | (np.isnan(a) & np.isnan(b)))
 
 class RasterArray(object):
     """A class for wrapping a geo-referenced numpy array"""
+    _default_nodata = hom_nodata
+    _default_dtype = hom_dtype
     def __init__(self, array, crs, transform, nodata=None, window=None):
         # array = np.array(array)
         if (array.ndim < 2) or (array.ndim > 3):
@@ -62,6 +71,18 @@ class RasterArray(object):
             raise Exception('profile should include crs, transform and nodata keys')
         return cls(array, profile['crs'], profile['transform'], nodata=profile['nodata'], window=window)
 
+    @classmethod
+    def from_rio_dataset(cls, rio_dataset, indexes=None, window=None, boundless=False):
+        array = rio_dataset.read(indexes=indexes, window=window, boundless=boundless, out_dtype=cls._default_dtype)
+        is_alpha = [band_cinterp == ColorInterp.alpha for band_cinterp in rio_dataset.colorinterp]
+        if rio_dataset.nodata is not None and not any(is_alpha):
+            nodata = rio_dataset.nodata
+        else:
+            nodata = cls._default_nodata
+            mask = rio_dataset.dataset_mask()
+            array[~mask] = nodata
+        return cls(array, rio_dataset.crs, rio_dataset.transform, nodata=nodata, window=window)
+
     @property
     def array(self):
         return self._array
@@ -88,71 +109,81 @@ class RasterArray(object):
 
     @property
     def shape(self):
-        return self._array.shape
+        return self._array.shape[-2:]
 
     @property
     def count(self):
-        return self.shape[0] if len(self.shape) == 3 else 1
+        return self._array.shape[0] if self.array.ndim == 3 else 1
 
     @property
     def dtype(self):
-        return self.array.dtype
+        return self._array.dtype
 
     @property
     def transform(self):
         return self._transform
 
     @property
-    def nodata(self):
-        return self._nodata
-
-    @property
     def res(self):
-        return np.abs((self.transform.a, self.transform.e))
+        return np.abs((self._transform.a, self._transform.e))
 
     @property
     def bounds(self):
-        return windows.bounds(windows.Window(0, 0, self.width, self.height), self.transform)
+        return windows.bounds(windows.Window(0, 0, self.width, self.height), self._transform)
 
     @property
     def profile(self):
-        return dict(crs=self.crs, transform=self.transform, nodata=self.nodata, count=self.count, width=self.width,
+        return dict(crs=self._crs, transform=self._transform, nodata=self._nodata, count=self.count, width=self.width,
                     height=self.height, bounds=self.bounds)
 
     @property
     def proj_profile(self):
-        return dict(crs=self.crs, transform=self.transform, shape=self.shape)
+        return dict(crs=self._crs, transform=self._transform, shape=self._array.shape)
 
     @property
     def mask(self):
+        """ 2D boolean mask corresponding to valid pixels in array """
         if self._nodata is None:
-            return None
+            return np.full(self.shape, True)
+        mask = ~nan_equals(self.array, self.nodata)
+        if self._array.ndim > 2:
+            mask =  np.all(mask, axis=0)
+        return mask
 
-        if self._array.ndim == 3:
-            mask =  np.all(self._array != self._nodata, axis=0).astype('uint8')
+    @mask.setter
+    def mask(self, value):
+        """ 2D boolean mask corresponding to valid pixels in array """
+        if self._array.ndim == 2:
+            self._array[~value] = self._nodata
         else:
-            mask = (self._array != self._nodata).astype('uint8')
+            self._array[:, ~value] = self._nodata
 
-        return RasterArray(mask, crs=self.crs, transform=self.transform, nodata=None)
+    @property
+    def nodata(self):
+        """ nodata value """
+        return self._nodata
 
-    # @property
-    # def nodata_mask(self):
-    #     if self._nodata_mask is None and self._nodata is not None:
-    #         self._nodata_mask = (self._array == self._nodata)
-    #     return self._nodata_mask
-    #
-    # @nodata.setter
-    # def nodata(self, value):
-    #     if value != self._nodata:
-    #         self.array[self.nodata_mask] = value
-    #         self._nodata = value
+    @nodata.setter
+    def nodata(self, value):
+        """ nodata value """
+        if value is None or self._nodata is None:
+            # if value is None, remove the mask, if current nodata is None,
+            # there is no mask to apply the new value to array
+            self._nodata = value
+        elif not (nan_equals(value, self._nodata)):
+            # if value is different to current nodata, set mask area in array to value
+            nodata_mask = ~self.mask
+            if self._array.ndim == 3:
+                self._array[:, nodata_mask] = value
+            else:
+                self._array[nodata_mask] = value
+            self._nodata = value
 
-
-
-    def reproject(self, crs=None, transform=None, shape=None, nodata=hom_nodata, dtype=hom_dtype, resampling=Resampling.lanczos):
+    def reproject(self, crs=None, transform=None, shape=None, nodata=_default_nodata, dtype=_default_dtype,
+                  resampling=Resampling.lanczos):
 
         if transform and not shape:
-            raise ValueError('if transform is specified, shape must also be specified')
+            raise ValueError('If transform is specified, shape must also be specified')
 
         if isinstance(resampling, str):
             resampling = Resampling[resampling]
@@ -180,10 +211,5 @@ class RasterArray(object):
         )
         return RasterArray(_dst_array, crs=crs, transform=_dst_transform, nodata=nodata)
 
-    # def reproject_to_profile(self, profile, resampling=Resampling.lanczos):
-    #     reproject_keys = ['crs', 'transform', 'nodata', 'height', 'width']
-    #     if any([key not in profile for key in reproject_keys]):
-    #         raise ValueError(f'profile should include {reproject_keys}')
-    #     return self.reproject(crs=profile['crs'], transform=profile['transform'],
-    #                         shape=(profile['height'], profile['width']), nodata=profile['nodata'],
-    #                         resampling=resampling)
+##
+

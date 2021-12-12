@@ -35,11 +35,12 @@ from rasterio.windows import Window
 from rasterio.fill import fillnodata
 from rasterio.vrt import WarpedVRT
 from rasterio.warp import reproject, Resampling, transform_geom, transform_bounds
+from rasterio.enums import ColorInterp
 from shapely.geometry import box, shape
 from tqdm import tqdm
 
 from homonim import get_logger, hom_dtype, hom_nodata
-from homonim.raster_array import RasterArray
+from homonim.raster_array import RasterArray, nan_equals
 
 logger = get_logger(__name__)
 
@@ -210,20 +211,29 @@ class HomonImBase:
                         raise Exception(f'Reference image {self._ref_filename.stem} does not cover source image '
                                         f'{self._src_filename.stem}.')
 
-                    # check reference has enough bands for the source
-                    if src_im.count > ref_im.count:
-                        raise Exception(f'Reference image {self._ref_filename.stem} has fewer bands than source image '
-                                        f'{self._src_filename.stem}.')
+                    # check reference has enough bands for the source, ignoring any alpha bands
+                    # TODO: what if any alpha band is not positioned last, will it be read like a normal band?
+                    im_band_count = []
+                    for im in [src_im, ref_im]:
+                        is_alpha = [band_cinterp == ColorInterp.alpha for band_cinterp in im.colorinterp]
+                        im_band_count.append(im.count - any(is_alpha))
+
+                    if im_band_count[0] > im_band_count[1]:
+                        raise Exception(f'Reference image {self._ref_filename.stem} has fewer non-alpha bands than '
+                                        f'source image {self._src_filename.stem}.')
 
                     # if the band counts don't match assume the first src_im.count bands of ref_im match those of src_im
-                    if src_im.count != ref_im.count:
-                        logger.warning('Reference bands do not match source bands.  \n'
-                                       f'Using the first {src_im.count} bands of reference image  {self._ref_filename.stem}.')
+                    if im_band_count[0] != im_band_count[1]:
+                        logger.warning('Reference non-alpha band count does not match source count.  \n'
+                                       f'Using the first {im_band_count[0]} bands of reference image  '
+                                       f'{self._ref_filename.stem}.')
 
-                    for fn, nodata in zip([self._src_filename, self._ref_filename], [src_im.nodata, ref_im.nodata]):
-                        if nodata is None:
-                            logger.warning(f'{fn} has no nodata value, defaulting to {hom_nodata}.\n'
-                                           'Any invalid pixels in this image should be first be masked with nodata.')
+                    for fn, nodata in zip([self._src_filename, self._ref_filename], [src_im, ref_im]):
+                        is_alpha = [band_cinterp == ColorInterp.alpha for band_cinterp in im.colorinterp]
+                        if nodata is None and not any(is_alpha):
+                            logger.warning(f'{fn} has no nodata value or alpha band, defaulting nodata={hom_nodata}.\n'
+                                           'Any invalid pixels in this image should be first be masked using a '
+                                           'nodata value, alpha band or mask sidecar file.')
 
                     src_nodata = hom_nodata if src_im.nodata is None else src_im.nodata
                     ref_nodata = hom_nodata if ref_im.nodata is None else ref_im.nodata
@@ -232,6 +242,7 @@ class HomonImBase:
                     ref_shape = (ref_win.height, ref_win.width)
                     ref_bounds = ref_im.window_bounds(ref_win)
 
+                    # TODO: do we need these?  Might they replace some parameter passing in other places?
                     self._src_props = RasterProps(crs=src_im.crs, transform=src_im.transform, shape=src_im.shape,
                                                   res=list(src_im.res), bounds=src_im.bounds, nodata=src_nodata,
                                                   count=src_im.count, profile=src_im.profile)
@@ -277,7 +288,6 @@ class HomonImBase:
                         br = ul + block_shape + (2 * overlap)
                         # include a ref pixel beyond src boundary to allow ref-space reprojections there
                         src_ul = np.fmax(ul, -res_ratio)
-                        # TODO is -1 correct?
                         src_br = np.fmin(br, src_shape + res_ratio)
                         src_block_shape = np.subtract(src_br, src_ul)
                         outer = np.any(src_ul <= 0) or np.any(src_br >= src_shape)
@@ -381,18 +391,18 @@ class HomonImBase:
         : numpy.array
         A two element array of linear offset model i.e. [1, offset]
         """
-        src_mask = src_array != hom_nodata
-        if not np.any(src_mask):
+        mask = ~(nan_equals(src_array, hom_nodata) | nan_equals(ref_array, hom_nodata))
+        if not np.any(mask):
             return np.zeros(2)
         # TODO: can we avoid these masked copies?
-        _ref_array = ref_array[src_mask]
-        _src_array = src_array[src_mask]
+        _ref_array = ref_array[mask]
+        _src_array = src_array[mask]
 
         norm_model = np.zeros(2)
         norm_model[0] = _ref_array.std() / _src_array.std()
         norm_model[1] = np.percentile(_ref_array, 1) - np.percentile(_src_array, 1) * norm_model[0]
 
-        src_array[src_mask] = norm_model[0]*_src_array + norm_model[1]
+        src_array[mask] = norm_model[0]*_src_array + norm_model[1]
         return norm_model
 
     def _find_r2_cv(self, ref_array, src_array, param_array, kernel_shape=(5, 5), mask=None, mask_sum=None,
@@ -401,8 +411,7 @@ class HomonImBase:
         filter_args = dict(normalize=False, borderType=cv.BORDER_CONSTANT)  # common opencv arguments
 
         if mask is None:
-            mask = src_array != hom_nodata
-        ref_array[~mask] = hom_nodata
+            mask = ~(nan_equals(src_array, hom_nodata) | nan_equals(ref_array, hom_nodata))
         if mask_sum is None:
             mask_sum = cv.boxFilter(mask.astype(hom_dtype), -1, kernel_shape, **filter_args)
         if ref2_sum is None:
@@ -445,7 +454,7 @@ class HomonImBase:
         Parameters
         ----------
         ref_array : numpy.array_like
-            Reference band in an MxN array.
+            Reference band in a RasterArray.
         src_array : numpy.array_like
             Source band, collocated with ref_ra and the same shape.
         kernel_shape : numpy.array_like, list, tuple, optional
@@ -457,9 +466,11 @@ class HomonImBase:
         1 x M x N array of gains, corresponding to M x N src_ and ref_ra
         """
         # adapted from https://www.mathsisfun.com/data/least-squares-regression.html with c=0
-        # m = sum(ref)/sum(src)
-        mask = src_array != hom_nodata
-        ref_array[~mask] = hom_nodata
+
+        mask = (nan_equals(src_array, hom_nodata) | nan_equals(ref_array, hom_nodata))
+        src_array[mask] = 0
+        ref_array[mask] = 0
+        mask = ~mask
 
         kernel_shape = tuple(kernel_shape)  # convert to tuple for opencv
         filter_args = dict(normalize=False, borderType=cv.BORDER_CONSTANT)  # common opencv arguments
@@ -508,8 +519,10 @@ class HomonImBase:
         """
         # Least squares formulae adapted from https://www.mathsisfun.com/data/least-squares-regression.html
 
-        mask = src_array != hom_nodata
-        ref_array[~mask] = hom_nodata  # apply src mask to ref, so we are summing on same pixels
+        mask = (nan_equals(src_array, hom_nodata) | nan_equals(ref_array, hom_nodata))
+        src_array[mask] = 0
+        ref_array[mask] = 0
+        mask = ~mask
         kernel_shape = tuple(kernel_shape)  # force to tuple for opencv
 
         # find the numerator for the gain i.e. cov(ref, src)
@@ -546,6 +559,8 @@ class HomonImBase:
         if self._homo_config['r2_inpaint_thresh'] is not None:
             # fill ("inpaint") low R2 areas and negative gain areas in the offset parameter
             r2_mask = (param_array[2, :, :] < self._homo_config['r2_inpaint_thresh']) | (param_array[0, :, :] <= 0)
+            # TODO: fillnodata, interpolates from nodata, there is a mask to tell it where to fill, but not a mask to
+            # tell it which values it can use.
             param_array[1, :, :] = fillnodata(param_array[1, :, :], ~r2_mask)
             param_array[1, ~mask] = hom_nodata  # re-set nodata as nodata areas will have been filled above
 
@@ -642,13 +657,16 @@ class HomonImBase:
                     def process_block(ovl_block: OvlBlock):
                         """Thread-safe function to homogenise a block of src_im"""
                         with src_read_lock:
-                            src_array = src_im.read(ovl_block.band_i, window=ovl_block.src_in_block, out_dtype=hom_dtype,
-                                                    boundless=ovl_block.outer)
-                            src_ra = RasterArray.from_profile(src_array, src_im.profile, window=ovl_block.src_in_block)
+                            # src_array = src_im.read(ovl_block.band_i, window=ovl_block.src_in_block, out_dtype=hom_dtype,
+                            #                         boundless=ovl_block.outer)
+                            # src_ra = RasterArray.from_profile(src_array, src_im.profile, window=ovl_block.src_in_block)
+                            src_ra = RasterArray.from_rio_dataset(src_im, indexes=ovl_block.band_i, window=ovl_block.src_in_block, boundless=ovl_block.outer)
 
                         with ref_read_lock:
-                            ref_array = ref_im.read(ovl_block.band_i, window=ovl_block.ref_in_block, out_dtype=hom_dtype)
-                            ref_ra = RasterArray.from_profile(ref_array, ref_im.profile, window=ovl_block.ref_in_block)
+                            # ref_array = ref_im.read(ovl_block.band_i, window=ovl_block.ref_in_block, out_dtype=hom_dtype)
+                            # ref_ra = RasterArray.from_profile(ref_array, ref_im.profile, window=ovl_block.ref_in_block)
+                            ref_ra = RasterArray.from_rio_dataset(ref_im, indexes=ovl_block.band_i, window=ovl_block.ref_in_block)
+                            ref_ra.nodata = hom_nodata
 
                         out_array, dbg_array = self._homogenise_array(
                             ref_ra, src_ra, method=method, kernel_shape=kernel_shape, mask_partial=ovl_block.outer
@@ -732,8 +750,9 @@ class HomonimRefSpace(HomonImBase):
         if mask_partial and self._homo_config['mask_partial_pixel']:
             # mask src_ds_ra pixels that were not completely covered by src_ra
             # TODO is this faster, or setting param_ra[src_ra == 0] = 0 below
-            mask_ds_ra = src_ra.mask.reproject(**src_ds_ra.proj_profile, resampling=Resampling.average)
-            src_ds_ra.array[np.logical_not(mask_ds_ra.array == 1)] = hom_nodata
+            mask_ra = RasterArray(src_ra.mask.astype('uint8', copy=False), crs=src_ra.crs, transform=src_ra.transform, nodata=None)
+            mask_ds_ra = mask_ra.reproject(**src_ds_ra.proj_profile, resampling=Resampling.average)
+            src_ds_ra.mask = (mask_ds_ra.array >= 1)
 
         if method == 'gain_offset':
             param_ds_array = self._find_gain_and_offset_cv(ref_ra.array, src_ds_ra.array, kernel_shape=kernel_shape)
@@ -748,7 +767,7 @@ class HomonimRefSpace(HomonImBase):
         param_ra = param_ds_ra.reproject(**src_ra.proj_profile, resampling=self._homo_config['ref2src_interp'])
 
         if mask_partial and (self._homo_config['mask_partial_interp'] or self._homo_config['mask_partial_kernel']):
-            param_mask = np.all(param_ra.array == hom_nodata, axis=0)
+            mask = param_ra.mask  #np.all(nan_equals(param_ra.array, hom_nodata), axis=0)
             res_ratio = np.divide(ref_ra.res, param_ra.res)
             if self._homo_config['mask_partial_kernel']:
                 morph_kernel_shape = np.ceil(res_ratio * kernel_shape).astype('int32')
@@ -756,11 +775,11 @@ class HomonimRefSpace(HomonImBase):
                 # no need to do mask_partial_interp when mask_partial_kernel==True
                 morph_kernel_shape = np.ceil(res_ratio).astype('int32')
             se = cv2.getStructuringElement(cv2.MORPH_RECT, tuple(morph_kernel_shape))
-            param_mask = cv2.dilate(param_mask.astype('uint8', copy=False), se).astype('bool', copy=False)
-            param_ra.array[:, param_mask] = hom_nodata
+            mask = cv2.erode(mask.astype('uint8', copy=False), se).astype('bool', copy=False)
+            param_ra.mask = mask
         elif not self._homo_config['mask_partial_pixel']:
             # if no mask_partial_* was done, then mask with source mask
-            param_ra.array[:, (src_ra.array == src_ra.nodata)] = hom_nodata
+            param_ra.mask = src_ra.mask     #[:, (src_ra.array == src_ra.nodata)] = hom_nodata
 
         # apply the model to src_ra
         if method == 'gain_offset':

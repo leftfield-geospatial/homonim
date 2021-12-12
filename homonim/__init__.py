@@ -35,7 +35,7 @@ def get_logger(name):
 
 
 """Internal homonim nodata value"""
-hom_nodata = 0
+hom_nodata = float('nan')
 
 """Internal homonim data type"""
 hom_dtype = 'float32'
