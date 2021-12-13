@@ -25,6 +25,7 @@ from rasterio import transform
 from rasterio.crs import CRS
 from rasterio import Affine
 from rasterio.warp import reproject, Resampling
+from rasterio.enums import MaskFlags
 from homonim import get_logger, hom_dtype, hom_nodata
 import multiprocessing
 from rasterio.enums import ColorInterp
@@ -35,10 +36,14 @@ def nan_equals(a, b, equal_nan=True):
     else:
         return ((a == b) | (np.isnan(a) & np.isnan(b)))
 
-class RasterArray(object):
-    """A class for wrapping a geo-referenced numpy array"""
-    _default_nodata = hom_nodata
-    _default_dtype = hom_dtype
+class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
+    """
+    A class for wrapping and re-projecting a geo-referenced numpy array.
+    Internally masking is done using a nodata value, not a separately stored mask.
+    By default internal data type is float32 and the nodata value is nan.
+    """
+    default_nodata = hom_nodata
+    default_dtype = hom_dtype
     def __init__(self, array, crs, transform, nodata=None, window=None):
         # array = np.array(array)
         if (array.ndim < 2) or (array.ndim > 3):
@@ -73,14 +78,20 @@ class RasterArray(object):
 
     @classmethod
     def from_rio_dataset(cls, rio_dataset, indexes=None, window=None, boundless=False):
-        array = rio_dataset.read(indexes=indexes, window=window, boundless=boundless, out_dtype=cls._default_dtype)
-        is_alpha = [band_cinterp == ColorInterp.alpha for band_cinterp in rio_dataset.colorinterp]
-        if rio_dataset.nodata is not None and not any(is_alpha):
-            nodata = rio_dataset.nodata
-        else:
-            nodata = cls._default_nodata
+        array = rio_dataset.read(indexes=indexes, window=window, boundless=boundless, out_dtype=cls.default_dtype)
+
+        # check bands if bands have masks (i.e. internal/side-car mask or alpha channel, as opposed to nodata value)
+        index_list = [indexes] if np.isscalar(indexes) else indexes
+        is_masked = [np.any(enm==MaskFlags.per_dataset) for bi in index_list for enm in rio_dataset.mask_flag_enums[bi-1]]
+
+        if np.any(is_masked):
+            # read mask from dataset and apply it to array with default nodata
+            nodata = cls.default_nodata
             mask = rio_dataset.dataset_mask()
             array[~mask] = nodata
+        else:
+            # use dataset nodata value as is
+            nodata = rio_dataset.nodata
         return cls(array, rio_dataset.crs, rio_dataset.transform, nodata=nodata, window=window)
 
     @property
@@ -179,7 +190,7 @@ class RasterArray(object):
                 self._array[nodata_mask] = value
             self._nodata = value
 
-    def reproject(self, crs=None, transform=None, shape=None, nodata=_default_nodata, dtype=_default_dtype,
+    def reproject(self, crs=None, transform=None, shape=None, nodata=default_nodata, dtype=default_dtype,
                   resampling=Resampling.lanczos):
 
         if transform and not shape:
