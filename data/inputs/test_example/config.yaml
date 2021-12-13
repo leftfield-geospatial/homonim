@@ -20,7 +20,7 @@ homogenisation:
   # and fitted gain (None = no inpainting).
   r2_inpaint_thresh: 0.25
   # maximum memory for automatic block size in megabytes
-  max_block_mem: 1
+  max_block_mem: 10
 
 # Format of output (homogenised) image
 output:
@@ -38,4 +38,4 @@ output:
   # Photometric interpretation, see https://gdal.org/drivers/raster/gtiff.html for options (None = same as source image)
   photometric:
   # NODATA value (None = same as source image)
-  nodata: #.nan
+  nodata: .nan
