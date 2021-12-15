@@ -44,7 +44,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
     """
     default_nodata = hom_nodata
     default_dtype = hom_dtype
-    def __init__(self, array, crs, transform, nodata=None, window=None):
+    def __init__(self, array, crs, transform, nodata=default_nodata, window=None):
         # array = np.array(array)
         if (array.ndim < 2) or (array.ndim > 3):
             raise ValueError('`array` must be a 2D or 3D numpy array')
@@ -74,6 +74,14 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
     def from_profile(cls, array, profile, window=None):
         if not ('crs' and 'transform' and 'nodata' in profile):
             raise Exception('profile should include crs, transform and nodata keys')
+        if array is None:   # create array filled with nodata
+            if not ('width' and 'height' and 'count' and  'dtype' in profile):
+                raise Exception('profile should include width, height, count and dtype keys')
+            # if profile['count'] == 1:
+            #     array_shape = (profile['height'], profile['width'])
+            # else:
+            array_shape = (profile['count'], profile['height'], profile['width'])
+            array = np.full(array_shape, fill_value=profile['nodata'], dtype=profile['dtype'])
         return cls(array, profile['crs'], profile['transform'], nodata=profile['nodata'], window=window)
 
     @classmethod
@@ -82,12 +90,12 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
 
         # check bands if bands have masks (i.e. internal/side-car mask or alpha channel, as opposed to nodata value)
         index_list = [indexes] if np.isscalar(indexes) else indexes
-        is_masked = [np.any(enm==MaskFlags.per_dataset) for bi in index_list for enm in rio_dataset.mask_flag_enums[bi-1]]
+        is_masked = any([MaskFlags.per_dataset in rio_dataset.mask_flag_enums[bi-1] for bi in index_list])
 
-        if np.any(is_masked):
+        if is_masked:
             # read mask from dataset and apply it to array with default nodata
             nodata = cls.default_nodata
-            mask = rio_dataset.dataset_mask()
+            mask = rio_dataset.dataset_mask(window=window, boundless=boundless).astype('bool', copy=False)
             array[~mask] = nodata
         else:
             # use dataset nodata value as is
@@ -98,6 +106,12 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
     def array(self):
         return self._array
 
+    @array.setter
+    def array(self, value):
+        if np.all(value.shape[-2:] == self._array.shape[-2:]):
+            self._array = value
+        else:
+            raise ValueError('value width and height does not match array')
     # @array.setter
     # def array(self, array):
     #     if array.shape != self._array.shape:
@@ -145,11 +159,11 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
     @property
     def profile(self):
         return dict(crs=self._crs, transform=self._transform, nodata=self._nodata, count=self.count, width=self.width,
-                    height=self.height, bounds=self.bounds)
+                    height=self.height, bounds=self.bounds, dtype=self.dtype)
 
     @property
     def proj_profile(self):
-        return dict(crs=self._crs, transform=self._transform, shape=self._array.shape)
+        return dict(crs=self._crs, transform=self._transform, shape=self.shape)
 
     @property
     def mask(self):
@@ -189,6 +203,10 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
             else:
                 self._array[nodata_mask] = value
             self._nodata = value
+
+    def copy(self):
+        array = self._array.copy()
+        return RasterArray(array, crs=self._crs, transform=self._transform, nodata=self._nodata)
 
     def reproject(self, crs=None, transform=None, shape=None, nodata=default_nodata, dtype=default_dtype,
                   resampling=Resampling.lanczos):
