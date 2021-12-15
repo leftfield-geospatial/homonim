@@ -94,8 +94,8 @@ class TestHomonim(unittest.TestCase):
                     self.assertTrue(np.abs(src_mask.mean() - homo_mask.mean())/255 < .2, 'Source and homgenised have similar valid areas')
 
                     for fn in [lambda x: x, lambda x: np.bitwise_not(x)]:
-                        n_src_labels, _ = cv2.connectedComponents(fn(src_mask), None, 4, cv2.CV_16U)
-                        n_homo_labels, _ = cv2.connectedComponents(fn(homo_mask), None, 4, cv2.CV_16U)
+                        n_src_labels, src_labels = cv2.connectedComponents(fn(src_mask), None, 4, cv2.CV_16U)
+                        n_homo_labels, homo_labels = cv2.connectedComponents(fn(homo_mask), None, 4, cv2.CV_16U)
                         self.assertTrue(n_src_labels==n_homo_labels, 'Number of source and homgenised valid/nodata areas match')
 
 
