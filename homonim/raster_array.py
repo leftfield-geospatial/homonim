@@ -111,14 +111,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         if np.all(value.shape[-2:] == self._array.shape[-2:]):
             self._array = value
         else:
-            raise ValueError('value width and height does not match array')
-    # @array.setter
-    # def array(self, array):
-    #     if array.shape != self._array.shape:
-    #         raise ValueError('Array must be same shape as RasterArray.array')
-    #     if (array.ndim < 2) or (array.ndim > 3):
-    #         raise ValueError('Array must a 2 or 3D numpy array')
-    #     self._array = array
+            raise ValueError('value and array width and height must match')
 
     @property
     def crs(self):
