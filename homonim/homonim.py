@@ -41,6 +41,7 @@ from tqdm import tqdm
 
 from homonim import get_logger, hom_dtype, hom_nodata
 from homonim.raster_array import RasterArray, nan_equals
+from homonim.kernel_model import RefSpaceModel, SrcSpaceModel, KernelModel
 
 logger = get_logger(__name__)
 
@@ -152,6 +153,9 @@ class HomonImBase:
             }
         else:
             self._out_config = out_config
+
+        self._kernel_model = None
+
 
     # @property
     # def ref_ra(self):
@@ -612,7 +616,7 @@ class HomonImBase:
         """
         raise NotImplementedError()
 
-    def homogenise(self, out_filename, method='gain', kernel_shape=(5, 5)):
+    def _homogenise(self, out_filename, method='gain', kernel_shape=(5, 5)):
         """
         Homogenise a raster file by block.
 
@@ -744,6 +748,140 @@ class HomonImBase:
             current, peak = tracemalloc.get_traced_memory()
             logger.debug(f"Memory usage: current: {current / 10 ** 6:.1f} MB, peak: {peak / 10 ** 6:.1f} MB")
 
+    def homogenise(self, out_filename, method='gain', kernel_shape=(5, 5)):
+        """
+        Homogenise a raster file by block.
+
+        Parameters
+        ----------
+        out_filename: str, pathlib.Path
+                      Path of the homogenised raster file to create.
+        method: str, optional
+                The homogenisation method: ['gain'|'gain_im_offset'|'gain_offset'].  (Default: 'gain')
+        kernel_shape : numpy.array_like, list, tuple, optional
+                   Sliding kernel (width, height) in reference pixels.
+        """
+        kernel_shape = np.array(kernel_shape)
+        if not np.all(np.mod(kernel_shape, 2) == 1):
+            raise Exception('kernel_shape must be odd in both dimensions')
+
+        with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
+            with WarpedVRT(rio.open(self._ref_filename, 'r'), crs=src_im.crs, resampling=Resampling.bilinear) as ref_im:
+                ovl_blocks = self._create_ovl_blocks(kernel_shape=kernel_shape)
+
+                if self._homo_config['debug_level'] >= 1:
+                    # setup profiling
+                    tracemalloc.start()
+                    proc_profile = cProfile.Profile()
+                    proc_profile.enable()
+
+                    if self._homo_config['debug_level'] >= 2:
+                        # create debug raster file
+                        dbg_profile = self._create_debug_profile(src_im.profile, ref_im.profile)
+                        dbg_out_file_name = self._create_debug_filename(out_filename)
+                        dbg_im = rio.open(dbg_out_file_name, 'w', **dbg_profile)
+
+                # create the output raster file
+                out_profile = self._create_out_profile(src_im.profile)
+                out_im = rio.open(out_filename, 'w', **out_profile)  # avoid too many nested indents with 'with' statements
+
+                # initialise process by band
+                # bands = list(range(1, src_im.count + 1))
+                # TODO: what happens when src res is not an integer factor of ref res?
+                bar = tqdm(total=len(ovl_blocks) + 1)
+                bar.update(0)
+                src_read_lock = threading.Lock()
+                ref_read_lock = threading.Lock()
+                write_lock = threading.Lock()
+                dbg_lock = threading.Lock()
+                kernel_model = RefSpaceModel(
+                    method=method,
+                    kernel_shape=kernel_shape,
+                    debug=self._homo_config['debug_level']>1,
+                    r2_inpaint_thresh=self._homo_config['r2_inpaint_thresh'],
+                    src2ref_interp=self._homo_config['src2ref_interp'],
+                    ref2src_interp=self._homo_config['ref2src_interp'],
+                )
+                try:
+                    def process_block(ovl_block: OvlBlock):
+                        """Thread-safe function to homogenise a block of src_im"""
+                        with src_read_lock:
+                            src_ra = RasterArray.from_rio_dataset(
+                                src_im,
+                                indexes=self._src_bands[ovl_block.band_i],
+                                window=ovl_block.src_in_block,
+                                boundless=ovl_block.outer
+                            )
+
+                        with ref_read_lock:
+                            ref_ra = RasterArray.from_rio_dataset(
+                                ref_im,
+                                indexes=self._ref_bands[ovl_block.band_i],
+                                window=ovl_block.ref_in_block
+                            )
+                            # ref_ra.nodata = RasterArray.default_nodata  # TODO why is this here?
+
+                        param_ra = kernel_model.fit(ref_ra, src_ra)
+                        out_ra = kernel_model.apply(src_ra, param_ra)
+                        out_ra.mask = src_ra.mask
+                        if ovl_block.outer and self._homo_config['mask_partial_kernel']:
+                            out_ra = kernel_model.mask_partial(out_ra, ref_ra.res)
+                        out_ra.nodata = out_im.nodata
+
+                        with write_lock:
+                            out_arr_win = Window(ovl_block.src_out_block.col_off - ovl_block.src_in_block.col_off,
+                                                 ovl_block.src_out_block.row_off - ovl_block.src_in_block.row_off,
+                                                 ovl_block.src_out_block.width, ovl_block.src_out_block.height)
+                            _out_array = out_ra.array[out_arr_win.toslices()].astype(out_im.dtypes[ovl_block.band_i])
+                            out_im.write(_out_array, window=ovl_block.src_out_block, indexes=ovl_block.band_i+1)
+                            bar.update(1)
+
+                        if self._homo_config['debug_level'] >= 2:
+                            with dbg_lock:
+                                dbg_in_block = ovl_block.__getattribute__(f'{self._debug_block_prefix}_in_block')
+                                dbg_out_block = ovl_block.__getattribute__(f'{self._debug_block_prefix}_out_block')
+                                dbg_arr_win = Window(dbg_out_block.col_off - dbg_in_block.col_off,
+                                                     dbg_out_block.row_off - dbg_in_block.row_off,
+                                                     dbg_out_block.width, dbg_out_block.height)
+                                for pi in range(param_ra.count):
+                                    _bi = ovl_block.band_i + (pi * src_im.count)
+                                    _dbg_array = param_ra.array[(pi, *dbg_arr_win.toslices())].astype(
+                                        dbg_im.dtypes[_bi])
+                                    dbg_im.write(_dbg_array, window=dbg_out_block, indexes=_bi+1)
+
+                    if self._homo_config['multithread']:
+                        # process bands in concurrent threads
+                        future_list = []
+                        with concurrent.futures.ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
+                            for ovl_block in ovl_blocks:
+                                future = executor.submit(process_block, ovl_block)
+                                future_list.append(future)
+
+                            # wait for threads and raise any thread generated exceptions
+                            for future in future_list:
+                                future.result()
+                    else:
+                        # process bands consecutively
+                        for ovl_block in ovl_blocks:
+                            process_block(ovl_block)
+                finally:
+                    out_im.close()
+                    if self._homo_config['debug_level'] >= 2:
+                        dbg_im.close()
+                    bar.update(1)
+                    bar.close()
+
+        if self._homo_config['debug_level'] >= 1:
+            # print profiling info
+            # (tottime is the total time spent in the function alone. cumtime is the total time spent in the function
+            # plus all functions that this function called)
+            proc_profile.disable()
+            proc_stats = pstats.Stats(proc_profile).sort_stats('cumtime')
+            logger.debug(f'Processing time:')
+            proc_stats.print_stats(20)
+
+            current, peak = tracemalloc.get_traced_memory()
+            logger.debug(f"Memory usage: current: {current / 10 ** 6:.1f} MB, peak: {peak / 10 ** 6:.1f} MB")
 
 
 class HomonimRefSpace(HomonImBase):
