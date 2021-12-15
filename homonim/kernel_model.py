@@ -134,7 +134,8 @@ class KernelModel():
         # get arrays and find a combined ref & src mask
         ref_array = ref_ra.array
         src_array = src_ra.array
-        src_profile = src_ra.profile.copy()
+        param_profile = src_ra.profile.copy()
+        param_profile.update(count=3 if self._debug else 2)
         mask = ref_ra.mask & src_ra.mask
         # mask invalid pixels with 0 so that these do not contribute to kernel sums in *boxFilter()
         ref_array[~mask] = 0
@@ -147,7 +148,7 @@ class KernelModel():
         ref_sum = cv.boxFilter(ref_array, -1, kernel_shape, **filter_args)
 
         # create parameter array filled with nodata
-        param_ra = RasterArray.from_profile(None, src_profile.update(count=3 if self._debug else 2))
+        param_ra = RasterArray.from_profile(None, param_profile)
         param_ra.array[1, mask] = 0  # set offsets to 0
 
         # find sliding kernel gains, avoiding divide by 0
@@ -223,7 +224,8 @@ class KernelModel():
         # get arrays and find a combined ref & src mask
         ref_array = ref_ra.array
         src_array = src_ra.array
-        src_profile = src_ra.profile.copy()
+        param_profile = src_ra.profile.copy()
+        param_profile.update(count=3 if (self._debug or self._r2_inpaint_thresh) else 2)
         mask = ref_ra.mask & src_ra.mask
         # mask invalid pixels with 0 so that these do not contribute to kernel sums in *boxFilter()
         ref_array[~mask] = 0
@@ -243,7 +245,7 @@ class KernelModel():
         m_den_array = (mask_sum * src2_sum) - (src_sum ** 2)
 
         # create parameter RasterArray filled with nodata
-        param_ra = RasterArray.from_profile(None, src_profile.update(count=3 if self._debug else 2))
+        param_ra = RasterArray.from_profile(None, param_profile)
 
         # find the gain = cov(ref, src) / var(src), avoiding divide by 0
         np.divide(m_num_array, m_den_array, out=param_ra.array[0], where=mask)
@@ -259,12 +261,12 @@ class KernelModel():
 
         if self._r2_inpaint_thresh is not None:
             # fill/inpaint low R2 areas and negative gain areas in the offset parameter
-            r2_mask = (param_ra.array[2] < self._r2_inpaint_thresh) | (param_ra.array[0] <= 0)
-            param_ra.array[1] = fillnodata(param_ra.array[1], ~r2_mask)
+            r2_mask = (param_ra.array[2] > self._r2_inpaint_thresh) & (param_ra.array[0] > 0) & mask
+            param_ra.array[1] = fillnodata(param_ra.array[1], r2_mask)
             param_ra.mask = mask  # re-mask as nodata areas will have been filled above
 
             # recalculate the gain for the filled areas using m = (y - c)/x and and the point (mean(ref), mean(src)))
-            r2_mask &= mask
+            r2_mask = ~r2_mask & mask
             np.divide(ref_sum - mask_sum * param_ra.array[1], src_sum, out=param_ra.array[0], where=r2_mask)
 
         return param_ra
@@ -313,9 +315,9 @@ class KernelModel():
         out_array = _param_ra.array[0] * src_ra.array + _param_ra.array[1]
         return RasterArray.from_profile(out_array, _param_ra.profile)
 
-    def mask_partial(self, out_ra, ref_res, kernel_shape):
-        res_ratio = np.ceil(np.divide(out_ra.res, ref_res))
-        morph_kernel_shape = np.ceil(res_ratio * kernel_shape).astype('int')
+    def mask_partial(self, out_ra, ref_res):
+        res_ratio = np.ceil(np.divide(ref_res, out_ra.res))
+        morph_kernel_shape = np.ceil(res_ratio * self._kernel_shape).astype('int')
         mask = out_ra.mask
         se = cv2.getStructuringElement(cv2.MORPH_RECT, tuple(morph_kernel_shape))
         mask = cv2.erode(mask.astype('uint8', copy=False), se).astype('bool', copy=False)
