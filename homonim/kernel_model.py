@@ -304,16 +304,8 @@ class KernelModel():
         src_ra: homonim.RasterArray
                    M x N RasterArray of source data, collocated, and of similar spectral content, to ref_ra
         """
-
-        _param_ra = param_ra
-
-        if (param_ra.transform != src_ra.transform) or (param_ra.crs.to_proj4() != src_ra.crs.to_proj4() or
-                                                        (param_ra.shape != src_ra.shape)):
-            _param_ra.array = _param_ra.array[:2]   # only re-project gain & offset bands
-            _param_ra = param_ra.reproject(**src_ra.proj_profile, resampling=self._ref2src_interp)
-
-        out_array = _param_ra.array[0] * src_ra.array + _param_ra.array[1]
-        return RasterArray.from_profile(out_array, _param_ra.profile)
+        out_array = param_ra.array[0] * src_ra.array + param_ra.array[1]
+        return RasterArray.from_profile(out_array, param_ra.profile)
 
     def mask_partial(self, out_ra, ref_res):
         res_ratio = np.ceil(np.divide(ref_res, out_ra.res))
@@ -330,6 +322,12 @@ class RefSpaceModel(KernelModel):
         # downsample src_ra to ref crs and grid
         src_ds_ra = src_ra.reproject(**ref_ra.proj_profile, resampling=self._src2ref_interp)
         return KernelModel.fit(self, ref_ra, src_ds_ra)
+
+    def apply(self, src_ra: RasterArray, param_ra: RasterArray):
+        # upsample the param_ra to src crs and grid
+        _param_ra = RasterArray.from_profile(param_ra.array[:2], param_ra.profile)
+        param_us_ra = _param_ra.reproject(**src_ra.proj_profile, resampling=self._ref2src_interp)
+        return KernelModel.apply(self, src_ra, param_us_ra)
 
 
 class SrcSpaceModel(KernelModel):
