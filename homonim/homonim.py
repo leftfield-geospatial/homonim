@@ -799,10 +799,10 @@ class HomonImBase:
                         if self._homo_config['debug_level'] >= 2:
                             with dbg_lock:
                                 src_out_bounds = src_im.window_bounds(ovl_block.src_out_block)
-                                param_out_block = dbg_im.window(*src_out_bounds)
+                                param_out_block = round_window_to_grid(dbg_im.window(*src_out_bounds))
                                 param_array = param_ra.slice_array(*src_out_bounds)
                                 param_array = param_array.astype(dbg_im.dtypes[ovl_block.band_i])
-                                indexes = np.arange(param_ra.count) * src_im.count + ovl_block.band_i + 1
+                                indexes = np.arange(param_ra.count) * len(self._src_bands) + ovl_block.band_i + 1
                                 dbg_im.write(param_array, window=param_out_block, indexes=indexes)
 
                     if self._homo_config['multithread']:
