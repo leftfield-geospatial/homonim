@@ -40,7 +40,7 @@ from shapely.geometry import box, shape
 from tqdm import tqdm
 
 from homonim import get_logger, hom_dtype, hom_nodata
-from homonim.raster_array import RasterArray, nan_equals, round_window_to_grid
+from homonim.raster_array import RasterArray, nan_equals, round_window_to_grid, expand_window_to_grid
 from homonim.kernel_model import RefSpaceModel, SrcSpaceModel, KernelModel
 
 logger = get_logger(__name__)
@@ -78,12 +78,11 @@ class HomonImBase:
             Dictionary for configuring output file format.
         """
         # TODO: refactor which parameters get passed here, and which to homogenise()
-        self._src_props = None
-        self._ref_props = None
         self._src_filename = pathlib.Path(src_filename)
         self._ref_filename = pathlib.Path(ref_filename)
         self._ref_bands = None
         self._src_bands = None
+        self._ref_warped_vrt_dict = None
         self._check_rasters()
 
         # self._ref_array = None
@@ -126,21 +125,6 @@ class HomonImBase:
     #         self._ref_array = self._read_ref()
     #     return self._ref_array
     _debug_block_prefix = None
-
-    @property
-    def src_props(self):
-        """Source raster properties."""
-        if self._src_props is None:
-            self._check_rasters()
-        return self._src_props
-
-    @property
-    def ref_props(self):
-        """Reference raster properties."""
-        if self._ref_props is None:
-            self._check_rasters()
-        return self._ref_props
-
 
     def _check_rasters(self):
         """Check bounds, band count, and compression type of source and reference images"""
@@ -203,22 +187,11 @@ class HomonImBase:
                                            'Any invalid pixels in this image should be first be masked using a '
                                            'nodata value (recommended), internal/side-car mask or alpha band.')
 
-                    ref_win = round_window_to_grid(ref_im.window(*src_im.bounds))
+                    ref_win = expand_window_to_grid(ref_im.window(*src_im.bounds), expand_pixels=1)
                     ref_transform = ref_im.window_transform(ref_win)
-                    ref_shape = (ref_win.height, ref_win.width)
-                    ref_bounds = ref_im.window_bounds(ref_win)
+                    self._ref_warped_vrt_dict = dict(crs=src_im.crs, transform=ref_transform, width=ref_win.width,
+                                                     height=ref_win.height, resampling=Resampling.bilinear)
 
-                    # TODO: do we need these?  Might they replace some parameter passing in other places?
-                    self._src_props = RasterProps(crs=src_im.crs, transform=src_im.transform, shape=src_im.shape,
-                                                  res=list(src_im.res), bounds=src_im.bounds, nodata=src_im.nodata,
-                                                  count=src_im.count, profile=src_im.profile)
-                    self._ref_props = RasterProps(crs=ref_im.crs, transform=ref_transform, shape=ref_shape,
-                                                  res=list(ref_im.res), bounds=ref_bounds, nodata=ref_im.nodata,
-                                                  count=ref_im.count, profile=ref_im.profile)
-
-                # if src_im.crs != ref_im.crs:    # CRS's don't match
-                #     logger.warning('The reference will be re-projected to the source CRS.  \n'
-                #                    'To avoid this step, provide a reference image in the source CRS')
 
     def _auto_block_shape(self, src_shape):
         max_block_mem = self._homo_config['max_block_mem'] * (2**20)    # MB to Bytes
@@ -236,7 +209,7 @@ class HomonImBase:
 
         kernel_shape = np.array(kernel_shape).astype(int)
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
-            with WarpedVRT(rio.open(self._ref_filename, 'r'), crs=src_im.crs) as ref_im:
+            with WarpedVRT(rio.open(self._ref_filename, 'r'), **self._ref_warped_vrt_dict) as ref_im:
                 src_shape = np.array(src_im.shape)
                 res_ratio = np.ceil(np.array(ref_im.res) / np.array(src_im.res)).astype(int)
                 src_kernel_shape = (kernel_shape * res_ratio).astype(int)
@@ -626,7 +599,7 @@ class HomonImBase:
             raise Exception('kernel_shape must be odd in both dimensions')
 
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
-            with WarpedVRT(rio.open(self._ref_filename, 'r'), crs=src_im.crs, resampling=Resampling.bilinear) as ref_im:
+            with WarpedVRT(rio.open(self._ref_filename, 'r'), **self._ref_warped_vrt_dict) as ref_im:
                 ovl_blocks = self._create_ovl_blocks(kernel_shape=kernel_shape)
 
                 if self._homo_config['debug_level'] >= 1:
@@ -758,7 +731,7 @@ class HomonImBase:
             raise Exception('kernel_shape must be odd in both dimensions')
 
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
-            with WarpedVRT(rio.open(self._ref_filename, 'r'), crs=src_im.crs, resampling=Resampling.bilinear) as ref_im:
+            with WarpedVRT(rio.open(self._ref_filename, 'r'), **self._ref_warped_vrt_dict) as ref_im:
                 ovl_blocks = self._create_ovl_blocks(kernel_shape=kernel_shape)
 
                 if self._homo_config['debug_level'] >= 1:
@@ -824,18 +797,16 @@ class HomonImBase:
 
                         with write_lock:
                             out_array = out_ra.slice_array(*out_im.window_bounds(ovl_block.src_out_block))
-                            out_array = out_array.astype(out_im.dtypes[ovl_block.band_i])
                             out_im.write(out_array, window=ovl_block.src_out_block, indexes=ovl_block.band_i+1)
                             bar.update(1)
 
                         if self._homo_config['debug_level'] >= 2:
                             with dbg_lock:
                                 src_out_bounds = src_im.window_bounds(ovl_block.src_out_block)
-                                param_out_block = round_window_to_grid(dbg_im.window(*src_out_bounds))
-                                param_array = param_ra.slice_array(*src_out_bounds)
-                                param_array = param_array.astype(dbg_im.dtypes[ovl_block.band_i])
+                                dbg_out_block = round_window_to_grid(dbg_im.window(*src_out_bounds))
+                                dbg_array = param_ra.slice_array(*src_out_bounds)
                                 indexes = np.arange(param_ra.count) * len(self._src_bands) + ovl_block.band_i + 1
-                                dbg_im.write(param_array, window=param_out_block, indexes=indexes)
+                                dbg_im.write(dbg_array, window=dbg_out_block, indexes=indexes)
 
                     if self._homo_config['multithread']:
                         # process bands in concurrent threads
