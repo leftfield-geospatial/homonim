@@ -162,7 +162,11 @@ def cli(src_file=None, ref_file=None, kernel_shape=(3, 3), method="gain_im_offse
             meta_dict = dict(HOMO_SRC_FILE=src_filename.name, HOMO_REF_FILE=pathlib.Path(ref_file).name,
                              HOMO_SPACE=homo_space, HOMO_METHOD=method, HOMO_WIN_SIZE=kernel_shape,
                              HOMO_CONF=str(config['homogenisation']))
-            him.set_metadata(homo_filename, **meta_dict)
+            him.set_homo_metadata(homo_filename, **meta_dict)
+
+            if config['homogenisation']['debug_level'] >= 2:
+                param_out_filename = him._create_debug_filename(homo_filename)
+                him.set_debug_metadata(param_out_filename)
 
             ttl_time = (datetime.datetime.now() - start_ttl)
             logger.info(f'Completed in {ttl_time.total_seconds():.2f} secs')
@@ -174,7 +178,6 @@ def cli(src_file=None, ref_file=None, kernel_shape=(3, 3), method="gain_im_offse
                 him.build_overviews(homo_filename)
 
                 if config['homogenisation']['debug_level'] >= 2:
-                    param_out_filename = him._create_debug_filename(homo_filename)
                     logger.info(f'Building overviews for {param_out_filename.name}')
                     him.build_overviews(param_out_filename)
 

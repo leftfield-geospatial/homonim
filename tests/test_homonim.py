@@ -177,6 +177,7 @@ class TestHomonim(unittest.TestCase):
             with self.subTest('Overlapped Blocks', src_filename=src_filename):
                 self._test_ovl_blocks(him._create_ovl_blocks(param_dict['kernel_shape']))
             him.homogenise(homo_filename, **param_dict)
+            him.set_homo_metadata(homo_filename)
             him.build_overviews(homo_filename)
             self.assertTrue(homo_filename.exists(), 'Homogenised file exists')
             with self.subTest('Homogenised vs Source', src_filename=src_filename, homo_filename=homo_filename):

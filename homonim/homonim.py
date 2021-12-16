@@ -316,7 +316,7 @@ class HomonImBase:
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(filename, 'r+') as homo_im:
             homo_im.build_overviews([2, 4, 8, 16, 32], Resampling.average)
 
-    def set_metadata(self, filename, **kwargs):
+    def set_homo_metadata(self, filename, **kwargs):
         """
         Copy various metadata to a homogenised raster (GeoTIFF) file.
 
@@ -336,10 +336,40 @@ class HomonImBase:
             # Set user-supplied metadata
             homo_im.update_tags(**kwargs)
             # Copy any geedim generated metadata from the reference file
-            for bi in range(1, homo_im.count + 1):
-                ref_meta_dict = ref_im.tags(bi)
+            for bi in range(0, homo_im.count):
+                ref_meta_dict = ref_im.tags(bi + 1)
                 homo_meta_dict = {k: v for k, v in ref_meta_dict.items() if k in ['ABBREV', 'ID', 'NAME']}
-                homo_im.update_tags(bi, **homo_meta_dict)
+                homo_im.set_band_description(bi + 1, ref_im.descriptions[bi])
+                homo_im.update_tags(bi + 1, **homo_meta_dict)
+
+    def set_debug_metadata(self, filename, **kwargs):
+        """
+        Copy various metadata to a homogenised raster (GeoTIFF) file.
+
+        Parameters
+        ----------
+        filename: str, pathlib.Path
+                  Path to the GeoTIFF raster file to copy metadata to.
+        kwargs: dict
+                Dictionary of metadata items to copy to raster.
+        """
+        filename = pathlib.Path(filename)
+
+        if not filename.exists():
+            raise Exception(f'{filename} does not exist')
+
+        with rio.open(self._ref_filename, 'r') as ref_im, rio.open(filename, 'r+') as dbg_im:
+            # Set user-supplied metadata
+            dbg_im.update_tags(**kwargs)
+            # Use reference file band descriptions to make debug image band descriptions
+            num_src_bands = int(dbg_im.count / 3)
+            for ri in range(0, num_src_bands):
+                ref_descr = ref_im.descriptions[ri] or f'B{ri+1}'
+                ref_meta_dict = ref_im.tags(ri + 1)
+                for pi, pname in zip(range(ri, dbg_im.count, num_src_bands), ['GAIN', 'OFFSET', 'R2']):
+                    dbg_im.set_band_description(pi + 1, f'{ref_descr}_{pname}')
+                    dbg_meta_dict = {k: f'{v.upper()} {pname}' for k, v in ref_meta_dict.items() if k in ['ABBREV', 'ID', 'NAME']}
+                    dbg_im.update_tags(pi + 1, **dbg_meta_dict)
 
     def _src_image_offset(self, ref_array, src_array):
         """
@@ -776,10 +806,12 @@ class HomonImBase:
                             )
 
                         with ref_read_lock:
+                            src_in_bounds = src_im.window_bounds(ovl_block.src_in_block)
+                            ref_in_block = round_window_to_grid(ref_im.window(*src_in_bounds))
                             ref_ra = RasterArray.from_rio_dataset(
                                 ref_im,
                                 indexes=self._ref_bands[ovl_block.band_i],
-                                window=ovl_block.ref_in_block
+                                window=ref_in_block
                             )
                             # ref_ra.nodata = RasterArray.default_nodata  # TODO why is this here?
 

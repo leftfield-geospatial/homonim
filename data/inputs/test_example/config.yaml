@@ -20,7 +20,7 @@ homogenisation:
   # and fitted gain (None = no inpainting).
   r2_inpaint_thresh: 0.25
   # maximum memory for automatic block size in megabytes
-  max_block_mem: 10
+  max_block_mem: 2
 
 # Format of output (homogenised) image
 output:
@@ -32,7 +32,7 @@ output:
   blockxsize:
   blockysize:
   # GeoTIFF compress type (deflate, jpeg, jpeg2000, lzw, zstd, none) (None = same as source image)
-  compress:
+  compress: deflate
   # Interleave by 'pixel' or 'band' (pixel, band) (None = same as source image)
   interleave:
   # Photometric interpretation, see https://gdal.org/drivers/raster/gtiff.html for options (None = same as source image)

@@ -53,6 +53,8 @@ class KernelModel():
             src_array[~mask] = 0
         if mask_sum is None:
             mask_sum = cv.boxFilter(mask.astype(hom_dtype), -1, kernel_shape, **filter_args)
+        if ref_sum is None:
+            ref_sum = cv.boxFilter(ref_array, -1, kernel_shape, **filter_args)
         if ref2_sum is None:
             ref2_sum = cv.sqrBoxFilter(ref_array, -1, kernel_shape, **filter_args)
         if src2_sum is None:
@@ -63,8 +65,6 @@ class KernelModel():
         ss_tot_array = (mask_sum * ref2_sum) - (ref_sum ** 2)
 
         if param_array.shape[0] > 1:  # gain and offset
-            if ref_sum is None:
-                ref_sum = cv.boxFilter(ref_array, -1, kernel_shape, **filter_args)
             if src_sum is None:
                 src_sum = cv.boxFilter(src_array, -1, kernel_shape, **filter_args)
 
@@ -82,8 +82,8 @@ class KernelModel():
 
         if dest_array is None:
             dest_array = np.full(src_array.shape, fill_value=hom_nodata, dtype=hom_dtype)
-        np.divide(ss_res_array, ss_tot_array, out=dest_array, where=mask.astype('bool', copy=False))
-        np.subtract(1, dest_array, out=dest_array, where=mask.astype('bool', copy=False))
+        np.divide(ss_res_array, ss_tot_array, out=dest_array, where=mask)
+        np.subtract(1, dest_array, out=dest_array, where=mask)
         return dest_array
 
     def _fit_im_offset(self, ref_ra, src_ra):
