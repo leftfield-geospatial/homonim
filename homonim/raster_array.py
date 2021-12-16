@@ -37,7 +37,7 @@ def nan_equals(a, b, equal_nan=True):
     else:
         return ((a == b) | (np.isnan(a) & np.isnan(b)))
 
-def expand_window_to_grid(win):
+def expand_window_to_grid(win, expand_pixels=0):
     """
     Expands float window extents to be integers that include the original extents
 
@@ -51,10 +51,10 @@ def expand_window_to_grid(win):
     exp_win: rasterio.windows.Window
         the expanded window
     """
-    col_off, col_frac = np.divmod(win.col_off, 1)
-    row_off, row_frac = np.divmod(win.row_off, 1)
-    width = np.ceil(win.width + col_frac)
-    height = np.ceil(win.height + row_frac)
+    col_off, col_frac = np.divmod(win.col_off - expand_pixels, 1)
+    row_off, row_frac = np.divmod(win.row_off - expand_pixels, 1)
+    width = np.ceil(win.width + 2*expand_pixels + col_frac)
+    height = np.ceil(win.height + 2*expand_pixels + row_frac)
     exp_win = Window(col_off.astype('int'), row_off.astype('int'), width.astype('int'), height.astype('int'))
     return exp_win
 
@@ -74,7 +74,9 @@ def round_window_to_grid(win):
         the rounded window
     """
     row_range, col_range = win.toranges()
-    return Window.from_slices(slice(*np.round(row_range).astype('int')), slice(*np.round(col_range).astype('int')))
+    row_range = np.round(row_range).astype('int')
+    col_range = np.round(col_range).astype('int')
+    return Window(col_off=col_range[0], row_off=row_range[0], width=np.diff(col_range)[0], height=np.diff(row_range)[0])
 
 
 
