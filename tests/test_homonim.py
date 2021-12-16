@@ -82,7 +82,8 @@ class TestHomonim(unittest.TestCase):
                         out_attr = src_im.profile[attr]
                     else:
                         out_attr = self._out_config[attr]
-                    self.assertTrue(str(homo_im.profile[attr]) == str(out_attr), f'{attr} set')
+                    is_set = (homo_im.profile[attr] == out_attr) | (str(homo_im.profile[attr]) == str(out_attr))
+                    self.assertTrue(is_set, f'{attr} set')
                 # check homo_filename against source
                 self.assertTrue(src_im.crs.to_proj4() == homo_im.crs.to_proj4(), 'Source and homogenised crs match')
                 self.assertTrue(src_im.count == homo_im.count, 'Source and homogenised band counts match')
