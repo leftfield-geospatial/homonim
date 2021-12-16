@@ -40,7 +40,7 @@ from shapely.geometry import box, shape
 from tqdm import tqdm
 
 from homonim import get_logger, hom_dtype, hom_nodata
-from homonim.raster_array import RasterArray, nan_equals
+from homonim.raster_array import RasterArray, nan_equals, round_window_to_grid
 from homonim.kernel_model import RefSpaceModel, SrcSpaceModel, KernelModel
 
 logger = get_logger(__name__)
@@ -52,44 +52,6 @@ class Model(Enum):
     gain_and_offset = 3
 
 
-def expand_window_to_grid(win):
-    """
-    Expands float window extents to be integers that include the original extents
-
-    Parameters
-    ----------
-    win : rasterio.windows.Window
-        the window to expand
-
-    Returns
-    -------
-    exp_win: rasterio.windows.Window
-        the expanded window
-    """
-    col_off, col_frac = np.divmod(win.col_off, 1)
-    row_off, row_frac = np.divmod(win.row_off, 1)
-    width = np.ceil(win.width + col_frac)
-    height = np.ceil(win.height + row_frac)
-    exp_win = Window(col_off.astype('int'), row_off.astype('int'), width.astype('int'), height.astype('int'))
-    return exp_win
-
-
-def round_window_to_grid(win):
-    """
-    Rounds float window extents to nearest integer
-
-    Parameters
-    ----------
-    win : rasterio.windows.Window
-        the window to round
-
-    Returns
-    -------
-    exp_win: rasterio.windows.Window
-        the rounded window
-    """
-    row_range, col_range = win.toranges()
-    return Window.from_slices(slice(*np.round(row_range).astype('int')), slice(*np.round(col_range).astype('int')))
 
 
 """Projection related raster properties"""
@@ -829,25 +791,19 @@ class HomonImBase:
                         out_ra.nodata = out_im.nodata
 
                         with write_lock:
-                            out_arr_win = Window(ovl_block.src_out_block.col_off - ovl_block.src_in_block.col_off,
-                                                 ovl_block.src_out_block.row_off - ovl_block.src_in_block.row_off,
-                                                 ovl_block.src_out_block.width, ovl_block.src_out_block.height)
-                            _out_array = out_ra.array[out_arr_win.toslices()].astype(out_im.dtypes[ovl_block.band_i])
-                            out_im.write(_out_array, window=ovl_block.src_out_block, indexes=ovl_block.band_i+1)
+                            out_array = out_ra.slice_array(*out_im.window_bounds(ovl_block.src_out_block))
+                            out_array = out_array.astype(out_im.dtypes[ovl_block.band_i])
+                            out_im.write(out_array, window=ovl_block.src_out_block, indexes=ovl_block.band_i+1)
                             bar.update(1)
 
                         if self._homo_config['debug_level'] >= 2:
                             with dbg_lock:
-                                dbg_in_block = ovl_block.__getattribute__(f'{self._debug_block_prefix}_in_block')
-                                dbg_out_block = ovl_block.__getattribute__(f'{self._debug_block_prefix}_out_block')
-                                dbg_arr_win = Window(dbg_out_block.col_off - dbg_in_block.col_off,
-                                                     dbg_out_block.row_off - dbg_in_block.row_off,
-                                                     dbg_out_block.width, dbg_out_block.height)
-                                for pi in range(param_ra.count):
-                                    _bi = ovl_block.band_i + (pi * src_im.count)
-                                    _dbg_array = param_ra.array[(pi, *dbg_arr_win.toslices())].astype(
-                                        dbg_im.dtypes[_bi])
-                                    dbg_im.write(_dbg_array, window=dbg_out_block, indexes=_bi+1)
+                                src_out_bounds = src_im.window_bounds(ovl_block.src_out_block)
+                                param_out_block = dbg_im.window(*src_out_bounds)
+                                param_array = param_ra.slice_array(*src_out_bounds)
+                                param_array = param_array.astype(dbg_im.dtypes[ovl_block.band_i])
+                                indexes = np.arange(param_ra.count) * src_im.count + ovl_block.band_i + 1
+                                dbg_im.write(param_array, window=param_out_block, indexes=indexes)
 
                     if self._homo_config['multithread']:
                         # process bands in concurrent threads

@@ -25,14 +25,15 @@ import warnings
 import cv2
 import numpy as np
 import rasterio as rio
-from rasterio.warp import Resampling
-from rasterio.vrt import WarpedVRT
 import yaml
 from click.testing import CliRunner
-from homonim import homonim, root_path, cli
-from homonim.raster_array import RasterArray, nan_equals
+from rasterio.vrt import WarpedVRT
+from rasterio.warp import Resampling
 from shapely.geometry import box
 from tqdm import tqdm
+
+from homonim import homonim, root_path, cli
+from homonim.raster_array import RasterArray, expand_window_to_grid
 
 
 def _read_ref(src_filename, ref_filename):
@@ -41,7 +42,7 @@ def _read_ref(src_filename, ref_filename):
     """
     with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(src_filename, 'r') as src_im:
         with WarpedVRT(rio.open(ref_filename, 'r'), crs=src_im.crs, resampling=Resampling.bilinear) as ref_im:
-            ref_win = homonim.expand_window_to_grid(ref_im.window(*src_im.bounds))
+            ref_win = expand_window_to_grid(ref_im.window(*src_im.bounds))
             ref_bands = range(1, src_im.count + 1)
             _ref_array = ref_im.read(ref_bands, window=ref_win).astype(homonim.hom_dtype)
 
@@ -81,7 +82,7 @@ class TestHomonim(unittest.TestCase):
                         out_attr = src_im.profile[attr]
                     else:
                         out_attr = self._out_config[attr]
-                    self.assertTrue(str(homo_im.profile[attr])==str(out_attr), f'{attr} set')
+                    self.assertTrue(str(homo_im.profile[attr]) == str(out_attr), f'{attr} set')
                 # check homo_filename against source
                 self.assertTrue(src_im.crs.to_proj4() == homo_im.crs.to_proj4(), 'Source and homogenised crs match')
                 self.assertTrue(src_im.count == homo_im.count, 'Source and homogenised band counts match')
@@ -91,13 +92,14 @@ class TestHomonim(unittest.TestCase):
                 for bi in range(src_im.count):
                     src_mask = src_im.read_masks(bi + 1)
                     homo_mask = homo_im.read_masks(bi + 1)
-                    self.assertTrue(np.abs(src_mask.mean() - homo_mask.mean())/255 < .2, 'Source and homgenised have similar valid areas')
+                    self.assertTrue(np.abs(src_mask.mean() - homo_mask.mean()) / 255 < .2,
+                                    'Source and homgenised have similar valid areas')
 
                     for fn in [lambda x: x, lambda x: np.bitwise_not(x)]:
                         n_src_labels, src_labels = cv2.connectedComponents(fn(src_mask), None, 4, cv2.CV_16U)
                         n_homo_labels, homo_labels = cv2.connectedComponents(fn(homo_mask), None, 4, cv2.CV_16U)
-                        self.assertTrue(n_src_labels==n_homo_labels, 'Number of source and homgenised valid/nodata areas match')
-
+                        self.assertTrue(n_src_labels == n_homo_labels,
+                                        'Number of source and homgenised valid/nodata areas match')
 
     def _test_homo_against_ref(self, src_filename, homo_filename, ref_filename):
         """Test R2 against reference before and after homogenisation"""
@@ -133,16 +135,20 @@ class TestHomonim(unittest.TestCase):
                     curr_blk = ovl_block.__getattribute__(out_blk_fld)
                     prev_blk = prev_ovl_block.__getattribute__(out_blk_fld)
                     if curr_blk.row_off == prev_blk.row_off:
-                        self.assertTrue(curr_blk.col_off == prev_blk.col_off + prev_blk.width, f'{out_blk_fld} col consecutive')
+                        self.assertTrue(curr_blk.col_off == prev_blk.col_off + prev_blk.width,
+                                        f'{out_blk_fld} col consecutive')
                     else:
-                        self.assertTrue(curr_blk.row_off == prev_blk.row_off + prev_blk.height, f'{out_blk_fld} row consecutive')
+                        self.assertTrue(curr_blk.row_off == prev_blk.row_off + prev_blk.height,
+                                        f'{out_blk_fld} row consecutive')
                 for in_blk_fld in ('src_in_block', 'ref_in_block'):
                     curr_blk = ovl_block.__getattribute__(in_blk_fld)
                     prev_blk = prev_ovl_block.__getattribute__(in_blk_fld)
                     if curr_blk.row_off == prev_blk.row_off:
-                        self.assertTrue(curr_blk.col_off < prev_blk.col_off + prev_blk.width, f'{in_blk_fld} col overlap')
+                        self.assertTrue(curr_blk.col_off < prev_blk.col_off + prev_blk.width,
+                                        f'{in_blk_fld} col overlap')
                     else:
-                        self.assertTrue(curr_blk.row_off < prev_blk.row_off + prev_blk.height, f'{in_blk_fld} row overlap')
+                        self.assertTrue(curr_blk.row_off < prev_blk.row_off + prev_blk.height,
+                                        f'{in_blk_fld} row overlap')
             else:
                 self.assertTrue(ovl_block.band_i == prev_ovl_block.band_i + 1, f'band consecutive')
 

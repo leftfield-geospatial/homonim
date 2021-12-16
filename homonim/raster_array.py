@@ -26,6 +26,7 @@ from rasterio.crs import CRS
 from rasterio import Affine
 from rasterio.warp import reproject, Resampling
 from rasterio.enums import MaskFlags
+from rasterio.windows import Window
 from homonim import get_logger, hom_dtype, hom_nodata
 import multiprocessing
 from rasterio.enums import ColorInterp
@@ -35,6 +36,47 @@ def nan_equals(a, b, equal_nan=True):
         return (a == b)
     else:
         return ((a == b) | (np.isnan(a) & np.isnan(b)))
+
+def expand_window_to_grid(win):
+    """
+    Expands float window extents to be integers that include the original extents
+
+    Parameters
+    ----------
+    win : rasterio.windows.Window
+        the window to expand
+
+    Returns
+    -------
+    exp_win: rasterio.windows.Window
+        the expanded window
+    """
+    col_off, col_frac = np.divmod(win.col_off, 1)
+    row_off, row_frac = np.divmod(win.row_off, 1)
+    width = np.ceil(win.width + col_frac)
+    height = np.ceil(win.height + row_frac)
+    exp_win = Window(col_off.astype('int'), row_off.astype('int'), width.astype('int'), height.astype('int'))
+    return exp_win
+
+
+def round_window_to_grid(win):
+    """
+    Rounds float window extents to nearest integer
+
+    Parameters
+    ----------
+    win : rasterio.windows.Window
+        the window to round
+
+    Returns
+    -------
+    exp_win: rasterio.windows.Window
+        the rounded window
+    """
+    row_range, col_range = win.toranges()
+    return Window.from_slices(slice(*np.round(row_range).astype('int')), slice(*np.round(col_range).astype('int')))
+
+
 
 class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
     """
@@ -197,9 +239,17 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
                 self._array[nodata_mask] = value
             self._nodata = value
 
-    def copy(self):
-        array = self._array.copy()
-        return RasterArray(array, crs=self._crs, transform=self._transform, nodata=self._nodata)
+    def copy(self, deep=True):
+        array = self._array.copy() if deep else self._array
+        return RasterArray.from_profile(array, self.profile)
+
+    def slice_array(self, *bounds):
+        window = self.window(*bounds)
+        window = round_window_to_grid(window)
+        if self._array.ndim == 2:
+            return self._array[window.toslices()]
+        else:
+            return self._array[(slice(self._array.shape[0]), *window.toslices())]
 
     def reproject(self, crs=None, transform=None, shape=None, nodata=default_nodata, dtype=default_dtype,
                   resampling=Resampling.lanczos):
