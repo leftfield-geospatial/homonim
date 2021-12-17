@@ -28,22 +28,22 @@ from homonim.raster_array import RasterArray, nan_equals
 
 
 class KernelModel():
-    def __init__(self, method='gain_im_offset', kernel_shape=(5, 5), debug=False, r2_inpaint_thresh=None,
+    def __init__(self, method='gain-im-offset', kernel_shape=(5, 5), debug_raster=False, r2_inpaint_thresh=None,
                  src2ref_interp=Resampling.average, ref2src_interp=Resampling.cubic_spline):
-        if not method in ['gain', 'gain_im_offset', 'gain_offset']:
-            raise ValueError('method must be one of gain | gain_im_offset | gain_offset')
+        if not method in ['gain', 'gain-im-offset', 'gain-offset']:
+            raise ValueError('method should be one of "gain", "gain-im-offset" or "gain-offset"')
         self._method = method
         if not np.all(np.mod(kernel_shape, 2) == 1):
             raise ValueError('kernel_shape must be odd in both dimensions')
-        self._kernel_shape = np.array(kernel_shape)
-        self._debug = debug
+        self._kernel_shape = np.array(kernel_shape).astype(int)
+        self._debug_raster = debug_raster
         self._r2_inpaint_thresh = r2_inpaint_thresh
         self._src2ref_interp = src2ref_interp
         self._ref2src_interp = ref2src_interp
 
-    def _r2_array(self, ref_array, src_array, param_array, kernel_shape=(5, 5), mask=None, mask_sum=None,
+    def _r2_array(self, ref_array, src_array, param_array, mask=None, mask_sum=None,
                   ref_sum=None, src_sum=None, ref2_sum=None, src2_sum=None, src_ref_sum=None, dest_array=None):
-        kernel_shape = tuple(kernel_shape)  # convert to tuple for opencv
+        kernel_shape = tuple(self._kernel_shape)  # convert to tuple for opencv
         filter_args = dict(normalize=False, borderType=cv.BORDER_CONSTANT)  # common opencv arguments
 
         # if mask is passed, it is assumed invalid pixels in ref_ and src_array have been zeroed
@@ -111,7 +111,7 @@ class KernelModel():
         offset_model[1] = np.percentile(ref_ra.array[mask], 1) - np.percentile(src_ra.array[mask], 1) * offset_model[0]
         return offset_model
 
-    def _fit_gain(self, ref_ra: RasterArray, src_ra: RasterArray, kernel_shape=(5, 5)):
+    def _fit_gain(self, ref_ra: RasterArray, src_ra: RasterArray):
         """
         Find sliding kernel gains for a band using opencv convolution.
 
@@ -121,8 +121,6 @@ class KernelModel():
             Reference block in a RasterArray.
         src_ra : RasterArray
             Source block, co-located with ref_ra and the same shape.
-        kernel_shape : numpy.array_like, list, tuple, optional
-            Sliding kernel [width, height] in pixels.
 
         Returns
         -------
@@ -135,12 +133,12 @@ class KernelModel():
         ref_array = ref_ra.array
         src_array = src_ra.array
         param_profile = src_ra.profile.copy()
-        param_profile.update(count=3 if self._debug else 2)
+        param_profile.update(count=3 if self._debug_raster else 2)
         mask = ref_ra.mask & src_ra.mask
         # mask invalid pixels with 0 so that these do not contribute to kernel sums in *boxFilter()
         ref_array[~mask] = 0
         src_array[~mask] = 0
-        kernel_shape = tuple(kernel_shape)  # force to tuple for opencv
+        kernel_shape = tuple(self._kernel_shape)  # force to tuple for opencv
 
         # convolve the kernel with src and ref to get kernel sums (uses DFT for large kernels)
         filter_args = dict(normalize=False, borderType=cv.BORDER_CONSTANT)  # common opencv arguments
@@ -154,13 +152,13 @@ class KernelModel():
         # find sliding kernel gains, avoiding divide by 0
         np.divide(ref_sum, src_sum, out=param_ra.array[0], where=mask)
 
-        if self._debug:
+        if self._debug_raster:
             # Find R2 of the sliding kernel models
-            self._r2_array(ref_array, src_array, param_ra.array[:2], kernel_shape=kernel_shape, mask=mask,
-                           ref_sum=ref_sum, src_sum=src_sum, dest_array=param_ra.array[2])
+            self._r2_array(ref_array, src_array, param_ra.array[:2], mask=mask, ref_sum=ref_sum, src_sum=src_sum,
+                           dest_array=param_ra.array[2])
         return param_ra
 
-    def _fit_gain_im_offset(self, ref_ra: RasterArray, src_ra: RasterArray, kernel_shape=(5, 5), dest_src_ra=None):
+    def _fit_gain_im_offset(self, ref_ra: RasterArray, src_ra: RasterArray, dest_src_ra=None):
         """
         Find sliding kernel gains and 'image' (i.e. block) offset for a band using opencv convolution.
 
@@ -170,8 +168,6 @@ class KernelModel():
             Reference block in a RasterArray.
         src_ra : RasterArray
             Source block, co-located with ref_ra and the same shape.
-        kernel_shape : numpy.array_like, list, tuple, optional
-            Sliding kernel [width, height] in pixels.
         dest_src_ra: RasterArray, optional
             Destination RasterArray to write the offset src_ra into (useful to make the operation in-place with
             dest_src_ra=src_ra)
@@ -193,14 +189,14 @@ class KernelModel():
         src_offset_ra.array = src_ra.array * offset_model[0] + offset_model[1]
 
         # find gains for offset src
-        param_ra = self._fit_gain(ref_ra, src_offset_ra, kernel_shape=kernel_shape)
+        param_ra = self._fit_gain(ref_ra, src_offset_ra)
 
         # incorporate the offset model in the parameter RasterArray
         param_ra.array[1] = param_ra.array[0] * offset_model[1]
         param_ra.array[0] *= offset_model[0]
         return param_ra
 
-    def _fit_gain_offset(self, ref_ra: RasterArray, src_ra: RasterArray, kernel_shape=(15, 15)):
+    def _fit_gain_offset(self, ref_ra: RasterArray, src_ra: RasterArray):
         """
         Find sliding kernel full linear model for a band using opencv convolution.
 
@@ -210,8 +206,6 @@ class KernelModel():
             Reference block in a RasterArray.
         src_ra : RasterArray
             Source block, co-located with ref_ra and the same shape.
-        kernel_shape : numpy.array_like, list, tuple, optional
-            Sliding kernel [width, height] in pixels.
 
         Returns
         -------
@@ -225,12 +219,12 @@ class KernelModel():
         ref_array = ref_ra.array
         src_array = src_ra.array
         param_profile = src_ra.profile.copy()
-        param_profile.update(count=3 if (self._debug or self._r2_inpaint_thresh) else 2)
+        param_profile.update(count=3 if (self._debug_raster or self._r2_inpaint_thresh) else 2)
         mask = ref_ra.mask & src_ra.mask
         # mask invalid pixels with 0 so that these do not contribute to kernel sums in *boxFilter()
         ref_array[~mask] = 0
         src_array[~mask] = 0
-        kernel_shape = tuple(kernel_shape)  # force to tuple for opencv
+        kernel_shape = tuple(self._kernel_shape)  # force to tuple for opencv
 
         # find the numerator for the gain i.e N*cov(ref, src)
         filter_args = dict(normalize=False, borderType=cv.BORDER_CONSTANT)
@@ -253,11 +247,10 @@ class KernelModel():
         # solve for the offset c = y - mx, given that the linear model passes through (mean(ref), mean(src))
         np.divide(ref_sum - (param_ra.array[0] * src_sum), mask_sum, out=param_ra.array[1], where=mask)
 
-        if (self._debug) or (self._r2_inpaint_thresh is not None):
+        if (self._debug_raster) or (self._r2_inpaint_thresh is not None):
             # Find R2 of the sliding kernel models
-            self._r2_array(ref_array, src_array, param_ra.array[:2], kernel_shape=kernel_shape, mask=mask,
-                           mask_sum=mask_sum, ref_sum=ref_sum, src_sum=src_sum, src2_sum=src2_sum,
-                           src_ref_sum=src_ref_sum, dest_array=param_ra.array[2])
+            self._r2_array(ref_array, src_array, param_ra.array[:2], mask=mask, mask_sum=mask_sum, ref_sum=ref_sum,
+                           src_sum=src_sum, src2_sum=src2_sum, src_ref_sum=src_ref_sum, dest_array=param_ra.array[2])
 
         if self._r2_inpaint_thresh is not None:
             # fill/inpaint low R2 areas and negative gain areas in the offset parameter
@@ -287,11 +280,11 @@ class KernelModel():
             raise ValueError('ref_ra and src_ra must have the same CRS, transform and shape')
 
         if self._method == 'gain':
-            param_ra = self._fit_gain(ref_ra, src_ra, kernel_shape=self._kernel_shape)
-        elif self._method == 'gain_im_offset':  # normalise src_ds_ra in place
-            param_ra = self._fit_gain_im_offset(ref_ra, src_ra, kernel_shape=self._kernel_shape)
+            param_ra = self._fit_gain(ref_ra, src_ra)
+        elif self._method == 'gain-im-offset':  # normalise src_ds_ra in place
+            param_ra = self._fit_gain_im_offset(ref_ra, src_ra)
         else:
-            param_ra = self._fit_gain_offset(ref_ra, src_ra, kernel_shape=self._kernel_shape)
+            param_ra = self._fit_gain_offset(ref_ra, src_ra)
 
         return param_ra
 

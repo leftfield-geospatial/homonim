@@ -69,8 +69,9 @@ class TestHomonim(unittest.TestCase):
         self._conf_filename = root_path.joinpath('data/inputs/test_example/config.yaml')
         with open(self._conf_filename, 'r') as f:
             config = yaml.safe_load(f)
-        self._homo_config = config['homogenisation']
-        self._out_config = config['output']
+        self._homo_config = config['homo_config']
+        self._out_config = config['out_config']
+        self._model_config = config['model_config']
 
     def _test_homo_against_src(self, src_filename, homo_filename):
         """Test homogenised against source image"""
@@ -116,7 +117,7 @@ class TestHomonim(unittest.TestCase):
                         _im_array = im.read(band_i + 1)
                         im_array = RasterArray.from_profile(_im_array, im.profile)
                         im_ds_array = im_array.reproject(transform=ref_array.transform, shape=ref_array.shape[-2:],
-                                                         resampling=him._homo_config['src2ref_interp'])
+                                                         resampling=self._model_config['src2ref_interp'])
                         mask = im_ds_array.mask
                         im_ref_cc = np.corrcoef(im_ds_array.array[mask], ref_array.array[band_i, mask])
                         im_ref_r2[im_i, band_i] = im_ref_cc[0, 1] ** 2
@@ -166,18 +167,18 @@ class TestHomonim(unittest.TestCase):
 
         param_list = [
             dict(method='gain', kernel_shape=(3, 3)),
-            dict(method='gain_im_offset', kernel_shape=(5, 5)),
-            dict(method='gain_offset', kernel_shape=(9, 9)),
+            dict(method='gain-im-offset', kernel_shape=(5, 5)),
+            dict(method='gain-offset', kernel_shape=(9, 9)),
         ]
 
         for param_dict in param_list:
             post_fix = cli._create_homo_postfix(space='ref-space', **param_dict)
             homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
-            him = homonim.HomonimRefSpace(src_filename, ref_filename, homo_config=self._homo_config,
-                                          out_config=self._out_config)
+            him = homonim.HomonImBase(src_filename, ref_filename, **param_dict, homo_config=self._homo_config,
+                                      model_config=self._model_config, out_config=self._out_config, space='ref')
             with self.subTest('Overlapped Blocks', src_filename=src_filename):
-                self._test_ovl_blocks(him._create_ovl_blocks(param_dict['kernel_shape']))
-            him.homogenise(homo_filename, **param_dict)
+                self._test_ovl_blocks(him._create_ovl_blocks())
+            him.homogenise(homo_filename)
             him.set_homo_metadata(homo_filename)
             him.build_overviews(homo_filename)
             self.assertTrue(homo_filename.exists(), 'Homogenised file exists')
@@ -198,8 +199,8 @@ class TestHomonim(unittest.TestCase):
 
         param_list = [
             dict(method='gain', kernel_shape=(3, 3)),
-            dict(method='gain_im_offset', kernel_shape=(5, 5)),
-            dict(method='gain_offset', kernel_shape=(9, 9)),
+            dict(method='gain-im-offset', kernel_shape=(5, 5)),
+            dict(method='gain-offset', kernel_shape=(9, 9)),
         ]
 
         for param_dict in param_list:

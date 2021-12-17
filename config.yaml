@@ -1,29 +1,32 @@
 # Homogenisation configuration
-homogenisation:
+homo_config:
+  # Produce debug outputs (0=None, 1=profiling, 2=parameter rasters)
+  debug_raster: True
+#  # Mask partially covered source pixels when downsampling for --ref-space
+#  mask_partial_pixel: True
+#    # Mask partially covered source pixels when downsampling for --ref-space
+#  mask_partial_kernel: True
+#  # Mask extrapolated (boundary) pixels in resampled images
+#  mask_partial_interp: True
+  mask_partial: False
+  # Use multi-threading (memory intensive)
+  multithread: True
+  # maximum memory for automatic block size in megabytes
+  max_block_mem: 100
+
+model_config:
   # Interpolation type (average, bilinear, cubic, cubic_spline, gauss, lanczos) for resampling from source to reference
   #   CRS (cubic_spline recommended)
   src2ref_interp: average
   # Interpolation type (average, bilinear, cubic, cubic_spline, gauss, lanczos) for resampling from reference to source
   #   CRS  (average recommended)
   ref2src_interp: cubic_spline
-  # Produce debug outputs (0=None, 1=profiling, 2=parameter rasters)
-  debug_level: 2
-  # Mask partially covered source pixels when downsampling for --ref-space
-  mask_partial_pixel: True
-    # Mask partially covered source pixels when downsampling for --ref-space
-  mask_partial_kernel: True
-  # Mask extrapolated (boundary) pixels in resampled images
-  mask_partial_interp: True
-  # Use multi-threading (memory intensive)
-  multithread: True
   # For gain&offset model, refit pixels with model R2 values below this value, using interpolated offset
   # and fitted gain (None = no inpainting).
   r2_inpaint_thresh: 0.25
-  # maximum memory for automatic block size in megabytes
-  max_block_mem: 100
 
 # Format of output (homogenised) image
-output:
+out_config:
   # Format of homogenised raster - see www.gdal.org/formats_list.html (None = same format as source image)
   driver: GTiff
   # Data type (be aware that homogenised reflectances may be negative in some instances)
