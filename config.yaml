@@ -10,7 +10,7 @@ homo_config:
 #  mask_partial_interp: True
   mask_partial: False
   # Use multi-threading (memory intensive)
-  multithread: True
+  multithread: False
   # maximum memory for automatic block size in megabytes
   max_block_mem: 100
 
