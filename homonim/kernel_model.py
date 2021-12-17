@@ -36,7 +36,7 @@ class KernelModel():
         if not np.all(np.mod(kernel_shape, 2) == 1):
             raise ValueError('kernel_shape must be odd in both dimensions')
         self._kernel_shape = np.array(kernel_shape).astype(int)
-        self._debug_raster = debug_raster
+        self._debug_raster = debug_raster   # TODO: always find R2?
         self._r2_inpaint_thresh = r2_inpaint_thresh
         self._src2ref_interp = src2ref_interp
         self._ref2src_interp = ref2src_interp
@@ -86,7 +86,7 @@ class KernelModel():
         np.subtract(1, dest_array, out=dest_array, where=mask)
         return dest_array
 
-    def _fit_im_offset(self, ref_ra, src_ra):
+    def _fit_im_offset(self, ref_ra: RasterArray, src_ra: RasterArray):
         """
         Offset source image band (in place) to match reference image band. Uses basic dark object subtraction (DOS)
         type approach.
@@ -111,7 +111,7 @@ class KernelModel():
         offset_model[1] = np.percentile(ref_ra.array[mask], 1) - np.percentile(src_ra.array[mask], 1) * offset_model[0]
         return offset_model
 
-    def _fit_gain(self, ref_ra: RasterArray, src_ra: RasterArray):
+    def _fit_gain(self, ref_ra: RasterArray, src_ra: RasterArray) -> RasterArray:
         """
         Find sliding kernel gains for a band using opencv convolution.
 
@@ -158,7 +158,7 @@ class KernelModel():
                            dest_array=param_ra.array[2])
         return param_ra
 
-    def _fit_gain_im_offset(self, ref_ra: RasterArray, src_ra: RasterArray, dest_src_ra=None):
+    def _fit_gain_im_offset(self, ref_ra: RasterArray, src_ra: RasterArray) -> RasterArray:
         """
         Find sliding kernel gains and 'image' (i.e. block) offset for a band using opencv convolution.
 
@@ -168,9 +168,6 @@ class KernelModel():
             Reference block in a RasterArray.
         src_ra : RasterArray
             Source block, co-located with ref_ra and the same shape.
-        dest_src_ra: RasterArray, optional
-            Destination RasterArray to write the offset src_ra into (useful to make the operation in-place with
-            dest_src_ra=src_ra)
 
         Returns
         -------
@@ -180,23 +177,21 @@ class KernelModel():
         """
         # TODO: sort out ref/src in-place differences
         offset_model = self._fit_im_offset(ref_ra, src_ra)
-        # create RasterArray to hold offset src image, and force nodata to nan so that operation below remains
-        # correctly masked
-        src_offset_ra = dest_src_ra or src_ra.copy()
-        src_offset_ra.nodata = RasterArray.default_nodata
+        # force nodata to nan so that operation below remains correctly masked
+        src_ra.nodata = RasterArray.default_nodata
 
         # apply the offset model
-        src_offset_ra.array = src_ra.array * offset_model[0] + offset_model[1]
+        src_ra.array = (src_ra.array * offset_model[0]) + offset_model[1]
 
         # find gains for offset src
-        param_ra = self._fit_gain(ref_ra, src_offset_ra)
+        param_ra = self._fit_gain(ref_ra, src_ra)
 
         # incorporate the offset model in the parameter RasterArray
         param_ra.array[1] = param_ra.array[0] * offset_model[1]
         param_ra.array[0] *= offset_model[0]
         return param_ra
 
-    def _fit_gain_offset(self, ref_ra: RasterArray, src_ra: RasterArray):
+    def _fit_gain_offset(self, ref_ra: RasterArray, src_ra: RasterArray) -> RasterArray:
         """
         Find sliding kernel full linear model for a band using opencv convolution.
 
@@ -264,7 +259,7 @@ class KernelModel():
 
         return param_ra
 
-    def fit(self, ref_ra, src_ra):
+    def fit(self, ref_ra: RasterArray, src_ra: RasterArray) -> RasterArray:
         """
         Fits sliding kernel models to reference and source arrays
 
@@ -288,7 +283,7 @@ class KernelModel():
 
         return param_ra
 
-    def apply(self, src_ra: RasterArray, param_ra: RasterArray):
+    def apply(self, src_ra: RasterArray, param_ra: RasterArray) -> RasterArray:
         """
         Applies sliding kernel models to a source array
 
@@ -297,10 +292,10 @@ class KernelModel():
         src_ra: homonim.RasterArray
                    M x N RasterArray of source data, collocated, and of similar spectral content, to ref_ra
         """
-        out_array = param_ra.array[0] * src_ra.array + param_ra.array[1]
+        out_array = (param_ra.array[0] * src_ra.array) + param_ra.array[1]
         return RasterArray.from_profile(out_array, param_ra.profile)
 
-    def mask_partial(self, out_ra, ref_res):
+    def mask_partial(self, out_ra: RasterArray, ref_res: RasterArray) -> RasterArray:
         res_ratio = np.ceil(np.divide(ref_res, out_ra.res))
         morph_kernel_shape = np.ceil(res_ratio * self._kernel_shape).astype('int')
         mask = out_ra.mask
@@ -311,7 +306,7 @@ class KernelModel():
 
 
 class RefSpaceModel(KernelModel):
-    def fit(self, ref_ra, src_ra):
+    def fit(self, ref_ra: RasterArray, src_ra: RasterArray) -> RasterArray:
         # downsample src_ra to ref crs and grid
         src_ds_ra = src_ra.reproject(**ref_ra.proj_profile, resampling=self._src2ref_interp)
         return KernelModel.fit(self, ref_ra, src_ds_ra)
@@ -327,4 +322,5 @@ class SrcSpaceModel(KernelModel):
     def fit(self, ref_ra, src_ra):
         # upsample ref_ra to src crs and grid
         ref_us_ra = ref_ra.reproject(**src_ra.proj_profile, resampling=self._ref2src_interp)
-        return KernelModel.fit(self, ref_us_ra, src_ra)
+        _src_ra = src_ra.copy()     # avoid in-place changes to src_ra in fit() below
+        return KernelModel.fit(self, ref_us_ra, _src_ra)
