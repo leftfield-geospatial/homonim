@@ -105,7 +105,6 @@ class TestHomonim(unittest.TestCase):
 
     def _test_homo_against_ref(self, src_filename, homo_filename, ref_filename):
         """Test R2 against reference before and after homogenisation"""
-        him = homonim.HomonimRefSpace(src_filename, ref_filename)
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
             im_ref_r2 = None
             ref_array = _read_ref(src_filename, ref_filename)
@@ -133,7 +132,7 @@ class TestHomonim(unittest.TestCase):
         for ovl_block in ovl_blocks[1:]:
             ovl_block = ovl_block
             if ovl_block.band_i == prev_ovl_block.band_i:
-                for out_blk_fld in ('src_out_block', 'ref_out_block'):
+                for out_blk_fld in ('src_out_block',):
                     curr_blk = ovl_block.__getattribute__(out_blk_fld)
                     prev_blk = prev_ovl_block.__getattribute__(out_blk_fld)
                     if curr_blk.row_off == prev_blk.row_off:
@@ -142,7 +141,7 @@ class TestHomonim(unittest.TestCase):
                     else:
                         self.assertTrue(curr_blk.row_off == prev_blk.row_off + prev_blk.height,
                                         f'{out_blk_fld} row consecutive')
-                for in_blk_fld in ('src_in_block', 'ref_in_block'):
+                for in_blk_fld in ('src_in_block',):
                     curr_blk = ovl_block.__getattribute__(in_blk_fld)
                     prev_blk = prev_ovl_block.__getattribute__(in_blk_fld)
                     if curr_blk.row_off == prev_blk.row_off:

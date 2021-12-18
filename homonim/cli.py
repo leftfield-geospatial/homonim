@@ -23,6 +23,7 @@ import pathlib
 import click
 import numpy as np
 import yaml
+
 from homonim import homonim
 from homonim import root_path, get_logger
 
@@ -146,28 +147,17 @@ def cli(src_file=None, ref_file=None, kernel_shape=(3, 3), method="gain-im-offse
 
             logger.info(f'Homogenising {src_filename.name}')
             start_ttl = datetime.datetime.now()
-            if True:
-                if homo_space == 'ref-space':
-                    him = homonim.HomonimRefSpace(src_filename, ref_file, method=method, kernel_shape=kernel_shape,
-                                          space=homo_space[:3], **config)
-                else:
-                    him = homonim.HomonimSrcSpace(src_filename, ref_file, method=method, kernel_shape=kernel_shape,
-                                          space=homo_space[:3], **config)
-            else:
-                him = homonim.HomonImBase(src_filename, ref_file, method=method, kernel_shape=kernel_shape,
-                                          space=homo_space[:3], **config)
+            him = homonim.HomonImBase(src_filename, ref_file, method=method, kernel_shape=kernel_shape,
+                                      space=homo_space[:3], **config)
 
             # create output raster filename and homogenise
             post_fix = _create_homo_postfix(space=homo_space, method=method, kernel_shape=kernel_shape)
             homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
-            him._homogenise(homo_filename, method=method, kernel_shape=kernel_shape)
+            him.homogenise(homo_filename)
 
             # set metadata in output file
             # TODO move meta_dict into set_homo_metadata
-            meta_dict = dict(HOMO_SRC_FILE=src_filename.name, HOMO_REF_FILE=pathlib.Path(ref_file).name,
-                             HOMO_SPACE=homo_space, HOMO_METHOD=method, HOMO_WIN_SIZE=kernel_shape,
-                             HOMO_CONF=str(config['homo_config']))
-            him.set_homo_metadata(homo_filename, **meta_dict)
+            him.set_homo_metadata(homo_filename)
 
             if config['homo_config']['debug_raster']:
                 param_out_filename = him._create_debug_filename(homo_filename)

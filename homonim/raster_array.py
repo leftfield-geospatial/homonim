@@ -16,26 +16,27 @@
     You should have received a copy of the GNU Affero General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
-from multiprocessing.dummy import Value
+
+import multiprocessing
 
 import numpy as np
-import rasterio as rio
-from rasterio import windows
-from rasterio import transform
-from rasterio.crs import CRS
 from rasterio import Affine
-from rasterio.warp import reproject, Resampling
+from rasterio import transform
+from rasterio import windows
+from rasterio.crs import CRS
 from rasterio.enums import MaskFlags
+from rasterio.warp import reproject, Resampling
 from rasterio.windows import Window
-from homonim import get_logger, hom_dtype, hom_nodata
-import multiprocessing
-from rasterio.enums import ColorInterp
+
+from homonim import hom_dtype, hom_nodata
+
 
 def nan_equals(a, b, equal_nan=True):
     if not equal_nan:
         return (a == b)
     else:
         return ((a == b) | (np.isnan(a) & np.isnan(b)))
+
 
 def expand_window_to_grid(win, expand_pixels=0):
     """
@@ -53,8 +54,8 @@ def expand_window_to_grid(win, expand_pixels=0):
     """
     col_off, col_frac = np.divmod(win.col_off - expand_pixels, 1)
     row_off, row_frac = np.divmod(win.row_off - expand_pixels, 1)
-    width = np.ceil(win.width + 2*expand_pixels + col_frac)
-    height = np.ceil(win.height + 2*expand_pixels + row_frac)
+    width = np.ceil(win.width + 2 * expand_pixels + col_frac)
+    height = np.ceil(win.height + 2 * expand_pixels + row_frac)
     exp_win = Window(col_off.astype('int'), row_off.astype('int'), width.astype('int'), height.astype('int'))
     return exp_win
 
@@ -79,7 +80,6 @@ def round_window_to_grid(win):
     return Window(col_off=col_range[0], row_off=row_range[0], width=np.diff(col_range)[0], height=np.diff(row_range)[0])
 
 
-
 class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
     """
     A class for wrapping and re-projecting a geo-referenced numpy array.
@@ -88,6 +88,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
     """
     default_nodata = hom_nodata
     default_dtype = hom_dtype
+
     def __init__(self, array, crs, transform, nodata=default_nodata, window=None):
         # array = np.array(array)
         if (array.ndim < 2) or (array.ndim > 3):
@@ -118,8 +119,8 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
     def from_profile(cls, array, profile, window=None):
         if not ('crs' and 'transform' and 'nodata' in profile):
             raise Exception('profile should include crs, transform and nodata keys')
-        if array is None:   # create array filled with nodata
-            if not ('width' and 'height' and 'count' and  'dtype' in profile):
+        if array is None:  # create array filled with nodata
+            if not ('width' and 'height' and 'count' and 'dtype' in profile):
                 raise Exception('profile should include width, height, count and dtype keys')
             # if profile['count'] == 1:
             #     array_shape = (profile['height'], profile['width'])
@@ -134,7 +135,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
 
         # check bands if bands have masks (i.e. internal/side-car mask or alpha channel, as opposed to nodata value)
         index_list = [indexes] if np.isscalar(indexes) else indexes
-        is_masked = any([MaskFlags.per_dataset in rio_dataset.mask_flag_enums[bi-1] for bi in index_list])
+        is_masked = any([MaskFlags.per_dataset in rio_dataset.mask_flag_enums[bi - 1] for bi in index_list])
 
         if is_masked:
             # read mask from dataset and apply it to array with default nodata
@@ -209,7 +210,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
             return np.full(self.shape, True)
         mask = ~nan_equals(self.array, self.nodata)
         if self._array.ndim > 2:
-            mask =  np.all(mask, axis=0)
+            mask = np.all(mask, axis=0)
         return mask
 
     @mask.setter
@@ -286,4 +287,3 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         return RasterArray(_dst_array, crs=crs, transform=_dst_transform, nodata=nodata)
 
 ##
-

@@ -36,10 +36,15 @@ class KernelModel():
         if not np.all(np.mod(kernel_shape, 2) == 1):
             raise ValueError('kernel_shape must be odd in both dimensions')
         self._kernel_shape = np.array(kernel_shape).astype(int)
-        self._debug_raster = debug_raster   # TODO: always find R2?
+        self._debug_raster = debug_raster  # TODO: always find R2?
         self._r2_inpaint_thresh = r2_inpaint_thresh
         self._src2ref_interp = src2ref_interp
         self._ref2src_interp = ref2src_interp
+
+    @property
+    def config(self):
+        return dict(method=self._method, kernel_shape=self._kernel_shape, r2_inpaint_thresh=self._r2_inpaint_thresh,
+                    src2ref_interp=self._src2ref_interp, ref2src_interp=self._ref2src_interp)
 
     def _r2_array(self, ref_array, src_array, param_array, mask=None, mask_sum=None, ref_sum=None, src_sum=None,
                   ref2_sum=None, src2_sum=None, src_ref_sum=None, dest_array=None, kernel_shape=None):
@@ -345,5 +350,5 @@ class SrcSpaceModel(KernelModel):
         src_kernel_shape = np.ceil(np.divide(ref_ra.res, src_ra.res) * self._kernel_shape).astype('int')
 
         ref_us_ra = ref_ra.reproject(**src_ra.proj_profile, resampling=self._ref2src_interp)
-        _src_ra = src_ra.copy()     # avoid in-place changes to src_ra in fit() below
+        _src_ra = src_ra.copy()  # avoid in-place changes to src_ra in fit() below
         return KernelModel.fit(self, ref_us_ra, _src_ra, kernel_shape=src_kernel_shape)
