@@ -41,9 +41,11 @@ class KernelModel():
         self._src2ref_interp = src2ref_interp
         self._ref2src_interp = ref2src_interp
 
-    def _r2_array(self, ref_array, src_array, param_array, mask=None, mask_sum=None,
-                  ref_sum=None, src_sum=None, ref2_sum=None, src2_sum=None, src_ref_sum=None, dest_array=None):
-        kernel_shape = tuple(self._kernel_shape)  # convert to tuple for opencv
+    def _r2_array(self, ref_array, src_array, param_array, mask=None, mask_sum=None, ref_sum=None, src_sum=None,
+                  ref2_sum=None, src2_sum=None, src_ref_sum=None, dest_array=None, kernel_shape=None):
+        if kernel_shape is None:
+            kernel_shape = self._kernel_shape
+        kernel_shape = tuple(kernel_shape)  # force to tuple for opencv
         filter_args = dict(normalize=False, borderType=cv.BORDER_CONSTANT)  # common opencv arguments
 
         # if mask is passed, it is assumed invalid pixels in ref_ and src_array have been zeroed
@@ -111,7 +113,7 @@ class KernelModel():
         offset_model[1] = np.percentile(ref_ra.array[mask], 1) - np.percentile(src_ra.array[mask], 1) * offset_model[0]
         return offset_model
 
-    def _fit_gain(self, ref_ra: RasterArray, src_ra: RasterArray) -> RasterArray:
+    def _fit_gain(self, ref_ra: RasterArray, src_ra: RasterArray, kernel_shape=None) -> RasterArray:
         """
         Find sliding kernel gains for a band using opencv convolution.
 
@@ -121,6 +123,8 @@ class KernelModel():
             Reference block in a RasterArray.
         src_ra : RasterArray
             Source block, co-located with ref_ra and the same shape.
+        kernel_shape : numpy.array_like, list, tuple, optional
+            Sliding kernel [width, height] in pixels.
 
         Returns
         -------
@@ -130,15 +134,19 @@ class KernelModel():
         """
         # adapted from https://www.mathsisfun.com/data/least-squares-regression.html with c=0
         # get arrays and find a combined ref & src mask
+        if kernel_shape is None:
+            kernel_shape = self._kernel_shape
+        kernel_shape = tuple(kernel_shape)  # force to tuple for opencv
+
         ref_array = ref_ra.array
         src_array = src_ra.array
         param_profile = src_ra.profile.copy()
-        param_profile.update(count=3 if self._debug_raster else 2)
+        param_profile.update(count=3 if self._debug_raster else 2, nodata=RasterArray.default_nodata,
+                             dtype=RasterArray.default_dtype)
         mask = ref_ra.mask & src_ra.mask
         # mask invalid pixels with 0 so that these do not contribute to kernel sums in *boxFilter()
         ref_array[~mask] = 0
         src_array[~mask] = 0
-        kernel_shape = tuple(self._kernel_shape)  # force to tuple for opencv
 
         # convolve the kernel with src and ref to get kernel sums (uses DFT for large kernels)
         filter_args = dict(normalize=False, borderType=cv.BORDER_CONSTANT)  # common opencv arguments
@@ -154,11 +162,11 @@ class KernelModel():
 
         if self._debug_raster:
             # Find R2 of the sliding kernel models
-            self._r2_array(ref_array, src_array, param_ra.array[:2], mask=mask, ref_sum=ref_sum, src_sum=src_sum,
-                           dest_array=param_ra.array[2])
+            self._r2_array(ref_array, src_array, param_ra.array[:1], mask=mask, ref_sum=ref_sum, src_sum=src_sum,
+                           dest_array=param_ra.array[2], kernel_shape=kernel_shape)
         return param_ra
 
-    def _fit_gain_im_offset(self, ref_ra: RasterArray, src_ra: RasterArray) -> RasterArray:
+    def _fit_gain_im_offset(self, ref_ra: RasterArray, src_ra: RasterArray, kernel_shape=None) -> RasterArray:
         """
         Find sliding kernel gains and 'image' (i.e. block) offset for a band using opencv convolution.
 
@@ -176,6 +184,10 @@ class KernelModel():
         R2 for each kernel model in the third band when debug is on.
         """
         # TODO: sort out ref/src in-place differences
+        if kernel_shape is None:
+            kernel_shape = self._kernel_shape
+        kernel_shape = tuple(kernel_shape)  # force to tuple for opencv
+
         offset_model = self._fit_im_offset(ref_ra, src_ra)
         # force nodata to nan so that operation below remains correctly masked
         src_ra.nodata = RasterArray.default_nodata
@@ -184,14 +196,14 @@ class KernelModel():
         src_ra.array = (src_ra.array * offset_model[0]) + offset_model[1]
 
         # find gains for offset src
-        param_ra = self._fit_gain(ref_ra, src_ra)
+        param_ra = self._fit_gain(ref_ra, src_ra, kernel_shape=kernel_shape)
 
         # incorporate the offset model in the parameter RasterArray
         param_ra.array[1] = param_ra.array[0] * offset_model[1]
         param_ra.array[0] *= offset_model[0]
         return param_ra
 
-    def _fit_gain_offset(self, ref_ra: RasterArray, src_ra: RasterArray) -> RasterArray:
+    def _fit_gain_offset(self, ref_ra: RasterArray, src_ra: RasterArray, kernel_shape=None) -> RasterArray:
         """
         Find sliding kernel full linear model for a band using opencv convolution.
 
@@ -201,6 +213,8 @@ class KernelModel():
             Reference block in a RasterArray.
         src_ra : RasterArray
             Source block, co-located with ref_ra and the same shape.
+        kernel_shape : numpy.array_like, list, tuple, optional
+            Sliding kernel [width, height] in pixels.
 
         Returns
         -------
@@ -214,12 +228,15 @@ class KernelModel():
         ref_array = ref_ra.array
         src_array = src_ra.array
         param_profile = src_ra.profile.copy()
-        param_profile.update(count=3 if (self._debug_raster or self._r2_inpaint_thresh) else 2)
+        param_profile.update(count=3 if self._debug_raster else 2, nodata=RasterArray.default_nodata,
+                             dtype=RasterArray.default_dtype)
         mask = ref_ra.mask & src_ra.mask
         # mask invalid pixels with 0 so that these do not contribute to kernel sums in *boxFilter()
         ref_array[~mask] = 0
         src_array[~mask] = 0
-        kernel_shape = tuple(self._kernel_shape)  # force to tuple for opencv
+        if kernel_shape is None:
+            kernel_shape = self._kernel_shape
+        kernel_shape = tuple(kernel_shape)  # force to tuple for opencv
 
         # find the numerator for the gain i.e N*cov(ref, src)
         filter_args = dict(normalize=False, borderType=cv.BORDER_CONSTANT)
@@ -245,7 +262,8 @@ class KernelModel():
         if (self._debug_raster) or (self._r2_inpaint_thresh is not None):
             # Find R2 of the sliding kernel models
             self._r2_array(ref_array, src_array, param_ra.array[:2], mask=mask, mask_sum=mask_sum, ref_sum=ref_sum,
-                           src_sum=src_sum, src2_sum=src2_sum, src_ref_sum=src_ref_sum, dest_array=param_ra.array[2])
+                           src_sum=src_sum, src2_sum=src2_sum, src_ref_sum=src_ref_sum, dest_array=param_ra.array[2],
+                           kernel_shape=kernel_shape)
 
         if self._r2_inpaint_thresh is not None:
             # fill/inpaint low R2 areas and negative gain areas in the offset parameter
@@ -259,7 +277,7 @@ class KernelModel():
 
         return param_ra
 
-    def fit(self, ref_ra: RasterArray, src_ra: RasterArray) -> RasterArray:
+    def fit(self, ref_ra: RasterArray, src_ra: RasterArray, kernel_shape=None) -> RasterArray:
         """
         Fits sliding kernel models to reference and source arrays
 
@@ -274,12 +292,16 @@ class KernelModel():
                 (ref_ra.shape != src_ra.shape)):
             raise ValueError('ref_ra and src_ra must have the same CRS, transform and shape')
 
+        if kernel_shape is None:
+            kernel_shape = self._kernel_shape
+        kernel_shape = tuple(kernel_shape)  # force to tuple for opencv
+
         if self._method == 'gain':
-            param_ra = self._fit_gain(ref_ra, src_ra)
+            param_ra = self._fit_gain(ref_ra, src_ra, kernel_shape=kernel_shape)
         elif self._method == 'gain-im-offset':  # normalise src_ds_ra in place
-            param_ra = self._fit_gain_im_offset(ref_ra, src_ra)
+            param_ra = self._fit_gain_im_offset(ref_ra, src_ra, kernel_shape=kernel_shape)
         else:
-            param_ra = self._fit_gain_offset(ref_ra, src_ra)
+            param_ra = self._fit_gain_offset(ref_ra, src_ra, kernel_shape=kernel_shape)
 
         return param_ra
 
@@ -296,8 +318,7 @@ class KernelModel():
         return RasterArray.from_profile(out_array, param_ra.profile)
 
     def mask_partial(self, out_ra: RasterArray, ref_res: RasterArray) -> RasterArray:
-        res_ratio = np.ceil(np.divide(ref_res, out_ra.res))
-        morph_kernel_shape = np.ceil(res_ratio * self._kernel_shape).astype('int')
+        morph_kernel_shape = np.ceil(np.divide(ref_res, out_ra.res) * self._kernel_shape).astype('int')
         mask = out_ra.mask
         se = cv2.getStructuringElement(cv2.MORPH_RECT, tuple(morph_kernel_shape))
         mask = cv2.erode(mask.astype('uint8', copy=False), se).astype('bool', copy=False)
@@ -309,7 +330,7 @@ class RefSpaceModel(KernelModel):
     def fit(self, ref_ra: RasterArray, src_ra: RasterArray) -> RasterArray:
         # downsample src_ra to ref crs and grid
         src_ds_ra = src_ra.reproject(**ref_ra.proj_profile, resampling=self._src2ref_interp)
-        return KernelModel.fit(self, ref_ra, src_ds_ra)
+        return KernelModel.fit(self, ref_ra, src_ds_ra, kernel_shape=self._kernel_shape)
 
     def apply(self, src_ra: RasterArray, param_ra: RasterArray):
         # upsample the param_ra to src crs and grid
@@ -319,8 +340,10 @@ class RefSpaceModel(KernelModel):
 
 
 class SrcSpaceModel(KernelModel):
-    def fit(self, ref_ra, src_ra):
+    def fit(self, ref_ra: RasterArray, src_ra: RasterArray):
         # upsample ref_ra to src crs and grid
+        src_kernel_shape = np.ceil(np.divide(ref_ra.res, src_ra.res) * self._kernel_shape).astype('int')
+
         ref_us_ra = ref_ra.reproject(**src_ra.proj_profile, resampling=self._ref2src_interp)
         _src_ra = src_ra.copy()     # avoid in-place changes to src_ra in fit() below
-        return KernelModel.fit(self, ref_us_ra, _src_ra)
+        return KernelModel.fit(self, ref_us_ra, _src_ra, kernel_shape=src_kernel_shape)

@@ -126,9 +126,11 @@ class HomonImBase:
         self._check_rasters()
 
         if space == 'ref':
-            self._kernel_model = RefSpaceModel(method=method, kernel_shape=kernel_shape, **model_config)
+            self._kernel_model = RefSpaceModel(method=method, kernel_shape=kernel_shape,
+                                               debug_raster=self._homo_config['debug_raster'], **model_config)
         elif space == 'src':
-            self._kernel_model = SrcSpaceModel(method=method, kernel_shape=self._src_kernel_shape, **model_config)
+            self._kernel_model = SrcSpaceModel(method=method, kernel_shape=kernel_shape,
+                                               debug_raster = self._homo_config['debug_raster'], ** model_config)
         else:
             raise ValueError(f'Unknown space option "{space}"')
 
@@ -218,7 +220,6 @@ class HomonImBase:
                     ref_transform = ref_im.window_transform(ref_win)
                     self._ref_warped_vrt_dict = dict(crs=src_im.crs, transform=ref_transform, width=ref_win.width,
                                                      height=ref_win.height, resampling=Resampling.bilinear)
-                    self._src_kernel_shape = np.ceil(self._kernel_shape * np.divide(ref_im.res, src_im.res)).astype('int')
 
 
     def _auto_block_shape(self, src_shape):
