@@ -146,13 +146,13 @@ def cli(src_file=None, ref_file=None, kernel_shape=(3, 3), method="gain-im-offse
 
             logger.info(f'Homogenising {src_filename.name}')
             start_ttl = datetime.datetime.now()
-            if False:
+            if True:
                 if homo_space == 'ref-space':
-                    him = homonim.HomonimRefSpace(src_filename, ref_file, homo_config=config['homo_config'],
-                                                  out_config=config['output'])
+                    him = homonim.HomonimRefSpace(src_filename, ref_file, method=method, kernel_shape=kernel_shape,
+                                          space=homo_space[:3], **config)
                 else:
-                    him = homonim.HomonimSrcSpace(src_filename, ref_file, homo_config=config['homo_config'],
-                                                  out_config=config['output'])
+                    him = homonim.HomonimSrcSpace(src_filename, ref_file, method=method, kernel_shape=kernel_shape,
+                                          space=homo_space[:3], **config)
             else:
                 him = homonim.HomonImBase(src_filename, ref_file, method=method, kernel_shape=kernel_shape,
                                           space=homo_space[:3], **config)
@@ -160,7 +160,7 @@ def cli(src_file=None, ref_file=None, kernel_shape=(3, 3), method="gain-im-offse
             # create output raster filename and homogenise
             post_fix = _create_homo_postfix(space=homo_space, method=method, kernel_shape=kernel_shape)
             homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
-            him.homogenise(homo_filename)
+            him._homogenise(homo_filename, method=method, kernel_shape=kernel_shape)
 
             # set metadata in output file
             # TODO move meta_dict into set_homo_metadata

@@ -25,7 +25,6 @@ model_config:
   # and fitted gain (None = no inpainting).
   r2_inpaint_thresh: 0.25
 
-
 # Format of output (homogenised) image
 out_config:
   # Format of homogenised raster - see www.gdal.org/formats_list.html (None = same format as source image)

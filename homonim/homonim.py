@@ -482,7 +482,7 @@ class HomonImBase:
         # mask_sum = cv.boxFilter(mask.astype(hom_dtype, copy=False), -1, kernel_shape, **filter_args)
 
         # calculate gains for valid pixels
-        if self._homo_config['debug_raster'] >= 2:
+        if self._homo_config['debug_raster']:
             param_array = np.full((2, *src_array.shape), fill_value=hom_nodata, dtype=hom_dtype)
         else:
             param_array = np.full((1, *src_array.shape), fill_value=hom_nodata, dtype=hom_dtype)
@@ -496,7 +496,7 @@ class HomonImBase:
         # if self._homo_config['mask_partial_kernel']:
         #     mask &= (mask_sum >= np.product(kernel_shape))
 
-        if self._homo_config['debug_raster'] >= 2:
+        if self._homo_config['debug_raster']:
             self._find_r2_cv(ref_array, src_array, param_array[:1, :, :], kernel_shape=kernel_shape, mask=mask,
                              ref_sum=ref_sum, src_sum=src_sum, dest_array=param_array[1, :, :])
         return param_array
@@ -541,7 +541,7 @@ class HomonImBase:
         # del (src2_sum)
 
         # find the gain = cov(ref, src) / var(src)
-        if (self._homo_config['debug_raster'] >= 2) or (self._homo_config['r2_inpaint_thresh'] is not None):
+        if (self._homo_config['debug_raster']) or (self._homo_config['r2_inpaint_thresh'] is not None):
             param_array = np.full((3, *src_array.shape), fill_value=hom_nodata, dtype=hom_dtype)
         else:
             param_array = np.full((2, *src_array.shape), fill_value=hom_nodata, dtype=hom_dtype)
@@ -551,7 +551,7 @@ class HomonImBase:
         _ = np.divide(ref_sum - (param_array[0, :, :] * src_sum), mask_sum, out=param_array[1, :, :],
                       where=mask.astype('bool', copy=False))
 
-        if (self._homo_config['debug_raster'] >= 2) or (self._homo_config['r2_inpaint_thresh'] is not None):
+        if (self._homo_config['debug_raster']) or (self._homo_config['r2_inpaint_thresh'] is not None):
             # Find R2 of the models for each pixel
             self._find_r2_cv(ref_array, src_array, param_array[:2, :, :], kernel_shape=kernel_shape, mask=mask,
                              mask_sum=mask_sum, ref_sum=ref_sum, src_sum=src_sum, src2_sum=src2_sum,
@@ -627,15 +627,15 @@ class HomonImBase:
 
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
             with WarpedVRT(rio.open(self._ref_filename, 'r'), **self._ref_warped_vrt_dict) as ref_im:
-                ovl_blocks = self._create_ovl_blocks(kernel_shape=kernel_shape)
+                ovl_blocks = self._create_ovl_blocks()
 
-                if self._homo_config['debug_raster'] >= 1:
+                if self._homo_config['debug_raster']:
                     # setup profiling
                     tracemalloc.start()
                     proc_profile = cProfile.Profile()
                     proc_profile.enable()
 
-                    if self._homo_config['debug_raster'] >= 2:
+                    if self._homo_config['debug_raster']:
                         # create debug raster file
                         dbg_profile = self._create_debug_profile(src_im.profile, ref_im.profile)
                         dbg_out_file_name = self._create_debug_filename(out_filename)
@@ -693,7 +693,7 @@ class HomonImBase:
                             out_im.write(_out_array, window=ovl_block.src_out_block, indexes=ovl_block.band_i+1)
                             bar.update(1)
 
-                        if self._homo_config['debug_raster'] >= 2:
+                        if self._homo_config['debug_raster']:
                             with dbg_lock:
                                 dbg_in_block = ovl_block.__getattribute__(f'{self._debug_block_prefix}_in_block')
                                 dbg_out_block = ovl_block.__getattribute__(f'{self._debug_block_prefix}_out_block')
@@ -723,12 +723,12 @@ class HomonImBase:
                             process_block(ovl_block)
                 finally:
                     out_im.close()
-                    if self._homo_config['debug_raster'] >= 2:
+                    if self._homo_config['debug_raster']:
                         dbg_im.close()
                     bar.update(1)
                     bar.close()
 
-        if self._homo_config['debug_raster'] >= 1:
+        if self._homo_config['debug_raster']:
             # print profiling info
             # (tottime is the total time spent in the function alone. cumtime is the total time spent in the function
             # plus all functions that this function called)
@@ -911,7 +911,7 @@ class HomonimRefSpace(HomonImBase):
         else:
             out_array = param_ra.array[0, :, :] * src_ra.array
 
-        if self._homo_config['debug_raster'] >= 2:
+        if self._homo_config['debug_raster']:
             debug_array = param_ds_array
             if method == 'gain-im-offset':  # incorporate norm_model into parameters
                 debug_array = np.insert(debug_array, 1, debug_array[0, :, :] * norm_model[1], axis=0)
@@ -930,7 +930,7 @@ class HomonimSrcSpace(HomonImBase):
 
     def _create_debug_profile(self, src_profile, ref_profile):
         """Create a ref-space rasterio profile for the debug parameter raster based on a starting profile and configuration"""
-        return HomonImBase._create_debug_profile(self, src_profile, ref_profile, which='src')
+        return HomonImBase._create_debug_profile(self, src_profile, ref_profile)
 
     def _homogenise_array(self, ref_ra, src_ra, method='gain-im-offset', kernel_shape=(5, 5), mask_partial=True):
         method = method.lower()
@@ -940,7 +940,7 @@ class HomonimSrcSpace(HomonImBase):
             src_ra.array[src_ra.array == src_ra.nodata] = hom_nodata
 
         # upsample reference to source grid
-        ref_us_ra = ref_ra.reproject(**src_ra.proj_profile, resampling=self._homo_config['ref2src_interp'])
+        ref_us_ra = ref_ra.reproject(**src_ra.proj_profile, resampling=Resampling.cubic_spline)
 
         # find kernel_shape in source pixels
         src_kernel_shape = kernel_shape * np.round(ref_ra.res / src_ra.res).astype(int)
@@ -952,7 +952,7 @@ class HomonimSrcSpace(HomonImBase):
                 norm_model = self._src_image_offset(ref_us_ra.array, src_ra.array)
             param_array = self._find_gains_cv(ref_us_ra.array, src_ra.array, kernel_shape=src_kernel_shape)
 
-        if mask_partial and self._homo_config['mask_partial_kernel']:
+        if mask_partial and self._homo_config['mask_partial']:
             # mask boundary param_array pixels that not fully covered by a kernel
             param_mask = np.all(param_array == hom_nodata, axis=0)
             se = cv2.getStructuringElement(cv2.MORPH_RECT, tuple(src_kernel_shape))
@@ -964,7 +964,7 @@ class HomonimSrcSpace(HomonImBase):
         if method == 'gain-offset':
             out_array += param_array[1, :, :]
 
-        if self._homo_config['debug_raster'] >= 2:
+        if self._homo_config['debug_raster']:
             debug_array = param_array
             if method == 'gain-im-offset':  # incorporate norm_model into parameters
                 debug_array = np.insert(debug_array, 1, debug_array[0, :, :] * norm_model[1], axis=0)
