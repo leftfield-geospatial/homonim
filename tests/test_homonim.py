@@ -33,7 +33,7 @@ from shapely.geometry import box
 from tqdm import tqdm
 
 from homonim import homonim, root_path, cli
-from homonim.raster_array import RasterArray, expand_window_to_grid
+from homonim.raster_array import RasterArray, expand_window_to_grid, default_dtype, default_nodata
 
 
 def _read_ref(src_filename, ref_filename):
@@ -44,10 +44,10 @@ def _read_ref(src_filename, ref_filename):
         with WarpedVRT(rio.open(ref_filename, 'r'), crs=src_im.crs, resampling=Resampling.bilinear) as ref_im:
             ref_win = expand_window_to_grid(ref_im.window(*src_im.bounds))
             ref_bands = range(1, src_im.count + 1)
-            _ref_array = ref_im.read(ref_bands, window=ref_win).astype(homonim.hom_dtype)
+            _ref_array = ref_im.read(ref_bands, window=ref_win).astype(default_dtype)
 
-            if (ref_im.nodata is not None) and (ref_im.nodata != homonim.hom_nodata):
-                _ref_array[_ref_array == ref_im.nodata] = homonim.hom_nodata
+            if (ref_im.nodata is not None) and (ref_im.nodata != default_nodata):
+                _ref_array[_ref_array == ref_im.nodata] = default_nodata
             ref_array = RasterArray.from_profile(_ref_array, ref_im.profile, ref_win)
 
     return ref_array

@@ -23,9 +23,7 @@ import numpy as np
 from rasterio.fill import fillnodata
 from rasterio.warp import Resampling
 
-from homonim import hom_dtype, hom_nodata
-from homonim.raster_array import RasterArray, nan_equals
-
+from homonim.raster_array import RasterArray, nan_equals, default_dtype, default_nodata
 
 class KernelModel():
     def __init__(self, method='gain-im-offset', kernel_shape=(5, 5), debug_raster=False, r2_inpaint_thresh=None,
@@ -55,11 +53,11 @@ class KernelModel():
 
         # if mask is passed, it is assumed invalid pixels in ref_ and src_array have been zeroed
         if mask is None:
-            mask = (nan_equals(src_array, hom_nodata) & nan_equals(ref_array, hom_nodata))
+            mask = (nan_equals(src_array, default_nodata) & nan_equals(ref_array, default_nodata))
             ref_array[~mask] = 0
             src_array[~mask] = 0
         if mask_sum is None:
-            mask_sum = cv.boxFilter(mask.astype(hom_dtype), -1, kernel_shape, **filter_args)
+            mask_sum = cv.boxFilter(mask.astype(default_dtype), -1, kernel_shape, **filter_args)
         if ref_sum is None:
             ref_sum = cv.boxFilter(ref_array, -1, kernel_shape, **filter_args)
         if ref2_sum is None:
@@ -88,7 +86,7 @@ class KernelModel():
         ss_res_array *= mask_sum
 
         if dest_array is None:
-            dest_array = np.full(src_array.shape, fill_value=hom_nodata, dtype=hom_dtype)
+            dest_array = np.full(src_array.shape, fill_value=default_nodata, dtype=default_dtype)
         np.divide(ss_res_array, ss_tot_array, out=dest_array, where=mask)
         np.subtract(1, dest_array, out=dest_array, where=mask)
         return dest_array
@@ -146,8 +144,8 @@ class KernelModel():
         ref_array = ref_ra.array
         src_array = src_ra.array
         param_profile = src_ra.profile.copy()
-        param_profile.update(count=3 if self._debug_raster else 2, nodata=RasterArray.default_nodata,
-                             dtype=RasterArray.default_dtype)
+        param_profile.update(count=3 if self._debug_raster else 2, nodata=default_nodata,
+                             dtype=default_dtype)
         mask = ref_ra.mask & src_ra.mask
         # mask invalid pixels with 0 so that these do not contribute to kernel sums in *boxFilter()
         ref_array[~mask] = 0
@@ -195,7 +193,7 @@ class KernelModel():
 
         offset_model = self._fit_im_offset(ref_ra, src_ra)
         # force nodata to nan so that operation below remains correctly masked
-        src_ra.nodata = RasterArray.default_nodata
+        src_ra.nodata = default_nodata
 
         # apply the offset model
         src_ra.array = (src_ra.array * offset_model[0]) + offset_model[1]
@@ -233,8 +231,8 @@ class KernelModel():
         ref_array = ref_ra.array
         src_array = src_ra.array
         param_profile = src_ra.profile.copy()
-        param_profile.update(count=3 if self._debug_raster else 2, nodata=RasterArray.default_nodata,
-                             dtype=RasterArray.default_dtype)
+        param_profile.update(count=3 if self._debug_raster else 2, nodata=default_nodata,
+                             dtype=default_dtype)
         mask = ref_ra.mask & src_ra.mask
         # mask invalid pixels with 0 so that these do not contribute to kernel sums in *boxFilter()
         ref_array[~mask] = 0
@@ -248,7 +246,7 @@ class KernelModel():
         src_sum = cv.boxFilter(src_array, -1, kernel_shape, **filter_args)
         ref_sum = cv.boxFilter(ref_array, -1, kernel_shape, **filter_args)
         src_ref_sum = cv.boxFilter(src_array * ref_array, -1, kernel_shape, **filter_args)
-        mask_sum = cv.boxFilter(mask.astype(hom_dtype, copy=False), -1, kernel_shape, **filter_args)
+        mask_sum = cv.boxFilter(mask.astype(default_dtype, copy=False), -1, kernel_shape, **filter_args)
         m_num_array = (mask_sum * src_ref_sum) - (src_sum * ref_sum)
 
         # find the denominator for the gain i.e. N*var(src)

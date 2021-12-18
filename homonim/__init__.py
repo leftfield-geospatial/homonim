@@ -32,10 +32,3 @@ def get_logger(name):
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
     return logger
-
-
-"""Internal homonim nodata value"""
-hom_nodata = float('nan')
-
-"""Internal homonim data type"""
-hom_dtype = 'float32'

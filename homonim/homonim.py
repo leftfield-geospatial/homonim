@@ -35,9 +35,9 @@ from rasterio.windows import Window
 from shapely.geometry import box
 from tqdm import tqdm
 
-from homonim import get_logger, hom_dtype, hom_nodata
+from homonim import get_logger
 from homonim.kernel_model import RefSpaceModel, SrcSpaceModel
-from homonim.raster_array import RasterArray, round_window_to_grid, expand_window_to_grid
+from homonim.raster_array import RasterArray, round_window_to_grid, expand_window_to_grid, default_nodata, default_dtype
 
 logger = get_logger(__name__)
 
@@ -207,7 +207,7 @@ class HomonImBase:
 
     def _auto_block_shape(self, src_shape):
         max_block_mem = self._homo_config['max_block_mem'] * (2 ** 20)  # MB to Bytes
-        dtype_size = np.dtype(hom_dtype).itemsize
+        dtype_size = np.dtype(default_dtype).itemsize
 
         div_dim = np.argmax(src_shape)
         block_shape = np.array(src_shape)
@@ -270,7 +270,8 @@ class HomonImBase:
         for key, value in self._out_config.items():
             if value is not None:
                 debug_profile.update(**{key: value})
-        debug_profile.update(dtype=hom_dtype, count=len(self._src_bands) * 3, nodata=hom_nodata, tiled=True)
+        debug_profile.update(dtype=default_dtype, count=len(self._src_bands) * 3,
+                             nodata=default_nodata, tiled=True)
         return debug_profile
 
     def _create_debug_filename(self, filename):
@@ -409,7 +410,7 @@ class HomonImBase:
                                 indexes=self._ref_bands[ovl_block.band_i],
                                 window=ref_in_block
                             )
-                            # ref_ra.nodata = RasterArray.default_nodata  # TODO why is this here?
+                            # ref_ra.nodata = default_nodata  # TODO why is this here?
 
                         param_ra = self._kernel_model.fit(ref_ra, src_ra)
                         out_ra = self._kernel_model.apply(src_ra, param_ra)
