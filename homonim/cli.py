@@ -39,18 +39,22 @@ logger = get_logger(__name__)
 
 class _ConfigFileCommand(click.Command):
     """Class to combine config file with command line parameters"""
-
+    # adapted from https://stackoverflow.com/questions/46358797/python-click-supply-arguments-and-options-from-a-configuration-file/46391887
     def invoke(self, ctx):
         config_file = ctx.params['conf']
         if config_file is not None:
             # overwrite context parameters with values from config file
             with open(config_file) as f:
                 config_dict = yaml.safe_load(f)
-            for param, value in ctx.params.items():
-                param_src = ctx.get_parameter_source(param)
-                if (value is None or param_src == ParameterSource.DEFAULT) and param in config_dict:
-                    ctx.params[param] = config_dict[param]
-
+            for conf_key, conf_value in config_dict.items():
+                if not conf_key in ctx.params:
+                    raise click.BadParameter(f"Unknown config file parameter '{conf_key}'", param="conf",
+                                             param_hint="conf")
+                else:
+                    param_src = ctx.get_parameter_source(conf_key)
+                    if (ctx.params[conf_key] is None or param_src == ParameterSource.DEFAULT):
+                        # overwrite default or None parameters with values from config file
+                        ctx.params[conf_key] = conf_value
         return click.Command.invoke(self, ctx)
 
 
@@ -111,7 +115,7 @@ def _parse_nodata(ctx, param, value):
 @click.option("-mp", "--mask-partial", type=click.BOOL, is_flag=True,
               default=HomonIm.default_homo_config['mask_partial'],
               help=f"Mask output pixels produced from partial kernel, or source image coverage.")
-@click.option("-nmt", "--no-mutlithread", type=click.BOOL, is_flag=True,
+@click.option("-nmt", "--no-mutlithread", "multithread", type=click.BOOL, is_flag=True,
               default=HomonIm.default_homo_config['multithread'],
               help=f"Process image blocks consecutively.")
 @click.option("-mbm", "--max-block-mem", type=click.INT, help="Maximum image block size for processing (MB)",
