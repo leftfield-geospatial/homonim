@@ -59,7 +59,7 @@ class _ConfigFileCommand(click.Command):
 
 
 def _create_homo_postfix(homo_crs=None, method=None, kernel_shape=None):
-    """Create a postfix string for the homogenised raster file"""
+    """Create a postfix string for the homogenised image file"""
     post_fix = f'_HOMO_c{homo_crs.upper()}_m{method.upper()}_k{kernel_shape[0]}_{kernel_shape[1]}.tif'
     return post_fix
 
@@ -98,20 +98,20 @@ def _parse_nodata(ctx, param, value):
 @click.option("-r", "--ref-file", type=click.Path(exists=True, dir_okay=False, readable=True), required=True,
               help="Path to the reference image file.")
 @click.option("-k", "--kernel-shape", type=click.Tuple([click.INT, click.INT]), nargs=2, default=(5, 5),
-              show_default=True, help="Sliding kernel (window) width and height.")
+              show_default=True, help="Sliding kernel (window) width and height (in reference pixels).")
 @click.option("-m", "--method", type=click.Choice(['gain', 'gain-im-offset', 'gain-offset'], case_sensitive=False),
               default='gain-im-offset', show_default=True, help="Homogenisation method.")
 @click.option("-mc", "--model-crs", type=click.Choice(['ref', 'src'], case_sensitive=False), default='ref',
-              show_default=True, help="Derive homogenisation model in ref (reference) or src (source) image CRS.")
+              show_default=True, help="Derive homogenisation model in 'ref' (reference) or 'src' (source) image CRS.")
 @click.option("-od", "--output-dir", type=click.Path(exists=True, file_okay=False, writable=True),
               help="Directory to create homogenised image(s) in. [default: use --src-file directory]")
 @click.option("-nbo", "--no-build-ovw", "build_ovw", type=click.BOOL, is_flag=True, default=True,
               help="Don't build overviews for the created image(s).")
 @click.option("-c", "--conf", type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path),
               required=False, default=None, help="Path to a configuration file.")
-@click.option("-dr", "--debug-raster", type=click.BOOL, is_flag=True,
-              default=HomonIm.default_homo_config['debug_raster'],
-              help=f"Create a debug raster for each source file containing parameter and R\N{SUPERSCRIPT TWO} values.")
+@click.option("-di", "--debug-image", type=click.BOOL, is_flag=True,
+              default=HomonIm.default_homo_config['debug_image'],
+              help=f"Create a debug image for each source file containing parameter and R\N{SUPERSCRIPT TWO} values.")
 @click.option("-mp", "--mask-partial", type=click.BOOL, is_flag=True,
               default=HomonIm.default_homo_config['mask_partial'],
               help=f"Mask output pixels produced from partial kernel, or source image coverage.")
@@ -135,25 +135,25 @@ def _parse_nodata(ctx, param, value):
               default=HomonIm.default_out_profile['driver'], show_default=True, metavar="TEXT",
               help="Output format driver.")
 @click.option("--out-dtype", "dtype", type=click.Choice(list(rio.dtypes.dtype_fwd.values())[1:8], case_sensitive=False),
-              default=HomonIm.default_out_profile['dtype'], show_default=True, help="Output raster data type.")
+              default=HomonIm.default_out_profile['dtype'], show_default=True, help="Output image data type.")
 @click.option("--out-blockxsize", "blockxsize", type=click.INT, default=HomonIm.default_out_profile['blockxsize'],
-              show_default=True, help="Output raster block width.")
+              show_default=True, help="Output image block width.")
 @click.option("--out-blockysize", "blockysize", type=click.INT, default=HomonIm.default_out_profile['blockysize'],
-              show_default=True, help="Output raster block height.")
+              show_default=True, help="Output image block height.")
 @click.option("--out-compress", "compress",
               type=click.Choice([item.value for item in rio.enums.Compression], case_sensitive=False),
               default=HomonIm.default_out_profile['compress'], show_default=True,  # metavar="TEXT",
-              help="Output raster compression.")
+              help="Output image compression.")
 @click.option("--out-interleave", "interleave", type=click.Choice(["pixel", "band"], case_sensitive=False),
               default=HomonIm.default_out_profile['interleave'], show_default=True,
-              help="Output raster data interleaving.")
+              help="Output image data interleaving.")
 @click.option("--out-photometric", "photometric",
               type=click.Choice([item.value for item in rio.enums.PhotometricInterp], case_sensitive=False),
               default=HomonIm.default_out_profile['photometric'], show_default=True,
-              help="Output raster photometric interpretation.")
+              help="Output image photometric interpretation.")
 @click.option("--out-nodata", "nodata", type=click.STRING, callback=_parse_nodata, metavar="[NUMBER|null|nan]",
               default=HomonIm.default_out_profile['nodata'], show_default=True,
-              help="Output raster nodata value.")
+              help="Output image nodata value.")
 def cli(src_file, ref_file, kernel_shape, method, model_crs, output_dir, build_ovw, conf, **kwargs):
     """Radiometrically homogenise image(s) by fusion with reference satellite data"""
 
@@ -180,7 +180,7 @@ def cli(src_file, ref_file, kernel_shape, method, model_crs, output_dir, build_o
             him = HomonIm(src_filename, ref_file, method=method, kernel_shape=kernel_shape, model_crs=model_crs,
                           **config)
 
-            # create output raster filename and homogenise
+            # create output image filename and homogenise
             post_fix = _create_homo_postfix(homo_crs=model_crs, method=method, kernel_shape=kernel_shape)
             homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
             him.homogenise(homo_filename)
@@ -188,7 +188,7 @@ def cli(src_file, ref_file, kernel_shape, method, model_crs, output_dir, build_o
             # set metadata in output file
             him.set_homo_metadata(homo_filename)
 
-            if config['homo_config']['debug_raster']:
+            if config['homo_config']['debug_image']:
                 param_out_filename = him._create_debug_filename(homo_filename)
                 him.set_debug_metadata(param_out_filename)
 
@@ -201,7 +201,7 @@ def cli(src_file, ref_file, kernel_shape, method, model_crs, output_dir, build_o
                 logger.info(f'Building overviews for {homo_filename.name}')
                 him.build_overviews(homo_filename)
 
-                if config['homo_config']['debug_raster']:
+                if config['homo_config']['debug_image']:
                     logger.info(f'Building overviews for {param_out_filename.name}')
                     him.build_overviews(param_out_filename)
 

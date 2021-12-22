@@ -28,7 +28,7 @@ from homonim.raster_array import RasterArray, nan_equals
 class KernelModel():
     default_config = dict(src2ref_interp='cubic_spline', ref2src_interp='average', r2_inpaint_thresh=0.25)
 
-    def __init__(self, method, kernel_shape, debug_raster, r2_inpaint_thresh=default_config['r2_inpaint_thresh'],
+    def __init__(self, method, kernel_shape, debug_image, r2_inpaint_thresh=default_config['r2_inpaint_thresh'],
                  src2ref_interp=default_config['src2ref_interp'], ref2src_interp=default_config['ref2src_interp']):
         if not method in ['gain', 'gain-im-offset', 'gain-offset']:
             raise ValueError('method should be one of "gain", "gain-im-offset" or "gain-offset"')
@@ -37,7 +37,7 @@ class KernelModel():
         if not np.all(np.mod(kernel_shape, 2) == 1):
             raise ValueError('kernel_shape must be odd in both dimensions')
         self._kernel_shape = np.array(kernel_shape).astype(int)
-        self._debug_raster = debug_raster  # TODO: always find R2?
+        self._debug_image = debug_image  # TODO: always find R2?
         self._r2_inpaint_thresh = r2_inpaint_thresh
         self._src2ref_interp = src2ref_interp
         self._ref2src_interp = ref2src_interp
@@ -157,7 +157,7 @@ class KernelModel():
         ref_array = ref_ra.array
         src_array = src_ra.array
         param_profile = src_ra.profile.copy()
-        param_profile.update(count=3 if self._debug_raster else 2, nodata=RasterArray.default_nodata,
+        param_profile.update(count=3 if self._debug_image else 2, nodata=RasterArray.default_nodata,
                              dtype=RasterArray.default_dtype)
         mask = ref_ra.mask & src_ra.mask
         # mask invalid pixels with 0 so that these do not contribute to kernel sums in *boxFilter()
@@ -176,7 +176,7 @@ class KernelModel():
         # find sliding kernel gains, avoiding divide by 0
         np.divide(ref_sum, src_sum, out=param_ra.array[0], where=mask)
 
-        if self._debug_raster:
+        if self._debug_image:
             # Find R2 of the sliding kernel models
             self._r2_array(ref_array, src_array, param_ra.array[:1], mask=mask, ref_sum=ref_sum, src_sum=src_sum,
                            dest_array=param_ra.array[2], kernel_shape=kernel_shape)
@@ -243,7 +243,7 @@ class KernelModel():
         ref_array = ref_ra.array
         src_array = src_ra.array
         param_profile = src_ra.profile.copy()
-        param_count = 3 if self._debug_raster or (self._r2_inpaint_thresh is not None) else 2
+        param_count = 3 if self._debug_image or (self._r2_inpaint_thresh is not None) else 2
         param_profile.update(count=param_count, nodata=RasterArray.default_nodata, dtype=RasterArray.default_dtype)
         mask = ref_ra.mask & src_ra.mask
         # mask invalid pixels with 0 so that these do not contribute to kernel sums in *boxFilter()
@@ -274,7 +274,7 @@ class KernelModel():
         # solve for the offset c = y - mx, given that the linear model passes through (mean(ref), mean(src))
         np.divide(ref_sum - (param_ra.array[0] * src_sum), mask_sum, out=param_ra.array[1], where=mask)
 
-        if (self._debug_raster) or (self._r2_inpaint_thresh is not None):
+        if (self._debug_image) or (self._r2_inpaint_thresh is not None):
             # Find R2 of the sliding kernel models
             self._r2_array(ref_array, src_array, param_ra.array[:2], mask=mask, mask_sum=mask_sum, ref_sum=ref_sum,
                            src_sum=src_sum, src2_sum=src2_sum, src_ref_sum=src_ref_sum, dest_array=param_ra.array[2],

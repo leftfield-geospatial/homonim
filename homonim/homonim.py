@@ -38,7 +38,7 @@ from tqdm import tqdm
 from homonim import get_logger
 from homonim.kernel_model import KernelModel, RefSpaceModel, SrcSpaceModel
 from homonim.raster_array import RasterArray, round_window_to_grid, expand_window_to_grid
-from homonim.errors import UnsupportedRasterError, RasterContentError, BlockSizeError
+from homonim.errors import UnsupportedImageError, ImageContentError, BlockSizeError
 
 logger = get_logger(__name__)
 
@@ -47,7 +47,7 @@ OvlBlock = namedtuple('OvlBlock', ['band_i', 'src_in_block', 'src_out_block', 'o
 
 
 class HomonIm(object):
-    default_homo_config = dict(debug_raster=False, mask_partial=False, multithread=True, max_block_mem=100)
+    default_homo_config = dict(debug_image=False, mask_partial=False, multithread=True, max_block_mem=100)
     default_out_profile = dict(driver='GTiff', dtype=RasterArray.default_dtype, blockxsize=512, blockysize=512,
                                compress='deflate', interleave='band', photometric=None,
                                nodata=RasterArray.default_nodata)
@@ -92,10 +92,10 @@ class HomonIm(object):
 
         if model_crs == 'ref':
             self._model = RefSpaceModel(method=method, kernel_shape=kernel_shape,
-                                        debug_raster=self._config['debug_raster'], **model_config)
+                                        debug_image=self._config['debug_image'], **model_config)
         elif model_crs == 'src':
             self._model = SrcSpaceModel(method=method, kernel_shape=kernel_shape,
-                                        debug_raster=self._config['debug_raster'], **model_config)
+                                        debug_image=self._config['debug_image'], **model_config)
         else:
             raise ValueError(f'Unknown "model_crs" option "{model_crs}"')
 
@@ -126,7 +126,7 @@ class HomonIm(object):
                         tmp_array = im.read(1, window=im.block_window(1, 0, 0))
                     except Exception as ex:
                         if im.profile['compress'] == 'jpeg':  # assume it is a 12bit JPEG
-                            raise UnsupportedRasterError(f'Could not read {filename.stem}\n'
+                            raise UnsupportedImageError(f'Could not read {filename.stem}\n'
                                             f'    This GDAL package does not support JPEG compression with NBITS==12\n'
                                             f'    you probably need to recompress this file.\n'
                                             f'    See the README for details.')
@@ -146,7 +146,7 @@ class HomonIm(object):
                     ref_box = box(*ref_im.bounds)
 
                     if not ref_box.covers(src_box):
-                        raise RasterContentError(f'Reference image {self._ref_filename.stem} does not cover source image '
+                        raise ImageContentError(f'Reference image {self._ref_filename.stem} does not cover source image '
                                         f'{self._src_filename.stem}.')
 
                     # make lists of non-alpha bands for ref and src
@@ -157,7 +157,7 @@ class HomonIm(object):
 
                     # check ref image has enough bands
                     if len(self._src_bands) > len(self._ref_bands):
-                        raise RasterContentError(f'Reference image {self._ref_filename.stem} has fewer non-alpha bands '
+                        raise ImageContentError(f'Reference image {self._ref_filename.stem} has fewer non-alpha bands '
                                                  f'than source image {self._src_filename.stem}.')
 
                     # if the band counts don't match, use the first len(src_band_list) of ref image
@@ -232,7 +232,7 @@ class HomonIm(object):
         return ovl_blocks
 
     def _create_out_profile(self, init_profile):
-        """Create a rasterio profile for the output raster based on a starting profile and configuration"""
+        """Create a rasterio profile for the output image based on a starting profile and configuration"""
         out_profile = init_profile.copy()
         out_profile['count'] = len(self._src_bands)
         for key, value in self._out_profile.items():
@@ -242,7 +242,7 @@ class HomonIm(object):
         return out_profile
 
     def _create_debug_profile(self, src_profile, ref_profile):
-        """Create a rasterio profile for the debug parameter raster based on a reference or source profile"""
+        """Create a rasterio profile for the debug parameter image based on a reference or source profile"""
         if self._model_crs == 'ref':
             debug_profile = ref_profile.copy()
         else:
@@ -256,18 +256,18 @@ class HomonIm(object):
         return debug_profile
 
     def _create_debug_filename(self, filename):
-        """Return a debug parameter raster filename, given the homogenised raster filename"""
+        """Return a debug image filename, given the homogenised image filename"""
         filename = pathlib.Path(filename)
         return filename.parent.joinpath(f'{filename.stem}_DEBUG{filename.suffix}')
 
     def build_overviews(self, filename):
         """
-        Builds internal overviews for a existing raster file.
+        Builds internal overviews for a existing image file.
 
         Parameters
         ----------
         filename: str, pathlib.Path
-                  Path to the raster file to build overviews for.
+                  Path to the image file to build overviews for.
         """
         filename = pathlib.Path(filename)
 
@@ -278,12 +278,12 @@ class HomonIm(object):
 
     def set_homo_metadata(self, filename):
         """
-        Copy various metadata to a homogenised raster (GeoTIFF) file.
+        Copy various metadata to a homogenised image (GeoTIFF) file.
 
         Parameters
         ----------
         filename: str, pathlib.Path
-                  Path to the GeoTIFF raster file to copy metadata to.
+                  Path to the GeoTIFF image file to copy metadata to.
         """
         filename = pathlib.Path(filename)
         meta_dict = dict(HOMO_SRC_FILE=self._src_filename.name, HOMO_REF_FILE=self._ref_filename.name,
@@ -305,12 +305,12 @@ class HomonIm(object):
 
     def set_debug_metadata(self, filename):
         """
-        Copy various metadata to a homogenised raster (GeoTIFF) file.
+        Copy various metadata to a homogenised image (GeoTIFF) file.
 
         Parameters
         ----------
         filename: str, pathlib.Path
-                  Path to the GeoTIFF raster file to copy metadata to.
+                  Path to the GeoTIFF image file to copy metadata to.
         """
         filename = pathlib.Path(filename)
         meta_dict = dict(HOMO_SRC_FILE=self._src_filename.name, HOMO_REF_FILE=self._ref_filename.name,
@@ -337,12 +337,12 @@ class HomonIm(object):
 
     def homogenise(self, out_filename):
         """
-        Homogenise a raster file by block.
+        Homogenise an image file by block.
 
         Parameters
         ----------
         out_filename: str, pathlib.Path
-                      Path of the homogenised raster file to create.
+                      Path of the homogenised image file to create.
         """
         ovl_blocks = self._create_ovl_blocks()
         bar = tqdm(total=len(ovl_blocks) + 1)
@@ -362,13 +362,13 @@ class HomonIm(object):
                     proc_profile = cProfile.Profile()
                     proc_profile.enable()
 
-                if self._config['debug_raster']:
-                    # create debug raster file
+                if self._config['debug_image']:
+                    # create debug image file
                     dbg_profile = self._create_debug_profile(src_im.profile, ref_im.profile)
                     dbg_out_file_name = self._create_debug_filename(out_filename)
                     dbg_im = rio.open(dbg_out_file_name, 'w', **dbg_profile)
 
-                # create the output raster file
+                # create the output image file
                 out_profile = self._create_out_profile(src_im.profile)
                 out_im = rio.open(out_filename, 'w',
                                   **out_profile)  # avoid too many nested indents with 'with' statements
@@ -405,7 +405,7 @@ class HomonIm(object):
                             out_im.write(out_array, window=ovl_block.src_out_block, indexes=ovl_block.band_i + 1)
                             bar.update(1)
 
-                        if self._config['debug_raster']:
+                        if self._config['debug_image']:
                             with dbg_lock:
                                 src_out_bounds = src_im.window_bounds(ovl_block.src_out_block)
                                 dbg_out_block = round_window_to_grid(dbg_im.window(*src_out_bounds))
@@ -430,7 +430,7 @@ class HomonIm(object):
                             process_block(ovl_block)
                 finally:
                     out_im.close()
-                    if self._config['debug_raster']:
+                    if self._config['debug_image']:
                         dbg_im.close()
                     bar.update(1)
                     bar.close()

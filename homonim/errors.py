@@ -20,14 +20,14 @@
 class HomonimError(Exception):
     """Root exception class"""
 
-class UnsupportedRasterError(HomonimError):
-    """Raised when reading a 12bit jpeg compressed raster"""
+class UnsupportedImageError(HomonimError):
+    """Raised when reading a 12bit jpeg compressed image"""
 
-class RasterContentError(HomonimError):
+class ImageContentError(HomonimError):
     """Raised when reference image has insufficient coverage or bands"""
 
 class BlockSizeError(HomonimError):
     """Raised when the image block size is invalid"""
 
-class RasterProfileError(HomonimError):
-    """Raised when a raster profile invalid"""
+class ImageProfileError(HomonimError):
+    """Raised when a image profile invalid"""

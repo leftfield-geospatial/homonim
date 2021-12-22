@@ -27,7 +27,7 @@ from rasterio.crs import CRS
 from rasterio.enums import MaskFlags
 from rasterio.warp import reproject, Resampling
 from rasterio.windows import Window
-from homonim.errors import RasterProfileError
+from homonim.errors import ImageProfileError
 
 
 def nan_equals(a, b, equal_nan=True):
@@ -118,10 +118,10 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
     @classmethod
     def from_profile(cls, array, profile, window=None):
         if not ('crs' and 'transform' and 'nodata' in profile):
-            raise RasterProfileError('"profile" should include "crs", "transform" and "nodata" keys')
+            raise ImageProfileError('"profile" should include "crs", "transform" and "nodata" keys')
         if array is None:  # create array filled with nodata
             if not ('width' and 'height' and 'count' and 'dtype' in profile):
-                raise RasterProfileError('"profile" should include "width", "height", "count" and "dtype" keys')
+                raise ImageProfileError('"profile" should include "width", "height", "count" and "dtype" keys')
             array_shape = (profile['count'], profile['height'], profile['width'])
             array = np.full(array_shape, fill_value=profile['nodata'], dtype=profile['dtype'])
         return cls(array, profile['crs'], profile['transform'], nodata=profile['nodata'], window=window)
