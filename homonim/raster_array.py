@@ -27,7 +27,7 @@ from rasterio.crs import CRS
 from rasterio.enums import MaskFlags
 from rasterio.warp import reproject, Resampling
 from rasterio.windows import Window
-from types import SimpleNamespace
+from homonim.errors import RasterProfileError
 
 
 def nan_equals(a, b, equal_nan=True):
@@ -92,17 +92,17 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
     def __init__(self, array, crs, transform, nodata=default_nodata, window=None):
         # array = np.array(array)
         if (array.ndim < 2) or (array.ndim > 3):
-            raise ValueError('`array` must be a 2D or 3D numpy array')
+            raise ValueError('"array" must be have 2 or 3 dimensions with bands along the first dimension')
         self._array = array
 
         if window is not None:
             if (window.height, window.width) != array.shape[-2:]:
-                raise ValueError('window and array dimensions must match')
+                raise ValueError('"window" and "array" width and height must match')
 
         if isinstance(crs, CRS):
             self._crs = crs
         else:
-            raise TypeError('crs must be an instance of rasterio.CRS')
+            raise TypeError('"crs" must be an instance of rasterio.CRS')
 
         if isinstance(transform, Affine):
             if window is not None:
@@ -110,7 +110,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
             else:
                 self._transform = transform
         else:
-            raise TypeError('transform must be an instance of rasterio.Affine')
+            raise TypeError('"transform" must be an instance of rasterio.Affine')
 
         self._nodata = nodata
         self._nodata_mask = None
@@ -118,13 +118,10 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
     @classmethod
     def from_profile(cls, array, profile, window=None):
         if not ('crs' and 'transform' and 'nodata' in profile):
-            raise Exception('profile should include crs, transform and nodata keys')
+            raise RasterProfileError('"profile" should include "crs", "transform" and "nodata" keys')
         if array is None:  # create array filled with nodata
             if not ('width' and 'height' and 'count' and 'dtype' in profile):
-                raise Exception('profile should include width, height, count and dtype keys')
-            # if profile['count'] == 1:
-            #     array_shape = (profile['height'], profile['width'])
-            # else:
+                raise RasterProfileError('"profile" should include "width", "height", "count" and "dtype" keys')
             array_shape = (profile['count'], profile['height'], profile['width'])
             array = np.full(array_shape, fill_value=profile['nodata'], dtype=profile['dtype'])
         return cls(array, profile['crs'], profile['transform'], nodata=profile['nodata'], window=window)
@@ -156,7 +153,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         if np.all(value.shape[-2:] == self._array.shape[-2:]):
             self._array = value
         else:
-            raise ValueError('value and array width and height must match')
+            raise ValueError('"value" and current width and height must match')
 
     @property
     def crs(self):
@@ -258,7 +255,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
                   resampling=Resampling.lanczos):
 
         if transform and not shape:
-            raise ValueError('If transform is specified, shape must also be specified')
+            raise ValueError('If "transform" is specified, "shape" must also be specified')
 
         if isinstance(resampling, str):
             resampling = Resampling[resampling]

@@ -38,6 +38,7 @@ from tqdm import tqdm
 from homonim import get_logger
 from homonim.kernel_model import KernelModel, RefSpaceModel, SrcSpaceModel
 from homonim.raster_array import RasterArray, round_window_to_grid, expand_window_to_grid
+from homonim.errors import UnsupportedRasterError, RasterContentError, BlockSizeError
 
 logger = get_logger(__name__)
 
@@ -96,7 +97,7 @@ class HomonIm(object):
             self._model = SrcSpaceModel(method=method, kernel_shape=kernel_shape,
                                         debug_raster=self._config['debug_raster'], **model_config)
         else:
-            raise ValueError(f'Unknown model_crs option "{model_crs}"')
+            raise ValueError(f'Unknown "model_crs" option "{model_crs}"')
 
     @property
     def method(self):
@@ -113,9 +114,9 @@ class HomonIm(object):
     def _check_rasters(self):
         """Check bounds, band count, and compression type of source and reference images"""
         if not self._src_filename.exists():
-            raise Exception(f'Source file {self._src_filename.stem} does not exist')
+            raise FileNotFoundError(f'Source file {self._src_filename.stem} does not exist')
         if not self._ref_filename.exists():
-            raise Exception(f'Reference file {self._ref_filename.stem} does not exist')
+            raise FileNotFoundError(f'Reference file {self._ref_filename.stem} does not exist')
 
         # check we can read the images
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
@@ -125,7 +126,7 @@ class HomonIm(object):
                         tmp_array = im.read(1, window=im.block_window(1, 0, 0))
                     except Exception as ex:
                         if im.profile['compress'] == 'jpeg':  # assume it is a 12bit JPEG
-                            raise Exception(f'Could not read {filename.stem}\n'
+                            raise UnsupportedRasterError(f'Could not read {filename.stem}\n'
                                             f'    This GDAL package does not support JPEG compression with NBITS==12\n'
                                             f'    you probably need to recompress this file.\n'
                                             f'    See the README for details.')
@@ -145,7 +146,7 @@ class HomonIm(object):
                     ref_box = box(*ref_im.bounds)
 
                     if not ref_box.covers(src_box):
-                        raise Exception(f'Reference image {self._ref_filename.stem} does not cover source image '
+                        raise RasterContentError(f'Reference image {self._ref_filename.stem} does not cover source image '
                                         f'{self._src_filename.stem}.')
 
                     # make lists of non-alpha bands for ref and src
@@ -156,8 +157,8 @@ class HomonIm(object):
 
                     # check ref image has enough bands
                     if len(self._src_bands) > len(self._ref_bands):
-                        raise Exception(f'Reference image {self._ref_filename.stem} has fewer non-alpha bands than '
-                                        f'source image {self._src_filename.stem}.')
+                        raise RasterContentError(f'Reference image {self._ref_filename.stem} has fewer non-alpha bands '
+                                                 f'than source image {self._src_filename.stem}.')
 
                     # if the band counts don't match, use the first len(src_band_list) of ref image
                     if len(self._src_bands) != len(self._ref_bands):
@@ -206,8 +207,8 @@ class HomonIm(object):
                 ovl_blocks = []
                 block_shape = self._auto_block_shape(src_im.shape)
                 if np.any(block_shape <= src_kernel_shape):
-                    raise Exception('Block size is less than kernel size, increase `max_block_mem` or decrease '
-                                    '`kernel_shape`')
+                    raise BlockSizeError('Block size is less than kernel size, increase `max_block_mem` or decrease '
+                                         '`kernel_shape`')
 
                 for band_i in range(len(self._src_bands)):
                     for ul_row, ul_col in product(range(-overlap[0], (src_shape[0] - 2 * overlap[0]), block_shape[0]),
@@ -290,7 +291,7 @@ class HomonIm(object):
                          HOMO_CONF=str(self._config), HOMO_MODEL_CONF=str(self._model.config))
 
         if not filename.exists():
-            raise Exception(f'{filename} does not exist')
+            raise FileNotFoundError(f'{filename} does not exist')
 
         with rio.open(self._ref_filename, 'r') as ref_im, rio.open(filename, 'r+') as homo_im:
             # Set user-supplied metadata
@@ -318,7 +319,7 @@ class HomonIm(object):
                          HOMO_CONF=str(self._config), HOMO_MODEL_CONF=str(self._model.config))
 
         if not filename.exists():
-            raise Exception(f'{filename} does not exist')
+            raise FileNotFoundError(f'{filename} does not exist')
 
         with rio.open(self._ref_filename, 'r') as ref_im, rio.open(filename, 'r+') as dbg_im:
             # Set user-supplied metadata

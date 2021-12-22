@@ -166,7 +166,8 @@ def cli(src_file, ref_file, kernel_shape, method, model_crs, output_dir, build_o
     for src_file_spec in src_file:
         src_file_path = pathlib.Path(src_file_spec)
         if len(list(src_file_path.parent.glob(src_file_path.name))) == 0:
-            raise Exception(f'Could not find any source image(s) matching {src_file_spec}')
+            raise click.BadParameter(f'Could not find any source image(s) matching {src_file_spec}', param="src_file",
+                                     param_hint="src_file")
 
         for src_filename in src_file_path.parent.glob(src_file_path.name):
             if output_dir is not None:
