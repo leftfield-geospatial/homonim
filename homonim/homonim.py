@@ -176,12 +176,15 @@ class HomonIm(object):
 
                     if np.any(src_im.res >= ref_im.res) and (self._model_crs == 'ref'):
                         logger.warning('Source image resolution is coarser than reference image resolution, '
-                                       'space="src" is recommended.')
+                                       'model_crs="src" is recommended.')
                     elif np.any(src_im.res < ref_im.res) and (self._model_crs == 'src'):
                         logger.warning('Source image resolution is finer than reference image resolution, '
-                                       'space="ref" is recommended.')
+                                       'model_crs="ref" is recommended.')
 
-                    ref_win = expand_window_to_grid(ref_im.window(*src_im.bounds), expand_pixels=1)
+                    ref_win = expand_window_to_grid(
+                        ref_im.window(*src_im.bounds),
+                        expand_pixels=np.ceil(np.divide(src_im.res, ref_im.res)).astype('int')
+                    )
                     ref_transform = ref_im.window_transform(ref_win)
                     self._ref_warped_vrt_dict = dict(crs=src_im.crs, transform=ref_transform, width=ref_win.width,
                                                      height=ref_win.height, resampling=Resampling.bilinear)
@@ -201,14 +204,15 @@ class HomonIm(object):
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
             with WarpedVRT(rio.open(self._ref_filename, 'r'), **self._ref_warped_vrt_dict) as ref_im:
                 src_shape = np.array(src_im.shape)
+                # TODO deal with res_ratio < 1 (everywhere), and also src_kernel_shape even with model_crs='src'
+                src_kernel_shape = np.ceil(self._kernel_shape * np.divide(ref_im.res, src_im.res)).astype(int)
                 res_ratio = np.ceil(np.divide(ref_im.res, src_im.res)).astype(int)
-                src_kernel_shape = (self._kernel_shape * res_ratio).astype(int)
                 overlap = np.ceil(res_ratio + src_kernel_shape / 2).astype(int)
                 ovl_blocks = []
                 block_shape = self._auto_block_shape(src_im.shape)
                 if np.any(block_shape <= src_kernel_shape):
-                    raise BlockSizeError('Block size is less than kernel size, increase `max_block_mem` or decrease '
-                                         '`kernel_shape`')
+                    raise BlockSizeError('Block size is less than kernel size, increase "max_block_mem" or decrease '
+                                         '"kernel_shape"')
 
                 for band_i in range(len(self._src_bands)):
                     for ul_row, ul_col in product(range(-overlap[0], (src_shape[0] - 2 * overlap[0]), block_shape[0]),
@@ -216,7 +220,8 @@ class HomonIm(object):
                         ul = np.array((ul_row, ul_col))
                         br = ul + block_shape + (2 * overlap)
                         # include a ref pixel beyond src boundary to allow ref-space reprojections there
-                        src_ul = np.fmax(ul, - res_ratio)
+                        # TODO rethink this, and the implications for src res > ref res
+                        src_ul = np.fmax(ul, -res_ratio)
                         src_br = np.fmin(br, src_shape + res_ratio)
                         src_block_shape = np.subtract(src_br, src_ul)
                         outer = np.any(src_ul <= 0) or np.any(src_br >= src_shape)
@@ -386,6 +391,7 @@ class HomonIm(object):
 
                         with ref_read_lock:
                             src_in_bounds = src_im.window_bounds(ovl_block.src_in_block)
+                            # TODO: if src res >> ref res, ref_in_block can extend beyond ref limits
                             ref_in_block = round_window_to_grid(ref_im.window(*src_in_bounds))
                             ref_ra = RasterArray.from_rio_dataset(
                                 ref_im,
