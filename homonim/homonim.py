@@ -36,8 +36,8 @@ from shapely.geometry import box
 from tqdm import tqdm
 
 from homonim import get_logger
-from homonim.kernel_model import RefSpaceModel, SrcSpaceModel
-from homonim.raster_array import RasterArray, round_window_to_grid, expand_window_to_grid, default_nodata, default_dtype
+from homonim.kernel_model import KernelModel, RefSpaceModel, SrcSpaceModel
+from homonim.raster_array import RasterArray, round_window_to_grid, expand_window_to_grid
 
 logger = get_logger(__name__)
 
@@ -45,9 +45,16 @@ logger = get_logger(__name__)
 OvlBlock = namedtuple('OvlBlock', ['band_i', 'src_in_block', 'src_out_block', 'outer'])
 
 
-class HomonImBase:
-    def __init__(self, src_filename, ref_filename, method='gain-offset', kernel_shape=(15, 15), space='ref',
-                 homo_config=None, model_config=None, out_config=None):
+class HomonIm(object):
+    default_homo_config = dict(debug_raster=False, mask_partial=False, multithread=True, max_block_mem=100)
+    default_out_profile = dict(driver='GTiff', dtype=RasterArray.default_dtype, blockxsize=512, blockysize=512,
+                               compress='deflate', interleave='band', photometric=None,
+                               nodata=RasterArray.default_nodata)
+    default_model_config = KernelModel.default_config
+
+    def __init__(self, src_filename, ref_filename, method, kernel_shape, model_crs='ref',
+                 homo_config=default_homo_config,
+                 model_config=default_model_config, out_profile=default_out_profile):
         """
         Class for homogenising images
 
@@ -57,12 +64,13 @@ class HomonImBase:
             Source image filename.
         ref_filename: str, pathlib.Path
             Reference image filename.
-        homo_config: dict, optional
-            Dictionary for advanced homogenisation configuration ().
-        out_config: dict, optional
-            Dictionary for configuring output file format.
+        homo_config: HomoConfig, optional
+
+        model_config: ModelConfig, optional
+
+        out_profile: OutConfig, optional
+
         """
-        # TODO: refactor which parameters get passed here, and which to homogenise()
         self._src_filename = pathlib.Path(src_filename)
         self._ref_filename = pathlib.Path(ref_filename)
         if not method in ['gain', 'gain-im-offset', 'gain-offset']:
@@ -71,52 +79,24 @@ class HomonImBase:
         if not np.all(np.mod(kernel_shape, 2) == 1):
             raise ValueError('kernel_shape must be odd in both dimensions')
         self._kernel_shape = np.array(kernel_shape).astype(int)
-
-        if homo_config is None:
-            self._homo_config = {
-                'debug_raster': False,
-                'mask_partial': False,
-                'multithread': True,
-                'max_block_mem': 100,
-            }
-        else:
-            self._homo_config = homo_config
-
-        if model_config is None:
-            model_config = {
-                'src2ref_interp': 'cubic_spline',
-                'ref2src_interp': 'average',
-                'r2_inpaint_thresh': 0.25,
-            }
-
-        if out_config is None:
-            self._out_config = {
-                'driver': 'GTiff',
-                'dtype': 'float32',
-                'tile_size': [512, 512],
-                'compress': 'deflate',
-                'interleave': 'band',
-                'photometric': None,
-                'nodata': np.nan,
-            }
-        else:
-            self._out_config = out_config
+        self._config = homo_config
+        self._out_profile = out_profile
 
         self._ref_bands = None
         self._src_bands = None
         self._ref_warped_vrt_dict = None
         self._profile = False
-        self._space = space
+        self._model_crs = model_crs
         self._check_rasters()
 
-        if space == 'ref':
-            self._kernel_model = RefSpaceModel(method=method, kernel_shape=kernel_shape,
-                                               debug_raster=self._homo_config['debug_raster'], **model_config)
-        elif space == 'src':
-            self._kernel_model = SrcSpaceModel(method=method, kernel_shape=kernel_shape,
-                                               debug_raster=self._homo_config['debug_raster'], **model_config)
+        if model_crs == 'ref':
+            self._model = RefSpaceModel(method=method, kernel_shape=kernel_shape,
+                                        debug_raster=self._config['debug_raster'], **model_config)
+        elif model_crs == 'src':
+            self._model = SrcSpaceModel(method=method, kernel_shape=kernel_shape,
+                                        debug_raster=self._config['debug_raster'], **model_config)
         else:
-            raise ValueError(f'Unknown space option "{space}"')
+            raise ValueError(f'Unknown model_crs option "{model_crs}"')
 
     @property
     def method(self):
@@ -128,7 +108,7 @@ class HomonImBase:
 
     @property
     def space(self):
-        return self._space
+        return self._model_crs
 
     def _check_rasters(self):
         """Check bounds, band count, and compression type of source and reference images"""
@@ -193,10 +173,10 @@ class HomonImBase:
                                            'Any invalid pixels in this image should be first be masked using a '
                                            'nodata value (recommended), internal/side-car mask or alpha band.')
 
-                    if np.any(src_im.res >= ref_im.res) and (self._space == 'ref'):
+                    if np.any(src_im.res >= ref_im.res) and (self._model_crs == 'ref'):
                         logger.warning('Source image resolution is coarser than reference image resolution, '
                                        'space="src" is recommended.')
-                    elif np.any(src_im.res < ref_im.res) and (self._space == 'src'):
+                    elif np.any(src_im.res < ref_im.res) and (self._model_crs == 'src'):
                         logger.warning('Source image resolution is finer than reference image resolution, '
                                        'space="ref" is recommended.')
 
@@ -206,8 +186,8 @@ class HomonImBase:
                                                      height=ref_win.height, resampling=Resampling.bilinear)
 
     def _auto_block_shape(self, src_shape):
-        max_block_mem = self._homo_config['max_block_mem'] * (2 ** 20)  # MB to Bytes
-        dtype_size = np.dtype(default_dtype).itemsize
+        max_block_mem = self._config['max_block_mem'] * (2 ** 20)  # MB to Bytes
+        dtype_size = np.dtype(RasterArray.default_dtype).itemsize
 
         div_dim = np.argmax(src_shape)
         block_shape = np.array(src_shape)
@@ -220,7 +200,7 @@ class HomonImBase:
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
             with WarpedVRT(rio.open(self._ref_filename, 'r'), **self._ref_warped_vrt_dict) as ref_im:
                 src_shape = np.array(src_im.shape)
-                res_ratio = np.ceil(np.array(ref_im.res) / np.array(src_im.res)).astype(int)
+                res_ratio = np.ceil(np.divide(ref_im.res, src_im.res)).astype(int)
                 src_kernel_shape = (self._kernel_shape * res_ratio).astype(int)
                 overlap = np.ceil(res_ratio + src_kernel_shape / 2).astype(int)
                 ovl_blocks = []
@@ -235,7 +215,7 @@ class HomonImBase:
                         ul = np.array((ul_row, ul_col))
                         br = ul + block_shape + (2 * overlap)
                         # include a ref pixel beyond src boundary to allow ref-space reprojections there
-                        src_ul = np.fmax(ul, -res_ratio)
+                        src_ul = np.fmax(ul, - res_ratio)
                         src_br = np.fmin(br, src_shape + res_ratio)
                         src_block_shape = np.subtract(src_br, src_ul)
                         outer = np.any(src_ul <= 0) or np.any(src_br >= src_shape)
@@ -254,7 +234,7 @@ class HomonImBase:
         """Create a rasterio profile for the output raster based on a starting profile and configuration"""
         out_profile = init_profile.copy()
         out_profile['count'] = len(self._src_bands)
-        for key, value in self._out_config.items():
+        for key, value in self._out_profile.items():
             if value is not None:
                 out_profile.update(**{key: value})
         out_profile.update(tiled=True)
@@ -262,16 +242,16 @@ class HomonImBase:
 
     def _create_debug_profile(self, src_profile, ref_profile):
         """Create a rasterio profile for the debug parameter raster based on a reference or source profile"""
-        if self._space == 'ref':
+        if self._model_crs == 'ref':
             debug_profile = ref_profile.copy()
         else:
             debug_profile = src_profile.copy()
 
-        for key, value in self._out_config.items():
+        for key, value in self._out_profile.items():
             if value is not None:
                 debug_profile.update(**{key: value})
-        debug_profile.update(dtype=default_dtype, count=len(self._src_bands) * 3,
-                             nodata=default_nodata, tiled=True)
+        debug_profile.update(dtype=RasterArray.default_dtype, count=len(self._src_bands) * 3,
+                             nodata=RasterArray.default_nodata, tiled=True)
         return debug_profile
 
     def _create_debug_filename(self, filename):
@@ -306,8 +286,8 @@ class HomonImBase:
         """
         filename = pathlib.Path(filename)
         meta_dict = dict(HOMO_SRC_FILE=self._src_filename.name, HOMO_REF_FILE=self._ref_filename.name,
-                         HOMO_SPACE=self._space, HOMO_METHOD=self._method, HOMO_KENREL_SHAPE=self._kernel_shape,
-                         HOMO_CONF=str(self._homo_config), MODEL_CONF=str(self._kernel_model.config))
+                         HOMO_SPACE=self._model_crs, HOMO_METHOD=self._method, HOMO_KERNEL_SHAPE=self._kernel_shape,
+                         HOMO_CONF=str(self._config), HOMO_MODEL_CONF=str(self._model.config))
 
         if not filename.exists():
             raise Exception(f'{filename} does not exist')
@@ -333,8 +313,9 @@ class HomonImBase:
         """
         filename = pathlib.Path(filename)
         meta_dict = dict(HOMO_SRC_FILE=self._src_filename.name, HOMO_REF_FILE=self._ref_filename.name,
-                         HOMO_SPACE=self._space, HOMO_METHOD=self._method, HOMO_KENREL_SHAPE=self._kernel_shape,
-                         HOMO_CONF=str(self._homo_config), MODEL_CONF=str(self._kernel_model.config))
+                         HOMO_SPACE=self._model_crs, HOMO_METHOD=self._method,
+                         HOMO_KERNEL_SHAPE=tuple(self._kernel_shape),
+                         HOMO_CONF=str(self._config), HOMO_MODEL_CONF=str(self._model.config))
 
         if not filename.exists():
             raise Exception(f'{filename} does not exist')
@@ -380,7 +361,7 @@ class HomonImBase:
                     proc_profile = cProfile.Profile()
                     proc_profile.enable()
 
-                if self._homo_config['debug_raster']:
+                if self._config['debug_raster']:
                     # create debug raster file
                     dbg_profile = self._create_debug_profile(src_im.profile, ref_im.profile)
                     dbg_out_file_name = self._create_debug_filename(out_filename)
@@ -410,13 +391,12 @@ class HomonImBase:
                                 indexes=self._ref_bands[ovl_block.band_i],
                                 window=ref_in_block
                             )
-                            # ref_ra.nodata = default_nodata  # TODO why is this here?
 
-                        param_ra = self._kernel_model.fit(ref_ra, src_ra)
-                        out_ra = self._kernel_model.apply(src_ra, param_ra)
+                        param_ra = self._model.fit(ref_ra, src_ra)
+                        out_ra = self._model.apply(src_ra, param_ra)
                         out_ra.mask = src_ra.mask
-                        if ovl_block.outer and self._homo_config['mask_partial']:
-                            out_ra = self._kernel_model.mask_partial(out_ra, ref_ra.res)
+                        if ovl_block.outer and self._config['mask_partial']:
+                            out_ra = self._model.mask_partial(out_ra, ref_ra.res)
                         out_ra.nodata = out_im.nodata
 
                         with write_lock:
@@ -424,7 +404,7 @@ class HomonImBase:
                             out_im.write(out_array, window=ovl_block.src_out_block, indexes=ovl_block.band_i + 1)
                             bar.update(1)
 
-                        if self._homo_config['debug_raster']:
+                        if self._config['debug_raster']:
                             with dbg_lock:
                                 src_out_bounds = src_im.window_bounds(ovl_block.src_out_block)
                                 dbg_out_block = round_window_to_grid(dbg_im.window(*src_out_bounds))
@@ -432,7 +412,7 @@ class HomonImBase:
                                 indexes = np.arange(param_ra.count) * len(self._src_bands) + ovl_block.band_i + 1
                                 dbg_im.write(dbg_array, window=dbg_out_block, indexes=indexes)
 
-                    if self._homo_config['multithread']:
+                    if self._config['multithread']:
                         # process bands in concurrent threads
                         future_list = []
                         with concurrent.futures.ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
@@ -449,7 +429,7 @@ class HomonImBase:
                             process_block(ovl_block)
                 finally:
                     out_im.close()
-                    if self._homo_config['debug_raster']:
+                    if self._config['debug_raster']:
                         dbg_im.close()
                     bar.update(1)
                     bar.close()

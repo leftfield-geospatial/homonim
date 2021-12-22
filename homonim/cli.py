@@ -22,10 +22,14 @@ import pathlib
 
 import click
 import numpy as np
+import rasterio as rio
 import yaml
+from click.core import ParameterSource
+from rasterio.warp import SUPPORTED_RESAMPLING
 
-from homonim import homonim
-from homonim import root_path, get_logger
+from homonim import get_logger
+from homonim.homonim import HomonIm
+from homonim.kernel_model import KernelModel
 
 # print formatting
 np.set_printoptions(precision=4)
@@ -33,105 +37,126 @@ np.set_printoptions(suppress=True)
 logger = get_logger(__name__)
 
 
-def _create_homo_postfix(space=None, method=None, kernel_shape=None):
+class _ConfigFileCommand(click.Command):
+    """Class to combine config file with command line parameters"""
+
+    def invoke(self, ctx):
+        config_file = ctx.params['conf']
+        if config_file is not None:
+            # overwrite context parameters with values from config file
+            with open(config_file) as f:
+                config_dict = yaml.safe_load(f)
+            for param, value in ctx.params.items():
+                param_src = ctx.get_parameter_source(param)
+                if (value is None or param_src == ParameterSource.DEFAULT) and param in config_dict:
+                    ctx.params[param] = config_dict[param]
+
+        return click.Command.invoke(self, ctx)
+
+
+def _create_homo_postfix(homo_crs=None, method=None, kernel_shape=None):
     """Create a postfix string for the homogenised raster file"""
-    if space == 'ref-space':
-        post_fix = f'_HOMO_sREF_m{method.upper()}_k{kernel_shape[0]}_{kernel_shape[1]}.tif'
-    else:
-        post_fix = f'_HOMO_sSRC_m{method.upper()}_k{kernel_shape[0]}_{kernel_shape[1]}.tif'
+    post_fix = f'_HOMO_c{homo_crs.upper()}_m{method.upper()}_k{kernel_shape[0]}_{kernel_shape[1]}.tif'
     return post_fix
 
 
-@click.command()
-@click.option(
-    "-s",
-    "--src-file",
-    type=click.Path(exists=False),  # check below
-    help="path(s) or wildcard pattern(s) specifying the source image file(s)",
-    required=True,
-    multiple=True
-)
-@click.option(
-    "-r",
-    "--ref-file",
-    type=click.Path(exists=True, dir_okay=False, readable=True),
-    help="path to the reference image file",
-    required=True,
-)
-@click.option(
-    "-k",
-    "--kernel-shape",
-    type=click.Tuple([click.INT, click.INT]),
-    nargs=2,
-    help="sliding window width and height (e.g. -k 3 3) [default: (3, 3))]",
-    required=False,
-    default=(3, 3),
-    show_default=True,
-)
-@click.option(
-    "-m",
-    "--method",
-    type=click.Choice(['gain', 'gain-im-offset', 'gain-offset'], case_sensitive=False),
-    help="homogenisation method",
-    default='gain',
-    show_default=True,
-)
-@click.option(
-    "-rs",
-    "--ref-space",
-    'homo_space',
-    help="Homogenise in source or reference image space.  [default: --ref-space]",
-    flag_value='ref-space',
-    default=True,
-    required=False,
-)
-@click.option(
-    "-ss",
-    "--src-space",
-    'homo_space',
-    help="Homogenise in source or reference image space.  [default: --ref-space]",
-    flag_value='src-space',
-    default=False,
-    required=False,
-)
-@click.option(
-    "-od",
-    "--output-dir",
-    type=click.Path(exists=True, file_okay=False, dir_okay=True, writable=True),
-    help="directory to write homogenised image(s) in [default: use src-file directory]",
-    required=False,
-)
-@click.option(
-    "-bo/-nbo",
-    "--build-ovw/--no-build-ovw",
-    default=True,
-    help="Do/don't build overviews for the homogenised image.  [default: --build-ovw]",
-    required=False,
-)
-@click.option(
-    "-c",
-    "--conf",
-    type=click.Path(exists=True, dir_okay=False, readable=True),
-    help="path to a configuration file",
-    required=False
-)
-def cli(src_file=None, ref_file=None, kernel_shape=(3, 3), method="gain-im-offset", homo_space='ref-space',
-        output_dir=None, build_ovw=True, conf=None):
+def _update_existing_keys(default_dict, **kwargs):
+    """Update values in a dict with args from matching keys in **kwargs"""
+    return {k: kwargs.get(k, v) for k, v in default_dict.items()}
+
+
+def _parse_output_profile(ctx, param, value):
+    if ctx.get_parameter_source(param.name) == ParameterSource.DEFAULT:  # defaults
+        return dict(value)
+    else:
+        out = {}
+        for k, v in value:
+            out[k] = None if v.lower() in ['none', 'null', 'nil', 'nada'] else yaml.safe_load(v)
+        return out
+
+
+def _parse_nodata(ctx, param, value):
+    """Return a float or None"""
+    if value is None or value.lower() in ["null", "nil", "none", "nada"]:
+        return None
+    elif value.lower() == "nan":
+        return float("nan")
+    else:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            raise click.BadParameter("{!r} is not a number".format(value), param=param, param_hint="nodata")
+
+
+@click.command(cls=_ConfigFileCommand)
+@click.option("-s", "--src-file", type=click.Path(), required=True, multiple=True,
+              help="Path(s) or wildcard pattern(s) specifying the source image file(s).")
+@click.option("-r", "--ref-file", type=click.Path(exists=True, dir_okay=False, readable=True), required=True,
+              help="Path to the reference image file.")
+@click.option("-k", "--kernel-shape", type=click.Tuple([click.INT, click.INT]), nargs=2, default=(5, 5),
+              show_default=True, help="Sliding kernel (window) width and height.")
+@click.option("-m", "--method", type=click.Choice(['gain', 'gain-im-offset', 'gain-offset'], case_sensitive=False),
+              default='gain-im-offset', show_default=True, help="Homogenisation method.")
+@click.option("-mc", "--model-crs", type=click.Choice(['ref', 'src'], case_sensitive=False), default='ref',
+              show_default=True, help="Derive homogenisation model in ref (reference) or src (source) image CRS.")
+@click.option("-od", "--output-dir", type=click.Path(exists=True, file_okay=False, writable=True),
+              help="Directory to create homogenised image(s) in. [default: use --src-file directory]")
+@click.option("-nbo", "--no-build-ovw", "build_ovw", type=click.BOOL, is_flag=True, default=True,
+              help="Don't build overviews for the created image(s).")
+@click.option("-c", "--conf", type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path),
+              required=False, default=None, help="Path to a configuration file.")
+@click.option("-dr", "--debug-raster", type=click.BOOL, is_flag=True,
+              default=HomonIm.default_homo_config['debug_raster'],
+              help=f"Create a debug raster for each source file containing parameter and R\N{SUPERSCRIPT TWO} values.")
+@click.option("-mp", "--mask-partial", type=click.BOOL, is_flag=True,
+              default=HomonIm.default_homo_config['mask_partial'],
+              help=f"Mask output pixels produced from partial kernel, or source image coverage.")
+@click.option("-nmt", "--no-mutlithread", type=click.BOOL, is_flag=True,
+              default=HomonIm.default_homo_config['multithread'],
+              help=f"Process image blocks consecutively.")
+@click.option("-mbm", "--max-block-mem", type=click.INT, help="Maximum image block size for processing (MB)",
+              default=HomonIm.default_homo_config['max_block_mem'], show_default=True)
+@click.option("-sri", "--src2ref-interp", type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
+              default=KernelModel.default_config['src2ref_interp'], show_default=True,
+              help="Resampling method for re-projecting from reference to source CRS.")
+@click.option("-rsi", "--ref2src-interp", type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
+              help="Resampling method for re-projecting from source to reference CRS.",
+              default=KernelModel.default_config['ref2src_interp'], show_default=True)
+@click.option("-rit", "--r2-inpaint-thresh", type=click.FloatRange(min=0, max=1),
+              default=KernelModel.default_config['r2_inpaint_thresh'], show_default=True, metavar="FLOAT 0-1",
+              help="R\N{SUPERSCRIPT TWO} threshold below which to inpaint (interpolate) model parameters from "
+                   "surrounding areas. For 'gain-offset' method only.")
+@click.option("--out-driver", "driver",
+              type=click.Choice(set(rio.drivers.raster_driver_extensions().values()), case_sensitive=False),
+              default=HomonIm.default_out_profile['driver'], show_default=True, metavar="TEXT",
+              help="Output format driver.")
+@click.option("--out-dtype", "dtype", type=click.Choice(list(rio.dtypes.dtype_fwd.values())[1:8], case_sensitive=False),
+              default=HomonIm.default_out_profile['dtype'], show_default=True, help="Output raster data type.")
+@click.option("--out-blockxsize", "blockxsize", type=click.INT, default=HomonIm.default_out_profile['blockxsize'],
+              show_default=True, help="Output raster block width.")
+@click.option("--out-blockysize", "blockysize", type=click.INT, default=HomonIm.default_out_profile['blockysize'],
+              show_default=True, help="Output raster block height.")
+@click.option("--out-compress", "compress",
+              type=click.Choice([item.value for item in rio.enums.Compression], case_sensitive=False),
+              default=HomonIm.default_out_profile['compress'], show_default=True,  # metavar="TEXT",
+              help="Output raster compression.")
+@click.option("--out-interleave", "interleave", type=click.Choice(["pixel", "band"], case_sensitive=False),
+              default=HomonIm.default_out_profile['interleave'], show_default=True,
+              help="Output raster data interleaving.")
+@click.option("--out-photometric", "photometric",
+              type=click.Choice([item.value for item in rio.enums.PhotometricInterp], case_sensitive=False),
+              default=HomonIm.default_out_profile['photometric'], show_default=True,
+              help="Output raster photometric interpretation.")
+@click.option("--out-nodata", "nodata", type=click.STRING, callback=_parse_nodata, metavar="[NUMBER|null|nan]",
+              default=HomonIm.default_out_profile['nodata'], show_default=True,
+              help="Output raster nodata value.")
+def cli(src_file, ref_file, kernel_shape, method, model_crs, output_dir, build_ovw, conf, **kwargs):
     """Radiometrically homogenise image(s) by fusion with reference satellite data"""
 
-    # read configuration
-    if conf is None:
-        conf_filename = root_path.joinpath('config.yaml')
-    else:
-        conf_filename = pathlib.Path(conf)
-
-    if not conf_filename.exists():
-        raise Exception(f'Config file {conf_filename} does not exist')
-
-    with open(conf_filename, 'r') as f:
-        config = yaml.safe_load(f)
-
-    method = method.lower()
+    config = {}
+    config['homo_config'] = _update_existing_keys(HomonIm.default_homo_config, **kwargs)
+    config['model_config'] = _update_existing_keys(HomonIm.default_model_config, **kwargs)
+    config['out_profile'] = _update_existing_keys(HomonIm.default_out_profile, **kwargs)
 
     # iterate over and homogenise source file(s)
     for src_file_spec in src_file:
@@ -147,16 +172,15 @@ def cli(src_file=None, ref_file=None, kernel_shape=(3, 3), method="gain-im-offse
 
             logger.info(f'Homogenising {src_filename.name}')
             start_ttl = datetime.datetime.now()
-            him = homonim.HomonImBase(src_filename, ref_file, method=method, kernel_shape=kernel_shape,
-                                      space=homo_space[:3], **config)
+            him = HomonIm(src_filename, ref_file, method=method, kernel_shape=kernel_shape, model_crs=model_crs,
+                          **config)
 
             # create output raster filename and homogenise
-            post_fix = _create_homo_postfix(space=homo_space, method=method, kernel_shape=kernel_shape)
+            post_fix = _create_homo_postfix(homo_crs=model_crs, method=method, kernel_shape=kernel_shape)
             homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
             him.homogenise(homo_filename)
 
             # set metadata in output file
-            # TODO move meta_dict into set_homo_metadata
             him.set_homo_metadata(homo_filename)
 
             if config['homo_config']['debug_raster']:

@@ -50,7 +50,7 @@ setup(
     url="https://github.com/dugalh/homonim",
     license='AGPLv3',
     packages=find_packages(exclude=['tests', 'data'], include=['homonim']),
-    install_requires=["numpy>=1.2, <2", "rasterio>=1.1, <2", "click>=7.1, <8", "tqdm>=4.6"],
+    install_requires=["numpy>=1.2, <2", "rasterio>=1.1, <2", "click>=8, <9", "tqdm>=4.6"],
     python_requires=">=3.6",
     classifiers=[
         "Programming Language :: Python :: 3",

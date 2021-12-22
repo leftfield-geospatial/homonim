@@ -21,15 +21,18 @@ import cv2
 import cv2 as cv
 import numpy as np
 from rasterio.fill import fillnodata
-from rasterio.warp import Resampling
 
-from homonim.raster_array import RasterArray, nan_equals, default_dtype, default_nodata
+from homonim.raster_array import RasterArray, nan_equals
+
 
 class KernelModel():
-    def __init__(self, method='gain-im-offset', kernel_shape=(5, 5), debug_raster=False, r2_inpaint_thresh=None,
-                 src2ref_interp=Resampling.average, ref2src_interp=Resampling.cubic_spline):
+    default_config = dict(src2ref_interp='cubic_spline', ref2src_interp='average', r2_inpaint_thresh=0.25)
+
+    def __init__(self, method, kernel_shape, debug_raster, r2_inpaint_thresh=default_config['r2_inpaint_thresh'],
+                 src2ref_interp=default_config['src2ref_interp'], ref2src_interp=default_config['ref2src_interp']):
         if not method in ['gain', 'gain-im-offset', 'gain-offset']:
             raise ValueError('method should be one of "gain", "gain-im-offset" or "gain-offset"')
+
         self._method = method
         if not np.all(np.mod(kernel_shape, 2) == 1):
             raise ValueError('kernel_shape must be odd in both dimensions')
@@ -40,9 +43,17 @@ class KernelModel():
         self._ref2src_interp = ref2src_interp
 
     @property
+    def method(self):
+        return self._method
+
+    @property
+    def kernel_shape(self):
+        return self._kernel_shape
+
+    @property
     def config(self):
-        return dict(method=self._method, kernel_shape=self._kernel_shape, r2_inpaint_thresh=self._r2_inpaint_thresh,
-                    src2ref_interp=self._src2ref_interp, ref2src_interp=self._ref2src_interp)
+        return dict(r2_inpaint_thresh=self._r2_inpaint_thresh, src2ref_interp=self._src2ref_interp,
+                    ref2src_interp=self._ref2src_interp)
 
     def _r2_array(self, ref_array, src_array, param_array, mask=None, mask_sum=None, ref_sum=None, src_sum=None,
                   ref2_sum=None, src2_sum=None, src_ref_sum=None, dest_array=None, kernel_shape=None):
@@ -53,11 +64,12 @@ class KernelModel():
 
         # if mask is passed, it is assumed invalid pixels in ref_ and src_array have been zeroed
         if mask is None:
-            mask = (nan_equals(src_array, default_nodata) & nan_equals(ref_array, default_nodata))
+            mask = (nan_equals(src_array, RasterArray.default_nodata) & nan_equals(ref_array,
+                                                                                   RasterArray.default_nodata))
             ref_array[~mask] = 0
             src_array[~mask] = 0
         if mask_sum is None:
-            mask_sum = cv.boxFilter(mask.astype(default_dtype), -1, kernel_shape, **filter_args)
+            mask_sum = cv.boxFilter(mask.astype(RasterArray.default_dtype), -1, kernel_shape, **filter_args)
         if ref_sum is None:
             ref_sum = cv.boxFilter(ref_array, -1, kernel_shape, **filter_args)
         if ref2_sum is None:
@@ -86,7 +98,8 @@ class KernelModel():
         ss_res_array *= mask_sum
 
         if dest_array is None:
-            dest_array = np.full(src_array.shape, fill_value=default_nodata, dtype=default_dtype)
+            dest_array = np.full(src_array.shape, fill_value=RasterArray.default_nodata,
+                                 dtype=RasterArray.default_dtype)
         np.divide(ss_res_array, ss_tot_array, out=dest_array, where=mask)
         np.subtract(1, dest_array, out=dest_array, where=mask)
         return dest_array
@@ -144,8 +157,8 @@ class KernelModel():
         ref_array = ref_ra.array
         src_array = src_ra.array
         param_profile = src_ra.profile.copy()
-        param_profile.update(count=3 if self._debug_raster else 2, nodata=default_nodata,
-                             dtype=default_dtype)
+        param_profile.update(count=3 if self._debug_raster else 2, nodata=RasterArray.default_nodata,
+                             dtype=RasterArray.default_dtype)
         mask = ref_ra.mask & src_ra.mask
         # mask invalid pixels with 0 so that these do not contribute to kernel sums in *boxFilter()
         ref_array[~mask] = 0
@@ -186,14 +199,13 @@ class KernelModel():
         RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second, and optionally
         R2 for each kernel model in the third band when debug is on.
         """
-        # TODO: sort out ref/src in-place differences
         if kernel_shape is None:
             kernel_shape = self._kernel_shape
         kernel_shape = tuple(kernel_shape)  # force to tuple for opencv
 
         offset_model = self._fit_im_offset(ref_ra, src_ra)
         # force nodata to nan so that operation below remains correctly masked
-        src_ra.nodata = default_nodata
+        src_ra.nodata = RasterArray.default_nodata
 
         # apply the offset model
         src_ra.array = (src_ra.array * offset_model[0]) + offset_model[1]
@@ -231,8 +243,8 @@ class KernelModel():
         ref_array = ref_ra.array
         src_array = src_ra.array
         param_profile = src_ra.profile.copy()
-        param_profile.update(count=3 if self._debug_raster else 2, nodata=default_nodata,
-                             dtype=default_dtype)
+        param_count = 3 if self._debug_raster or (self._r2_inpaint_thresh is not None) else 2
+        param_profile.update(count=param_count, nodata=RasterArray.default_nodata, dtype=RasterArray.default_dtype)
         mask = ref_ra.mask & src_ra.mask
         # mask invalid pixels with 0 so that these do not contribute to kernel sums in *boxFilter()
         ref_array[~mask] = 0
@@ -246,7 +258,7 @@ class KernelModel():
         src_sum = cv.boxFilter(src_array, -1, kernel_shape, **filter_args)
         ref_sum = cv.boxFilter(ref_array, -1, kernel_shape, **filter_args)
         src_ref_sum = cv.boxFilter(src_array * ref_array, -1, kernel_shape, **filter_args)
-        mask_sum = cv.boxFilter(mask.astype(default_dtype, copy=False), -1, kernel_shape, **filter_args)
+        mask_sum = cv.boxFilter(mask.astype(RasterArray.default_dtype, copy=False), -1, kernel_shape, **filter_args)
         m_num_array = (mask_sum * src_ref_sum) - (src_sum * ref_sum)
 
         # find the denominator for the gain i.e. N*var(src)

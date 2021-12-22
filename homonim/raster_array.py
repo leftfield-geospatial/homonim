@@ -27,6 +27,7 @@ from rasterio.crs import CRS
 from rasterio.enums import MaskFlags
 from rasterio.warp import reproject, Resampling
 from rasterio.windows import Window
+from types import SimpleNamespace
 
 
 def nan_equals(a, b, equal_nan=True):
@@ -78,8 +79,6 @@ def round_window_to_grid(win):
     return Window(col_off=col_range[0], row_off=row_range[0], width=np.diff(col_range)[0], height=np.diff(row_range)[0])
 
 
-default_nodata = float('nan')
-default_dtype = 'float32'
 
 class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
     """
@@ -87,6 +86,8 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
     Internally masking is done using a nodata value, not a separately stored mask.
     By default internal data type is float32 and the nodata value is nan.
     """
+    default_nodata = float('nan')
+    default_dtype = 'float32'
 
     def __init__(self, array, crs, transform, nodata=default_nodata, window=None):
         # array = np.array(array)
@@ -130,7 +131,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
 
     @classmethod
     def from_rio_dataset(cls, rio_dataset, indexes=None, window=None, boundless=False):
-        array = rio_dataset.read(indexes=indexes, window=window, boundless=boundless, out_dtype=default_dtype)
+        array = rio_dataset.read(indexes=indexes, window=window, boundless=boundless, out_dtype=cls.default_dtype)
 
         # check bands if bands have masks (i.e. internal/side-car mask or alpha channel, as opposed to nodata value)
         index_list = [indexes] if np.isscalar(indexes) else indexes
@@ -138,7 +139,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
 
         if is_masked:
             # read mask from dataset and apply it to array with default nodata
-            nodata = default_nodata
+            nodata = cls.default_nodata
             mask = rio_dataset.dataset_mask(window=window, boundless=boundless).astype('bool', copy=False)
             array[~mask] = nodata
         else:
@@ -195,8 +196,8 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
 
     @property
     def profile(self):
-        return dict(crs=self._crs, transform=self._transform, nodata=self._nodata, count=self.count, width=self.width,
-                    height=self.height, bounds=self.bounds, dtype=self.dtype)
+        return dict(crs=self._crs, transform=self._transform, nodata=self._nodata, count=self.count,
+                               width=self.width, height=self.height, bounds=self.bounds, dtype=self.dtype)
 
     @property
     def proj_profile(self):

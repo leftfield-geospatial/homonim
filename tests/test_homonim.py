@@ -32,8 +32,9 @@ from rasterio.warp import Resampling
 from shapely.geometry import box
 from tqdm import tqdm
 
-from homonim import homonim, root_path, cli
-from homonim.raster_array import RasterArray, expand_window_to_grid, default_dtype, default_nodata
+from homonim import root_path, cli
+from homonim.homonim import HomonIm
+from homonim.raster_array import RasterArray, expand_window_to_grid
 
 
 def _read_ref(src_filename, ref_filename):
@@ -44,10 +45,10 @@ def _read_ref(src_filename, ref_filename):
         with WarpedVRT(rio.open(ref_filename, 'r'), crs=src_im.crs, resampling=Resampling.bilinear) as ref_im:
             ref_win = expand_window_to_grid(ref_im.window(*src_im.bounds))
             ref_bands = range(1, src_im.count + 1)
-            _ref_array = ref_im.read(ref_bands, window=ref_win).astype(default_dtype)
+            _ref_array = ref_im.read(ref_bands, window=ref_win).astype(RasterArray.default_dtype)
 
-            if (ref_im.nodata is not None) and (ref_im.nodata != default_nodata):
-                _ref_array[_ref_array == ref_im.nodata] = default_nodata
+            if (ref_im.nodata is not None) and (ref_im.nodata != RasterArray.default_nodata):
+                _ref_array[_ref_array == ref_im.nodata] = RasterArray.default_nodata
             ref_array = RasterArray.from_profile(_ref_array, ref_im.profile, ref_win)
 
     return ref_array
@@ -69,9 +70,9 @@ class TestHomonim(unittest.TestCase):
         self._conf_filename = root_path.joinpath('data/inputs/test_example/config.yaml')
         with open(self._conf_filename, 'r') as f:
             config = yaml.safe_load(f)
-        self._homo_config = config['homo_config']
-        self._out_config = config['out_config']
-        self._model_config = config['model_config']
+        self._homo_config = cli._update_existing_keys(HomonIm.default_homo_config, **config)
+        self._out_profile = cli._update_existing_keys(HomonIm.default_out_profile, **config)
+        self._model_config = cli._update_existing_keys(HomonIm.default_model_config, **config)
 
     def _test_homo_against_src(self, src_filename, homo_filename):
         """Test homogenised against source image"""
@@ -79,10 +80,10 @@ class TestHomonim(unittest.TestCase):
             with rio.open(homo_filename, 'r') as homo_im, rio.open(src_filename, 'r') as src_im:
                 # check homo_filename configured correctly
                 for attr in ['nodata', 'dtype', 'compress', 'interleave', 'blockxsize', 'blockysize']:
-                    if self._out_config[attr] is None:
+                    if self._out_profile[attr] is None:
                         out_attr = src_im.profile[attr]
                     else:
-                        out_attr = self._out_config[attr]
+                        out_attr = self._out_profile[attr]
                     is_set = (homo_im.profile[attr] == out_attr) | (str(homo_im.profile[attr]) == str(out_attr))
                     self.assertTrue(is_set, f'{attr} set')
                 # check homo_filename against source
@@ -171,10 +172,10 @@ class TestHomonim(unittest.TestCase):
         ]
 
         for param_dict in param_list:
-            post_fix = cli._create_homo_postfix(space='ref-space', **param_dict)
+            post_fix = cli._create_homo_postfix(homo_crs='ref', **param_dict)
             homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
-            him = homonim.HomonImBase(src_filename, ref_filename, **param_dict, homo_config=self._homo_config,
-                                      model_config=self._model_config, out_config=self._out_config, space='ref')
+            him = HomonIm(src_filename, ref_filename, **param_dict, homo_config=self._homo_config,
+                          model_config=self._model_config, out_profile=self._out_profile, model_crs='ref')
             with self.subTest('Overlapped Blocks', src_filename=src_filename):
                 self._test_ovl_blocks(him._create_ovl_blocks())
             him.homogenise(homo_filename)
@@ -204,13 +205,13 @@ class TestHomonim(unittest.TestCase):
 
         for param_dict in param_list:
             kernel_shape_str = [str(param_dict["kernel_shape"][0]), str(param_dict["kernel_shape"][1])]
-            cli_params = ['-s', str(src_wildcard), '-r', str(ref_filename), '--ref-space', '-k', *kernel_shape_str,
+            cli_params = ['-s', str(src_wildcard), '-r', str(ref_filename), '-k', *kernel_shape_str,
                           '-m', param_dict['method'], '-od', str(homo_root), '-c', str(self._conf_filename)]
             result = CliRunner().invoke(cli.cli, cli_params, terminal_width=100)
             self.assertTrue(result.exit_code == 0, result.exception)
 
             src_file_list = glob.glob(str(src_wildcard))
-            homo_post_fix = cli._create_homo_postfix(space='ref-space', **param_dict)
+            homo_post_fix = cli._create_homo_postfix(homo_crs='ref', **param_dict)
             for src_filename in src_file_list:
                 src_filename = pathlib.Path(src_filename)
                 homo_filename = homo_root.joinpath(src_filename.stem + homo_post_fix)
