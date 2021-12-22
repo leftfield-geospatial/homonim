@@ -79,7 +79,7 @@ class TestHomonim(unittest.TestCase):
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
             with rio.open(homo_filename, 'r') as homo_im, rio.open(src_filename, 'r') as src_im:
                 # check homo_filename configured correctly
-                for attr in ['nodata', 'dtype', 'compress', 'interleave', 'blockxsize', 'blockysize']:
+                for attr in homo_im.profile.keys() & self._out_profile.keys():
                     if self._out_profile[attr] is None:
                         out_attr = src_im.profile[attr]
                     else:
@@ -172,7 +172,7 @@ class TestHomonim(unittest.TestCase):
         ]
 
         for param_dict in param_list:
-            post_fix = cli._create_homo_postfix(homo_crs='ref', **param_dict)
+            post_fix = cli._create_homo_postfix(homo_crs='ref', driver=self._out_profile['driver'], **param_dict)
             homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
             him = HomonIm(src_filename, ref_filename, **param_dict, homo_config=self._homo_config,
                           model_config=self._model_config, out_profile=self._out_profile, model_crs='ref')
@@ -211,7 +211,7 @@ class TestHomonim(unittest.TestCase):
             self.assertTrue(result.exit_code == 0, result.exception)
 
             src_file_list = glob.glob(str(src_wildcard))
-            homo_post_fix = cli._create_homo_postfix(homo_crs='ref', **param_dict)
+            homo_post_fix = cli._create_homo_postfix(homo_crs='ref', driver=self._out_profile['driver'], **param_dict)
             for src_filename in src_file_list:
                 src_filename = pathlib.Path(src_filename)
                 homo_filename = homo_root.joinpath(src_filename.stem + homo_post_fix)
