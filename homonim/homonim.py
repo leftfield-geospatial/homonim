@@ -413,13 +413,13 @@ class HomonIm(object):
                         if self._config['debug_image']:
                             with dbg_lock:
                                 src_out_bounds = src_im.window_bounds(ovl_block.src_out_block)
-                                dbg_out_block = round_window_to_grid(dbg_im.window(*src_out_bounds))
                                 dbg_array = param_ra.slice_array(*src_out_bounds)
+                                dbg_out_block = round_window_to_grid(dbg_im.window(*src_out_bounds))
                                 indexes = np.arange(param_ra.count) * len(self._src_bands) + ovl_block.band_i + 1
                                 dbg_im.write(dbg_array, window=dbg_out_block, indexes=indexes)
 
                     if self._config['multithread']:
-                        # process bands in concurrent threads
+                        # process blocks in concurrent threads
                         future_list = []
                         with concurrent.futures.ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
                             for ovl_block in ovl_blocks:

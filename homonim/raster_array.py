@@ -128,20 +128,19 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
 
     @classmethod
     def from_rio_dataset(cls, rio_dataset, indexes=None, window=None, boundless=False):
-        array = rio_dataset.read(indexes=indexes, window=window, boundless=boundless, out_dtype=cls.default_dtype)
-
         # check bands if bands have masks (i.e. internal/side-car mask or alpha channel, as opposed to nodata value)
         index_list = [indexes] if np.isscalar(indexes) else indexes
         is_masked = any([MaskFlags.per_dataset in rio_dataset.mask_flag_enums[bi - 1] for bi in index_list])
 
+        # force nodata to default if masked or dataset nodata is None
+        nodata = cls.default_nodata if (is_masked or rio_dataset.nodata is None) else rio_dataset.nodata
+        array = rio_dataset.read(indexes=indexes, window=window, boundless=boundless, out_dtype=cls.default_dtype,
+                                 fill_value=nodata)
         if is_masked:
-            # read mask from dataset and apply it to array with default nodata
-            nodata = cls.default_nodata
+            # read mask from dataset and apply it to array
             mask = rio_dataset.dataset_mask(window=window, boundless=boundless).astype('bool', copy=False)
             array[~mask] = nodata
-        else:
-            # use dataset nodata value as is
-            nodata = rio_dataset.nodata
+
         return cls(array, rio_dataset.crs, rio_dataset.transform, nodata=nodata, window=window)
 
     @property

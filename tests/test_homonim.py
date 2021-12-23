@@ -190,7 +190,8 @@ class TestHomonim(unittest.TestCase):
 
     def test_api_src_space(self):
         """Test homogenisation API with model-crs=src and src res > ref res"""
-        src_filename = root_path.joinpath('data/inputs/test_example/source/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_RGB.vrt')
+        src_filename = root_path.joinpath(
+            'data/inputs/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.vrt')
         ref_filename = root_path.joinpath(
             'data/inputs/test_example/reference/COPERNICUS-S2-20151003T075826_20151003T082014_T35HKC_B432_Byte.tif')
         homo_root = root_path.joinpath('data/outputs/test_example/homogenised')
