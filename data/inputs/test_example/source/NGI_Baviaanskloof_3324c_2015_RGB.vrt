@@ -1,0 +1,110 @@
+<VRTDataset rasterXSize="1326" rasterYSize="2266">
+  <SRS dataAxisToSRSAxisMapping="1,2">PROJCS["unnamed",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",25],PARAMETER["scale_factor",1],PARAMETER["false_easting",0],PARAMETER["false_northing",0],UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["Easting",EAST],AXIS["Northing",NORTH]]</SRS>
+  <GeoTransform> -5.9703572983482431e+04,  5.0000000000000000e+00,  0.0000000000000000e+00, -3.7238378048744886e+06,  0.0000000000000000e+00, -5.0000000000000000e+00</GeoTransform>
+  <VRTRasterBand dataType="Byte" band="1">
+    <NoDataValue>0</NoDataValue>
+    <ColorInterp>Gray</ColorInterp>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">3324c_2015_1004_05_0182_RGB.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="805" RasterYSize="1421" DataType="Byte" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="805" ySize="1421" />
+      <DstRect xOff="514.824764258158" yOff="13.8002595311031" xSize="805" ySize="1421" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">3324c_2015_1004_05_0184_RGB.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="806" RasterYSize="1421" DataType="Byte" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="806" ySize="1421" />
+      <DstRect xOff="0" yOff="0" xSize="806" ySize="1421" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">3324c_2015_1004_06_0251_RGB.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="792" RasterYSize="1406" DataType="Byte" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="792" ySize="1406" />
+      <DstRect xOff="5.86698027474049" yOff="859.920428828616" xSize="792" ySize="1406" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">3324c_2015_1004_06_0253_RGB.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="795" RasterYSize="1411" DataType="Byte" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="795" ySize="1411" />
+      <DstRect xOff="530.50469977883" yOff="813.597939170524" xSize="795" ySize="1411" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="2">
+    <NoDataValue>0</NoDataValue>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">3324c_2015_1004_05_0182_RGB.tif</SourceFilename>
+      <SourceBand>2</SourceBand>
+      <SourceProperties RasterXSize="805" RasterYSize="1421" DataType="Byte" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="805" ySize="1421" />
+      <DstRect xOff="514.824764258158" yOff="13.8002595311031" xSize="805" ySize="1421" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">3324c_2015_1004_05_0184_RGB.tif</SourceFilename>
+      <SourceBand>2</SourceBand>
+      <SourceProperties RasterXSize="806" RasterYSize="1421" DataType="Byte" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="806" ySize="1421" />
+      <DstRect xOff="0" yOff="0" xSize="806" ySize="1421" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">3324c_2015_1004_06_0251_RGB.tif</SourceFilename>
+      <SourceBand>2</SourceBand>
+      <SourceProperties RasterXSize="792" RasterYSize="1406" DataType="Byte" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="792" ySize="1406" />
+      <DstRect xOff="5.86698027474049" yOff="859.920428828616" xSize="792" ySize="1406" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">3324c_2015_1004_06_0253_RGB.tif</SourceFilename>
+      <SourceBand>2</SourceBand>
+      <SourceProperties RasterXSize="795" RasterYSize="1411" DataType="Byte" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="795" ySize="1411" />
+      <DstRect xOff="530.50469977883" yOff="813.597939170524" xSize="795" ySize="1411" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="3">
+    <NoDataValue>0</NoDataValue>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">3324c_2015_1004_05_0182_RGB.tif</SourceFilename>
+      <SourceBand>3</SourceBand>
+      <SourceProperties RasterXSize="805" RasterYSize="1421" DataType="Byte" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="805" ySize="1421" />
+      <DstRect xOff="514.824764258158" yOff="13.8002595311031" xSize="805" ySize="1421" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">3324c_2015_1004_05_0184_RGB.tif</SourceFilename>
+      <SourceBand>3</SourceBand>
+      <SourceProperties RasterXSize="806" RasterYSize="1421" DataType="Byte" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="806" ySize="1421" />
+      <DstRect xOff="0" yOff="0" xSize="806" ySize="1421" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">3324c_2015_1004_06_0251_RGB.tif</SourceFilename>
+      <SourceBand>3</SourceBand>
+      <SourceProperties RasterXSize="792" RasterYSize="1406" DataType="Byte" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="792" ySize="1406" />
+      <DstRect xOff="5.86698027474049" yOff="859.920428828616" xSize="792" ySize="1406" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">3324c_2015_1004_06_0253_RGB.tif</SourceFilename>
+      <SourceBand>3</SourceBand>
+      <SourceProperties RasterXSize="795" RasterYSize="1411" DataType="Byte" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="795" ySize="1411" />
+      <DstRect xOff="530.50469977883" yOff="813.597939170524" xSize="795" ySize="1411" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+</VRTDataset>
