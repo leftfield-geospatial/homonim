@@ -192,11 +192,10 @@ class HomonIm(object):
         max_block_mem = self._config['max_block_mem'] * (2 ** 20)  # MB to Bytes
         dtype_size = np.dtype(RasterArray.default_dtype).itemsize
 
-        div_dim = np.argmax(src_shape)
         block_shape = np.array(src_shape)
         while (np.product(block_shape) * dtype_size > max_block_mem):
+            div_dim = np.argmax(block_shape)
             block_shape[div_dim] /= 2
-            div_dim = np.mod(div_dim + 1, 2)
         return np.round(block_shape).astype('int')
 
     def _create_ovl_blocks(self):

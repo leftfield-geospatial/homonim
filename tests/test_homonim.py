@@ -96,7 +96,7 @@ class TestHomonim(unittest.TestCase):
                     src_mask = src_im.read_masks(bi + 1)
                     homo_mask = homo_im.read_masks(bi + 1)
                     self.assertTrue(np.abs(src_mask.mean() - homo_mask.mean()) / 255 < .2,
-                                    'Source and homgenised have similar valid areas')
+                                    'Source and homogenised have similar valid areas')
 
                     for fn in [lambda x: x, lambda x: np.bitwise_not(x)]:
                         n_src_labels, src_labels = cv2.connectedComponents(fn(src_mask), None, 4, cv2.CV_16U)
@@ -108,7 +108,7 @@ class TestHomonim(unittest.TestCase):
         """Test R2 against reference before and after homogenisation"""
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
             im_ref_r2 = None
-            ref_array = _read_ref(src_filename, ref_filename)
+            ref_ra = _read_ref(src_filename, ref_filename)
             for im_i, im_filename in enumerate([src_filename, homo_filename]):
                 with rio.open(im_filename, 'r') as im:
                     if im_ref_r2 is None:
@@ -116,10 +116,12 @@ class TestHomonim(unittest.TestCase):
                     for band_i in range(im.count):
                         _im_array = im.read(band_i + 1)
                         im_array = RasterArray.from_profile(_im_array, im.profile)
-                        im_ds_array = im_array.reproject(transform=ref_array.transform, shape=ref_array.shape[-2:],
-                                                         resampling=self._model_config['src2ref_interp'])
+                        resampling = self._model_config['downsampling'] if np.prod(im.res) < np.prod(
+                            ref_ra.res) else self._model_config['upsampling']
+                        im_ds_array = im_array.reproject(transform=ref_ra.transform, shape=ref_ra.shape[-2:],
+                                                         resampling=resampling)
                         mask = im_ds_array.mask
-                        im_ref_cc = np.corrcoef(im_ds_array.array[mask], ref_array.array[band_i, mask])
+                        im_ref_cc = np.corrcoef(im_ds_array.array[mask], ref_ra.array[band_i, mask])
                         im_ref_r2[im_i, band_i] = im_ref_cc[0, 1] ** 2
 
             tqdm.write(f'Pre-homogensied R2 : {im_ref_r2[0, :]}')
@@ -236,7 +238,7 @@ class TestHomonim(unittest.TestCase):
                           '-m', param_dict['method'], '-od', str(homo_root), '-c', str(self._conf_filename),
                           '-mc', param_dict["model_crs"]]
 
-            result = CliRunner().invoke(cli.cli, cli_params, terminal_width=100)
+            result = CliRunner().invoke(cli.cli, cli_params, terminal_width=100, catch_exceptions=False)
             self.assertTrue(result.exit_code == 0, result.exception)
 
             src_file_list = glob.glob(str(src_wildcard))

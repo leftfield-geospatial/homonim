@@ -123,12 +123,12 @@ def _parse_nodata(ctx, param, value):
               help=f"Process image blocks consecutively.")
 @click.option("-mbm", "--max-block-mem", type=click.INT, help="Maximum image block size for processing (MB)",
               default=HomonIm.default_homo_config['max_block_mem'], show_default=True)
-@click.option("-sri", "--src2ref-interp", type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
-              default=KernelModel.default_config['src2ref_interp'], show_default=True,
+@click.option("-ds", "--downsampling", type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
+              default=KernelModel.default_config['downsampling'], show_default=True,
               help="Resampling method for re-projecting from reference to source CRS.")
-@click.option("-rsi", "--ref2src-interp", type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
+@click.option("-us", "--upsampling", type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
               help="Resampling method for re-projecting from source to reference CRS.",
-              default=KernelModel.default_config['ref2src_interp'], show_default=True)
+              default=KernelModel.default_config['upsampling'], show_default=True)
 @click.option("-rit", "--r2-inpaint-thresh", type=click.FloatRange(min=0, max=1),
               default=KernelModel.default_config['r2_inpaint_thresh'], show_default=True, metavar="FLOAT 0-1",
               help="R\N{SUPERSCRIPT TWO} threshold below which to inpaint (interpolate) model parameters from "

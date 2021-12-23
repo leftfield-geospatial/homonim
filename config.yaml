@@ -2,19 +2,19 @@
 # Produce debug outputs (0=None, 1=profiling, 2=parameter rasters)
 debug_image: True
 # Mask output pixels that were derived from kernels, and or ref pixels, without full source coverage
-mask_partial: False
+mask_partial: True
 # Use multi-threading (memory intensive)
-multithread: False
+multithread: True
 # maximum memory for automatic block size in megabytes
-max_block_mem: 1
+max_block_mem: 100
 
 # Model configuration
 # Interpolation type (average, bilinear, cubic, cubic_spline, gauss, lanczos) for resampling from source to reference
 #   CRS (cubic_spline recommended)
-src2ref_interp: average
+downsampling: average
 # Interpolation type (average, bilinear, cubic, cubic_spline, gauss, lanczos) for resampling from reference to source
 #   CRS  (average recommended)
-ref2src_interp: cubic_spline
+upsampling: cubic_spline
 # For gain&offset model, refit pixels with model R2 values below this value, using interpolated offset
 # and fitted gain (None = no inpainting).
 r2_inpaint_thresh: 0.25

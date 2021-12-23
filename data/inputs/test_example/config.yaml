@@ -11,10 +11,10 @@ max_block_mem: 2
 # Model configuration
 # Interpolation type (average, bilinear, cubic, cubic_spline, gauss, lanczos) for resampling from source to reference
 #   CRS (cubic_spline recommended)
-src2ref_interp: average
+downsampling: average
 # Interpolation type (average, bilinear, cubic, cubic_spline, gauss, lanczos) for resampling from reference to source
 #   CRS  (average recommended)
-ref2src_interp: cubic_spline
+upsampling: cubic_spline
 # For gain&offset model, refit pixels with model R2 values below this value, using interpolated offset
 # and fitted gain (None = no inpainting).
 r2_inpaint_thresh: 0.25

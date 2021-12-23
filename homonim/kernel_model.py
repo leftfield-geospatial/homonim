@@ -26,10 +26,10 @@ from homonim.raster_array import RasterArray, nan_equals
 
 
 class KernelModel():
-    default_config = dict(src2ref_interp='cubic_spline', ref2src_interp='average', r2_inpaint_thresh=0.25)
+    default_config = dict(downsampling='cubic_spline', upsampling='average', r2_inpaint_thresh=0.25)
 
     def __init__(self, method, kernel_shape, debug_image, r2_inpaint_thresh=default_config['r2_inpaint_thresh'],
-                 src2ref_interp=default_config['src2ref_interp'], ref2src_interp=default_config['ref2src_interp']):
+                 downsampling=default_config['downsampling'], upsampling=default_config['upsampling']):
         if not method in ['gain', 'gain-im-offset', 'gain-offset']:
             raise ValueError('method should be one of "gain", "gain-im-offset" or "gain-offset"')
 
@@ -39,8 +39,8 @@ class KernelModel():
         self._kernel_shape = np.array(kernel_shape).astype(int)
         self._debug_image = debug_image  # TODO: always find R2?
         self._r2_inpaint_thresh = r2_inpaint_thresh
-        self._src2ref_interp = src2ref_interp
-        self._ref2src_interp = ref2src_interp
+        self._downsampling = downsampling
+        self._upsampling = upsampling
 
     @property
     def method(self):
@@ -52,8 +52,8 @@ class KernelModel():
 
     @property
     def config(self):
-        return dict(r2_inpaint_thresh=self._r2_inpaint_thresh, src2ref_interp=self._src2ref_interp,
-                    ref2src_interp=self._ref2src_interp)
+        return dict(r2_inpaint_thresh=self._r2_inpaint_thresh, downsampling=self._downsampling,
+                    upsampling=self._upsampling)
 
     def _r2_array(self, ref_array, src_array, param_array, mask=None, mask_sum=None, ref_sum=None, src_sum=None,
                   ref2_sum=None, src2_sum=None, src_ref_sum=None, dest_array=None, kernel_shape=None):
@@ -344,13 +344,15 @@ class KernelModel():
 class RefSpaceModel(KernelModel):
     def fit(self, ref_ra: RasterArray, src_ra: RasterArray) -> RasterArray:
         # downsample src_ra to ref crs and grid
-        src_ds_ra = src_ra.reproject(**ref_ra.proj_profile, resampling=self._src2ref_interp)
+        resampling = self._downsampling if np.prod(src_ra.res) < np.prod(ref_ra.res) else self._upsampling
+        src_ds_ra = src_ra.reproject(**ref_ra.proj_profile, resampling=resampling)
         return KernelModel.fit(self, ref_ra, src_ds_ra, kernel_shape=self._kernel_shape)
 
     def apply(self, src_ra: RasterArray, param_ra: RasterArray):
         # upsample the param_ra to src crs and grid
         _param_ra = RasterArray.from_profile(param_ra.array[:2], param_ra.profile)
-        param_us_ra = _param_ra.reproject(**src_ra.proj_profile, resampling=self._ref2src_interp)
+        resampling = self._upsampling if np.prod(src_ra.res) < np.prod(param_ra.res) else self._downsampling
+        param_us_ra = _param_ra.reproject(**src_ra.proj_profile, resampling=resampling)
         return KernelModel.apply(self, src_ra, param_us_ra)
 
 
@@ -359,6 +361,7 @@ class SrcSpaceModel(KernelModel):
         # upsample ref_ra to src crs and grid
         src_kernel_shape = np.ceil(np.divide(ref_ra.res, src_ra.res) * self._kernel_shape).astype('int')
 
-        ref_us_ra = ref_ra.reproject(**src_ra.proj_profile, resampling=self._ref2src_interp)
+        resampling = self._upsampling if np.prod(src_ra.res) < np.prod(ref_ra.res) else self._downsampling
+        ref_us_ra = ref_ra.reproject(**src_ra.proj_profile, resampling=resampling)
         _src_ra = src_ra.copy()  # avoid in-place changes to src_ra in fit() below
         return KernelModel.fit(self, ref_us_ra, _src_ra, kernel_shape=src_kernel_shape)
