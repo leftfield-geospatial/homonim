@@ -101,7 +101,7 @@ class TestHomonim(unittest.TestCase):
                     for fn in [lambda x: x, lambda x: np.bitwise_not(x)]:
                         n_src_labels, src_labels = cv2.connectedComponents(fn(src_mask), None, 4, cv2.CV_16U)
                         n_homo_labels, homo_labels = cv2.connectedComponents(fn(homo_mask), None, 4, cv2.CV_16U)
-                        self.assertTrue(n_src_labels == n_homo_labels,
+                        self.assertTrue(np.abs(n_src_labels - n_homo_labels) <= 1,
                                         'Number of source and homgenised valid/nodata areas match')
 
     def _test_homo_against_ref(self, src_filename, homo_filename, ref_filename):
@@ -156,8 +156,8 @@ class TestHomonim(unittest.TestCase):
 
             prev_ovl_block = ovl_block
 
-    def test_api(self):
-        """Test homogenisation API"""
+    def test_api_ref_space(self):
+        """Test homogenisation API with model-crs=ref"""
         src_filename = root_path.joinpath('data/inputs/test_example/source/3324c_2015_1004_05_0182_RGB.tif')
         ref_filename = root_path.joinpath(
             'data/inputs/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif')
@@ -166,16 +166,16 @@ class TestHomonim(unittest.TestCase):
         homo_root = root_path.joinpath('data/outputs/test_example/homogenised')
 
         param_list = [
-            dict(method='gain', kernel_shape=(3, 3)),
-            dict(method='gain-im-offset', kernel_shape=(5, 5)),
-            dict(method='gain-offset', kernel_shape=(9, 9)),
+            dict(method='gain', kernel_shape=(3, 3), model_crs='ref'),
+            dict(method='gain-im-offset', kernel_shape=(5, 5), model_crs='ref'),
+            dict(method='gain-offset', kernel_shape=(9, 9), model_crs='ref'),
         ]
 
         for param_dict in param_list:
-            post_fix = cli._create_homo_postfix(homo_crs='ref', driver=self._out_profile['driver'], **param_dict)
+            post_fix = cli._create_homo_postfix(driver=self._out_profile['driver'], **param_dict)
             homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
             him = HomonIm(src_filename, ref_filename, **param_dict, homo_config=self._homo_config,
-                          model_config=self._model_config, out_profile=self._out_profile, model_crs='ref')
+                          model_config=self._model_config, out_profile=self._out_profile)
             with self.subTest('Overlapped Blocks', src_filename=src_filename):
                 self._test_ovl_blocks(him._create_ovl_blocks())
             him.homogenise(homo_filename)
@@ -188,6 +188,32 @@ class TestHomonim(unittest.TestCase):
                               ref_filename=ref2_filename):
                 self._test_homo_against_ref(src_filename, homo_filename, ref2_filename)
 
+    def test_api_src_space(self):
+        """Test homogenisation API with model-crs=src and src res > ref res"""
+        src_filename = root_path.joinpath('data/inputs/test_example/source/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_RGB.vrt')
+        ref_filename = root_path.joinpath(
+            'data/inputs/test_example/reference/COPERNICUS-S2-20151003T075826_20151003T082014_T35HKC_B432_Byte.tif')
+        homo_root = root_path.joinpath('data/outputs/test_example/homogenised')
+
+        param_list = [dict(method='gain', kernel_shape=(15, 15), model_crs='src')]
+
+        for param_dict in param_list:
+            post_fix = cli._create_homo_postfix(driver=self._out_profile['driver'], **param_dict)
+            homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
+            him = HomonIm(src_filename, ref_filename, **param_dict, homo_config=self._homo_config,
+                          model_config=self._model_config, out_profile=self._out_profile)
+            with self.subTest('Overlapped Blocks', src_filename=src_filename):
+                self._test_ovl_blocks(him._create_ovl_blocks())
+            him.homogenise(homo_filename)
+            him.set_homo_metadata(homo_filename)
+            him.build_overviews(homo_filename)
+            self.assertTrue(homo_filename.exists(), 'Homogenised file exists')
+            with self.subTest('Homogenised vs Source', src_filename=src_filename, homo_filename=homo_filename):
+                self._test_homo_against_src(src_filename, homo_filename)
+            with self.subTest('Homogenised vs Reference', src_filename=src_filename, homo_filename=homo_filename,
+                              ref_filename=ref_filename):
+                self._test_homo_against_ref(src_filename, homo_filename, ref_filename)
+
     def test_cli(self):
         """Test homogenisation CLI"""
         src_wildcard = root_path.joinpath('data/inputs/test_example/source/3324c_2015_*_RGB.tif')
@@ -198,20 +224,22 @@ class TestHomonim(unittest.TestCase):
         homo_root = root_path.joinpath('data/outputs/test_example/homogenised')
 
         param_list = [
-            dict(method='gain', kernel_shape=(3, 3)),
-            dict(method='gain-im-offset', kernel_shape=(5, 5)),
-            dict(method='gain-offset', kernel_shape=(9, 9)),
+            dict(method='gain', kernel_shape=(3, 3), model_crs='ref'),
+            dict(method='gain-im-offset', kernel_shape=(5, 5), model_crs='ref'),
+            dict(method='gain-offset', kernel_shape=(9, 9), model_crs='ref'),
         ]
 
         for param_dict in param_list:
             kernel_shape_str = [str(param_dict["kernel_shape"][0]), str(param_dict["kernel_shape"][1])]
             cli_params = ['-s', str(src_wildcard), '-r', str(ref_filename), '-k', *kernel_shape_str,
-                          '-m', param_dict['method'], '-od', str(homo_root), '-c', str(self._conf_filename)]
+                          '-m', param_dict['method'], '-od', str(homo_root), '-c', str(self._conf_filename),
+                          '-mc', param_dict["model_crs"]]
+
             result = CliRunner().invoke(cli.cli, cli_params, terminal_width=100)
             self.assertTrue(result.exit_code == 0, result.exception)
 
             src_file_list = glob.glob(str(src_wildcard))
-            homo_post_fix = cli._create_homo_postfix(homo_crs='ref', driver=self._out_profile['driver'], **param_dict)
+            homo_post_fix = cli._create_homo_postfix(driver=self._out_profile['driver'], **param_dict)
             for src_filename in src_file_list:
                 src_filename = pathlib.Path(src_filename)
                 homo_filename = homo_root.joinpath(src_filename.stem + homo_post_fix)

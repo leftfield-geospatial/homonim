@@ -58,12 +58,12 @@ class _ConfigFileCommand(click.Command):
         return click.Command.invoke(self, ctx)
 
 
-def _create_homo_postfix(homo_crs, method, kernel_shape, driver='GTiff'):
+def _create_homo_postfix(model_crs, method, kernel_shape, driver='GTiff'):
     """Create a postfix string for the homogenised image file"""
     ext_dict = rio.drivers.raster_driver_extensions()
     ext_idx = list(ext_dict.values()).index(driver)
     ext = list(ext_dict.keys())[ext_idx]
-    post_fix = f'_HOMO_c{homo_crs.upper()}_m{method.upper()}_k{kernel_shape[0]}_{kernel_shape[1]}.{ext}'
+    post_fix = f'_HOMO_c{model_crs.upper()}_m{method.upper()}_k{kernel_shape[0]}_{kernel_shape[1]}.{ext}'
     return post_fix
 
 
@@ -184,7 +184,7 @@ def cli(src_file, ref_file, kernel_shape, method, model_crs, output_dir, build_o
                           **config)
 
             # create output image filename and homogenise
-            post_fix = _create_homo_postfix(homo_crs=model_crs, method=method, kernel_shape=kernel_shape,
+            post_fix = _create_homo_postfix(model_crs=model_crs, method=method, kernel_shape=kernel_shape,
                                             driver=config['out_profile']['driver'])
             homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
             him.homogenise(homo_filename)
