@@ -1,0 +1,37 @@
+<VRTDataset rasterXSize="237" rasterYSize="408">
+  <SRS dataAxisToSRSAxisMapping="1,2">PROJCS["unnamed",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",25],PARAMETER["scale_factor",1],PARAMETER["false_easting",0],PARAMETER["false_northing",0],UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["Easting",EAST],AXIS["Northing",NORTH]]</SRS>
+  <GeoTransform> -5.9940000000000000e+04,  3.0000000000000000e+01,  0.0000000000000000e+00, -3.7233900000000000e+06,  0.0000000000000000e+00, -3.0000000000000000e+01</GeoTransform>
+  <VRTRasterBand dataType="Byte" band="1">
+    <NoDataValue>0</NoDataValue>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">..\reference\LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="245" RasterYSize="416" DataType="Byte" BlockXSize="245" BlockYSize="11" />
+      <SrcRect xOff="4" yOff="4" xSize="245" ySize="416" />
+      <DstRect xOff="0" yOff="0" xSize="245" ySize="416" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="2">
+    <NoDataValue>0</NoDataValue>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">..\reference\LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif</SourceFilename>
+      <SourceBand>2</SourceBand>
+      <SourceProperties RasterXSize="245" RasterYSize="416" DataType="Byte" BlockXSize="245" BlockYSize="11" />
+      <SrcRect xOff="4" yOff="4" xSize="245" ySize="416" />
+      <DstRect xOff="0" yOff="0" xSize="245" ySize="416" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="3">
+    <NoDataValue>0</NoDataValue>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">..\reference\LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif</SourceFilename>
+      <SourceBand>3</SourceBand>
+      <SourceProperties RasterXSize="245" RasterYSize="416" DataType="Byte" BlockXSize="245" BlockYSize="11" />
+      <SrcRect xOff="4" yOff="4" xSize="245" ySize="416" />
+      <DstRect xOff="0" yOff="0" xSize="245" ySize="416" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+</VRTDataset>

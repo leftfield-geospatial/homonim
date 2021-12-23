@@ -126,7 +126,7 @@ class HomonIm(object):
                         tmp_array = im.read(1, window=im.block_window(1, 0, 0))
                     except Exception as ex:
                         if im.profile['compress'] == 'jpeg':  # assume it is a 12bit JPEG
-                            raise UnsupportedImageError(f'Could not read {filename.stem}\n'
+                            raise UnsupportedImageError(f'Could not read {filename.name}\n'
                                             f'    This GDAL package does not support JPEG compression with NBITS==12\n'
                                             f'    you probably need to recompress this file.\n'
                                             f'    See the README for details.')
@@ -146,8 +146,8 @@ class HomonIm(object):
                     ref_box = box(*ref_im.bounds)
 
                     if not ref_box.covers(src_box):
-                        raise ImageContentError(f'Reference image {self._ref_filename.stem} does not cover source image '
-                                        f'{self._src_filename.stem}.')
+                        raise ImageContentError(f'Reference image {self._ref_filename.name} does not cover source image '
+                                        f'{self._src_filename.name}.')
 
                     # make lists of non-alpha bands for ref and src
                     self._src_bands = [bi + 1 for bi in range(src_im.count) if
@@ -157,22 +157,21 @@ class HomonIm(object):
 
                     # check ref image has enough bands
                     if len(self._src_bands) > len(self._ref_bands):
-                        raise ImageContentError(f'Reference image {self._ref_filename.stem} has fewer non-alpha bands '
-                                                 f'than source image {self._src_filename.stem}.')
+                        raise ImageContentError(f'Reference image {self._ref_filename.name} has fewer non-alpha bands '
+                                                 f'than source image {self._src_filename.name}.')
 
                     # if the band counts don't match, use the first len(src_band_list) of ref image
                     if len(self._src_bands) != len(self._ref_bands):
                         logger.warning('Reference and source non-alpha band counts don`t match.  \n'
                                        f'Using the first {len(self._src_bands)} non-alpha bands of reference image '
-                                       f'{self._ref_filename.stem}.')
+                                       f'{self._ref_filename.name}.')
 
                     # warn if the datasets are not masked
                     for im, fn in zip([src_im, ref_im], [self._src_filename, self._ref_filename]):
                         is_masked = any([MaskFlags.all_valid not in im.mask_flag_enums[bi] for bi in range(im.count)])
                         if im.nodata is None and not is_masked:
-                            logger.warning(f'{fn} has no mask or nodata value.\n'
-                                           'Any invalid pixels in this image should be first be masked using a '
-                                           'nodata value (recommended), internal/side-car mask or alpha band.')
+                            logger.warning(f'{fn.name} has no mask or nodata value. '
+                                           f'Any invalid pixels in this image should be masked')
 
                     if np.any(src_im.res >= ref_im.res) and (self._model_crs == 'ref'):
                         logger.warning('Source image resolution is coarser than reference image resolution, '
