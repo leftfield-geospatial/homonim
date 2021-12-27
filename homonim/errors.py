@@ -31,3 +31,12 @@ class BlockSizeError(HomonimError):
 
 class ImageProfileError(HomonimError):
     """Raised when a image profile invalid"""
+
+class BandCountMismatchWarning(UserWarning):
+    """Warn when the reference and source band counts don't match"""
+
+class NodataMaskWarning(UserWarning):
+    """Warn when an image has no mask or nodata values"""
+
+class ModelCrsWarning(UserWarning):
+    """Warn when the model CRS appears to be incorrectly set"""

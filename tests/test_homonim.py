@@ -233,12 +233,11 @@ class TestHomonim(unittest.TestCase):
         ]
 
         for param_dict in param_list:
-            kernel_shape_str = [str(param_dict["kernel_shape"][0]), str(param_dict["kernel_shape"][1])]
-            cli_params = ['-s', str(src_wildcard), '-r', str(ref_filename), '-k', *kernel_shape_str,
-                          '-m', param_dict['method'], '-od', str(homo_root), '-c', str(self._conf_filename),
-                          '-mc', param_dict["model_crs"]]
+            cli_str = (f'-s {src_wildcard} -r {ref_filename} -k {param_dict["kernel_shape"][0]} '
+                       f'{param_dict["kernel_shape"][1]} -m {param_dict["method"]} -od  {homo_root} -c '
+                       f'{self._conf_filename} -mc  {param_dict["model_crs"]}')
 
-            result = CliRunner().invoke(cli.cli, cli_params, terminal_width=100, catch_exceptions=False)
+            result = CliRunner().invoke(cli.cli, cli_str.split(), terminal_width=100, catch_exceptions=False)
             self.assertTrue(result.exit_code == 0, result.exception)
 
             src_file_list = glob.glob(str(src_wildcard))

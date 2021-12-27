@@ -19,6 +19,7 @@
 
 import datetime
 import pathlib
+import sys
 
 import click
 import numpy as np
@@ -26,16 +27,33 @@ import rasterio as rio
 import yaml
 from click.core import ParameterSource
 from rasterio.warp import SUPPORTED_RESAMPLING
+import logging
 
-from homonim import get_logger
 from homonim.homonim import HomonIm
 from homonim.kernel_model import KernelModel
 
 # print formatting
 np.set_printoptions(precision=4)
 np.set_printoptions(suppress=True)
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
+class _CustomFormatter(logging.Formatter):
+    def format(self, record):
+        if record.levelno == logging.INFO:
+            self._style._fmt = "%(message)s"
+        else:
+            self._style._fmt = "%(levelname)s:%(name)s: %(message)s"
+        return super().format(record)
+
+def configure_logging(verbosity):
+    # TODO, copy rio's verbose/quiet params: https://github.com/rasterio/rasterio/blob/master/rasterio/rio/main.py
+    log_level = max(10, 30 - 10 * verbosity)
+    # logging.basicConfig(level=log_level, format='%(levelname)s:%(name)s: %(message)s')
+    formatter = _CustomFormatter()
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(formatter)
+    logging.root.addHandler(handler)
+    logging.root.setLevel(log_level)
 
 class _ConfigFileCommand(click.Command):
     """Class to combine config file with command line parameters"""
@@ -104,7 +122,7 @@ def _parse_nodata(ctx, param, value):
               show_default=True, help="Sliding kernel (window) width and height (in reference pixels).")
 @click.option("-m", "--method", type=click.Choice(['gain', 'gain-im-offset', 'gain-offset'], case_sensitive=False),
               default='gain-im-offset', show_default=True, help="Homogenisation method.")
-@click.option("-mc", "--model-crs", type=click.Choice(['ref', 'src'], case_sensitive=False), default='ref',
+@click.option("-mc", "--model-crs", type=click.Choice(['ref', 'src', 'auto'], case_sensitive=False), default='auto',
               show_default=True, help="Derive homogenisation model in 'ref' (reference) or 'src' (source) image CRS.")
 @click.option("-od", "--output-dir", type=click.Path(exists=True, file_okay=False, writable=True),
               help="Directory to create homogenised image(s) in. [default: use --src-file directory]")
@@ -160,54 +178,59 @@ def _parse_nodata(ctx, param, value):
 def cli(src_file, ref_file, kernel_shape, method, model_crs, output_dir, build_ovw, conf, **kwargs):
     """Radiometrically homogenise image(s) by fusion with reference satellite data"""
 
+    configure_logging(1)
     config = {}
     config['homo_config'] = _update_existing_keys(HomonIm.default_homo_config, **kwargs)
     config['model_config'] = _update_existing_keys(HomonIm.default_model_config, **kwargs)
     config['out_profile'] = _update_existing_keys(HomonIm.default_out_profile, **kwargs)
 
     # iterate over and homogenise source file(s)
-    for src_file_spec in src_file:
-        src_file_path = pathlib.Path(src_file_spec)
-        if len(list(src_file_path.parent.glob(src_file_path.name))) == 0:
-            raise click.BadParameter(f'Could not find any source image(s) matching {src_file_spec}', param="src_file",
-                                     param_hint="src_file")
+    try:
+        for src_file_spec in src_file:
+            src_file_path = pathlib.Path(src_file_spec)
+            if len(list(src_file_path.parent.glob(src_file_path.name))) == 0:
+                raise click.BadParameter(f'Could not find any source image(s) matching {src_file_path.name}',
+                                         param='src_file', param_hint='src_file')
 
-        for src_filename in src_file_path.parent.glob(src_file_path.name):
-            if output_dir is not None:
-                homo_root = pathlib.Path(output_dir)
-            else:
-                homo_root = src_filename.parent
+            for src_filename in src_file_path.parent.glob(src_file_path.name):
+                if output_dir is not None:
+                    homo_root = pathlib.Path(output_dir)
+                else:
+                    homo_root = src_filename.parent
 
-            logger.info(f'Homogenising {src_filename.name}')
-            start_ttl = datetime.datetime.now()
-            him = HomonIm(src_filename, ref_file, method=method, kernel_shape=kernel_shape, model_crs=model_crs,
-                          **config)
-
-            # create output image filename and homogenise
-            post_fix = _create_homo_postfix(model_crs=model_crs, method=method, kernel_shape=kernel_shape,
-                                            driver=config['out_profile']['driver'])
-            homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
-            him.homogenise(homo_filename)
-
-            # set metadata in output file
-            him.set_homo_metadata(homo_filename)
-
-            if config['homo_config']['debug_image']:
-                param_out_filename = him._create_debug_filename(homo_filename)
-                him.set_debug_metadata(param_out_filename)
-
-            ttl_time = (datetime.datetime.now() - start_ttl)
-            logger.info(f'Completed in {ttl_time.total_seconds():.2f} secs')
-
-            if build_ovw:
-                # build overviews
+                logger.info(f'\nHomogenising {src_filename.name}')
                 start_ttl = datetime.datetime.now()
-                logger.info(f'Building overviews for {homo_filename.name}')
-                him.build_overviews(homo_filename)
+                him = HomonIm(src_filename, ref_file, method=method, kernel_shape=kernel_shape, model_crs=model_crs,
+                              **config)
+
+                # create output image filename and homogenise
+                post_fix = _create_homo_postfix(model_crs=model_crs, method=method, kernel_shape=kernel_shape,
+                                                driver=config['out_profile']['driver'])
+                homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
+                him.homogenise(homo_filename)
+
+                # set metadata in output file
+                him.set_homo_metadata(homo_filename)
 
                 if config['homo_config']['debug_image']:
-                    logger.info(f'Building overviews for {param_out_filename.name}')
-                    him.build_overviews(param_out_filename)
+                    param_out_filename = him._create_debug_filename(homo_filename)
+                    him.set_debug_metadata(param_out_filename)
+
+                # ttl_time = (datetime.datetime.now() - start_ttl)
+                # logger.info(f'Completed in {ttl_time.total_seconds():.2f} secs')
+
+                if build_ovw:
+                    # build overviews
+                    # start_ttl = datetime.datetime.now()
+                    logger.info(f'Building overviews for {homo_filename.name}')
+                    him.build_overviews(homo_filename)
+
+                    if config['homo_config']['debug_image']:
+                        logger.info(f'Building overviews for {param_out_filename.name}')
+                        him.build_overviews(param_out_filename)
 
                 ttl_time = (datetime.datetime.now() - start_ttl)
                 logger.info(f'Completed in {ttl_time.total_seconds():.2f} secs')
+    except Exception:
+        logger.exception("Exception caught during processing")
+        raise click.Abort()

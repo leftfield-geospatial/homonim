@@ -16,6 +16,8 @@
     You should have received a copy of the GNU Affero General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
+import logging
+import warnings
 import cProfile
 import concurrent.futures
 import multiprocessing
@@ -34,13 +36,16 @@ from rasterio.warp import Resampling
 from rasterio.windows import Window
 from shapely.geometry import box
 from tqdm import tqdm
+from tqdm.contrib.logging import logging_redirect_tqdm
 
-from homonim import get_logger
 from homonim.kernel_model import KernelModel, RefSpaceModel, SrcSpaceModel
 from homonim.raster_array import RasterArray, round_window_to_grid, expand_window_to_grid
-from homonim.errors import UnsupportedImageError, ImageContentError, BlockSizeError
+from homonim.errors import (
+    UnsupportedImageError, ImageContentError, BlockSizeError, BandCountMismatchWarning, NodataMaskWarning,
+    ModelCrsWarning
+)
 
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 """Overlapping block object"""
 OvlBlock = namedtuple('OvlBlock', ['band_i', 'src_in_block', 'src_out_block', 'outer'])
@@ -53,7 +58,7 @@ class HomonIm(object):
                                nodata=RasterArray.default_nodata)
     default_model_config = KernelModel.default_config
 
-    def __init__(self, src_filename, ref_filename, method, kernel_shape, model_crs='ref',
+    def __init__(self, src_filename, ref_filename, method, kernel_shape, model_crs='auto',
                  homo_config=default_homo_config,
                  model_config=default_model_config, out_profile=default_out_profile):
         """
@@ -90,14 +95,14 @@ class HomonIm(object):
         self._model_crs = model_crs
         self._check_rasters()
 
-        if model_crs == 'ref':
+        if self._model_crs == 'ref':
             self._model = RefSpaceModel(method=method, kernel_shape=kernel_shape,
                                         debug_image=self._config['debug_image'], **model_config)
-        elif model_crs == 'src':
+        elif self._model_crs == 'src':
             self._model = SrcSpaceModel(method=method, kernel_shape=kernel_shape,
                                         debug_image=self._config['debug_image'], **model_config)
         else:
-            raise ValueError(f'Unknown "model_crs" option "{model_crs}"')
+            raise ValueError(f'Unknown model_crs option: {model_crs}')
 
     @property
     def method(self):
@@ -126,19 +131,16 @@ class HomonIm(object):
                         tmp_array = im.read(1, window=im.block_window(1, 0, 0))
                     except Exception as ex:
                         if im.profile['compress'] == 'jpeg':  # assume it is a 12bit JPEG
-                            raise UnsupportedImageError(f'Could not read {filename.name}\n'
-                                            f'    This GDAL package does not support JPEG compression with NBITS==12\n'
-                                            f'    you probably need to recompress this file.\n'
-                                            f'    See the README for details.')
+                            raise UnsupportedImageError(
+                                f'Could not read image.  JPEG compression with NBITS==12 is unsupported, you probably '
+                                f'need to recompress this image.'
+                            )
                         else:
                             raise ex
 
             with rio.open(self._src_filename, 'r') as src_im, rio.open(self._ref_filename, 'r') as _ref_im:
                 if src_im.crs.to_proj4() != _ref_im.crs.to_proj4():  # re-project the reference image to source CRS
-                    # TODO: here we project from transform on the ref grid and that include source bounds
-                    #   we could just project into src_im transform though too.
-                    logger.warning('Reprojecting reference image to the source CRS. '
-                                   'To avoid this step, provide reference and source images in the same CRS')
+                    logger.info(f'Re-projecting reference image to source CRS.')
                 with WarpedVRT(_ref_im, crs=src_im.crs, resampling=Resampling.bilinear) as ref_im:
 
                     # check reference covers source
@@ -146,8 +148,7 @@ class HomonIm(object):
                     ref_box = box(*ref_im.bounds)
 
                     if not ref_box.covers(src_box):
-                        raise ImageContentError(f'Reference image {self._ref_filename.name} does not cover source image '
-                                        f'{self._src_filename.name}.')
+                        raise ImageContentError('Reference image extent does not cover source image.')
 
                     # make lists of non-alpha bands for ref and src
                     self._src_bands = [bi + 1 for bi in range(src_im.count) if
@@ -157,28 +158,28 @@ class HomonIm(object):
 
                     # check ref image has enough bands
                     if len(self._src_bands) > len(self._ref_bands):
-                        raise ImageContentError(f'Reference image {self._ref_filename.name} has fewer non-alpha bands '
-                                                 f'than source image {self._src_filename.name}.')
+                        raise ImageContentError('Reference has fewer non-alpha bands than source image.')
 
                     # if the band counts don't match, use the first len(src_band_list) of ref image
                     if len(self._src_bands) != len(self._ref_bands):
-                        logger.warning('Reference and source non-alpha band counts don`t match.  \n'
-                                       f'Using the first {len(self._src_bands)} non-alpha bands of reference image '
-                                       f'{self._ref_filename.name}.')
+                        logger.warning(f'Reference and source image non-alpha band counts don`t match. Using the first '
+                                       f'{len(self._src_bands)} non-alpha reference bands.')
 
                     # warn if the datasets are not masked
-                    for im, fn in zip([src_im, ref_im], [self._src_filename, self._ref_filename]):
+                    for im, im_label in zip([src_im, ref_im], ['Source', 'Reference']):
                         is_masked = any([MaskFlags.all_valid not in im.mask_flag_enums[bi] for bi in range(im.count)])
                         if im.nodata is None and not is_masked:
-                            logger.warning(f'{fn.name} has no mask or nodata value. '
-                                           f'Any invalid pixels in this image should be masked')
+                            logger.warning(f'{im_label} image has no mask or nodata value, '
+                                           f'any invalid pixels should be masked before homogenising.')
 
-                    if np.any(src_im.res >= ref_im.res) and (self._model_crs == 'ref'):
-                        logger.warning('Source image resolution is coarser than reference image resolution, '
-                                       'model_crs="src" is recommended.')
-                    elif np.any(src_im.res < ref_im.res) and (self._model_crs == 'src'):
-                        logger.warning('Source image resolution is finer than reference image resolution, '
-                                       'model_crs="ref" is recommended.')
+                    src_pixel_smaller = np.prod(src_im.res) < np.prod(ref_im.res)
+                    if self._model_crs == 'auto':
+                        self._model_crs = 'ref' if src_pixel_smaller else 'src'
+                    elif ((self._model_crs == 'src' and src_pixel_smaller) or
+                          (self._model_crs == 'ref' and not src_pixel_smaller)):
+                        logger.warning(f'model_crs == "{"ref" if src_pixel_smaller else "src"}" is recommended when '
+                                      f'the source image pixel size is '
+                                      f'{"smaller" if src_pixel_smaller else "larger"} than the reference.')
 
                     ref_win = expand_window_to_grid(
                         ref_im.window(*src_im.bounds),
@@ -348,15 +349,17 @@ class HomonIm(object):
                       Path of the homogenised image file to create.
         """
         ovl_blocks = self._create_ovl_blocks()
-        bar = tqdm(total=len(ovl_blocks) + 1)
+        bar = tqdm(total=len(ovl_blocks),
+                   bar_format='{l_bar}{bar}|{n_fmt}/{total_fmt} blocks [{elapsed}<{remaining}]')
         bar.update(0)
 
         src_read_lock = threading.Lock()
         ref_read_lock = threading.Lock()
         write_lock = threading.Lock()
         dbg_lock = threading.Lock()
+        mask_thingy = 0
 
-        with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
+        with logging_redirect_tqdm(), rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
             with WarpedVRT(rio.open(self._ref_filename, 'r'), **self._ref_warped_vrt_dict) as ref_im:
 
                 if self._profile:
@@ -373,8 +376,9 @@ class HomonIm(object):
 
                 # create the output image file
                 out_profile = self._create_out_profile(src_im.profile)
-                out_im = rio.open(out_filename, 'w',
-                                  **out_profile)  # avoid too many nested indents with 'with' statements
+                out_im = rio.open(out_filename, 'w', **out_profile)  # avoid too many nested indents with 'with' statements
+                r2_sum = 0.
+                mask_sum = 0.
 
                 try:
                     def process_block(ovl_block: OvlBlock):
@@ -410,7 +414,12 @@ class HomonIm(object):
                             bar.update(1)
 
                         if self._config['debug_image']:
+                            param_mask = param_ra.mask
                             with dbg_lock:
+                                nonlocal mask_sum, r2_sum
+                                mask_sum += param_mask.sum()
+                                r2_sum += param_ra.array[2, param_mask].sum()
+
                                 src_out_bounds = src_im.window_bounds(ovl_block.src_out_block)
                                 dbg_array = param_ra.slice_array(*src_out_bounds)
                                 dbg_out_block = round_window_to_grid(dbg_im.window(*src_out_bounds))
@@ -434,10 +443,10 @@ class HomonIm(object):
                             process_block(ovl_block)
                 finally:
                     out_im.close()
+                    bar.close()
                     if self._config['debug_image']:
                         dbg_im.close()
-                    bar.update(1)
-                    bar.close()
+                        logger.debug(f'Average kernel model R\N{SUPERSCRIPT TWO}: {r2_sum/mask_sum:.2f}')
 
         if self._profile:
             # print profiling info
