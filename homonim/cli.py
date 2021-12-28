@@ -29,12 +29,12 @@ from click.core import ParameterSource
 from rasterio.warp import SUPPORTED_RESAMPLING
 import logging
 
-from homonim.homonim import HomonIm
+from homonim.homonim import ImFuse
 from homonim.kernel_model import KernelModel
 
 # print formatting
-np.set_printoptions(precision=4)
-np.set_printoptions(suppress=True)
+# np.set_printoptions(precision=4)
+# np.set_printoptions(suppress=True)
 logger = logging.getLogger(__name__)
 
 class _CustomFormatter(logging.Formatter):
@@ -48,12 +48,13 @@ class _CustomFormatter(logging.Formatter):
 def configure_logging(verbosity):
     # TODO, copy rio's verbose/quiet params: https://github.com/rasterio/rasterio/blob/master/rasterio/rio/main.py
     log_level = max(10, 30 - 10 * verbosity)
-    # logging.basicConfig(level=log_level, format='%(levelname)s:%(name)s: %(message)s')
     formatter = _CustomFormatter()
     handler = logging.StreamHandler(sys.stderr)
     handler.setFormatter(formatter)
     logging.root.addHandler(handler)
     logging.root.setLevel(log_level)
+    logging.captureWarnings(True)
+
 
 class _ConfigFileCommand(click.Command):
     """Class to combine config file with command line parameters"""
@@ -112,35 +113,52 @@ def _parse_nodata(ctx, param, value):
         except (TypeError, ValueError):
             raise click.BadParameter("{!r} is not a number".format(value), param=param, param_hint="nodata")
 
+ref_file_option = click.option("-r", "--ref-file", type=click.Path(exists=True, dir_okay=False, readable=True), required=True,
+              help="Path to the reference image file.")
+
+@click.group(chain=True)
+@click.option(
+    '--verbose', '-v',
+    count=True,
+    help="Increase verbosity.")
+@click.option(
+    '--quiet', '-q',
+    count=True,
+    help="Decrease verbosity.")
+@click.pass_context
+def cli(ctx, verbose, quiet):
+    verbosity = verbose - quiet
+    configure_logging(verbosity)
+    ctx.obj = {}
+    ctx.obj["verbosity"] = verbosity
 
 @click.command(cls=_ConfigFileCommand)
 @click.option("-s", "--src-file", type=click.Path(), required=True, multiple=True,
               help="Path(s) or wildcard pattern(s) specifying the source image file(s).")
-@click.option("-r", "--ref-file", type=click.Path(exists=True, dir_okay=False, readable=True), required=True,
-              help="Path to the reference image file.")
+@ref_file_option
 @click.option("-k", "--kernel-shape", type=click.Tuple([click.INT, click.INT]), nargs=2, default=(5, 5),
               show_default=True, help="Sliding kernel (window) width and height (in reference pixels).")
 @click.option("-m", "--method", type=click.Choice(['gain', 'gain-im-offset', 'gain-offset'], case_sensitive=False),
               default='gain-im-offset', show_default=True, help="Homogenisation method.")
-@click.option("-mc", "--model-crs", type=click.Choice(['ref', 'src', 'auto'], case_sensitive=False), default='auto',
-              show_default=True, help="Derive homogenisation model in 'ref' (reference) or 'src' (source) image CRS.")
 @click.option("-od", "--output-dir", type=click.Path(exists=True, file_okay=False, writable=True),
-              help="Directory to create homogenised image(s) in. [default: use --src-file directory]")
+              help="Directory to create homogenised image(s) in. [default: use source image directory]")
 @click.option("-nbo", "--no-build-ovw", "build_ovw", type=click.BOOL, is_flag=True, default=True,
               help="Don't build overviews for the created image(s).")
+@click.option("-mc", "--model-crs", type=click.Choice(['ref', 'src', 'auto'], case_sensitive=False), default='auto',
+              show_default=True, help="The image CRS in which to derive the homogenisation model.")
 @click.option("-c", "--conf", type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path),
               required=False, default=None, help="Path to a configuration file.")
-@click.option("-di", "--debug-image", type=click.BOOL, is_flag=True,
-              default=HomonIm.default_homo_config['debug_image'],
+@click.option("-di", "--debug-image", type=click.BOOL, is_flag=True,    # TODO: normally on and flag to switch off?
+              default=ImFuse.default_homo_config['debug_image'],
               help=f"Create a debug image for each source file containing parameter and R\N{SUPERSCRIPT TWO} values.")
 @click.option("-mp", "--mask-partial", type=click.BOOL, is_flag=True,
-              default=HomonIm.default_homo_config['mask_partial'],
+              default=ImFuse.default_homo_config['mask_partial'],
               help=f"Mask output pixels produced from partial kernel, or source image coverage.")
 @click.option("-nmt", "--no-mutlithread", "multithread", type=click.BOOL, is_flag=True,
-              default=HomonIm.default_homo_config['multithread'],
+              default=ImFuse.default_homo_config['multithread'],
               help=f"Process image blocks consecutively.")
 @click.option("-mbm", "--max-block-mem", type=click.INT, help="Maximum image block size for processing (MB)",
-              default=HomonIm.default_homo_config['max_block_mem'], show_default=True)
+              default=ImFuse.default_homo_config['max_block_mem'], show_default=True)
 @click.option("-ds", "--downsampling", type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
               default=KernelModel.default_config['downsampling'], show_default=True,
               help="Resampling method for re-projecting from reference to source CRS.")
@@ -153,36 +171,34 @@ def _parse_nodata(ctx, param, value):
                    "surrounding areas. For 'gain-offset' method only.")
 @click.option("--out-driver", "driver",
               type=click.Choice(set(rio.drivers.raster_driver_extensions().values()), case_sensitive=False),
-              default=HomonIm.default_out_profile['driver'], show_default=True, metavar="TEXT",
+              default=ImFuse.default_out_profile['driver'], show_default=True, metavar="TEXT",
               help="Output format driver.")
 @click.option("--out-dtype", "dtype", type=click.Choice(list(rio.dtypes.dtype_fwd.values())[1:8], case_sensitive=False),
-              default=HomonIm.default_out_profile['dtype'], show_default=True, help="Output image data type.")
-@click.option("--out-blockxsize", "blockxsize", type=click.INT, default=HomonIm.default_out_profile['blockxsize'],
+              default=ImFuse.default_out_profile['dtype'], show_default=True, help="Output image data type.")
+@click.option("--out-blockxsize", "blockxsize", type=click.INT, default=ImFuse.default_out_profile['blockxsize'],
               show_default=True, help="Output image block width.")
-@click.option("--out-blockysize", "blockysize", type=click.INT, default=HomonIm.default_out_profile['blockysize'],
+@click.option("--out-blockysize", "blockysize", type=click.INT, default=ImFuse.default_out_profile['blockysize'],
               show_default=True, help="Output image block height.")
 @click.option("--out-compress", "compress",
               type=click.Choice([item.value for item in rio.enums.Compression], case_sensitive=False),
-              default=HomonIm.default_out_profile['compress'], show_default=True,  # metavar="TEXT",
+              default=ImFuse.default_out_profile['compress'], show_default=True,  # metavar="TEXT",
               help="Output image compression.")
 @click.option("--out-interleave", "interleave", type=click.Choice(["pixel", "band"], case_sensitive=False),
-              default=HomonIm.default_out_profile['interleave'], show_default=True,
+              default=ImFuse.default_out_profile['interleave'], show_default=True,
               help="Output image data interleaving.")
 @click.option("--out-photometric", "photometric",
               type=click.Choice([item.value for item in rio.enums.PhotometricInterp], case_sensitive=False),
-              default=HomonIm.default_out_profile['photometric'], show_default=True,
+              default=ImFuse.default_out_profile['photometric'], show_default=True,
               help="Output image photometric interpretation.")
 @click.option("--out-nodata", "nodata", type=click.STRING, callback=_parse_nodata, metavar="[NUMBER|null|nan]",
-              default=HomonIm.default_out_profile['nodata'], show_default=True,
+              default=ImFuse.default_out_profile['nodata'], show_default=True,
               help="Output image nodata value.")
-def cli(src_file, ref_file, kernel_shape, method, model_crs, output_dir, build_ovw, conf, **kwargs):
-    """Radiometrically homogenise image(s) by fusion with reference satellite data"""
-
-    configure_logging(1)
+def fuse(src_file, ref_file, kernel_shape, method, output_dir, build_ovw, model_crs, conf, **kwargs):
+    """Radiometrically homogenise image(s) by fusion with a reference"""
     config = {}
-    config['homo_config'] = _update_existing_keys(HomonIm.default_homo_config, **kwargs)
-    config['model_config'] = _update_existing_keys(HomonIm.default_model_config, **kwargs)
-    config['out_profile'] = _update_existing_keys(HomonIm.default_out_profile, **kwargs)
+    config['homo_config'] = _update_existing_keys(ImFuse.default_homo_config, **kwargs)
+    config['model_config'] = _update_existing_keys(ImFuse.default_model_config, **kwargs)
+    config['out_profile'] = _update_existing_keys(ImFuse.default_out_profile, **kwargs)
 
     # iterate over and homogenise source file(s)
     try:
@@ -200,8 +216,8 @@ def cli(src_file, ref_file, kernel_shape, method, model_crs, output_dir, build_o
 
                 logger.info(f'\nHomogenising {src_filename.name}')
                 start_ttl = datetime.datetime.now()
-                him = HomonIm(src_filename, ref_file, method=method, kernel_shape=kernel_shape, model_crs=model_crs,
-                              **config)
+                him = ImFuse(src_filename, ref_file, method=method, kernel_shape=kernel_shape, model_crs=model_crs,
+                             **config)
 
                 # create output image filename and homogenise
                 post_fix = _create_homo_postfix(model_crs=model_crs, method=method, kernel_shape=kernel_shape,
@@ -209,16 +225,8 @@ def cli(src_file, ref_file, kernel_shape, method, model_crs, output_dir, build_o
                 homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
                 him.homogenise(homo_filename)
 
-                # set metadata in output file
-                him.set_homo_metadata(homo_filename)
-
-                if config['homo_config']['debug_image']:
-                    param_out_filename = him._create_debug_filename(homo_filename)
-                    him.set_debug_metadata(param_out_filename)
-
                 # ttl_time = (datetime.datetime.now() - start_ttl)
                 # logger.info(f'Completed in {ttl_time.total_seconds():.2f} secs')
-
                 if build_ovw:
                     # build overviews
                     # start_ttl = datetime.datetime.now()
@@ -226,6 +234,7 @@ def cli(src_file, ref_file, kernel_shape, method, model_crs, output_dir, build_o
                     him.build_overviews(homo_filename)
 
                     if config['homo_config']['debug_image']:
+                        param_out_filename = him._create_debug_filename(homo_filename)
                         logger.info(f'Building overviews for {param_out_filename.name}')
                         him.build_overviews(param_out_filename)
 
@@ -234,3 +243,26 @@ def cli(src_file, ref_file, kernel_shape, method, model_crs, output_dir, build_o
     except Exception:
         logger.exception("Exception caught during processing")
         raise click.Abort()
+
+cli.add_command(fuse)
+
+@click.command()
+@click.option("-i", "--im-file", type=click.Path(), required=True, multiple=True,
+              help="Path(s) or wildcard pattern(s) specifying the image file(s).")
+@ref_file_option
+def compare(im_file, ref_file):
+    """Statistically compare image(s) with a reference"""
+    try:
+        for im_file_spec in im_file:
+            im_file_path = pathlib.Path(im_file_spec)
+            if len(list(im_file_path.parent.glob(im_file_path.name))) == 0:
+                raise click.BadParameter(f'Could not find any source image(s) matching {im_file_path.name}',
+                                         param='src_file', param_hint='src_file')
+
+            for im_filename in im_file_path.parent.glob(im_file_path.name):
+                logger.info(f'\nComparing {im_filename.name} and {ref_file.name}')
+    except Exception:
+        logger.exception("Exception caught during processing")
+        raise click.Abort()
+
+cli.add_command(compare)

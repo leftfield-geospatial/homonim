@@ -40,18 +40,58 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 from homonim.kernel_model import KernelModel, RefSpaceModel, SrcSpaceModel
 from homonim.raster_array import RasterArray, round_window_to_grid, expand_window_to_grid
-from homonim.errors import (
-    UnsupportedImageError, ImageContentError, BlockSizeError, BandCountMismatchWarning, NodataMaskWarning,
-    ModelCrsWarning
-)
+from homonim.errors import (UnsupportedImageError, ImageContentError, BlockSizeError)
 
 logger = logging.getLogger(__name__)
+
+
+def _inspect_image(im_filename):
+    im_filename = pathlib.Path(im_filename)
+    if not im_filename.exists():
+        raise FileNotFoundError(f'{im_filename.name} does not exist')
+
+    with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(im_filename, 'r') as im:
+        try:
+            tmp_array = im.read(1, window=im.block_window(1, 0, 0))
+        except Exception as ex:
+            if im.profile['compress'] == 'jpeg':  # assume it is a 12bit JPEG
+                raise UnsupportedImageError(
+                    f'Could not read image {im_filename.name}.  JPEG compression with NBITS==12 is unsupported, '
+                    f'you probably need to recompress this image.'
+                )
+            else:
+                raise ex
+        is_masked = any([MaskFlags.all_valid not in im.mask_flag_enums[bi] for bi in range(im.count)])
+        if im.nodata is None and not is_masked:
+            logger.warning(f'{im_filename.name} has no mask or nodata value, '
+                           f'any invalid pixels should be masked before homogenising.')
+        im_bands = [bi + 1 for bi in range(im.count) if im.colorinterp[bi] != ColorInterp.alpha]
+    return im_bands
+
+def _inspect_image_pair(cmp_filename, ref_filename):
+    # check ref_filename has enough bands
+    cmp_bands = _inspect_image(cmp_filename)
+    ref_bands = _inspect_image(ref_filename)
+    if len(cmp_bands) > len(ref_bands):
+        raise ImageContentError(f'{ref_filename.name} has fewer non-alpha bands than {cmp_filename.name}.')
+
+    # warn if band counts don't match
+    if len(cmp_bands) != len(ref_bands):
+        logger.warning(f'Image non-alpha band counts don`t match. Using the first {len(cmp_bands)} non-alpha bands '
+                         f'of {ref_filename.name}.')
+
+    with rio.open(cmp_filename, 'r') as cmp_im:
+        with WarpedVRT(rio.open(ref_filename, 'r'), crs=cmp_im.crs, resampling=Resampling.bilinear) as ref_im:
+            # check coverage
+            if not box(*ref_im.bounds).covers(box(*cmp_im.bounds)):
+                raise ImageContentError('Reference extent does not cover image.')
+    return cmp_bands, ref_bands
 
 """Overlapping block object"""
 OvlBlock = namedtuple('OvlBlock', ['band_i', 'src_in_block', 'src_out_block', 'outer'])
 
 
-class HomonIm(object):
+class ImFuse():
     default_homo_config = dict(debug_image=False, mask_partial=False, multithread=True, max_block_mem=100)
     default_out_profile = dict(driver='GTiff', dtype=RasterArray.default_dtype, blockxsize=512, blockysize=512,
                                compress='deflate', interleave='band', photometric=None,
@@ -59,8 +99,7 @@ class HomonIm(object):
     default_model_config = KernelModel.default_config
 
     def __init__(self, src_filename, ref_filename, method, kernel_shape, model_crs='auto',
-                 homo_config=default_homo_config,
-                 model_config=default_model_config, out_profile=default_out_profile):
+                 homo_config=default_homo_config, model_config=default_model_config, out_profile=default_out_profile):
         """
         Class for homogenising images
 
@@ -93,7 +132,7 @@ class HomonIm(object):
         self._ref_warped_vrt_dict = None
         self._profile = False
         self._model_crs = model_crs
-        self._check_rasters()
+        self._image_init()
 
         if self._model_crs == 'ref':
             self._model = RefSpaceModel(method=method, kernel_shape=kernel_shape,
@@ -116,78 +155,30 @@ class HomonIm(object):
     def space(self):
         return self._model_crs
 
-    def _check_rasters(self):
+    def _image_init(self):
         """Check bounds, band count, and compression type of source and reference images"""
-        if not self._src_filename.exists():
-            raise FileNotFoundError(f'Source file {self._src_filename.stem} does not exist')
-        if not self._ref_filename.exists():
-            raise FileNotFoundError(f'Reference file {self._ref_filename.stem} does not exist')
+        self._src_bands, self._ref_bands = _inspect_image_pair(self._src_filename, self._ref_filename)
 
-        # check we can read the images
-        with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
-            for filename in [self._src_filename, self._ref_filename]:
-                with rio.open(filename, 'r') as im:
-                    try:
-                        tmp_array = im.read(1, window=im.block_window(1, 0, 0))
-                    except Exception as ex:
-                        if im.profile['compress'] == 'jpeg':  # assume it is a 12bit JPEG
-                            raise UnsupportedImageError(
-                                f'Could not read image.  JPEG compression with NBITS==12 is unsupported, you probably '
-                                f'need to recompress this image.'
-                            )
-                        else:
-                            raise ex
+        with rio.open(self._src_filename, 'r') as src_im, rio.open(self._ref_filename, 'r') as _ref_im:
+            if src_im.crs.to_proj4() != _ref_im.crs.to_proj4():  # re-project the reference image to source CRS
+                logger.info(f'Re-projecting reference image to source CRS.')
+            with WarpedVRT(_ref_im, crs=src_im.crs, resampling=Resampling.bilinear) as ref_im:
+                src_pixel_smaller = np.prod(src_im.res) < np.prod(ref_im.res)
+                if self._model_crs == 'auto':
+                    self._model_crs = 'ref' if src_pixel_smaller else 'src'
+                elif ((self._model_crs == 'src' and src_pixel_smaller) or
+                      (self._model_crs == 'ref' and not src_pixel_smaller)):
+                    logger.warning(f'model_crs == "{"ref" if src_pixel_smaller else "src"}" is recommended when '
+                                  f'the source image pixel size is '
+                                  f'{"smaller" if src_pixel_smaller else "larger"} than the reference.')
 
-            with rio.open(self._src_filename, 'r') as src_im, rio.open(self._ref_filename, 'r') as _ref_im:
-                if src_im.crs.to_proj4() != _ref_im.crs.to_proj4():  # re-project the reference image to source CRS
-                    logger.info(f'Re-projecting reference image to source CRS.')
-                with WarpedVRT(_ref_im, crs=src_im.crs, resampling=Resampling.bilinear) as ref_im:
-
-                    # check reference covers source
-                    src_box = box(*src_im.bounds)
-                    ref_box = box(*ref_im.bounds)
-
-                    if not ref_box.covers(src_box):
-                        raise ImageContentError('Reference image extent does not cover source image.')
-
-                    # make lists of non-alpha bands for ref and src
-                    self._src_bands = [bi + 1 for bi in range(src_im.count) if
-                                       src_im.colorinterp[bi] != ColorInterp.alpha]
-                    self._ref_bands = [bi + 1 for bi in range(ref_im.count) if
-                                       ref_im.colorinterp[bi] != ColorInterp.alpha]
-
-                    # check ref image has enough bands
-                    if len(self._src_bands) > len(self._ref_bands):
-                        raise ImageContentError('Reference has fewer non-alpha bands than source image.')
-
-                    # if the band counts don't match, use the first len(src_band_list) of ref image
-                    if len(self._src_bands) != len(self._ref_bands):
-                        logger.warning(f'Reference and source image non-alpha band counts don`t match. Using the first '
-                                       f'{len(self._src_bands)} non-alpha reference bands.')
-
-                    # warn if the datasets are not masked
-                    for im, im_label in zip([src_im, ref_im], ['Source', 'Reference']):
-                        is_masked = any([MaskFlags.all_valid not in im.mask_flag_enums[bi] for bi in range(im.count)])
-                        if im.nodata is None and not is_masked:
-                            logger.warning(f'{im_label} image has no mask or nodata value, '
-                                           f'any invalid pixels should be masked before homogenising.')
-
-                    src_pixel_smaller = np.prod(src_im.res) < np.prod(ref_im.res)
-                    if self._model_crs == 'auto':
-                        self._model_crs = 'ref' if src_pixel_smaller else 'src'
-                    elif ((self._model_crs == 'src' and src_pixel_smaller) or
-                          (self._model_crs == 'ref' and not src_pixel_smaller)):
-                        logger.warning(f'model_crs == "{"ref" if src_pixel_smaller else "src"}" is recommended when '
-                                      f'the source image pixel size is '
-                                      f'{"smaller" if src_pixel_smaller else "larger"} than the reference.')
-
-                    ref_win = expand_window_to_grid(
-                        ref_im.window(*src_im.bounds),
-                        expand_pixels=np.ceil(np.divide(src_im.res, ref_im.res)).astype('int')
-                    )
-                    ref_transform = ref_im.window_transform(ref_win)
-                    self._ref_warped_vrt_dict = dict(crs=src_im.crs, transform=ref_transform, width=ref_win.width,
-                                                     height=ref_win.height, resampling=Resampling.bilinear)
+                ref_win = expand_window_to_grid(
+                    ref_im.window(*src_im.bounds),
+                    expand_pixels=np.ceil(np.divide(src_im.res, ref_im.res)).astype('int')
+                )
+                ref_transform = ref_im.window_transform(ref_win)
+                self._ref_warped_vrt_dict = dict(crs=src_im.crs, transform=ref_transform, width=ref_win.width,
+                                                 height=ref_win.height, resampling=Resampling.bilinear)
 
     def _auto_block_shape(self, src_shape):
         max_block_mem = self._config['max_block_mem'] * (2 ** 20)  # MB to Bytes
@@ -280,7 +271,7 @@ class HomonIm(object):
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(filename, 'r+') as homo_im:
             homo_im.build_overviews([2, 4, 8, 16, 32], Resampling.average)
 
-    def set_homo_metadata(self, filename):
+    def _set_homo_metadata(self, filename):
         """
         Copy various metadata to a homogenised image (GeoTIFF) file.
 
@@ -307,7 +298,7 @@ class HomonIm(object):
                 homo_im.set_band_description(bi + 1, ref_im.descriptions[bi])
                 homo_im.update_tags(bi + 1, **homo_meta_dict)
 
-    def set_debug_metadata(self, filename):
+    def _set_debug_metadata(self, filename):
         """
         Copy various metadata to a homogenised image (GeoTIFF) file.
 
@@ -357,7 +348,6 @@ class HomonIm(object):
         ref_read_lock = threading.Lock()
         write_lock = threading.Lock()
         dbg_lock = threading.Lock()
-        mask_thingy = 0
 
         with logging_redirect_tqdm(), rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
             with WarpedVRT(rio.open(self._ref_filename, 'r'), **self._ref_warped_vrt_dict) as ref_im:
@@ -371,8 +361,8 @@ class HomonIm(object):
                 if self._config['debug_image']:
                     # create debug image file
                     dbg_profile = self._create_debug_profile(src_im.profile, ref_im.profile)
-                    dbg_out_file_name = self._create_debug_filename(out_filename)
-                    dbg_im = rio.open(dbg_out_file_name, 'w', **dbg_profile)
+                    dbg_file_name = self._create_debug_filename(out_filename)
+                    dbg_im = rio.open(dbg_file_name, 'w', **dbg_profile)
 
                 # create the output image file
                 out_profile = self._create_out_profile(src_im.profile)
@@ -444,8 +434,10 @@ class HomonIm(object):
                 finally:
                     out_im.close()
                     bar.close()
+                    self._set_homo_metadata(out_filename)
                     if self._config['debug_image']:
                         dbg_im.close()
+                        self._set_debug_metadata(dbg_file_name)
                         logger.debug(f'Average kernel model R\N{SUPERSCRIPT TWO}: {r2_sum/mask_sum:.2f}')
 
         if self._profile:

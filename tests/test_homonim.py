@@ -33,7 +33,7 @@ from shapely.geometry import box
 from tqdm import tqdm
 
 from homonim import root_path, cli
-from homonim.homonim import HomonIm
+from homonim.homonim import ImFuse
 from homonim.raster_array import RasterArray, expand_window_to_grid
 
 
@@ -70,9 +70,9 @@ class TestHomonim(unittest.TestCase):
         self._conf_filename = root_path.joinpath('data/inputs/test_example/config.yaml')
         with open(self._conf_filename, 'r') as f:
             config = yaml.safe_load(f)
-        self._homo_config = cli._update_existing_keys(HomonIm.default_homo_config, **config)
-        self._out_profile = cli._update_existing_keys(HomonIm.default_out_profile, **config)
-        self._model_config = cli._update_existing_keys(HomonIm.default_model_config, **config)
+        self._homo_config = cli._update_existing_keys(ImFuse.default_homo_config, **config)
+        self._out_profile = cli._update_existing_keys(ImFuse.default_out_profile, **config)
+        self._model_config = cli._update_existing_keys(ImFuse.default_model_config, **config)
 
     def _test_homo_against_src(self, src_filename, homo_filename):
         """Test homogenised against source image"""
@@ -176,12 +176,11 @@ class TestHomonim(unittest.TestCase):
         for param_dict in param_list:
             post_fix = cli._create_homo_postfix(driver=self._out_profile['driver'], **param_dict)
             homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
-            him = HomonIm(src_filename, ref_filename, **param_dict, homo_config=self._homo_config,
-                          model_config=self._model_config, out_profile=self._out_profile)
+            him = ImFuse(src_filename, ref_filename, **param_dict, homo_config=self._homo_config,
+                         model_config=self._model_config, out_profile=self._out_profile)
             with self.subTest('Overlapped Blocks', src_filename=src_filename):
                 self._test_ovl_blocks(him._create_ovl_blocks())
             him.homogenise(homo_filename)
-            him.set_homo_metadata(homo_filename)
             him.build_overviews(homo_filename)
             self.assertTrue(homo_filename.exists(), 'Homogenised file exists')
             with self.subTest('Homogenised vs Source', src_filename=src_filename, homo_filename=homo_filename):
@@ -203,12 +202,11 @@ class TestHomonim(unittest.TestCase):
         for param_dict in param_list:
             post_fix = cli._create_homo_postfix(driver=self._out_profile['driver'], **param_dict)
             homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
-            him = HomonIm(src_filename, ref_filename, **param_dict, homo_config=self._homo_config,
-                          model_config=self._model_config, out_profile=self._out_profile)
+            him = ImFuse(src_filename, ref_filename, **param_dict, homo_config=self._homo_config,
+                         model_config=self._model_config, out_profile=self._out_profile)
             with self.subTest('Overlapped Blocks', src_filename=src_filename):
                 self._test_ovl_blocks(him._create_ovl_blocks())
             him.homogenise(homo_filename)
-            him.set_homo_metadata(homo_filename)
             him.build_overviews(homo_filename)
             self.assertTrue(homo_filename.exists(), 'Homogenised file exists')
             with self.subTest('Homogenised vs Source', src_filename=src_filename, homo_filename=homo_filename):
@@ -217,7 +215,7 @@ class TestHomonim(unittest.TestCase):
                               ref_filename=ref_filename):
                 self._test_homo_against_ref(src_filename, homo_filename, ref_filename)
 
-    def test_cli(self):
+    def test_cli_fuse(self):
         """Test homogenisation CLI"""
         src_wildcard = root_path.joinpath('data/inputs/test_example/source/3324c_2015_*_RGB.tif')
         ref_filename = root_path.joinpath(
@@ -233,7 +231,7 @@ class TestHomonim(unittest.TestCase):
         ]
 
         for param_dict in param_list:
-            cli_str = (f'-s {src_wildcard} -r {ref_filename} -k {param_dict["kernel_shape"][0]} '
+            cli_str = (f'fuse -s {src_wildcard} -r {ref_filename} -k {param_dict["kernel_shape"][0]} '
                        f'{param_dict["kernel_shape"][1]} -m {param_dict["method"]} -od  {homo_root} -c '
                        f'{self._conf_filename} -mc  {param_dict["model_crs"]}')
 
