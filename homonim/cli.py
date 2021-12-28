@@ -22,14 +22,13 @@ import pathlib
 import sys
 
 import click
-import numpy as np
 import rasterio as rio
 import yaml
 from click.core import ParameterSource
 from rasterio.warp import SUPPORTED_RESAMPLING
 import logging
 
-from homonim.homonim import ImFuse
+from homonim.fuse import ImFuse
 from homonim.kernel_model import KernelModel
 
 # print formatting

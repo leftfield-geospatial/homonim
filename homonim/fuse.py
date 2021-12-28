@@ -40,10 +40,10 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 from homonim.kernel_model import KernelModel, RefSpaceModel, SrcSpaceModel
 from homonim.raster_array import RasterArray, round_window_to_grid, expand_window_to_grid
-from homonim.errors import (UnsupportedImageError, ImageContentError, BlockSizeError)
+from homonim.errors import UnsupportedImageError, ImageContentError, BlockSizeError
+from homonim.inspect import _inspect_image, _inspect_image_pair
 
 logger = logging.getLogger(__name__)
-
 
 def _inspect_image(im_filename):
     im_filename = pathlib.Path(im_filename)

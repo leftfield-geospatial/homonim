@@ -33,7 +33,7 @@ from shapely.geometry import box
 from tqdm import tqdm
 
 from homonim import root_path, cli
-from homonim.homonim import ImFuse
+from homonim.fuse import ImFuse
 from homonim.raster_array import RasterArray, expand_window_to_grid
 
 

@@ -17,7 +17,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 import pathlib
-from homonim import homonim
+from homonim import fuse
 
 # src_filename = pathlib.Path(r"V:\Data\NGI\UnRectified\3324C_2015_1004\RGBN\simple_ortho_eg\3324c_2015_1004_05_0182_RGBN_CMP_ORTHO.tif")#2015-09-06
 src_filename = pathlib.Path(r"V:\Data\HomonimEgs\Sequoia_2017_02_28_JonasKop\Source\odm_orthophoto - with cam radiom and with global mosaic adj 4Band.tif")
@@ -31,7 +31,7 @@ ref_filename = pathlib.Path(r"V:/Data/HomonimEgs/Sequoia_2017_02_28_JonasKop/Ref
 # ref_filename = pathlib.Path(r"V:\Data\HomonimEgs\NGI_3322A_2010_HotSpotSeamLineEg\Reference\MCD43A4.A2010025.h19v12.005.2010043064233.Lo23.RGBN.tif")
 # ref_filename = pathlib.Path(r"V:\Data\HomonimEgs\NGI_3322A_2010_HotSpotSeamLineEg\Reference\LANDSAT-LE07-C02-T1_L2-2010_02_03-2010_02_19-Q_MOSAIC_COMP_B3214.tif")
 
-hom = homonim.HomonimRefSpace(src_filename, ref_filename, win_size=[15, 15])
+hom = fuse.HomonimRefSpace(src_filename, ref_filename, win_size=[15, 15])
 hom.homogenise_by_band(src_filename.parent.joinpath(src_filename.stem + '_HOMO_REF_L7_GainAndOffset' + src_filename.suffix))
 
 
