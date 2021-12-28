@@ -30,6 +30,7 @@ import logging
 
 from homonim.fuse import ImFuse
 from homonim.kernel_model import KernelModel
+from homonim.compare import ImCompare
 
 # print formatting
 # np.set_printoptions(precision=4)
@@ -112,8 +113,9 @@ def _parse_nodata(ctx, param, value):
         except (TypeError, ValueError):
             raise click.BadParameter("{!r} is not a number".format(value), param=param, param_hint="nodata")
 
-ref_file_option = click.option("-r", "--ref-file", type=click.Path(exists=True, dir_okay=False, readable=True), required=True,
-              help="Path to the reference image file.")
+ref_file_option = click.option("-r", "--ref-file",
+                               type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path),
+                               required=True, help="Path to the reference image file.")
 
 @click.group(chain=True)
 @click.option(
@@ -260,6 +262,12 @@ def compare(im_file, ref_file):
 
             for im_filename in im_file_path.parent.glob(im_file_path.name):
                 logger.info(f'\nComparing {im_filename.name} and {ref_file.name}')
+                start_ttl = datetime.datetime.now()
+                cmp = ImCompare(im_filename, ref_file)
+                cmp.compare()
+                ttl_time = (datetime.datetime.now() - start_ttl)
+                logger.info(f'Completed in {ttl_time.total_seconds():.2f} secs')
+
     except Exception:
         logger.exception("Exception caught during processing")
         raise click.Abort()
