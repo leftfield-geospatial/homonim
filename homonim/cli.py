@@ -18,24 +18,26 @@
 """
 
 import datetime
+import logging
 import pathlib
 import sys
 
 import click
+import pandas as pd
 import rasterio as rio
 import yaml
 from click.core import ParameterSource
 from rasterio.warp import SUPPORTED_RESAMPLING
-import logging
 
+from homonim.compare import ImCompare
 from homonim.fuse import ImFuse
 from homonim.kernel_model import KernelModel
-from homonim.compare import ImCompare
 
 # print formatting
 # np.set_printoptions(precision=4)
 # np.set_printoptions(suppress=True)
 logger = logging.getLogger(__name__)
+
 
 class _CustomFormatter(logging.Formatter):
     def format(self, record):
@@ -45,9 +47,10 @@ class _CustomFormatter(logging.Formatter):
             self._style._fmt = "%(levelname)s:%(name)s: %(message)s"
         return super().format(record)
 
+
 def configure_logging(verbosity):
     # TODO, copy rio's verbose/quiet params: https://github.com/rasterio/rasterio/blob/master/rasterio/rio/main.py
-    log_level = max(10, 30 - 10 * verbosity)
+    log_level = max(10, 20 - 10 * verbosity)
     formatter = _CustomFormatter()
     handler = logging.StreamHandler(sys.stderr)
     handler.setFormatter(formatter)
@@ -58,6 +61,7 @@ def configure_logging(verbosity):
 
 class _ConfigFileCommand(click.Command):
     """Class to combine config file with command line parameters"""
+
     # adapted from https://stackoverflow.com/questions/46358797/python-click-supply-arguments-and-options-from-a-configuration-file/46391887
     def invoke(self, ctx):
         config_file = ctx.params['conf']
@@ -77,12 +81,12 @@ class _ConfigFileCommand(click.Command):
         return click.Command.invoke(self, ctx)
 
 
-def _create_homo_postfix(model_crs, method, kernel_shape, driver='GTiff'):
+def _create_homo_postfix(proc_crs, method, kernel_shape, driver='GTiff'):
     """Create a postfix string for the homogenised image file"""
     ext_dict = rio.drivers.raster_driver_extensions()
     ext_idx = list(ext_dict.values()).index(driver)
     ext = list(ext_dict.keys())[ext_idx]
-    post_fix = f'_HOMO_c{model_crs.upper()}_m{method.upper()}_k{kernel_shape[0]}_{kernel_shape[1]}.{ext}'
+    post_fix = f'_HOMO_c{proc_crs.upper()}_m{method.upper()}_k{kernel_shape[0]}_{kernel_shape[1]}.{ext}'
     return post_fix
 
 
@@ -113,9 +117,19 @@ def _parse_nodata(ctx, param, value):
         except (TypeError, ValueError):
             raise click.BadParameter("{!r} is not a number".format(value), param=param, param_hint="nodata")
 
+
 ref_file_option = click.option("-r", "--ref-file",
                                type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path),
                                required=True, help="Path to the reference image file.")
+src_file_option = click.option("-s", "--src-file", type=click.Path(), required=True, multiple=True,
+                               help="Path(s) or wildcard pattern(s) specifying the source image file(s).")
+proc_crs_option = click.option("-pc", "--proc-crs", type=click.Choice(['ref', 'src', 'auto'], case_sensitive=False),
+                               default='auto',
+                               show_default=True, help="The image CRS in which to perform processing.")
+multithread_option = click.option("-nmt", "--no-mutlithread", "multithread", type=click.BOOL, is_flag=True,
+                                  default=ImFuse.default_homo_config['multithread'],
+                                  help=f"Process image blocks consecutively.")
+
 
 @click.group(chain=True)
 @click.option(
@@ -133,9 +147,9 @@ def cli(ctx, verbose, quiet):
     ctx.obj = {}
     ctx.obj["verbosity"] = verbosity
 
+
 @click.command(cls=_ConfigFileCommand)
-@click.option("-s", "--src-file", type=click.Path(), required=True, multiple=True,
-              help="Path(s) or wildcard pattern(s) specifying the source image file(s).")
+@src_file_option
 @ref_file_option
 @click.option("-k", "--kernel-shape", type=click.Tuple([click.INT, click.INT]), nargs=2, default=(5, 5),
               show_default=True, help="Sliding kernel (window) width and height (in reference pixels).")
@@ -145,19 +159,16 @@ def cli(ctx, verbose, quiet):
               help="Directory to create homogenised image(s) in. [default: use source image directory]")
 @click.option("-nbo", "--no-build-ovw", "build_ovw", type=click.BOOL, is_flag=True, default=True,
               help="Don't build overviews for the created image(s).")
-@click.option("-mc", "--model-crs", type=click.Choice(['ref', 'src', 'auto'], case_sensitive=False), default='auto',
-              show_default=True, help="The image CRS in which to derive the homogenisation model.")
+@proc_crs_option
 @click.option("-c", "--conf", type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path),
               required=False, default=None, help="Path to a configuration file.")
-@click.option("-di", "--debug-image", type=click.BOOL, is_flag=True,    # TODO: normally on and flag to switch off?
+@click.option("-di", "--debug-image", type=click.BOOL, is_flag=True,  # TODO: normally on and flag to switch off?
               default=ImFuse.default_homo_config['debug_image'],
               help=f"Create a debug image for each source file containing parameter and R\N{SUPERSCRIPT TWO} values.")
 @click.option("-mp", "--mask-partial", type=click.BOOL, is_flag=True,
               default=ImFuse.default_homo_config['mask_partial'],
               help=f"Mask output pixels produced from partial kernel, or source image coverage.")
-@click.option("-nmt", "--no-mutlithread", "multithread", type=click.BOOL, is_flag=True,
-              default=ImFuse.default_homo_config['multithread'],
-              help=f"Process image blocks consecutively.")
+@multithread_option
 @click.option("-mbm", "--max-block-mem", type=click.INT, help="Maximum image block size for processing (MB)",
               default=ImFuse.default_homo_config['max_block_mem'], show_default=True)
 @click.option("-ds", "--downsampling", type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
@@ -194,7 +205,7 @@ def cli(ctx, verbose, quiet):
 @click.option("--out-nodata", "nodata", type=click.STRING, callback=_parse_nodata, metavar="[NUMBER|null|nan]",
               default=ImFuse.default_out_profile['nodata'], show_default=True,
               help="Output image nodata value.")
-def fuse(src_file, ref_file, kernel_shape, method, output_dir, build_ovw, model_crs, conf, **kwargs):
+def fuse(src_file, ref_file, kernel_shape, method, output_dir, build_ovw, proc_crs, conf, **kwargs):
     """Radiometrically homogenise image(s) by fusion with a reference"""
     config = {}
     config['homo_config'] = _update_existing_keys(ImFuse.default_homo_config, **kwargs)
@@ -217,11 +228,11 @@ def fuse(src_file, ref_file, kernel_shape, method, output_dir, build_ovw, model_
 
                 logger.info(f'\nHomogenising {src_filename.name}')
                 start_ttl = datetime.datetime.now()
-                him = ImFuse(src_filename, ref_file, method=method, kernel_shape=kernel_shape, model_crs=model_crs,
+                him = ImFuse(src_filename, ref_file, method=method, kernel_shape=kernel_shape, proc_crs=proc_crs,
                              **config)
 
                 # create output image filename and homogenise
-                post_fix = _create_homo_postfix(model_crs=model_crs, method=method, kernel_shape=kernel_shape,
+                post_fix = _create_homo_postfix(proc_crs=proc_crs, method=method, kernel_shape=kernel_shape,
                                                 driver=config['out_profile']['driver'])
                 homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
                 him.homogenise(homo_filename)
@@ -245,31 +256,43 @@ def fuse(src_file, ref_file, kernel_shape, method, output_dir, build_ovw, model_
         logger.exception("Exception caught during processing")
         raise click.Abort()
 
+
 cli.add_command(fuse)
 
+
 @click.command()
-@click.option("-i", "--im-file", type=click.Path(), required=True, multiple=True,
-              help="Path(s) or wildcard pattern(s) specifying the image file(s).")
+@src_file_option
 @ref_file_option
-def compare(im_file, ref_file):
+@proc_crs_option
+@multithread_option
+def compare(src_file, ref_file, proc_crs, multithread):
     """Statistically compare image(s) with a reference"""
     try:
-        for im_file_spec in im_file:
-            im_file_path = pathlib.Path(im_file_spec)
-            if len(list(im_file_path.parent.glob(im_file_path.name))) == 0:
-                raise click.BadParameter(f'Could not find any source image(s) matching {im_file_path.name}',
+        res_dict = {}
+        for src_file_spec in src_file:
+            src_file_path = pathlib.Path(src_file_spec)
+            if len(list(src_file_path.parent.glob(src_file_path.name))) == 0:
+                raise click.BadParameter(f'Could not find any source image(s) matching {src_file_path.name}',
                                          param='src_file', param_hint='src_file')
 
-            for im_filename in im_file_path.parent.glob(im_file_path.name):
-                logger.info(f'\nComparing {im_filename.name} and {ref_file.name}')
+            for src_filename in src_file_path.parent.glob(src_file_path.name):
+                logger.info(f'\nComparing {src_filename.name}')
                 start_ttl = datetime.datetime.now()
-                cmp = ImCompare(im_filename, ref_file)
-                cmp.compare()
+                cmp = ImCompare(src_filename, ref_file, proc_crs=proc_crs, multithread=multithread)
+                res_list = cmp.compare()
+                res_dict[src_filename.stem] = res_list
                 ttl_time = (datetime.datetime.now() - start_ttl)
                 logger.info(f'Completed in {ttl_time.total_seconds():.2f} secs')
+        # print results
+        for src_file, res_list in res_dict.items():
+            res_df = pd.DataFrame.from_dict(res_list).set_index('Band')
+            res_df.loc['Mean'] = res_df.mean()
+            res_str = res_df.to_string(float_format="{:.2f}".format, index=True, justify="center", index_names=False)
+            logger.info(f'\n\n{src_file}:\n\n{res_str}')
 
     except Exception:
         logger.exception("Exception caught during processing")
         raise click.Abort()
+
 
 cli.add_command(compare)

@@ -19,6 +19,7 @@
 import logging
 import pathlib
 
+import numpy as np
 import rasterio as rio
 from rasterio.enums import ColorInterp, MaskFlags
 from rasterio.vrt import WarpedVRT
@@ -54,21 +55,34 @@ def _inspect_image(im_filename):
     return im_bands
 
 
-def _inspect_image_pair(cmp_filename, ref_filename):
+def _inspect_image_pair(src_filename, ref_filename, proc_crs='auto'):
     # check ref_filename has enough bands
-    cmp_bands = _inspect_image(cmp_filename)
+    cmp_bands = _inspect_image(src_filename)
     ref_bands = _inspect_image(ref_filename)
     if len(cmp_bands) > len(ref_bands):
-        raise ImageContentError(f'{ref_filename.name} has fewer non-alpha bands than {cmp_filename.name}.')
+        raise ImageContentError(f'{ref_filename.name} has fewer non-alpha bands than {src_filename.name}.')
 
     # warn if band counts don't match
     if len(cmp_bands) != len(ref_bands):
         logger.warning(f'Image non-alpha band counts don`t match. Using the first {len(cmp_bands)} non-alpha bands '
                        f'of {ref_filename.name}.')
 
-    with rio.open(cmp_filename, 'r') as cmp_im:
+    with rio.open(src_filename, 'r') as cmp_im:
         with WarpedVRT(rio.open(ref_filename, 'r'), crs=cmp_im.crs, resampling=Resampling.bilinear) as ref_im:
             # check coverage
             if not box(*ref_im.bounds).covers(box(*cmp_im.bounds)):
                 raise ImageContentError('Reference extent does not cover image.')
-    return cmp_bands, ref_bands
+
+            src_pixel_smaller = np.prod(cmp_im.res) < np.prod(ref_im.res)
+            cmp_str = "smaller" if src_pixel_smaller else "larger"
+            if proc_crs == 'auto':
+                proc_crs = 'ref' if src_pixel_smaller else 'src'
+                logger.debug(f'Source pixel size is {cmp_str} than the reference, '
+                             f'using model_crs="{proc_crs}"')
+            elif ((proc_crs == 'src' and src_pixel_smaller) or
+                  (proc_crs == 'ref' and not src_pixel_smaller)):
+                rec_crs_str = "ref" if src_pixel_smaller else "src"
+                logger.warning(f'model_crs="{rec_crs_str}" is recommended when '
+                               f'the source image pixel size is {cmp_str} than the reference.')
+
+    return cmp_bands, ref_bands, proc_crs

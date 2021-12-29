@@ -17,26 +17,34 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
+
 class HomonimError(Exception):
     """Root exception class"""
+
 
 class UnsupportedImageError(HomonimError):
     """Raised when reading a 12bit jpeg compressed image"""
 
+
 class ImageContentError(HomonimError):
     """Raised when reference image has insufficient coverage or bands"""
+
 
 class BlockSizeError(HomonimError):
     """Raised when the image block size is invalid"""
 
+
 class ImageProfileError(HomonimError):
     """Raised when a image profile invalid"""
+
 
 class BandCountMismatchWarning(UserWarning):
     """Warn when the reference and source band counts don't match"""
 
+
 class NodataMaskWarning(UserWarning):
     """Warn when an image has no mask or nodata values"""
+
 
 class ModelCrsWarning(UserWarning):
     """Warn when the model CRS appears to be incorrectly set"""

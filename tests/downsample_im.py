@@ -17,13 +17,13 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
-
-import rasterio as rio
-from rasterio.warp import Resampling
-import numpy as np
-import pathlib
 import argparse
 import glob
+import pathlib
+
+import numpy as np
+import rasterio as rio
+from rasterio.warp import Resampling
 
 """
 Downsample an image by an integer factor, keeping the grid alignment and bounds.  

@@ -27,6 +27,7 @@ from rasterio.crs import CRS
 from rasterio.enums import MaskFlags
 from rasterio.warp import reproject, Resampling
 from rasterio.windows import Window
+
 from homonim.errors import ImageProfileError
 
 
@@ -37,7 +38,7 @@ def nan_equals(a, b, equal_nan=True):
         return ((a == b) | (np.isnan(a) & np.isnan(b)))
 
 
-def expand_window_to_grid(win, expand_pixels=(0,0)):
+def expand_window_to_grid(win, expand_pixels=(0, 0)):
     """
     Expands float window extents to be integers that include the original extents
 
@@ -77,7 +78,6 @@ def round_window_to_grid(win):
     row_range = np.round(row_range).astype('int')
     col_range = np.round(col_range).astype('int')
     return Window(col_off=col_range[0], row_off=row_range[0], width=np.diff(col_range)[0], height=np.diff(row_range)[0])
-
 
 
 class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
@@ -193,7 +193,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
     @property
     def profile(self):
         return dict(crs=self._crs, transform=self._transform, nodata=self._nodata, count=self.count,
-                               width=self.width, height=self.height, bounds=self.bounds, dtype=self.dtype)
+                    width=self.width, height=self.height, bounds=self.bounds, dtype=self.dtype)
 
     @property
     def proj_profile(self):

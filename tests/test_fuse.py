@@ -168,9 +168,9 @@ class TestHomonim(unittest.TestCase):
         homo_root = root_path.joinpath('data/outputs/test_example/homogenised')
 
         param_list = [
-            dict(method='gain', kernel_shape=(3, 3), model_crs='ref'),
-            dict(method='gain-im-offset', kernel_shape=(5, 5), model_crs='ref'),
-            dict(method='gain-offset', kernel_shape=(9, 9), model_crs='ref'),
+            dict(method='gain', kernel_shape=(3, 3), proc_crs='ref'),
+            dict(method='gain-im-offset', kernel_shape=(5, 5), proc_crs='ref'),
+            dict(method='gain-offset', kernel_shape=(9, 9), proc_crs='ref'),
         ]
 
         for param_dict in param_list:
@@ -197,7 +197,7 @@ class TestHomonim(unittest.TestCase):
             'data/inputs/test_example/reference/COPERNICUS-S2-20151003T075826_20151003T082014_T35HKC_B432_Byte.tif')
         homo_root = root_path.joinpath('data/outputs/test_example/homogenised')
 
-        param_list = [dict(method='gain', kernel_shape=(15, 15), model_crs='src')]
+        param_list = [dict(method='gain', kernel_shape=(15, 15), proc_crs='src')]
 
         for param_dict in param_list:
             post_fix = cli._create_homo_postfix(driver=self._out_profile['driver'], **param_dict)
@@ -225,15 +225,15 @@ class TestHomonim(unittest.TestCase):
         homo_root = root_path.joinpath('data/outputs/test_example/homogenised')
 
         param_list = [
-            dict(method='gain', kernel_shape=(3, 3), model_crs='ref'),
-            dict(method='gain-im-offset', kernel_shape=(5, 5), model_crs='ref'),
-            dict(method='gain-offset', kernel_shape=(9, 9), model_crs='ref'),
+            dict(method='gain', kernel_shape=(3, 3), proc_crs='ref'),
+            dict(method='gain-im-offset', kernel_shape=(5, 5), proc_crs='ref'),
+            dict(method='gain-offset', kernel_shape=(9, 9), proc_crs='ref'),
         ]
 
         for param_dict in param_list:
             cli_str = (f'fuse -s {src_wildcard} -r {ref_filename} -k {param_dict["kernel_shape"][0]} '
                        f'{param_dict["kernel_shape"][1]} -m {param_dict["method"]} -od  {homo_root} -c '
-                       f'{self._conf_filename} -mc  {param_dict["model_crs"]}')
+                       f'{self._conf_filename} -pc  {param_dict["proc_crs"]}')
 
             result = CliRunner().invoke(cli.cli, cli_str.split(), terminal_width=100, catch_exceptions=False)
             self.assertTrue(result.exit_code == 0, result.exception)

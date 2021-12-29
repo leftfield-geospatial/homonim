@@ -16,8 +16,8 @@
     You should have received a copy of the GNU Affero General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
-import pathlib
 import os
+import pathlib
 
 if '__file__' in globals():
     root_path = pathlib.Path(__file__).absolute().parents[1]

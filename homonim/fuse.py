@@ -16,10 +16,9 @@
     You should have received a copy of the GNU Affero General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
-import logging
-import warnings
 import cProfile
 import concurrent.futures
+import logging
 import multiprocessing
 import pathlib
 import pstats
@@ -30,62 +29,18 @@ from itertools import product
 
 import numpy as np
 import rasterio as rio
-from rasterio.enums import ColorInterp, MaskFlags
 from rasterio.vrt import WarpedVRT
 from rasterio.warp import Resampling
 from rasterio.windows import Window
-from shapely.geometry import box
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
+from homonim.errors import BlockSizeError
+from homonim.inspect import _inspect_image_pair
 from homonim.kernel_model import KernelModel, RefSpaceModel, SrcSpaceModel
 from homonim.raster_array import RasterArray, round_window_to_grid, expand_window_to_grid
-from homonim.errors import UnsupportedImageError, ImageContentError, BlockSizeError
-from homonim.inspect import _inspect_image, _inspect_image_pair
 
 logger = logging.getLogger(__name__)
-
-def _inspect_image(im_filename):
-    im_filename = pathlib.Path(im_filename)
-    if not im_filename.exists():
-        raise FileNotFoundError(f'{im_filename.name} does not exist')
-
-    with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(im_filename, 'r') as im:
-        try:
-            tmp_array = im.read(1, window=im.block_window(1, 0, 0))
-        except Exception as ex:
-            if im.profile['compress'] == 'jpeg':  # assume it is a 12bit JPEG
-                raise UnsupportedImageError(
-                    f'Could not read image {im_filename.name}.  JPEG compression with NBITS==12 is unsupported, '
-                    f'you probably need to recompress this image.'
-                )
-            else:
-                raise ex
-        is_masked = any([MaskFlags.all_valid not in im.mask_flag_enums[bi] for bi in range(im.count)])
-        if im.nodata is None and not is_masked:
-            logger.warning(f'{im_filename.name} has no mask or nodata value, '
-                           f'any invalid pixels should be masked before homogenising.')
-        im_bands = [bi + 1 for bi in range(im.count) if im.colorinterp[bi] != ColorInterp.alpha]
-    return im_bands
-
-def _inspect_image_pair(cmp_filename, ref_filename):
-    # check ref_filename has enough bands
-    cmp_bands = _inspect_image(cmp_filename)
-    ref_bands = _inspect_image(ref_filename)
-    if len(cmp_bands) > len(ref_bands):
-        raise ImageContentError(f'{ref_filename.name} has fewer non-alpha bands than {cmp_filename.name}.')
-
-    # warn if band counts don't match
-    if len(cmp_bands) != len(ref_bands):
-        logger.warning(f'Image non-alpha band counts don`t match. Using the first {len(cmp_bands)} non-alpha bands '
-                         f'of {ref_filename.name}.')
-
-    with rio.open(cmp_filename, 'r') as cmp_im:
-        with WarpedVRT(rio.open(ref_filename, 'r'), crs=cmp_im.crs, resampling=Resampling.bilinear) as ref_im:
-            # check coverage
-            if not box(*ref_im.bounds).covers(box(*cmp_im.bounds)):
-                raise ImageContentError('Reference extent does not cover image.')
-    return cmp_bands, ref_bands
 
 """Overlapping block object"""
 OvlBlock = namedtuple('OvlBlock', ['band_i', 'src_in_block', 'src_out_block', 'outer'])
@@ -98,7 +53,7 @@ class ImFuse():
                                nodata=RasterArray.default_nodata)
     default_model_config = KernelModel.default_config
 
-    def __init__(self, src_filename, ref_filename, method, kernel_shape, model_crs='auto',
+    def __init__(self, src_filename, ref_filename, method, kernel_shape, proc_crs='auto',
                  homo_config=default_homo_config, model_config=default_model_config, out_profile=default_out_profile):
         """
         Class for homogenising images
@@ -131,17 +86,17 @@ class ImFuse():
         self._src_bands = None
         self._ref_warped_vrt_dict = None
         self._profile = False
-        self._model_crs = model_crs
+        self._proc_crs = proc_crs
         self._image_init()
 
-        if self._model_crs == 'ref':
+        if self._proc_crs == 'ref':
             self._model = RefSpaceModel(method=method, kernel_shape=kernel_shape,
                                         debug_image=self._config['debug_image'], **model_config)
-        elif self._model_crs == 'src':
+        elif self._proc_crs == 'src':
             self._model = SrcSpaceModel(method=method, kernel_shape=kernel_shape,
                                         debug_image=self._config['debug_image'], **model_config)
         else:
-            raise ValueError(f'Unknown model_crs option: {model_crs}')
+            raise ValueError(f'Unknown proc_crs option: {proc_crs}')
 
     @property
     def method(self):
@@ -153,25 +108,17 @@ class ImFuse():
 
     @property
     def space(self):
-        return self._model_crs
+        return self._proc_crs
 
     def _image_init(self):
         """Check bounds, band count, and compression type of source and reference images"""
-        self._src_bands, self._ref_bands = _inspect_image_pair(self._src_filename, self._ref_filename)
+        self._src_bands, self._ref_bands, self._proc_crs = _inspect_image_pair(self._src_filename, self._ref_filename,
+                                                                               self._proc_crs)
 
         with rio.open(self._src_filename, 'r') as src_im, rio.open(self._ref_filename, 'r') as _ref_im:
             if src_im.crs.to_proj4() != _ref_im.crs.to_proj4():  # re-project the reference image to source CRS
-                logger.info(f'Re-projecting reference image to source CRS.')
+                logger.debug(f'Re-projecting reference image to source CRS.')
             with WarpedVRT(_ref_im, crs=src_im.crs, resampling=Resampling.bilinear) as ref_im:
-                src_pixel_smaller = np.prod(src_im.res) < np.prod(ref_im.res)
-                if self._model_crs == 'auto':
-                    self._model_crs = 'ref' if src_pixel_smaller else 'src'
-                elif ((self._model_crs == 'src' and src_pixel_smaller) or
-                      (self._model_crs == 'ref' and not src_pixel_smaller)):
-                    logger.warning(f'model_crs == "{"ref" if src_pixel_smaller else "src"}" is recommended when '
-                                  f'the source image pixel size is '
-                                  f'{"smaller" if src_pixel_smaller else "larger"} than the reference.')
-
                 ref_win = expand_window_to_grid(
                     ref_im.window(*src_im.bounds),
                     expand_pixels=np.ceil(np.divide(src_im.res, ref_im.res)).astype('int')
@@ -194,7 +141,7 @@ class ImFuse():
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
             with WarpedVRT(rio.open(self._ref_filename, 'r'), **self._ref_warped_vrt_dict) as ref_im:
                 src_shape = np.array(src_im.shape)
-                # TODO deal with res_ratio < 1 (everywhere), and also src_kernel_shape even with model_crs='src'
+                # TODO deal with res_ratio < 1 (everywhere), and also src_kernel_shape even with proc_crs='src'
                 src_kernel_shape = np.ceil(self._kernel_shape * np.divide(ref_im.res, src_im.res)).astype(int)
                 res_ratio = np.ceil(np.divide(ref_im.res, src_im.res)).astype(int)
                 overlap = np.ceil(res_ratio + src_kernel_shape / 2).astype(int)
@@ -238,7 +185,7 @@ class ImFuse():
 
     def _create_debug_profile(self, src_profile, ref_profile):
         """Create a rasterio profile for the debug parameter image based on a reference or source profile"""
-        if self._model_crs == 'ref':
+        if self._proc_crs == 'ref':
             debug_profile = ref_profile.copy()
         else:
             debug_profile = src_profile.copy()
@@ -282,7 +229,7 @@ class ImFuse():
         """
         filename = pathlib.Path(filename)
         meta_dict = dict(HOMO_SRC_FILE=self._src_filename.name, HOMO_REF_FILE=self._ref_filename.name,
-                         HOMO_SPACE=self._model_crs, HOMO_METHOD=self._method, HOMO_KERNEL_SHAPE=self._kernel_shape,
+                         HOMO_SPACE=self._proc_crs, HOMO_METHOD=self._method, HOMO_KERNEL_SHAPE=self._kernel_shape,
                          HOMO_CONF=str(self._config), HOMO_MODEL_CONF=str(self._model.config))
 
         if not filename.exists():
@@ -309,7 +256,7 @@ class ImFuse():
         """
         filename = pathlib.Path(filename)
         meta_dict = dict(HOMO_SRC_FILE=self._src_filename.name, HOMO_REF_FILE=self._ref_filename.name,
-                         HOMO_SPACE=self._model_crs, HOMO_METHOD=self._method,
+                         HOMO_SPACE=self._proc_crs, HOMO_METHOD=self._method,
                          HOMO_KERNEL_SHAPE=tuple(self._kernel_shape),
                          HOMO_CONF=str(self._config), HOMO_MODEL_CONF=str(self._model.config))
 
@@ -340,18 +287,17 @@ class ImFuse():
                       Path of the homogenised image file to create.
         """
         ovl_blocks = self._create_ovl_blocks()
-        bar = tqdm(total=len(ovl_blocks),
-                   bar_format='{l_bar}{bar}|{n_fmt}/{total_fmt} blocks [{elapsed}<{remaining}]')
-        bar.update(0)
-
         src_read_lock = threading.Lock()
         ref_read_lock = threading.Lock()
         write_lock = threading.Lock()
         dbg_lock = threading.Lock()
+        accum_stats = np.array([0., 0.])
+        bar_format = '{l_bar}{bar}|{n_fmt}/{total_fmt} blocks [{elapsed}<{remaining}]'
 
         with logging_redirect_tqdm(), rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
-            with WarpedVRT(rio.open(self._ref_filename, 'r'), **self._ref_warped_vrt_dict) as ref_im:
-
+            out_profile = self._create_out_profile(src_im.profile)
+            with WarpedVRT(rio.open(self._ref_filename, 'r'), **self._ref_warped_vrt_dict) as ref_im, (
+                    rio.open(out_filename, 'w', **out_profile)) as out_im:
                 if self._profile:
                     # setup profiling
                     tracemalloc.start()
@@ -363,12 +309,6 @@ class ImFuse():
                     dbg_profile = self._create_debug_profile(src_im.profile, ref_im.profile)
                     dbg_file_name = self._create_debug_filename(out_filename)
                     dbg_im = rio.open(dbg_file_name, 'w', **dbg_profile)
-
-                # create the output image file
-                out_profile = self._create_out_profile(src_im.profile)
-                out_im = rio.open(out_filename, 'w', **out_profile)  # avoid too many nested indents with 'with' statements
-                r2_sum = 0.
-                mask_sum = 0.
 
                 try:
                     def process_block(ovl_block: OvlBlock):
@@ -401,14 +341,12 @@ class ImFuse():
                         with write_lock:
                             out_array = out_ra.slice_array(*out_im.window_bounds(ovl_block.src_out_block))
                             out_im.write(out_array, window=ovl_block.src_out_block, indexes=ovl_block.band_i + 1)
-                            bar.update(1)
 
                         if self._config['debug_image']:
                             param_mask = param_ra.mask
                             with dbg_lock:
-                                nonlocal mask_sum, r2_sum
-                                mask_sum += param_mask.sum()
-                                r2_sum += param_ra.array[2, param_mask].sum()
+                                nonlocal accum_stats
+                                accum_stats += [param_ra.array[2, param_mask].sum(), param_mask.sum()]
 
                                 src_out_bounds = src_im.window_bounds(ovl_block.src_out_block)
                                 dbg_array = param_ra.slice_array(*src_out_bounds)
@@ -425,20 +363,20 @@ class ImFuse():
                                 future_list.append(future)
 
                             # wait for threads and raise any thread generated exceptions
-                            for future in future_list:
+                            for future in tqdm(future_list, bar_format=bar_format):
                                 future.result()
                     else:
                         # process bands consecutively
-                        for ovl_block in ovl_blocks:
+                        for ovl_block in tqdm(ovl_blocks, bar_format=bar_format):
                             process_block(ovl_block)
                 finally:
                     out_im.close()
-                    bar.close()
                     self._set_homo_metadata(out_filename)
                     if self._config['debug_image']:
                         dbg_im.close()
                         self._set_debug_metadata(dbg_file_name)
-                        logger.debug(f'Average kernel model R\N{SUPERSCRIPT TWO}: {r2_sum/mask_sum:.2f}')
+                        logger.debug(
+                            f'Average kernel model R\N{SUPERSCRIPT TWO}: {accum_stats[0] / accum_stats[1]:.2f}')
 
         if self._profile:
             # print profiling info
