@@ -39,17 +39,35 @@ from homonim.kernel_model import KernelModel
 logger = logging.getLogger(__name__)
 
 
-class _CustomFormatter(logging.Formatter):
-    def format(self, record):
-        if record.levelno == logging.INFO:
-            self._style._fmt = "%(message)s"
-        else:
-            self._style._fmt = "%(levelname)s:%(name)s: %(message)s"
-        return super().format(record)
+def _create_homo_postfix(proc_crs, method, kernel_shape, driver='GTiff'):
+    """Create a postfix string for the homogenised image file"""
+    ext_dict = rio.drivers.raster_driver_extensions()
+    ext_idx = list(ext_dict.values()).index(driver)
+    ext = list(ext_dict.keys())[ext_idx]
+    post_fix = f'_HOMO_c{proc_crs.upper()}_m{method.upper()}_k{kernel_shape[0]}_{kernel_shape[1]}.{ext}'
+    return post_fix
 
 
-def configure_logging(verbosity):
-    # TODO, copy rio's verbose/quiet params: https://github.com/rasterio/rasterio/blob/master/rasterio/rio/main.py
+def _update_existing_keys(default_dict, **kwargs):
+    """Update values in a dict with args from matching keys in **kwargs"""
+    return {k: kwargs.get(k, v) for k, v in default_dict.items()}
+
+
+def _parse_nodata(ctx, param, value):
+    """Return a float or None"""
+    if value is None or value.lower() in ["null", "nil", "none", "nada"]:
+        return None
+    elif value.lower() == "nan":
+        return float("nan")
+    else:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            raise click.BadParameter("{!r} is not a number".format(value), param=param, param_hint="nodata")
+
+
+def _configure_logging(verbosity):
+    # adapted from rasterio
     log_level = max(10, 20 - 10 * verbosity)
     formatter = _CustomFormatter()
     handler = logging.StreamHandler(sys.stderr)
@@ -59,9 +77,27 @@ def configure_logging(verbosity):
     logging.captureWarnings(True)
 
 
+def _get_chained_param(ctx, param, value, required=False):
+    param_source = ctx.get_parameter_source(param.name)
+    if (value is None or param_source == ParameterSource.DEFAULT):
+        if param.name in ctx.obj:
+            return ctx.obj[param.name]
+        elif required:
+            raise click.MissingParameter(param=param)
+    return value
+
+
+class _CustomFormatter(logging.Formatter):
+    def format(self, record):
+        if record.levelno == logging.INFO:
+            self._style._fmt = "%(message)s"
+        else:
+            self._style._fmt = "%(levelname)s:%(name)s: %(message)s"
+        return super().format(record)
+
+
 class _ConfigFileCommand(click.Command):
     """Class to combine config file with command line parameters"""
-
     # adapted from https://stackoverflow.com/questions/46358797/python-click-supply-arguments-and-options-from-a-configuration-file/46391887
     def invoke(self, ctx):
         config_file = ctx.params['conf']
@@ -81,52 +117,20 @@ class _ConfigFileCommand(click.Command):
         return click.Command.invoke(self, ctx)
 
 
-def _create_homo_postfix(proc_crs, method, kernel_shape, driver='GTiff'):
-    """Create a postfix string for the homogenised image file"""
-    ext_dict = rio.drivers.raster_driver_extensions()
-    ext_idx = list(ext_dict.values()).index(driver)
-    ext = list(ext_dict.keys())[ext_idx]
-    post_fix = f'_HOMO_c{proc_crs.upper()}_m{method.upper()}_k{kernel_shape[0]}_{kernel_shape[1]}.{ext}'
-    return post_fix
+class _ChainedCommand(click.Command):
+    """Class to override parameter defaults with their corresponding values from chained commands"""
+    def invoke(self, ctx):
+        for param_key, param_val in ctx.params.items():
+            if param_key in ctx.obj:
+                param_src = ctx.get_parameter_source(param_key)
+                if (ctx.params[param_key] is None or param_src == ParameterSource.DEFAULT):
+                    ctx.params[param_key] = ctx.obj[param_key]
+        return click.Command.invoke(self, ctx)
 
 
-def _update_existing_keys(default_dict, **kwargs):
-    """Update values in a dict with args from matching keys in **kwargs"""
-    return {k: kwargs.get(k, v) for k, v in default_dict.items()}
-
-
-def _parse_output_profile(ctx, param, value):
-    if ctx.get_parameter_source(param.name) == ParameterSource.DEFAULT:  # defaults
-        return dict(value)
-    else:
-        out = {}
-        for k, v in value:
-            out[k] = None if v.lower() in ['none', 'null', 'nil', 'nada'] else yaml.safe_load(v)
-        return out
-
-
-def _parse_nodata(ctx, param, value):
-    """Return a float or None"""
-    if value is None or value.lower() in ["null", "nil", "none", "nada"]:
-        return None
-    elif value.lower() == "nan":
-        return float("nan")
-    else:
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            raise click.BadParameter("{!r} is not a number".format(value), param=param, param_hint="nodata")
-
-
-ref_file_option = click.option("-r", "--ref-file",
-                               type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path),
-                               required=True, help="Path to the reference image file.")
-src_file_option = click.option("-s", "--src-file", type=click.Path(), required=True, multiple=True,
-                               help="Path(s) or wildcard pattern(s) specifying the source image file(s).")
 proc_crs_option = click.option("-pc", "--proc-crs", type=click.Choice(['ref', 'src', 'auto'], case_sensitive=False),
-                               default='auto',
-                               show_default=True, help="The image CRS in which to perform processing.")
-multithread_option = click.option("-nmt", "--no-mutlithread", "multithread", type=click.BOOL, is_flag=True,
+                               default='auto', show_default=True, help="The image CRS in which to perform processing.")
+multithread_option = click.option("-nmt", "--no-multithread", "multithread", type=click.BOOL, is_flag=True,
                                   default=ImFuse.default_homo_config['multithread'],
                                   help=f"Process image blocks consecutively.")
 
@@ -143,14 +147,17 @@ multithread_option = click.option("-nmt", "--no-mutlithread", "multithread", typ
 @click.pass_context
 def cli(ctx, verbose, quiet):
     verbosity = verbose - quiet
-    configure_logging(verbosity)
+    _configure_logging(verbosity)
     ctx.obj = {}
-    ctx.obj["verbosity"] = verbosity
+    ctx.obj["verbosity"] = verbosity  # TODO - necessary?
 
 
 @click.command(cls=_ConfigFileCommand)
-@src_file_option
-@ref_file_option
+@click.option("-s", "--src-file", type=click.Path(path_type=pathlib.Path), required=True, multiple=True,
+              help="Path(s) or wildcard pattern(s) specifying the source image file(s).")
+@click.option("-r", "--ref-file",
+              type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path),
+              required=True, help="Path to the reference image file.")
 @click.option("-k", "--kernel-shape", type=click.Tuple([click.INT, click.INT]), nargs=2, default=(5, 5),
               show_default=True, help="Sliding kernel (window) width and height (in reference pixels).")
 @click.option("-m", "--method", type=click.Choice(['gain', 'gain-im-offset', 'gain-offset'], case_sensitive=False),
@@ -205,8 +212,12 @@ def cli(ctx, verbose, quiet):
 @click.option("--out-nodata", "nodata", type=click.STRING, callback=_parse_nodata, metavar="[NUMBER|null|nan]",
               default=ImFuse.default_out_profile['nodata'], show_default=True,
               help="Output image nodata value.")
-def fuse(src_file, ref_file, kernel_shape, method, output_dir, build_ovw, proc_crs, conf, **kwargs):
+@click.pass_context
+def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, build_ovw, proc_crs, conf, **kwargs):
     """Radiometrically homogenise image(s) by fusion with a reference"""
+    ctx.obj.update(**ctx.params)  # copy all parameters for chained commands to use
+    ctx.obj['src_file'] = ()  # filled below
+
     config = {}
     config['homo_config'] = _update_existing_keys(ImFuse.default_homo_config, **kwargs)
     config['model_config'] = _update_existing_keys(ImFuse.default_model_config, **kwargs)
@@ -252,6 +263,8 @@ def fuse(src_file, ref_file, kernel_shape, method, output_dir, build_ovw, proc_c
 
                 ttl_time = (datetime.datetime.now() - start_ttl)
                 logger.info(f'Completed in {ttl_time.total_seconds():.2f} secs')
+                # copy individual src and homogenised filenames into context for chained downstream commands to re-use
+                ctx.obj['src_file'] += (src_filename, homo_filename)
     except Exception:
         logger.exception("Exception caught during processing")
         raise click.Abort()
@@ -260,13 +273,24 @@ def fuse(src_file, ref_file, kernel_shape, method, output_dir, build_ovw, proc_c
 cli.add_command(fuse)
 
 
-@click.command()
-@src_file_option
-@ref_file_option
+@click.command(cls=_ChainedCommand)
+@click.option("-s", "--src-file", type=click.Path(path_type=pathlib.Path), required=False, multiple=True,
+              help="Path(s) or wildcard pattern(s) specifying the source image file(s).")
+@click.option("-r", "--ref-file",
+              type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path),
+              required=False, help="Path to the reference image file.")
 @proc_crs_option
 @multithread_option
-def compare(src_file, ref_file, proc_crs, multithread):
+@click.pass_context
+def compare(ctx, src_file, ref_file, proc_crs, multithread):
     """Statistically compare image(s) with a reference"""
+    # check the src_file and ref_file have been set either via command line or previous command in the chain
+    for param, name in zip([src_file, ref_file], ['src_file', 'ref_file']):
+        if param is None:
+            raise click.BadOptionUsage(option_name=name,
+                                       message=f'Missing option "{name}", pass this on the command line '
+                                               f'or chain "compare" after "fuse".')
+
     try:
         res_dict = {}
         for src_file_spec in src_file:
@@ -284,11 +308,22 @@ def compare(src_file, ref_file, proc_crs, multithread):
                 ttl_time = (datetime.datetime.now() - start_ttl)
                 logger.info(f'Completed in {ttl_time.total_seconds():.2f} secs')
         # print results
+        summary_list = []
         for src_file, res_list in res_dict.items():
             res_df = pd.DataFrame.from_dict(res_list).set_index('Band')
-            res_df.loc['Mean'] = res_df.mean()
+            summ_df = res_df.mean()
+            res_df.loc['Mean'] = summ_df
             res_str = res_df.to_string(float_format="{:.2f}".format, index=True, justify="center", index_names=False)
             logger.info(f'\n\n{src_file}:\n\n{res_str}')
+            summ_df['Image'] = src_file
+            summary_list.append(summ_df)
+
+        if len(summary_list) > 1:
+            summ_df = pd.DataFrame(summary_list)
+            summ_df = summ_df[[summ_df.columns[-1], *summ_df.columns[:-1]]]
+            summ_df = summ_df.rename(columns=dict(zip(summ_df.columns[1:], ('Mean ' + summ_df.columns[1:]))))
+            summ_str = summ_df.to_string(float_format="{:.2f}".format, index=False, justify="center", index_names=False)
+            logger.info(f'\n\nSummary:\n\n{summ_str}')
 
     except Exception:
         logger.exception("Exception caught during processing")
@@ -296,3 +331,5 @@ def compare(src_file, ref_file, proc_crs, multithread):
 
 
 cli.add_command(compare)
+
+##
