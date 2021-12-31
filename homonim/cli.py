@@ -18,6 +18,7 @@
 """
 
 import datetime
+import json
 import logging
 import pathlib
 import sys
@@ -281,15 +282,18 @@ cli.add_command(fuse)
               required=False, help="Path to the reference image file.")
 @proc_crs_option
 @multithread_option
+@click.option("-o", "--output",
+              type=click.Path(exists=False, dir_okay=False, writable=True, resolve_path=True, path_type=pathlib.Path),
+              help="Write comparison results in json format to this filename")
 @click.pass_context
-def compare(ctx, src_file, ref_file, proc_crs, multithread):
+def compare(ctx, src_file, ref_file, proc_crs, multithread, output):
     """Statistically compare image(s) with a reference"""
     # check the src_file and ref_file have been set either via command line or previous command in the chain
-    for param, name in zip([src_file, ref_file], ['src_file', 'ref_file']):
+    for param, name in zip([src_file, ref_file], ['-s / --src-file', '-r / --ref-file']):
         if param is None:
-            raise click.BadOptionUsage(option_name=name,
-                                       message=f'Missing option "{name}", pass this on the command line '
-                                               f'or chain "compare" after "fuse".')
+            raise click.BadOptionUsage(option_name=name, ctx=ctx,
+                                       message=f'Missing option `{name}`, either pass this on the command line '
+                                               f'or chain this command with `fuse`.')
 
     try:
         res_dict = {}
@@ -303,27 +307,29 @@ def compare(ctx, src_file, ref_file, proc_crs, multithread):
                 logger.info(f'\nComparing {src_filename.name}')
                 start_ttl = datetime.datetime.now()
                 cmp = ImCompare(src_filename, ref_file, proc_crs=proc_crs, multithread=multithread)
-                res_list = cmp.compare()
-                res_dict[src_filename.stem] = res_list
+                res_dict[src_filename.stem] = cmp.compare()
                 ttl_time = (datetime.datetime.now() - start_ttl)
                 logger.info(f'Completed in {ttl_time.total_seconds():.2f} secs')
         # print results
-        summary_list = []
-        for src_file, res_list in res_dict.items():
-            res_df = pd.DataFrame.from_dict(res_list).set_index('Band')
-            summ_df = res_df.mean()
-            res_df.loc['Mean'] = summ_df
-            res_str = res_df.to_string(float_format="{:.2f}".format, index=True, justify="center", index_names=False)
+        summary_dict = {}
+        for src_file, _res_dict in res_dict.items():
+            res_df = pd.DataFrame.from_dict(_res_dict, orient='index')
+            res_str = res_df.to_string(float_format="{:.2f}".format, index=True, justify="center",
+                                                        index_names=False)
             logger.info(f'\n\n{src_file}:\n\n{res_str}')
-            summ_df['Image'] = src_file
-            summary_list.append(summ_df)
+            summary_dict[src_file] = _res_dict['Mean']
 
-        if len(summary_list) > 1:
-            summ_df = pd.DataFrame(summary_list)
-            summ_df = summ_df[[summ_df.columns[-1], *summ_df.columns[:-1]]]
-            summ_df = summ_df.rename(columns=dict(zip(summ_df.columns[1:], ('Mean ' + summ_df.columns[1:]))))
-            summ_str = summ_df.to_string(float_format="{:.2f}".format, index=False, justify="center", index_names=False)
+        if len(summary_dict) > 1:
+            summ_df = pd.DataFrame.from_dict(summary_dict, orient='index')
+            summ_df = summ_df.rename(columns=dict(zip(summ_df.columns, ('Mean ' + summ_df.columns))))
+            summ_str = summ_df.to_string(float_format="{:.2f}".format, index=True, justify="center",
+                                                          index_names=False)
             logger.info(f'\n\nSummary:\n\n{summ_str}')
+
+        if output is not None:
+            res_dict['Reference'] = ref_file.stem
+            with open(output, 'w') as file:
+                json.dump(res_dict, file)
 
     except Exception:
         logger.exception("Exception caught during processing")
