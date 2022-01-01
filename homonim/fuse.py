@@ -300,9 +300,9 @@ class ImFuse():
         bar_format = '{l_bar}{bar}|{n_fmt}/{total_fmt} blocks [{elapsed}<{remaining}]'
 
         with logging_redirect_tqdm(), rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
-            out_profile = self._create_out_profile(src_im.profile)
-            with WarpedVRT(rio.open(self._ref_filename, 'r'), **self._ref_warped_vrt_dict) as ref_im, (
-                    rio.open(out_filename, 'w', **out_profile)) as out_im:
+            with WarpedVRT(rio.open(self._ref_filename, 'r'), **self._ref_warped_vrt_dict) as ref_im:
+                out_profile = self._create_out_profile(src_im.profile)
+                out_im = rio.open(out_filename, 'w', **out_profile)
                 if self._profile:
                     # setup profiling
                     tracemalloc.start()

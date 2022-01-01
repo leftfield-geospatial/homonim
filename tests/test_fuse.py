@@ -27,31 +27,12 @@ import numpy as np
 import rasterio as rio
 import yaml
 from click.testing import CliRunner
-from rasterio.vrt import WarpedVRT
-from rasterio.warp import Resampling
 from shapely.geometry import box
 from tqdm import tqdm
 
 from homonim import root_path, cli
+from homonim.compare import ImCompare
 from homonim.fuse import ImFuse
-from homonim.raster_array import RasterArray, expand_window_to_grid
-
-
-def _read_ref(src_filename, ref_filename):
-    """
-    Read the source region from the reference image in the source CRS.
-    """
-    with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(src_filename, 'r') as src_im:
-        with WarpedVRT(rio.open(ref_filename, 'r'), crs=src_im.crs, resampling=Resampling.bilinear) as ref_im:
-            ref_win = expand_window_to_grid(ref_im.window(*src_im.bounds))
-            ref_bands = range(1, src_im.count + 1)
-            _ref_array = ref_im.read(ref_bands, window=ref_win).astype(RasterArray.default_dtype)
-
-            if (ref_im.nodata is not None) and (ref_im.nodata != RasterArray.default_nodata):
-                _ref_array[_ref_array == ref_im.nodata] = RasterArray.default_nodata
-            ref_array = RasterArray.from_profile(_ref_array, ref_im.profile, ref_win)
-
-    return ref_array
 
 
 class TestHomonim(unittest.TestCase):
@@ -106,28 +87,17 @@ class TestHomonim(unittest.TestCase):
 
     def _test_homo_against_ref(self, src_filename, homo_filename, ref_filename):
         """Test R2 against reference before and after homogenisation"""
-        with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
-            im_ref_r2 = None
-            ref_ra = _read_ref(src_filename, ref_filename)
-            for im_i, im_filename in enumerate([src_filename, homo_filename]):
-                with rio.open(im_filename, 'r') as im:
-                    if im_ref_r2 is None:
-                        im_ref_r2 = np.zeros((2, im.count))
-                    for band_i in range(im.count):
-                        _im_array = im.read(band_i + 1)
-                        im_array = RasterArray.from_profile(_im_array, im.profile)
-                        resampling = self._model_config['downsampling'] if np.prod(im.res) < np.prod(
-                            ref_ra.res) else self._model_config['upsampling']
-                        im_ds_array = im_array.reproject(transform=ref_ra.transform, shape=ref_ra.shape[-2:],
-                                                         resampling=resampling)
-                        mask = im_ds_array.mask
-                        im_ref_cc = np.corrcoef(im_ds_array.array[mask], ref_ra.array[band_i, mask])
-                        im_ref_r2[im_i, band_i] = im_ref_cc[0, 1] ** 2
+        im_ref_r2 = []
+        for im_i, im_filename in enumerate([src_filename, homo_filename]):
+            cmp = ImCompare(im_filename, ref_filename)
+            cmp_dict = cmp.compare()
+            im_ref_r2.append([band_dict['r2'] for band_dict in cmp_dict.values()])
 
-            tqdm.write(f'Pre-homogensied R2 : {im_ref_r2[0, :]}')
-            tqdm.write(f'Post-homogenised R2: {im_ref_r2[1, :]}')
-            self.assertTrue(np.all(im_ref_r2[1, :] > 0.6), 'Homogenised R2 > 0.6')
-            self.assertTrue(np.all(im_ref_r2[1, :] > im_ref_r2[0, :]), 'Homogenised vs reference R2 improvement')
+        im_ref_r2 = np.array(im_ref_r2)
+        tqdm.write(f'Pre-homogensied R2 : {im_ref_r2[0, :]}')
+        tqdm.write(f'Post-homogenised R2: {im_ref_r2[1, :]}')
+        self.assertTrue(np.all(im_ref_r2[1, :] > 0.6), 'Homogenised R2 > 0.6')
+        self.assertTrue(np.all(im_ref_r2[1, :] > im_ref_r2[0, :]), 'Homogenised vs reference R2 improvement')
 
     def _test_ovl_blocks(self, ovl_blocks):
         """ Test overlap blocks for sanity """

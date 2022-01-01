@@ -50,7 +50,7 @@ def _inspect_image(im_filename):
         is_masked = any([MaskFlags.all_valid not in im.mask_flag_enums[bi] for bi in range(im.count)])
         if im.nodata is None and not is_masked:
             logger.warning(f'{im_filename.name} has no mask or nodata value, '
-                           f'any invalid pixels should be masked before homogenising.')
+                           f'any invalid pixels should be masked before processing.')
         im_bands = [bi + 1 for bi in range(im.count) if im.colorinterp[bi] != ColorInterp.alpha]
     return im_bands
 
