@@ -98,7 +98,7 @@ class ImCompare():
     def compare(self):
         src_read_lock = threading.Lock()
         ref_read_lock = threading.Lock()
-        res_dict = {}
+        res_dict = OrderedDict()
         bar_format = '{l_bar}{bar}|{n_fmt}/{total_fmt} bands [{elapsed}<{remaining}]'
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._ref_filename, 'r') as ref_im:
             with rio.open(self._src_filename, 'r') as src_im:

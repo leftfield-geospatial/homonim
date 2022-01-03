@@ -35,8 +35,8 @@ from homonim.compare import ImCompare
 from homonim.fuse import ImFuse
 
 
-class TestHomonim(unittest.TestCase):
-    """ Class to test homonim API """
+class TestFuse(unittest.TestCase):
+    """ Test fuse API and CLI """
 
     def setUp(self):
         """Delete old test outputs and load config"""
@@ -128,6 +128,24 @@ class TestHomonim(unittest.TestCase):
 
             prev_ovl_block = ovl_block
 
+    def _test_api(self, src_filename, ref_filename, test_filename, **kwargs):
+        homo_root = root_path.joinpath('data/outputs/test_example/homogenised')
+
+        post_fix = cli._create_homo_postfix(driver=self._out_profile['driver'], **kwargs)
+        homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
+        him = ImFuse(src_filename, ref_filename, **kwargs, homo_config=self._homo_config,
+                     model_config=self._model_config, out_profile=self._out_profile)
+        with self.subTest('Overlapped Blocks', src_filename=src_filename):
+            self._test_ovl_blocks(him._create_ovl_blocks())
+        him.homogenise(homo_filename)
+        him.build_overviews(homo_filename)
+        self.assertTrue(homo_filename.exists(), 'Homogenised file exists')
+        with self.subTest('Homogenised vs Source', src_filename=src_filename, homo_filename=homo_filename):
+            self._test_homo_against_src(src_filename, homo_filename)
+        with self.subTest('Homogenised vs Reference', src_filename=src_filename, homo_filename=homo_filename,
+                          ref_filename=test_filename):
+            self._test_homo_against_ref(src_filename, homo_filename, test_filename)
+
     def test_api_ref_space(self):
         """Test homogenisation API with model-crs=ref"""
         src_filename = root_path.joinpath('data/inputs/test_example/source/3324c_2015_1004_05_0182_RGB.tif')
@@ -135,7 +153,6 @@ class TestHomonim(unittest.TestCase):
             'data/inputs/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif')
         ref2_filename = root_path.joinpath(
             'data/inputs/test_example/reference/COPERNICUS-S2-20151003T075826_20151003T082014_T35HKC_B432_Byte.tif')
-        homo_root = root_path.joinpath('data/outputs/test_example/homogenised')
 
         param_list = [
             dict(method='gain', kernel_shape=(3, 3), proc_crs='ref'),
@@ -144,20 +161,7 @@ class TestHomonim(unittest.TestCase):
         ]
 
         for param_dict in param_list:
-            post_fix = cli._create_homo_postfix(driver=self._out_profile['driver'], **param_dict)
-            homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
-            him = ImFuse(src_filename, ref_filename, **param_dict, homo_config=self._homo_config,
-                         model_config=self._model_config, out_profile=self._out_profile)
-            with self.subTest('Overlapped Blocks', src_filename=src_filename):
-                self._test_ovl_blocks(him._create_ovl_blocks())
-            him.homogenise(homo_filename)
-            him.build_overviews(homo_filename)
-            self.assertTrue(homo_filename.exists(), 'Homogenised file exists')
-            with self.subTest('Homogenised vs Source', src_filename=src_filename, homo_filename=homo_filename):
-                self._test_homo_against_src(src_filename, homo_filename)
-            with self.subTest('Homogenised vs Reference', src_filename=src_filename, homo_filename=homo_filename,
-                              ref_filename=ref2_filename):
-                self._test_homo_against_ref(src_filename, homo_filename, ref2_filename)
+            self._test_api(src_filename, ref_filename, ref2_filename, **param_dict)
 
     def test_api_src_space(self):
         """Test homogenisation API with model-crs=src and src res > ref res"""
@@ -165,27 +169,11 @@ class TestHomonim(unittest.TestCase):
             'data/inputs/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.vrt')
         ref_filename = root_path.joinpath(
             'data/inputs/test_example/reference/COPERNICUS-S2-20151003T075826_20151003T082014_T35HKC_B432_Byte.tif')
-        homo_root = root_path.joinpath('data/outputs/test_example/homogenised')
 
-        param_list = [dict(method='gain', kernel_shape=(15, 15), proc_crs='src')]
+        param_dict = dict(method='gain', kernel_shape=(15, 15), proc_crs='src')
+        self._test_api(src_filename, ref_filename, ref_filename, **param_dict)
 
-        for param_dict in param_list:
-            post_fix = cli._create_homo_postfix(driver=self._out_profile['driver'], **param_dict)
-            homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
-            him = ImFuse(src_filename, ref_filename, **param_dict, homo_config=self._homo_config,
-                         model_config=self._model_config, out_profile=self._out_profile)
-            with self.subTest('Overlapped Blocks', src_filename=src_filename):
-                self._test_ovl_blocks(him._create_ovl_blocks())
-            him.homogenise(homo_filename)
-            him.build_overviews(homo_filename)
-            self.assertTrue(homo_filename.exists(), 'Homogenised file exists')
-            with self.subTest('Homogenised vs Source', src_filename=src_filename, homo_filename=homo_filename):
-                self._test_homo_against_src(src_filename, homo_filename)
-            with self.subTest('Homogenised vs Reference', src_filename=src_filename, homo_filename=homo_filename,
-                              ref_filename=ref_filename):
-                self._test_homo_against_ref(src_filename, homo_filename, ref_filename)
-
-    def test_cli_fuse(self):
+    def test_cli(self):
         """Test homogenisation CLI"""
         src_wildcard = root_path.joinpath('data/inputs/test_example/source/3324c_2015_*_RGB.tif')
         ref_filename = root_path.joinpath(
@@ -201,12 +189,12 @@ class TestHomonim(unittest.TestCase):
         ]
 
         for param_dict in param_list:
-            cli_str = (f'fuse -s {src_wildcard} -r {ref_filename} -k {param_dict["kernel_shape"][0]} '
-                       f'{param_dict["kernel_shape"][1]} -m {param_dict["method"]} -od  {homo_root} -c '
-                       f'{self._conf_filename} -pc  {param_dict["proc_crs"]}')
+            cli_str = (f'fuse {src_wildcard} {ref_filename} -k {param_dict["kernel_shape"][0]} '
+                       f'{param_dict["kernel_shape"][1]} -m {param_dict["method"]} -od {homo_root} -c '
+                       f'{self._conf_filename} -pc {param_dict["proc_crs"]}')
 
-            result = CliRunner().invoke(cli.cli, cli_str.split(), terminal_width=100, catch_exceptions=False)
-            self.assertTrue(result.exit_code == 0, result.exception)
+            result = CliRunner().invoke(cli.cli, cli_str.split(), terminal_width=100, catch_exceptions=True)
+            self.assertTrue(result.exit_code == 0, result.output)
 
             src_file_list = glob.glob(str(src_wildcard))
             homo_post_fix = cli._create_homo_postfix(driver=self._out_profile['driver'], **param_dict)

@@ -87,6 +87,13 @@ def _get_chained_param(ctx, param, value, required=False):
             raise click.MissingParameter(param=param)
     return value
 
+def _str_to_path(ctx, param, value):
+    return (pathlib.Path(file_str) for file_str in value)
+
+def _src_file_callback(ctx, param, value):
+    print(f'src_file: {value}')
+    return value
+
 
 class _CustomFormatter(logging.Formatter):
     def format(self, record):
@@ -134,9 +141,13 @@ proc_crs_option = click.option("-pc", "--proc-crs", type=click.Choice(['ref', 's
 multithread_option = click.option("-nmt", "--no-multithread", "multithread", type=click.BOOL, is_flag=True,
                                   default=ImFuse.default_homo_config['multithread'],
                                   help=f"Process image blocks consecutively.")
+src_file_arg = click.argument("src-file", nargs=-1, metavar="INPUTS...",
+                              type=click.Path(exists=False, dir_okay=True, readable=False, path_type=pathlib.Path))
+ref_file_arg = click.argument("ref-file", nargs=1, metavar="REFERENCE",
+                              type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path))
 
 
-@click.group(chain=True)
+@click.group()
 @click.option(
     '--verbose', '-v',
     count=True,
@@ -154,17 +165,23 @@ def cli(ctx, verbose, quiet):
 
 
 @click.command(cls=_ConfigFileCommand)
-@click.option("-s", "--src-file", type=click.Path(path_type=pathlib.Path), required=True, multiple=True,
-              help="Path(s) or wildcard pattern(s) specifying the source image file(s).")
-@click.option("-r", "--ref-file",
-              type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path),
-              required=True, help="Path to the reference image file.")
+# @click.option("-s", "--src-file", type=click.STRING,
+#               required=True, multiple=True, callback=_src_file_callback,
+#               help="Path(s) or wildcard pattern(s)'' specifying the source image file(s).")
+# @click.option("-r", "--ref-file",
+#               type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path),
+#               required=True, help="Path to the reference image file.")
+@src_file_arg
+@ref_file_arg
+# @files_in_arg
 @click.option("-k", "--kernel-shape", type=click.Tuple([click.INT, click.INT]), nargs=2, default=(5, 5),
               show_default=True, help="Sliding kernel (window) width and height (in reference pixels).")
 @click.option("-m", "--method", type=click.Choice(['gain', 'gain-im-offset', 'gain-offset'], case_sensitive=False),
               default='gain-im-offset', show_default=True, help="Homogenisation method.")
 @click.option("-od", "--output-dir", type=click.Path(exists=True, file_okay=False, writable=True),
               help="Directory to create homogenised image(s) in. [default: use source image directory]")
+@click.option("-cmp", "--compare", "do_cmp", type=click.BOOL, is_flag=True, default=False,
+              help=f"Statistically compare source and homogenised images with the reference.")
 @click.option("-nbo", "--no-build-ovw", "build_ovw", type=click.BOOL, is_flag=True, default=True,
               help="Don't build overviews for the created image(s).")
 @proc_crs_option
@@ -214,11 +231,14 @@ def cli(ctx, verbose, quiet):
               default=ImFuse.default_out_profile['nodata'], show_default=True,
               help="Output image nodata value.")
 @click.pass_context
-def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, build_ovw, proc_crs, conf, **kwargs):
+def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, do_cmp, build_ovw, proc_crs, conf, **kwargs):
     """Radiometrically homogenise image(s) by fusion with a reference"""
-    ctx.obj.update(**ctx.params)  # copy all parameters for chained commands to use
-    ctx.obj['src_file'] = ()  # filled below
-
+    # ctx.obj.update(**ctx.params)  # copy all parameters for chained commands to use
+    # ctx.obj['src_file'] = ()  # filled below
+    # logger.info(f'files: {files}')
+    # src_file = files[:-1]
+    # ref_file = files[-1]
+    compare_files = []
     config = {}
     config['homo_config'] = _update_existing_keys(ImFuse.default_homo_config, **kwargs)
     config['model_config'] = _update_existing_keys(ImFuse.default_model_config, **kwargs)
@@ -265,7 +285,11 @@ def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, build_ovw, p
                 ttl_time = (datetime.datetime.now() - start_ttl)
                 logger.info(f'Completed in {ttl_time.total_seconds():.2f} secs')
                 # copy individual src and homogenised filenames into context for chained downstream commands to re-use
-                ctx.obj['src_file'] += (src_filename, homo_filename)
+                # ctx.obj['src_file'] += (src_filename, homo_filename)
+                compare_files += (src_filename, homo_filename)
+        if do_cmp:
+            ctx.invoke(compare, src_file=compare_files, ref_file=ref_file, proc_crs=proc_crs,
+                       multithread=kwargs['multithread'])
     except Exception:
         logger.exception("Exception caught during processing")
         raise click.Abort()
@@ -274,26 +298,28 @@ def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, build_ovw, p
 cli.add_command(fuse)
 
 
-@click.command(cls=_ChainedCommand)
-@click.option("-s", "--src-file", type=click.Path(path_type=pathlib.Path), required=False, multiple=True,
-              help="Path(s) or wildcard pattern(s) specifying the source image file(s).")
-@click.option("-r", "--ref-file",
-              type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path),
-              required=False, help="Path to the reference image file.")
+@click.command()
+# @click.option("-s", "--src-file", type=click.STRING,
+#             required=False, multiple=True, help="Path(s) or wildcard pattern(s) specifying the source image file(s).")
+# @click.option("-r", "--ref-file",
+#               type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path),
+#               required=False, help="Path to the reference image file.")
+@src_file_arg
+@ref_file_arg
 @proc_crs_option
 @multithread_option
 @click.option("-o", "--output",
               type=click.Path(exists=False, dir_okay=False, writable=True, resolve_path=True, path_type=pathlib.Path),
-              help="Write comparison results in json format to this filename")
+              help="Write comparison results in json format.")
 @click.pass_context
 def compare(ctx, src_file, ref_file, proc_crs, multithread, output):
     """Statistically compare image(s) with a reference"""
     # check the src_file and ref_file have been set either via command line or previous command in the chain
-    for param, name in zip([src_file, ref_file], ['-s / --src-file', '-r / --ref-file']):
-        if param is None:
-            raise click.BadOptionUsage(option_name=name, ctx=ctx,
-                                       message=f'Missing option `{name}`, either pass this on the command line '
-                                               f'or chain this command with `fuse`.')
+    # for param, name in zip([src_file, ref_file], ['-s / --src-file', '-r / --ref-file']):
+    #     if param is None:
+    #         raise click.BadOptionUsage(option_name=name, ctx=ctx,
+    #                                    message=f'Missing option `{name}`, either pass this on the command line '
+    #                                            f'or chain this command with `fuse`.')
 
     try:
         res_dict = {}
@@ -307,6 +333,7 @@ def compare(ctx, src_file, ref_file, proc_crs, multithread, output):
                 logger.info(f'\nComparing {src_filename.name}')
                 start_ttl = datetime.datetime.now()
                 cmp = ImCompare(src_filename, ref_file, proc_crs=proc_crs, multithread=multithread)
+                # TODO: what if file stems are identical
                 res_dict[src_filename.stem] = cmp.compare()
                 ttl_time = (datetime.datetime.now() - start_ttl)
                 logger.info(f'Completed in {ttl_time.total_seconds():.2f} secs')
