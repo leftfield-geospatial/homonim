@@ -94,8 +94,7 @@ def _src_file_callback(ctx, param, value):
     print(f'src_file: {value}')
     return value
 
-def _cb_key_val(ctx, param, value):
-
+def _creation_options_callback(ctx, param, value):
     """
     click callback to validate `--opt KEY1=VAL1 --opt KEY2=VAL2` and collect
     in a dictionary like the one below, which is what the CLI function receives.
@@ -106,7 +105,7 @@ def _cb_key_val(ctx, param, value):
         }
     Note: `==VAL` breaks this as `str.split('=', 1)` is used.
     """
-
+    # adapted from https://github.com/rasterio/rasterio/blob/master/rasterio/rio/options.py
     if not value:
         return {}
     else:
@@ -153,17 +152,6 @@ class _ConfigFileCommand(click.Command):
         return click.Command.invoke(self, ctx)
 
 
-class _ChainedCommand(click.Command):
-    """Class to override parameter defaults with their corresponding values from chained commands"""
-    def invoke(self, ctx):
-        for param_key, param_val in ctx.params.items():
-            if param_key in ctx.obj:
-                param_src = ctx.get_parameter_source(param_key)
-                if (ctx.params[param_key] is None or param_src == ParameterSource.DEFAULT):
-                    ctx.params[param_key] = ctx.obj[param_key]
-        return click.Command.invoke(self, ctx)
-
-
 proc_crs_option = click.option("-pc", "--proc-crs", type=click.Choice(['ref', 'src', 'auto'], case_sensitive=False),
                                default='auto', show_default=True, help="The image CRS in which to perform processing.")
 multithread_option = click.option("-nmt", "--no-multithread", "multithread", type=click.BOOL, is_flag=True,
@@ -184,12 +172,9 @@ ref_file_arg = click.argument("ref-file", nargs=1, metavar="REFERENCE",
     '--quiet', '-q',
     count=True,
     help="Decrease verbosity.")
-@click.pass_context
-def cli(ctx, verbose, quiet):
+def cli(verbose, quiet):
     verbosity = verbose - quiet
     _configure_logging(verbosity)
-    ctx.obj = {}
-    ctx.obj["verbosity"] = verbosity  # TODO - necessary?
 
 
 @click.command(cls=_ConfigFileCommand)
@@ -236,9 +221,9 @@ def cli(ctx, verbose, quiet):
 @click.option("--out-nodata", "nodata", type=click.STRING, callback=_parse_nodata, metavar="[NUMBER|null|nan]",
               default=ImFuse.default_out_profile['nodata'], show_default=True,
               help="Output image nodata value.")
-@click.option('--co', '--out-profile', 'creation_options', metavar='NAME=VALUE', multiple=True, callback=_cb_key_val,
+@click.option('--co', '--out-profile', 'creation_options', metavar='NAME=VALUE', multiple=True,
               default=tuple(f'{k}={v}' for k,v in ImFuse.default_out_profile['creation_options'].items()),
-              show_default=True,
+              show_default=True, callback=_creation_options_callback,
               help="Driver specific creation options.  See the rasterio documentation for more information: "
                    "https://rasterio.readthedocs.io/en/latest/topics/image_options.html.")
 @click.pass_context

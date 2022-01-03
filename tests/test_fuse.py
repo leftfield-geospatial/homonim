@@ -60,11 +60,21 @@ class TestFuse(unittest.TestCase):
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
             with rio.open(homo_filename, 'r') as homo_im, rio.open(src_filename, 'r') as src_im:
                 # check homo_filename configured correctly
-                for attr in homo_im.profile.keys() & self._out_profile.keys():
-                    if self._out_profile[attr] is None:
+                def flatten_profile(in_profile, out_profile={}):
+                    for k, v in in_profile.items():
+                        if isinstance(v, dict):
+                            out_profile = flatten_profile(v, out_profile=out_profile)
+                        else:
+                            out_profile[k] = v
+                    return out_profile
+                out_profile = flatten_profile(self._out_profile.copy())
+                for attr in out_profile.keys():
+                    if (out_profile[attr] is not None):
+                        out_attr = out_profile[attr]
+                    elif (attr in src_im.profile) and (src_im.profile['driver'] == out_profile['driver']):
                         out_attr = src_im.profile[attr]
                     else:
-                        out_attr = self._out_profile[attr]
+                        continue
                     is_set = (homo_im.profile[attr] == out_attr) | (str(homo_im.profile[attr]) == str(out_attr))
                     self.assertTrue(is_set, f'{attr} set')
                 # check homo_filename against source
