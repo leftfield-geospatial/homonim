@@ -94,6 +94,35 @@ def _src_file_callback(ctx, param, value):
     print(f'src_file: {value}')
     return value
 
+def _cb_key_val(ctx, param, value):
+
+    """
+    click callback to validate `--opt KEY1=VAL1 --opt KEY2=VAL2` and collect
+    in a dictionary like the one below, which is what the CLI function receives.
+    If no value or `None` is received then an empty dictionary is returned.
+        {
+            'KEY1': 'VAL1',
+            'KEY2': 'VAL2'
+        }
+    Note: `==VAL` breaks this as `str.split('=', 1)` is used.
+    """
+
+    if not value:
+        return {}
+    elif isinstance(value, dict):
+        return value
+    else:
+        out = {}
+        for pair in value:
+            if '=' not in pair:
+                raise click.BadParameter(
+                    "Invalid syntax for KEY=VAL arg: {}".format(pair))
+            else:
+                k, v = pair.split('=', 1)
+                k = k.lower()
+                v = v.lower()
+                out[k] = None if v.lower() in ['none', 'null', 'nil', 'nada'] else v
+        return out
 
 class _CustomFormatter(logging.Formatter):
     def format(self, record):
@@ -212,24 +241,30 @@ def cli(ctx, verbose, quiet):
               help="Output format driver.")
 @click.option("--out-dtype", "dtype", type=click.Choice(list(rio.dtypes.dtype_fwd.values())[1:8], case_sensitive=False),
               default=ImFuse.default_out_profile['dtype'], show_default=True, help="Output image data type.")
-@click.option("--out-blockxsize", "blockxsize", type=click.INT, default=ImFuse.default_out_profile['blockxsize'],
-              show_default=True, help="Output image block width.")
-@click.option("--out-blockysize", "blockysize", type=click.INT, default=ImFuse.default_out_profile['blockysize'],
-              show_default=True, help="Output image block height.")
-@click.option("--out-compress", "compress",
-              type=click.Choice([item.value for item in rio.enums.Compression], case_sensitive=False),
-              default=ImFuse.default_out_profile['compress'], show_default=True,  # metavar="TEXT",
-              help="Output image compression.")
-@click.option("--out-interleave", "interleave", type=click.Choice(["pixel", "band"], case_sensitive=False),
-              default=ImFuse.default_out_profile['interleave'], show_default=True,
-              help="Output image data interleaving.")
-@click.option("--out-photometric", "photometric",
-              type=click.Choice([item.value for item in rio.enums.PhotometricInterp], case_sensitive=False),
-              default=ImFuse.default_out_profile['photometric'], show_default=True,
-              help="Output image photometric interpretation.")
 @click.option("--out-nodata", "nodata", type=click.STRING, callback=_parse_nodata, metavar="[NUMBER|null|nan]",
               default=ImFuse.default_out_profile['nodata'], show_default=True,
               help="Output image nodata value.")
+@click.option('--co', '--out-profile', 'creation_options', metavar='NAME=VALUE', multiple=True, callback=_cb_key_val,
+              default=tuple(f'{k}={v}' for k,v in ImFuse.default_out_profile['creation_options'].items()),
+              show_default=True,
+              help="Driver specific creation options.  See the rasterio documentation for more information: "
+                   "https://rasterio.readthedocs.io/en/latest/topics/image_options.html.")
+
+# @click.option("--out-blockxsize", "blockxsize", type=click.INT, default=ImFuse.default_out_profile['blockxsize'],
+#               show_default=True, help="Output image block width.")
+# @click.option("--out-blockysize", "blockysize", type=click.INT, default=ImFuse.default_out_profile['blockysize'],
+#               show_default=True, help="Output image block height.")
+# @click.option("--out-compress", "compress",
+#               type=click.Choice([item.value for item in rio.enums.Compression], case_sensitive=False),
+#               default=ImFuse.default_out_profile['compress'], show_default=True,  # metavar="TEXT",
+#               help="Output image compression.")
+# @click.option("--out-interleave", "interleave", type=click.Choice(["pixel", "band"], case_sensitive=False),
+#               default=ImFuse.default_out_profile['interleave'], show_default=True,
+#               help="Output image data interleaving.")
+# @click.option("--out-photometric", "photometric",
+#               type=click.Choice([item.value for item in rio.enums.PhotometricInterp], case_sensitive=False),
+#               default=ImFuse.default_out_profile['photometric'], show_default=True,
+#               help="Output image photometric interpretation.")
 @click.pass_context
 def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, do_cmp, build_ovw, proc_crs, conf, **kwargs):
     """Radiometrically homogenise image(s) by fusion with a reference"""

@@ -46,11 +46,20 @@ logger = logging.getLogger(__name__)
 OvlBlock = namedtuple('OvlBlock', ['band_i', 'src_in_block', 'src_out_block', 'outer'])
 
 
+def _update_from_nested(to_dict, from_nested_dict):
+    for key, value in from_nested_dict.items():
+        if isinstance(value, dict):
+            _update_from_nested(value, to_dict)
+        if value is not None:
+            to_dict[key] = value
+    return to_dict
+
+
 class ImFuse():
     default_homo_config = dict(debug_image=False, mask_partial=False, multithread=True, max_block_mem=100)
-    default_out_profile = dict(driver='GTiff', dtype=RasterArray.default_dtype, blockxsize=512, blockysize=512,
-                               compress='deflate', interleave='band', photometric=None,
-                               nodata=RasterArray.default_nodata)
+    default_out_profile = dict(driver='GTiff', dtype=RasterArray.default_dtype, nodata=RasterArray.default_nodata,
+                               creation_options=dict(tiled=True, blockxsize=512, blockysize=512, compress='deflate',
+                                                     interleave='band', photometric=None))
     default_model_config = KernelModel.default_config
 
     def __init__(self, src_filename, ref_filename, method, kernel_shape, proc_crs='auto',
@@ -177,11 +186,7 @@ class ImFuse():
         """Create a rasterio profile for the output image based on a starting profile and configuration"""
         out_profile = init_profile.copy()
         out_profile['count'] = len(self._src_bands)
-        for key, value in self._out_profile.items():
-            if value is not None:
-                out_profile.update(**{key: value})
-        out_profile.update(tiled=True)
-        return out_profile
+        return _update_from_nested(out_profile, self._out_profile)
 
     def _create_debug_profile(self, src_profile, ref_profile):
         """Create a rasterio profile for the debug parameter image based on a reference or source profile"""
@@ -190,11 +195,9 @@ class ImFuse():
         else:
             debug_profile = src_profile.copy()
 
-        for key, value in self._out_profile.items():
-            if value is not None:
-                debug_profile.update(**{key: value})
+        debug_profile = _update_from_nested(debug_profile, self._out_profile)
         debug_profile.update(dtype=RasterArray.default_dtype, count=len(self._src_bands) * 3,
-                             nodata=RasterArray.default_nodata, tiled=True)
+                             nodata=RasterArray.default_nodata)
         return debug_profile
 
     def _create_debug_filename(self, filename):

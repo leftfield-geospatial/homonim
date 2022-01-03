@@ -24,14 +24,17 @@ r2_inpaint_thresh: 0.25
 driver: GTiff
 # Data type (be aware that homogenised reflectances may be negative in some instances)
 dtype: float32
-# Tile/block [x, y] size in pixels  ([512, 512] recommended) (None = same as source image)
-blockxsize:
-blockysize:
-# GeoTIFF compress type (deflate, jpeg, jpeg2000, lzw, zstd, none) (None = same as source image)
-compress: deflate
-# Interleave by 'pixel' or 'band' (pixel, band) (None = same as source image)
-interleave: band
-# Photometric interpretation, see https://gdal.org/drivers/raster/gtiff.html for options (None = same as source image)
-photometric:
 # NODATA value (None = same as source image)
 nodata: .nan
+# driver specific creation options
+creation_options:
+  tiled: True
+  # Tile/block [x, y] size in pixels  ([512, 512] recommended) (None = same as source image)
+  blockxsize:
+  blockysize:
+  # GeoTIFF compress type (deflate, jpeg, jpeg2000, lzw, zstd, none) (None = same as source image)
+  compress: deflate
+  # Interleave by 'pixel' or 'band' (pixel, band) (None = same as source image)
+  interleave: band
+  # Photometric interpretation, see https://gdal.org/drivers/raster/gtiff.html for options (None = same as source image)
+  photometric:
