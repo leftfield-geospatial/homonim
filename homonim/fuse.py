@@ -49,8 +49,8 @@ OvlBlock = namedtuple('OvlBlock', ['band_i', 'src_in_block', 'src_out_block', 'o
 def _update_from_nested(to_dict, from_nested_dict):
     for key, value in from_nested_dict.items():
         if isinstance(value, dict):
-            _update_from_nested(value, to_dict)
-        if value is not None:
+            _update_from_nested(to_dict, value)
+        elif value is not None:
             to_dict[key] = value
     return to_dict
 
@@ -182,20 +182,37 @@ class ImFuse():
                         ovl_blocks.append(OvlBlock(band_i, src_in_block, src_out_block, outer))
         return ovl_blocks
 
+    def _profile_from(self, in_profile):
+        """ create a raster profile by combining an input profile with the configuration profile """
+
+        if in_profile['driver'].lower() != self._out_profile['driver'].lower():
+            # only copy non driver specific keys from input profile when the driver is different to the configured val
+            copy_keys = ['driver', 'width', 'height', 'count', 'dtype', 'crs', 'transform']
+            out_profile = {copy_key: in_profile[copy_key] for copy_key in copy_keys}
+        else:
+            out_profile = in_profile.copy()
+
+        def nested_update(self_dict, other_dict):
+            """Update self_dict with a flattened version of other_dict"""
+            for other_key, other_value in other_dict.items():
+                if isinstance(other_value, dict):
+                    # flatten the driver specific nested dict into root dict
+                    nested_update(self_dict, other_value)
+                elif other_value is not None:
+                    self_dict[other_key] = other_value
+            return self_dict
+
+        return nested_update(out_profile, self._out_profile)
+
     def _create_out_profile(self, init_profile):
         """Create a rasterio profile for the output image based on a starting profile and configuration"""
-        out_profile = init_profile.copy()
+        out_profile = self._profile_from(init_profile)
         out_profile['count'] = len(self._src_bands)
-        return _update_from_nested(out_profile, self._out_profile)
+        return out_profile
 
     def _create_debug_profile(self, src_profile, ref_profile):
         """Create a rasterio profile for the debug parameter image based on a reference or source profile"""
-        if self._proc_crs == 'ref':
-            debug_profile = ref_profile.copy()
-        else:
-            debug_profile = src_profile.copy()
-
-        debug_profile = _update_from_nested(debug_profile, self._out_profile)
+        debug_profile = self._profile_from(ref_profile) if self._proc_crs == 'ref' else self._profile_from(src_profile)
         debug_profile.update(dtype=RasterArray.default_dtype, count=len(self._src_bands) * 3,
                              nodata=RasterArray.default_nodata)
         return debug_profile
@@ -247,7 +264,7 @@ class ImFuse():
             # Set user-supplied metadata
             homo_im.update_tags(**meta_dict)
             # Copy any geedim generated metadata from the reference file
-            for bi in range(0, homo_im.count):
+            for bi in range(0, min(homo_im.count, ref_im.count)):
                 ref_meta_dict = ref_im.tags(bi + 1)
                 homo_meta_dict = {k: v for k, v in ref_meta_dict.items() if k in ['ABBREV', 'ID', 'NAME']}
                 homo_im.set_band_description(bi + 1, ref_im.descriptions[bi])

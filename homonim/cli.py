@@ -109,8 +109,6 @@ def _cb_key_val(ctx, param, value):
 
     if not value:
         return {}
-    elif isinstance(value, dict):
-        return value
     else:
         out = {}
         for pair in value:
@@ -121,7 +119,7 @@ def _cb_key_val(ctx, param, value):
                 k, v = pair.split('=', 1)
                 k = k.lower()
                 v = v.lower()
-                out[k] = None if v.lower() in ['none', 'null', 'nil', 'nada'] else v
+                out[k] = None if v.lower() in ['none', 'null', 'nil', 'nada'] else yaml.safe_load(v)
         return out
 
 class _CustomFormatter(logging.Formatter):
@@ -151,6 +149,7 @@ class _ConfigFileCommand(click.Command):
                     if (ctx.params[conf_key] is None or param_src == ParameterSource.DEFAULT):
                         # overwrite default or None parameters with values from config file
                         ctx.params[conf_key] = conf_value
+                        ctx.set_parameter_source(conf_key, ParameterSource.COMMANDLINE)
         return click.Command.invoke(self, ctx)
 
 
@@ -194,15 +193,8 @@ def cli(ctx, verbose, quiet):
 
 
 @click.command(cls=_ConfigFileCommand)
-# @click.option("-s", "--src-file", type=click.STRING,
-#               required=True, multiple=True, callback=_src_file_callback,
-#               help="Path(s) or wildcard pattern(s)'' specifying the source image file(s).")
-# @click.option("-r", "--ref-file",
-#               type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path),
-#               required=True, help="Path to the reference image file.")
 @src_file_arg
 @ref_file_arg
-# @files_in_arg
 @click.option("-k", "--kernel-shape", type=click.Tuple([click.INT, click.INT]), nargs=2, default=(5, 5),
               show_default=True, help="Sliding kernel (window) width and height (in reference pixels).")
 @click.option("-m", "--method", type=click.Choice(['gain', 'gain-im-offset', 'gain-offset'], case_sensitive=False),
@@ -249,34 +241,16 @@ def cli(ctx, verbose, quiet):
               show_default=True,
               help="Driver specific creation options.  See the rasterio documentation for more information: "
                    "https://rasterio.readthedocs.io/en/latest/topics/image_options.html.")
-
-# @click.option("--out-blockxsize", "blockxsize", type=click.INT, default=ImFuse.default_out_profile['blockxsize'],
-#               show_default=True, help="Output image block width.")
-# @click.option("--out-blockysize", "blockysize", type=click.INT, default=ImFuse.default_out_profile['blockysize'],
-#               show_default=True, help="Output image block height.")
-# @click.option("--out-compress", "compress",
-#               type=click.Choice([item.value for item in rio.enums.Compression], case_sensitive=False),
-#               default=ImFuse.default_out_profile['compress'], show_default=True,  # metavar="TEXT",
-#               help="Output image compression.")
-# @click.option("--out-interleave", "interleave", type=click.Choice(["pixel", "band"], case_sensitive=False),
-#               default=ImFuse.default_out_profile['interleave'], show_default=True,
-#               help="Output image data interleaving.")
-# @click.option("--out-photometric", "photometric",
-#               type=click.Choice([item.value for item in rio.enums.PhotometricInterp], case_sensitive=False),
-#               default=ImFuse.default_out_profile['photometric'], show_default=True,
-#               help="Output image photometric interpretation.")
 @click.pass_context
 def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, do_cmp, build_ovw, proc_crs, conf, **kwargs):
     """Radiometrically homogenise image(s) by fusion with a reference"""
-    # ctx.obj.update(**ctx.params)  # copy all parameters for chained commands to use
-    # ctx.obj['src_file'] = ()  # filled below
-    # logger.info(f'files: {files}')
-    # src_file = files[:-1]
-    # ref_file = files[-1]
     compare_files = []
     config = {}
     config['homo_config'] = _update_existing_keys(ImFuse.default_homo_config, **kwargs)
     config['model_config'] = _update_existing_keys(ImFuse.default_model_config, **kwargs)
+    if (kwargs['driver'] != ImFuse.default_out_profile['driver'] and
+            ctx.get_parameter_source('creation_options') == ParameterSource.DEFAULT):
+        kwargs['creation_options'] = {}
     config['out_profile'] = _update_existing_keys(ImFuse.default_out_profile, **kwargs)
 
     # iterate over and homogenise source file(s)
@@ -334,11 +308,6 @@ cli.add_command(fuse)
 
 
 @click.command()
-# @click.option("-s", "--src-file", type=click.STRING,
-#             required=False, multiple=True, help="Path(s) or wildcard pattern(s) specifying the source image file(s).")
-# @click.option("-r", "--ref-file",
-#               type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path),
-#               required=False, help="Path to the reference image file.")
 @src_file_arg
 @ref_file_arg
 @proc_crs_option
@@ -346,16 +315,8 @@ cli.add_command(fuse)
 @click.option("-o", "--output",
               type=click.Path(exists=False, dir_okay=False, writable=True, resolve_path=True, path_type=pathlib.Path),
               help="Write comparison results in json format.")
-@click.pass_context
-def compare(ctx, src_file, ref_file, proc_crs, multithread, output):
+def compare(src_file, ref_file, proc_crs, multithread, output):
     """Statistically compare image(s) with a reference"""
-    # check the src_file and ref_file have been set either via command line or previous command in the chain
-    # for param, name in zip([src_file, ref_file], ['-s / --src-file', '-r / --ref-file']):
-    #     if param is None:
-    #         raise click.BadOptionUsage(option_name=name, ctx=ctx,
-    #                                    message=f'Missing option `{name}`, either pass this on the command line '
-    #                                            f'or chain this command with `fuse`.')
-
     try:
         res_dict = {}
         for src_file_spec in src_file:
