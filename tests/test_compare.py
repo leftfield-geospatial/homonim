@@ -21,16 +21,11 @@ import json
 import os
 import pathlib
 import unittest
-import warnings
 
-import cv2
-import numpy as np
 import pandas as pd
 import rasterio as rio
 import yaml
 from click.testing import CliRunner
-from shapely.geometry import box
-from tqdm import tqdm
 
 from homonim import root_path, cli
 from homonim.compare import ImCompare

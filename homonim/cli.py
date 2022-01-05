@@ -221,11 +221,14 @@ def cli(verbose, quiet):
 @click.option("--out-nodata", "nodata", type=click.STRING, callback=_parse_nodata, metavar="[NUMBER|null|nan]",
               default=ImFuse.default_out_profile['nodata'], show_default=True,
               help="Output image nodata value.")
+# @click.option('--co', '--out-profile', 'creation_options', metavar='NAME=VALUE', multiple=True,
+#               default=tuple(f'{k}={v}' for k,v in ImFuse.default_out_profile['creation_options'].items()),
+#               show_default=True, callback=_creation_options_callback,
+#               help="Driver specific creation options.  See the rasterio documentation for more information: "
+#                    "https://rasterio.readthedocs.io/en/latest/topics/image_options.html.")
 @click.option('--co', '--out-profile', 'creation_options', metavar='NAME=VALUE', multiple=True,
-              default=tuple(f'{k}={v}' for k,v in ImFuse.default_out_profile['creation_options'].items()),
-              show_default=True, callback=_creation_options_callback,
-              help="Driver specific creation options.  See the rasterio documentation for more information: "
-                   "https://rasterio.readthedocs.io/en/latest/topics/image_options.html.")
+              default=(), callback=_creation_options_callback,
+              help="Driver specific creation options.  See the rasterio documentation for more information.")
 @click.pass_context
 def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, do_cmp, build_ovw, proc_crs, conf, **kwargs):
     """Radiometrically homogenise image(s) by fusion with a reference"""
@@ -233,9 +236,13 @@ def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, do_cmp, buil
     config = {}
     config['homo_config'] = _update_existing_keys(ImFuse.default_homo_config, **kwargs)
     config['model_config'] = _update_existing_keys(ImFuse.default_model_config, **kwargs)
-    if (kwargs['driver'] != ImFuse.default_out_profile['driver'] and
+    # if (kwargs['driver'] != ImFuse.default_out_profile['driver'] and
+    #         ctx.get_parameter_source('creation_options') == ParameterSource.DEFAULT):
+    #     kwargs['creation_options'] = {}
+    if (ctx.get_parameter_source('driver') == ParameterSource.DEFAULT and
             ctx.get_parameter_source('creation_options') == ParameterSource.DEFAULT):
-        kwargs['creation_options'] = {}
+        # if no other driver or creation_options have been specified, use the defaults
+        kwargs['creation_options'] = ImFuse.default_out_profile['creation_options']
     config['out_profile'] = _update_existing_keys(ImFuse.default_out_profile, **kwargs)
 
     # iterate over and homogenise source file(s)
