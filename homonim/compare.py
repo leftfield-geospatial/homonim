@@ -66,6 +66,7 @@ class ImCompare():
                     src_ra = RasterArray.from_rio_dataset(src_im, indexes=self._src_bands)
                 expand_pixels = np.ceil(np.divide(src_im.res, ref_im.res)).astype(
                     'int')  # TODO: compare to fuse - is this necessary
+                # TODO the below is invalid when ref is not in src CRS
                 ref_win = expand_window_to_grid(ref_im.window(*src_ra.bounds), expand_pixels=expand_pixels)
                 with ref_read_lock:
                     ref_ra = RasterArray.from_rio_dataset(ref_im, indexes=self._ref_bands, window=ref_win,

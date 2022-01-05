@@ -37,6 +37,8 @@ class BlockSizeError(HomonimError):
 class ImageProfileError(HomonimError):
     """Raised when a image profile invalid"""
 
+class IoError(HomonimError):
+    """Raised when a reading to writing from a closed dataset"""
 
 class BandCountMismatchWarning(UserWarning):
     """Warn when the reference and source band counts don't match"""
