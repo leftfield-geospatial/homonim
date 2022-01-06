@@ -183,13 +183,11 @@ class ImPairReader():
         max_block_mem = self._max_block_mem * (2 ** 20) / mem_scale if self._max_block_mem > 0 else np.inf
         dtype_size = np.dtype(RasterArray.default_dtype).itemsize
 
-        block_shape = np.array(im_shape)
-        num_blocks = 1
+        block_shape = np.array(im_shape).astype('float')
         while ((np.product(block_shape) * dtype_size > max_block_mem)):
             div_dim = np.argmax(block_shape)
             block_shape[div_dim] /= 2
-            num_blocks *= 2
-        return np.round(block_shape).astype('int')
+        return np.ceil(block_shape).astype('int')
 
 
     def block_pairs(self):
@@ -213,13 +211,15 @@ class ImPairReader():
 
         # initialise block formation variables
         overlap = np.array(self._overlap)
-        proc_im_shape = np.array((proc_win.height, proc_win.width))
-        proc_im_ul = np.array((proc_win.row_off, proc_win.col_off))
-        proc_im_br = np.array((proc_win.height + proc_win.row_off, proc_win.width + proc_win.col_off))
+        proc_win_shape = np.array((proc_win.height, proc_win.width))
+        proc_win_ul = np.array((proc_win.row_off, proc_win.col_off))
+        proc_win_br = np.array((proc_win.height + proc_win.row_off, proc_win.width + proc_win.col_off))
+        proc_im_ul = np.array([0, 0])
+        proc_im_br = np.array(proc_im.shape)
 
         # calculate a block shape (in proc_crs) that satisfies the max_block_mem requirement
         mem_scale = np.product(np.divide(proc_im.res, other_im.res))
-        block_shape = self._auto_block_shape(proc_im_shape, mem_scale)
+        block_shape = self._auto_block_shape(proc_win_shape, mem_scale)
 
         # TODO: form an error message in terms of kernel shape, perhaps by catching this exception
         if np.any(block_shape <= np.fmax(2 * overlap, (3, 3))):
@@ -238,21 +238,28 @@ class ImPairReader():
                 # find UL and BR corners for overlapping block in proc space
                 ul = np.array((ul_row, ul_col))
                 br = ul + block_shape + (2 * overlap)
-                in_ul = np.fmax(ul, proc_im_ul)
-                in_br = np.fmin(br, proc_im_br)
+                in_ul = np.fmax(ul, proc_win_ul)
+                in_br = np.fmin(br, proc_win_br)
                 # find UL and BR corners for non-overlapping block in proc space
-                out_ul = ul + overlap
-                out_br = br - overlap
+                out_ul = np.fmax(ul + overlap, (0, 0))
+                out_br = np.fmin(br - overlap, proc_im.shape)
                 # block touches image boundary?
-                outer = np.any(in_ul <= proc_im_ul) or np.any(in_br >= proc_im_br)
+                outer = np.any(in_ul <= proc_win_ul) or np.any(in_br >= proc_win_br)
 
                 # form rasterio windows corresponding to above block corners
                 proc_in_block = Window(*in_ul[::-1], *np.subtract(in_br, in_ul)[::-1])
                 proc_out_block = Window(*out_ul[::-1], *np.subtract(out_br, out_ul)[::-1])
 
                 # form equivalent rasterio windows in 'other' space
+                #TODO: expand or round for other_in_block?  Proc_crs=ref: For ref->src round is good as that means there will be no
+                # nodata boundaries due to src transform beyond ref transform, but for src->ref, expand is good, as that
+                # means there will be no nodata for ref pixels straddling src transform.
                 other_in_block = round_window_to_grid(other_im.window(*proc_im.window_bounds(proc_in_block)))
                 other_out_block = round_window_to_grid(other_im.window(*proc_im.window_bounds(proc_out_block)))
+
+                other_out_ul = np.fmax(np.array(other_out_block.toranges())[:, 0], (0, 0))
+                other_out_br = np.fmin(np.array(other_out_block.toranges())[:, 1], other_im.shape)
+                other_out_block = Window(*other_out_ul[::-1], *np.subtract(other_out_br, other_out_ul)[::-1])
 
                 # form the BlockPair named tuple, assigning 'proc' and 'other' back to 'src' and 'ref' for use in read()
                 if self._proc_crs == 'ref':
