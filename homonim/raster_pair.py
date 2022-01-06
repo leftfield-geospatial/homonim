@@ -144,8 +144,8 @@ class ImPairReader():
 
     def open(self):
         # self._blocks = self._create_ovl_blocks(overlap=self._overlap)
-        self._src_im = rio.open(self._src_filename, 'r', num_threads='all_cpus')
-        self._ref_im = rio.open(self._ref_filename, 'r', num_threads='all_cpus')
+        self._src_im = rio.open(self._src_filename, 'r')
+        self._ref_im = rio.open(self._ref_filename, 'r')
 
         if self._src_im.crs.to_proj4() != self._ref_im.crs.to_proj4():
             # open the image pair in the same CRS, re-projecting the lower resolution image into the CRS of the other
@@ -227,6 +227,7 @@ class ImPairReader():
                                  f"increase 'max_block_mem', or decrease 'max_blocks', or 'overlap'")
 
         # form the overlapping blocks in 'proc' space, and find their equivalents in 'other' space
+        block_pairs = []
         for band_i in range(len(self._src_bands)): # outer loop over bands - faster for band interleaved images
             for ul_row, ul_col in product(
                     range(proc_win.row_off - overlap[0], proc_win.row_off + proc_win.height - 2 * overlap[0],
@@ -250,7 +251,7 @@ class ImPairReader():
                 proc_out_block = Window(*out_ul[::-1], *np.subtract(out_br, out_ul)[::-1])
 
                 # form equivalent rasterio windows in 'other' space
-                other_in_block = expand_window_to_grid(other_im.window(*proc_im.window_bounds(proc_in_block)))
+                other_in_block = round_window_to_grid(other_im.window(*proc_im.window_bounds(proc_in_block)))
                 other_out_block = round_window_to_grid(other_im.window(*proc_im.window_bounds(proc_out_block)))
 
                 # form the BlockPair named tuple, assigning 'proc' and 'other' back to 'src' and 'ref' for use in read()
@@ -260,4 +261,5 @@ class ImPairReader():
                 else:
                     block_pair = BlockPair(band_i, proc_in_block, other_in_block, proc_out_block, other_out_block,
                                            outer)
-                yield block_pair
+                block_pairs.append(block_pair)
+        return block_pairs
