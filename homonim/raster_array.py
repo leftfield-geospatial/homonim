@@ -263,7 +263,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
             return self._array[(slice(self._array.shape[0]), *window.toslices())]
 
     def reproject(self, crs=None, transform=None, shape=None, nodata=default_nodata, dtype=default_dtype,
-                  resampling=Resampling.lanczos):
+                  resampling=Resampling.lanczos, **kwargs):
 
         if transform and not shape:
             raise ValueError('If "transform" is specified, "shape" must also be specified')
@@ -291,6 +291,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
             dst_nodata=nodata,
             num_threads=multiprocessing.cpu_count(),
             resampling=resampling,
+            **kwargs
         )
         return RasterArray(_dst_array, crs=crs, transform=_dst_transform, nodata=nodata)
 
