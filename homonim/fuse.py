@@ -36,7 +36,7 @@ from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from homonim.errors import BlockSizeError
-from homonim.raster_pair import _inspect_image_pair
+from homonim.raster_pair import _inspect_image_pair, ImPairReader, BlockPair
 from homonim.kernel_model import KernelModel, RefSpaceModel, SrcSpaceModel
 from homonim.raster_array import RasterArray, round_window_to_grid, expand_window_to_grid
 
@@ -303,6 +303,107 @@ class ImFuse():
                     dbg_im.update_tags(pi + 1, **dbg_meta_dict)
 
     def homogenise(self, out_filename):
+        """
+        Homogenise an image file by block.
+
+        Parameters
+        ----------
+        out_filename: str, pathlib.Path
+                      Path of the homogenised image file to create.
+        """
+        write_lock = threading.Lock()
+        dbg_lock = threading.Lock()
+        accum_stats = np.array([0., 0.])
+        bar_format = '{l_bar}{bar}|{n_fmt}/{total_fmt} blocks [{elapsed}<{remaining}]'
+        im_pair_args = dict(proc_crs=self._proc_crs, overlap=np.floor(self._kernel_shape/2).astype('int'),
+                            max_block_mem=self._config['max_block_mem'])
+
+        with logging_redirect_tqdm(), ImPairReader(self._src_filename, self._ref_filename, **im_pair_args) as im_pair:
+            # TODO: use im_pair src_win to create expanded profile?
+            out_profile = self._create_out_profile(im_pair.src_im.profile)
+            out_im = rio.open(out_filename, 'w', **out_profile)
+            if self._profile:
+                # setup profiling
+                tracemalloc.start()
+                proc_profile = cProfile.Profile()
+                proc_profile.enable()
+
+            if self._config['debug_image']:
+                # create debug image file
+                #TODO: use im_pair ref_win / src_win to create profile
+                dbg_profile = self._create_debug_profile(im_pair.src_im.profile, im_pair.ref_im.profile)
+                dbg_file_name = self._create_debug_filename(out_filename)
+                dbg_im = rio.open(dbg_file_name, 'w', **dbg_profile)
+
+            try:
+                def process_block(block_pair: BlockPair):
+                    """Thread-safe function to homogenise a block of src_im"""
+                    src_ra, ref_ra = im_pair.read(block_pair)
+                    param_ra = self._model.fit(ref_ra, src_ra)
+                    out_ra = self._model.apply(src_ra, param_ra)
+                    out_ra.mask = src_ra.mask
+                    if block_pair.outer and self._config['mask_partial']:
+                        out_ra = self._model.mask_partial(out_ra, ref_ra.res)
+                    out_ra.nodata = out_im.nodata
+
+                    with write_lock:
+                        out_ul = np.array([block_pair.src_out_block.row_off, block_pair.src_out_block.col_off])
+                        out_br = np.array([block_pair.src_out_block.height, block_pair.src_out_block.width]) + out_ul
+                        out_ul = np.fmax(out_ul, (0, 0))
+                        out_br = np.fmin(out_br, (out_im.height, out_im.width))
+                        clipped_out_win = rio.windows.Window.from_slices((out_ul[0], out_br[0]), (out_ul[1], out_br[1]))
+                        out_array = out_ra.slice_array(*out_im.window_bounds(clipped_out_win))
+                        out_im.write(out_array, window=clipped_out_win, indexes=block_pair.band_i + 1)
+
+                    if self._config['debug_image']:
+                        param_mask = param_ra.mask
+                        with dbg_lock:
+                            nonlocal accum_stats
+                            accum_stats += [param_ra.array[2, param_mask].sum(), param_mask.sum()]
+
+                            src_out_bounds = im_pair.src_im.window_bounds(block_pair.src_out_block)
+                            dbg_array = param_ra.slice_array(*src_out_bounds)
+                            dbg_out_block = round_window_to_grid(dbg_im.window(*src_out_bounds))
+                            indexes = np.arange(param_ra.count) * len(self._src_bands) + block_pair.band_i + 1
+                            dbg_im.write(dbg_array, window=dbg_out_block, indexes=indexes)
+
+                if self._config['multithread']:
+                    # process blocks in concurrent threads
+                    future_list = []
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
+                        for block_pair in im_pair.block_pairs():
+                            future = executor.submit(process_block, block_pair)
+                            future_list.append(future)
+
+                        # wait for threads and raise any thread generated exceptions
+                        for future in tqdm(future_list, bar_format=bar_format):
+                            future.result()
+                else:
+                    # process bands consecutively
+                    for block_pair in tqdm(im_pair.block_pairs(), bar_format=bar_format):
+                        process_block(block_pair)
+            finally:
+                out_im.close()
+                self._set_homo_metadata(out_filename)
+                if self._config['debug_image']:
+                    dbg_im.close()
+                    self._set_debug_metadata(dbg_file_name)
+                    logger.debug(
+                        f'Average kernel model R\N{SUPERSCRIPT TWO}: {accum_stats[0] / accum_stats[1]:.2f}')
+
+        if self._profile:
+            # print profiling info
+            # (tottime is the total time spent in the function alone. cumtime is the total time spent in the function
+            # plus all functions that this function called)
+            proc_profile.disable()
+            proc_stats = pstats.Stats(proc_profile).sort_stats('cumtime')
+            logger.debug(f'Processing time:')
+            proc_stats.print_stats(20)
+
+            current, peak = tracemalloc.get_traced_memory()
+            logger.debug(f"Memory usage: current: {current / 10 ** 6:.1f} MB, peak: {peak / 10 ** 6:.1f} MB")
+
+    def _homogenise(self, out_filename):
         """
         Homogenise an image file by block.
 
