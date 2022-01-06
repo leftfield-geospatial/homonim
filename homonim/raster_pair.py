@@ -23,12 +23,14 @@ from collections import namedtuple
 from itertools import product
 
 import numpy as np
+import rasterio
 import rasterio as rio
 from rasterio.enums import ColorInterp, MaskFlags
 from rasterio.vrt import WarpedVRT
 from rasterio.warp import Resampling, transform_bounds
 from rasterio.windows import Window
 from shapely.geometry import box
+from typing import Tuple
 
 from homonim.errors import UnsupportedImageError, ImageContentError, BlockSizeError, IoError
 from homonim.raster_array import RasterArray, expand_window_to_grid, round_window_to_grid
@@ -56,29 +58,29 @@ def _inspect_image(im_filename):
         if im.nodata is None and not is_masked:
             logger.warning(f'{im_filename.name} has no mask or nodata value, '
                            f'any invalid pixels should be masked before processing.')
-        im_bands = [bi + 1 for bi in range(im.count) if im.colorinterp[bi] != ColorInterp.alpha]
+        im_bands = tuple([bi + 1 for bi in range(im.count) if im.colorinterp[bi] != ColorInterp.alpha])
     return im_bands
 
 
 def _inspect_image_pair(src_filename, ref_filename, proc_crs='auto'):
     # check ref_filename has enough bands
-    cmp_bands = _inspect_image(src_filename)
+    src_bands = _inspect_image(src_filename)
     ref_bands = _inspect_image(ref_filename)
-    if len(cmp_bands) > len(ref_bands):
+    if len(src_bands) > len(ref_bands):
         raise ImageContentError(f'{ref_filename.name} has fewer non-alpha bands than {src_filename.name}.')
 
     # warn if band counts don't match
-    if len(cmp_bands) != len(ref_bands):
-        logger.warning(f'Image non-alpha band counts don`t match. Using the first {len(cmp_bands)} non-alpha bands '
+    if len(src_bands) != len(ref_bands):
+        logger.warning(f'Image non-alpha band counts don`t match. Using the first {len(src_bands)} non-alpha bands '
                        f'of {ref_filename.name}.')
 
-    with rio.open(src_filename, 'r') as cmp_im:
-        with WarpedVRT(rio.open(ref_filename, 'r'), crs=cmp_im.crs, resampling=Resampling.bilinear) as ref_im:
+    with rio.open(src_filename, 'r') as src_im:
+        with WarpedVRT(rio.open(ref_filename, 'r'), crs=src_im.crs, resampling=Resampling.bilinear) as ref_im:
             # check coverage
-            if not box(*ref_im.bounds).covers(box(*cmp_im.bounds)):
+            if not box(*ref_im.bounds).covers(box(*src_im.bounds)):
                 raise ImageContentError('Reference extent does not cover image.')
 
-            src_pixel_smaller = np.prod(cmp_im.res) < np.prod(ref_im.res)
+            src_pixel_smaller = np.prod(src_im.res) < np.prod(ref_im.res)
             cmp_str = "smaller" if src_pixel_smaller else "larger"
             if proc_crs == 'auto':
                 proc_crs = 'ref' if src_pixel_smaller else 'src'
@@ -90,29 +92,48 @@ def _inspect_image_pair(src_filename, ref_filename, proc_crs='auto'):
                 logger.warning(f'model_crs="{rec_crs_str}" is recommended when '
                                f'the source image pixel size is {cmp_str} than the reference.')
 
-    return cmp_bands, ref_bands, proc_crs
+    return src_bands, ref_bands, proc_crs
 
 """Overlapping block object"""
 BlockPair = namedtuple('BlockPair', ['band_i', 'src_in_block', 'ref_in_block', 'src_out_block', 'ref_out_block', 'outer'])
 
-class ImPairBlockReader():
-    def __init__(self, src_filename, ref_filename, proc_crs='auto', overlap=(0,0), max_block_mem=100):
+class ImPairReader():
+    def __init__(self, src_filename, ref_filename, proc_crs='auto', overlap=(0,0), max_block_mem=np.inf):
         self._src_filename = pathlib.Path(src_filename)
         self._ref_filename = pathlib.Path(ref_filename)
         self._overlap = overlap if not np.isscalar(overlap) else (overlap, overlap)
         self._max_block_mem = max_block_mem
         self._src_bands, self._ref_bands, self._proc_crs = _inspect_image_pair(self._src_filename, self._ref_filename,
                                                                                proc_crs)
-        self._src_im = None
-        self._ref_im = None
+        self._src_im:rasterio.DatasetReader = None
+        self._ref_im:rasterio.DatasetReader = None
         self._env = None
-        self._ref_lock = threading.Lock()
         self._src_lock = threading.Lock()
+        self._ref_lock = threading.Lock()
+        # self._src_win = None
+        # self._ref_win = None
+
+    @property
+    def src_im(self)-> rasterio.DatasetReader:
+        return self._src_im
+
+    @property
+    def ref_im(self)-> rasterio.DatasetReader:
+        return self._ref_im
+
+    @property
+    def src_bands(self)-> Tuple[int,]:
+        return self._src_bands
+
+    @property
+    def ref_bands(self)-> Tuple[int,]:
+        return self._ref_bands
 
     def __enter__(self):
         self._env = rio.Env(GDAL_NUM_THREADS='ALL_CPUs').__enter__()
         self.open()
         return self
+
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
@@ -120,12 +141,20 @@ class ImPairBlockReader():
             self._env.__exit__(exc_type, exc_val, exc_tb)
             self._env = None
 
+
     def open(self):
         # self._blocks = self._create_ovl_blocks(overlap=self._overlap)
-        with self._src_lock:
-            self._src_im = rio.open(self._src_filename, 'r')
-        with self._ref_lock:
-            self._ref_im = rio.open(self._src_filename, 'r')
+        self._src_im = rio.open(self._src_filename, 'r', num_threads='all_cpus')
+        self._ref_im = rio.open(self._ref_filename, 'r', num_threads='all_cpus')
+
+        if self._src_im.crs.to_proj4() != self._ref_im.crs.to_proj4():
+            # open the image pair in the same CRS, re-projecting the lower resolution image into the CRS of the other
+            logger.warning(f'Source and reference image pair are not in the same CRS: {self._src_filename.name} and '
+                           f'{self._ref_filename.name}')
+            if self._proc_crs == 'ref':
+                self._ref_im = WarpedVRT(self._ref_im, crs=self._src_im.crs, resampling=Resampling.bilinear)
+            else:
+                self._src_im = WarpedVRT(self._src_im, crs=self._ref_im.crs, resampling=Resampling.bilinear)
 
     def close(self):
         if self._src_im:
@@ -137,8 +166,9 @@ class ImPairBlockReader():
 
 
     def read(self, block: BlockPair):
-        if not self._src_im or not self._ref_im:
-            raise IoError('Datasets are closed')
+        if not self._src_im or self._src_im.closed or not self._ref_im or self._ref_im.closed :
+            raise IoError(f'Source and reference image pair are closed: {self._src_filename.name} and '
+                           f'{self._ref_filename.name}')
         with self._src_lock:
             src_ra = RasterArray.from_rio_dataset(self._src_im, indexes=self._src_bands[block.band_i],
                                                   window=block.src_in_block, boundless=block.outer)
@@ -148,76 +178,82 @@ class ImPairBlockReader():
         return src_ra, ref_ra
 
 
-    def _auto_block_shape(self, im_shape):
-        max_block_mem = self._max_block_mem * (2 ** 20)  # MB to Bytes
+    def _auto_block_shape(self, im_shape, mem_scale=1):
+        # convert _max_block_mem from MB to Bytes in lowest res image space
+        max_block_mem = self._max_block_mem * (2 ** 20) / mem_scale if self._max_block_mem > 0 else np.inf
         dtype_size = np.dtype(RasterArray.default_dtype).itemsize
 
         block_shape = np.array(im_shape)
-        while (np.product(block_shape) * dtype_size > max_block_mem):
+        num_blocks = 1
+        while ((np.product(block_shape) * dtype_size > max_block_mem)):
             div_dim = np.argmax(block_shape)
             block_shape[div_dim] /= 2
+            num_blocks *= 2
         return np.round(block_shape).astype('int')
 
+
     def block_pairs(self):
-        # form the src and ref image windows
-        with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
-            with rio.open(self._ref_filename, 'r') as ref_im:
-                # src bounds in ref crs
-                _src_bounds = transform_bounds(src_im.crs, ref_im.crs, *src_im.bounds)
-                # find expanded ref window that covers src image
-                ref_win = expand_window_to_grid(ref_im.window(*_src_bounds))
-                # ref_transform = ref_im.window_transform(ref_win)
+        """ Iterator over co-located pairs of source and reference image blocks.  For use in read(). """
 
-                # expanded ref bounds in src crs
-                _ref_bounds = transform_bounds(ref_im.crs, src_im.crs, *ref_im.window_bounds(ref_win))
-                # find expanded src window that covers expanded ref image
-                src_win = expand_window_to_grid(src_im.window(*_ref_bounds))
-                # src_transform = src_im.window_transform(src_win)
+        if not self._src_im or self._src_im.closed or not self._ref_im or self._ref_im.closed :
+            raise IoError(f'Source and reference image pair are closed: {self._src_filename.name} and '
+                          f'{self._ref_filename.name}')
 
-        # ref_dict = dict(fn=self._ref_filename, window=ref_win, bands=self._ref_bands, im=ref_im,
-        #                 profile=dict(transform=ref_transform, width=ref_win.width, height=ref_win.height))
-        # src_dict = dict(fn=self._src_filename, window=src_win, bands=self._src_bands, im=src_im,
-        #                 profile=dict(transform=src_transform, width=src_win.width, height=src_win.height))
+        # image-wide windows that allow re-projections between src and ref without loss of data
+        ref_win = expand_window_to_grid(self._ref_im.window(*self._src_im.bounds))
+        src_win = expand_window_to_grid(self._src_im.window(*self._ref_im.window_bounds(ref_win)))
+
+        # assign 'src' and 'ref' to 'proc' and 'other' according to proc_crs
+        # (blocks are first formed in the 'proc' (usually the lowest resolution) image space, from which the equivalent
+        # blocks in 'other' image space are then inferred)
         if self._proc_crs == 'ref':
-            proc_win, proc_im, other_im = (ref_win, ref_im, src_im)
+            proc_win, proc_im, other_im = (ref_win, self._ref_im, self._src_im)
         else:
-            proc_win, proc_im, other_im = (src_win, src_im, ref_im)
+            proc_win, proc_im, other_im = (src_win, self._src_im, self._ref_im)
 
-        # def _create_block_pairs(proc_win: rasterio.windows.Window, proc_im: rasterio.DatasetReader,
-        #                          other_im: rasterio.DatasetReader, overlap=self._overlap):
+        # initialise block formation variables
         overlap = np.array(self._overlap)
-        proc_shape = np.array((proc_win.height, proc_win.width))
+        proc_im_shape = np.array((proc_win.height, proc_win.width))
         proc_im_ul = np.array((proc_win.row_off, proc_win.col_off))
         proc_im_br = np.array((proc_win.height + proc_win.row_off, proc_win.width + proc_win.col_off))
-        block_shape = self._auto_block_shape(proc_shape)
-        if np.any(block_shape <= 2 * overlap):
-            raise BlockSizeError("Block size is too small, increase 'max_block_mem' or decrease 'overlap'")
-        # TODO: avoid repeating calcs over bands, it is slow
-        for band_i in range(len(self._src_bands)):
+
+        # calculate a block shape (in proc_crs) that satisfies the max_block_mem requirement
+        mem_scale = np.product(np.divide(proc_im.res, other_im.res))
+        block_shape = self._auto_block_shape(proc_im_shape, mem_scale)
+
+        # TODO: form an error message in terms of kernel shape, perhaps by catching this exception
+        if np.any(block_shape <= np.fmax(2 * overlap, (3, 3))):
+            raise BlockSizeError(f"Block size {block_shape} is smaller than overlap, "
+                                 f"increase 'max_block_mem', or decrease 'max_blocks', or 'overlap'")
+
+        # form the overlapping blocks in 'proc' space, and find their equivalents in 'other' space
+        for band_i in range(len(self._src_bands)): # outer loop over bands - faster for band interleaved images
             for ul_row, ul_col in product(
                     range(proc_win.row_off - overlap[0], proc_win.row_off + proc_win.height - 2 * overlap[0],
                           block_shape[0]),
                     range(proc_win.col_off - overlap[1], proc_win.col_off + proc_win.width - 2 * overlap[1],
                           block_shape[1])
             ):
+                # find UL and BR corners for overlapping block in proc space
                 ul = np.array((ul_row, ul_col))
                 br = ul + block_shape + (2 * overlap)
-                proc_ul = np.fmax(ul, proc_im_ul)
-                proc_br = np.fmin(br, proc_im_br)
-                outer = np.any(proc_ul <= proc_im_ul) or np.any(proc_br >= proc_im_br)
+                in_ul = np.fmax(ul, proc_im_ul)
+                in_br = np.fmin(br, proc_im_br)
+                # find UL and BR corners for non-overlapping block in proc space
                 out_ul = ul + overlap
                 out_br = br - overlap
+                # block touches image boundary?
+                outer = np.any(in_ul <= proc_im_ul) or np.any(in_br >= proc_im_br)
 
-                proc_in_block = Window(*proc_ul[::-1], *np.subtract(proc_br, proc_ul)[::-1])
+                # form rasterio windows corresponding to above block corners
+                proc_in_block = Window(*in_ul[::-1], *np.subtract(in_br, in_ul)[::-1])
                 proc_out_block = Window(*out_ul[::-1], *np.subtract(out_br, out_ul)[::-1])
 
-                other_in_bounds = transform_bounds(proc_im.crs, other_im.crs,
-                                                   *proc_im.window_bounds(proc_in_block))
-                other_in_block = expand_window_to_grid(other_im.window(*other_in_bounds))
+                # form equivalent rasterio windows in 'other' space
+                other_in_block = expand_window_to_grid(other_im.window(*proc_im.window_bounds(proc_in_block)))
+                other_out_block = round_window_to_grid(other_im.window(*proc_im.window_bounds(proc_out_block)))
 
-                other_out_bounds = transform_bounds(proc_im.crs, other_im.crs,
-                                                    *proc_im.window_bounds(proc_out_block))
-                other_out_block = round_window_to_grid(other_im.window(*other_out_bounds))
+                # form the BlockPair named tuple, assigning 'proc' and 'other' back to 'src' and 'ref' for use in read()
                 if self._proc_crs == 'ref':
                     block_pair = BlockPair(band_i, other_in_block, proc_in_block, other_out_block, proc_out_block,
                                            outer)
@@ -225,4 +261,3 @@ class ImPairBlockReader():
                     block_pair = BlockPair(band_i, proc_in_block, other_in_block, proc_out_block, other_out_block,
                                            outer)
                 yield block_pair
-
