@@ -36,7 +36,7 @@ from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from homonim.errors import BlockSizeError
-from homonim.inspect import _inspect_image_pair
+from homonim.raster_pair import _inspect_image_pair
 from homonim.kernel_model import KernelModel, RefSpaceModel, SrcSpaceModel
 from homonim.raster_array import RasterArray, round_window_to_grid, expand_window_to_grid
 
