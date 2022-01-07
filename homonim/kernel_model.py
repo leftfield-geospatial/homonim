@@ -292,6 +292,31 @@ class KernelModel():
 
         return param_ra
 
+    def _mask_partial(self, out_ra: RasterArray, mask_kernel_shape=None) -> RasterArray:
+        if mask_kernel_shape is None:
+            mask_kernel_shape = self._kernel_shape
+        mask = out_ra.mask
+        se = cv2.getStructuringElement(cv2.MORPH_RECT, tuple(mask_kernel_shape))
+        mask = cv2.erode(mask.astype('uint8', copy=False), se).astype('bool', copy=False)
+        out_ra.mask = mask
+        return out_ra
+
+    def _apply(self, src_ra: RasterArray, param_ra: RasterArray, mask_kernel_shape=None) -> RasterArray:
+        """
+        Applies sliding kernel models to a source array
+
+        Parameters
+        ----------
+        src_ra: homonim.RasterArray
+                   M x N RasterArray of source data, collocated, and of similar spectral content, to ref_ra
+        """
+        out_array = (param_ra.array[0] * src_ra.array) + param_ra.array[1]
+        out_ra = RasterArray.from_profile(out_array, param_ra.profile)
+        out_ra.mask = src_ra.mask
+        if mask_kernel_shape is not None:
+            out_ra = self._mask_partial(out_ra, mask_kernel_shape=mask_kernel_shape)
+        return out_ra
+
     def fit(self, ref_ra: RasterArray, src_ra: RasterArray, kernel_shape=None) -> RasterArray:
         """
         Fits sliding kernel models to reference and source arrays
@@ -320,48 +345,36 @@ class KernelModel():
 
         return param_ra
 
-    def apply(self, src_ra: RasterArray, param_ra: RasterArray) -> RasterArray:
-        """
-        Applies sliding kernel models to a source array
-
-        Parameters
-        ----------
-        src_ra: homonim.RasterArray
-                   M x N RasterArray of source data, collocated, and of similar spectral content, to ref_ra
-        """
-        out_array = (param_ra.array[0] * src_ra.array) + param_ra.array[1]
-        return RasterArray.from_profile(out_array, param_ra.profile)
-
-    def mask_partial(self, out_ra: RasterArray, ref_res: RasterArray) -> RasterArray:
-        morph_kernel_shape = np.ceil(np.divide(ref_res, out_ra.res) * self._kernel_shape).astype('int')
-        mask = out_ra.mask
-        se = cv2.getStructuringElement(cv2.MORPH_RECT, tuple(morph_kernel_shape))
-        mask = cv2.erode(mask.astype('uint8', copy=False), se).astype('bool', copy=False)
-        out_ra.mask = mask
-        return out_ra
+    def apply(self, src_ra: RasterArray, param_ra: RasterArray, mask_partial=False):
+        mask_kernel_shape = self._kernel_shape if mask_partial else None
+        return self._apply(src_ra, param_ra, mask_kernel_shape=mask_kernel_shape)
 
 
 class RefSpaceModel(KernelModel):
-    def fit(self, ref_ra: RasterArray, src_ra: RasterArray) -> RasterArray:
+    def fit(self, ref_ra: RasterArray, src_ra: RasterArray, **kwargs) -> RasterArray:
         # downsample src_ra to ref crs and grid
         resampling = self._downsampling if np.prod(src_ra.res) < np.prod(ref_ra.res) else self._upsampling
         src_ds_ra = src_ra.reproject(**ref_ra.proj_profile, resampling=resampling)
         return KernelModel.fit(self, ref_ra, src_ds_ra, kernel_shape=self._kernel_shape)
 
-    def apply(self, src_ra: RasterArray, param_ra: RasterArray):
+    def apply(self, src_ra: RasterArray, param_ra: RasterArray, mask_partial=False):
         # upsample the param_ra to src crs and grid
         _param_ra = RasterArray.from_profile(param_ra.array[:2], param_ra.profile)
         resampling = self._upsampling if np.prod(src_ra.res) < np.prod(param_ra.res) else self._downsampling
         param_us_ra = _param_ra.reproject(**src_ra.proj_profile, resampling=resampling)
-        return KernelModel.apply(self, src_ra, param_us_ra)
+        if mask_partial:
+            mask_kernel_shape = np.ceil(np.divide(param_ra.res, src_ra.res) * self._kernel_shape).astype('int')
+        else:
+            mask_kernel_shape = None
+        return KernelModel._apply(self, src_ra, param_us_ra, mask_kernel_shape=mask_kernel_shape)
 
 
 class SrcSpaceModel(KernelModel):
-    def fit(self, ref_ra: RasterArray, src_ra: RasterArray):
+    def fit(self, ref_ra: RasterArray, src_ra: RasterArray, **kwargs):
         # upsample ref_ra to src crs and grid
-        src_kernel_shape = np.ceil(np.divide(ref_ra.res, src_ra.res) * self._kernel_shape).astype('int')
+        # src_kernel_shape = np.ceil(np.divide(ref_ra.res, src_ra.res) * self._kernel_shape).astype('int')
 
         resampling = self._upsampling if np.prod(src_ra.res) < np.prod(ref_ra.res) else self._downsampling
         ref_us_ra = ref_ra.reproject(**src_ra.proj_profile, resampling=resampling)
         _src_ra = src_ra.copy()  # avoid in-place changes to src_ra in fit() below
-        return KernelModel.fit(self, ref_us_ra, _src_ra, kernel_shape=src_kernel_shape)
+        return KernelModel.fit(self, ref_us_ra, _src_ra, kernel_shape=self._kernel_shape)
