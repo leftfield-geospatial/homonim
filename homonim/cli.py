@@ -181,7 +181,8 @@ def cli(verbose, quiet):
 @src_file_arg
 @ref_file_arg
 @click.option("-k", "--kernel-shape", type=click.Tuple([click.INT, click.INT]), nargs=2, default=(5, 5),
-              show_default=True, help="Sliding kernel (window) width and height (in reference pixels).")
+              show_default=True, help="Kernel width and height in pixels (of the the lowest resolution of the source "
+                                      "and reference images).")
 @click.option("-m", "--method", type=click.Choice(['gain', 'gain-im-offset', 'gain-offset'], case_sensitive=False),
               default='gain-im-offset', show_default=True, help="Homogenisation method.")
 @click.option("-od", "--output-dir", type=click.Path(exists=True, file_okay=False, writable=True),

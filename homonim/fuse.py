@@ -339,21 +339,24 @@ class ImFuse():
                 def process_block(block_pair: BlockPair):
                     """Thread-safe function to homogenise a block of src_im"""
                     src_ra, ref_ra = im_pair.read(block_pair)
-                    param_ra = self._model.fit(ref_ra, src_ra)
-                    out_ra = self._model.apply(src_ra, param_ra)
-                    out_ra.mask = src_ra.mask
-                    if block_pair.outer and self._config['mask_partial']:
-                        out_ra = self._model.mask_partial(out_ra, ref_ra.res)
+                    param_ra = self._model.fit(ref_ra, src_ra, )
+                    mask_partial = block_pair.outer and self._config['mask_partial']
+                    out_ra = self._model.apply(src_ra, param_ra, mask_partial=mask_partial)
+                    # out_ra.mask = src_ra.mask
+                    # if block_pair.outer and self._config['mask_partial']:
+                    #     out_ra = self._model.mask_partial(out_ra, ref_ra.res)
                     out_ra.nodata = out_im.nodata
 
                     with write_lock:
-                        out_ul = np.array([block_pair.src_out_block.row_off, block_pair.src_out_block.col_off])
-                        out_br = np.array([block_pair.src_out_block.height, block_pair.src_out_block.width]) + out_ul
-                        out_ul = np.fmax(out_ul, (0, 0))
-                        out_br = np.fmin(out_br, (out_im.height, out_im.width))
-                        clipped_out_win = rio.windows.Window.from_slices((out_ul[0], out_br[0]), (out_ul[1], out_br[1]))
-                        out_array = out_ra.slice_array(*out_im.window_bounds(clipped_out_win))
-                        out_im.write(out_array, window=clipped_out_win, indexes=block_pair.band_i + 1)
+                        # out_ul = np.array([block_pair.src_out_block.row_off, block_pair.src_out_block.col_off])
+                        # out_br = np.array([block_pair.src_out_block.height, block_pair.src_out_block.width]) + out_ul
+                        # out_ul = np.fmax(out_ul, (0, 0))
+                        # out_br = np.fmin(out_br, (out_im.height, out_im.width))
+                        # clipped_out_win = rio.windows.Window.from_slices((out_ul[0], out_br[0]), (out_ul[1], out_br[1]))
+                        # out_array = out_ra.slice_array(*out_im.window_bounds(clipped_out_win))
+                        # out_im.write(out_array, window=clipped_out_win, indexes=block_pair.band_i + 1)
+                        out_array = out_ra.slice_array(*out_im.window_bounds(block_pair.src_out_block))
+                        out_im.write(out_array, window=block_pair.src_out_block, indexes=block_pair.band_i + 1)
 
                     if self._config['debug_image']:
                         param_mask = param_ra.mask
@@ -457,7 +460,7 @@ class ImFuse():
                                 window=ref_in_block
                             )
 
-                        param_ra = self._model.fit(ref_ra, src_ra)
+                        param_ra = self._model.fit(ref_ra, src_ra, )
                         out_ra = self._model.apply(src_ra, param_ra)
                         out_ra.mask = src_ra.mask
                         if ovl_block.outer and self._config['mask_partial']:

@@ -86,8 +86,14 @@ class TestFuse(unittest.TestCase):
                 for bi in range(src_im.count):
                     src_mask = src_im.read_masks(bi + 1)
                     homo_mask = homo_im.read_masks(bi + 1)
-                    self.assertTrue(np.abs(src_mask.mean() - homo_mask.mean()) / 255 < .2,
-                                    'Source and homogenised have similar valid areas')
+                    if self._homo_config['mask_partial']:
+                        self.assertTrue(np.abs(src_mask.mean() - homo_mask.mean()) / 255 < .2,
+                                        'Source and homogenised images have similar valid areas')
+                    else:
+                        # strangely compression adds some artifacts in the homo mask, so test for near equality rather
+                        #  than exact equality
+                        self.assertTrue(np.abs(src_mask.mean() - homo_mask.mean()) / 255 < .001,
+                                        'Source and homogenised images have same valid area')
 
                     for fn in [lambda x: x, lambda x: np.bitwise_not(x)]:
                         n_src_labels, src_labels = cv2.connectedComponents(fn(src_mask), None, 4, cv2.CV_16U)
@@ -180,7 +186,7 @@ class TestFuse(unittest.TestCase):
         ref_filename = root_path.joinpath(
             'data/inputs/test_example/reference/COPERNICUS-S2-20151003T075826_20151003T082014_T35HKC_B432_Byte.tif')
 
-        param_dict = dict(method='gain', kernel_shape=(15, 15), proc_crs='src')
+        param_dict = dict(method='gain', kernel_shape=(5, 5), proc_crs='src')
         self._test_api(src_filename, ref_filename, ref_filename, **param_dict)
 
     def test_cli(self):
