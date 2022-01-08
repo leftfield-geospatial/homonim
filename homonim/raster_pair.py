@@ -29,7 +29,6 @@ from rasterio.enums import ColorInterp, MaskFlags
 from rasterio.vrt import WarpedVRT
 from rasterio.warp import Resampling, transform_bounds
 from rasterio.windows import Window
-from shapely.geometry import box
 from typing import Tuple
 
 from homonim.errors import UnsupportedImageError, ImageContentError, BlockSizeError, IoError
@@ -75,10 +74,14 @@ def _inspect_image_pair(src_filename, ref_filename, proc_crs='auto'):
                        f'of {ref_filename.name}.')
 
     with rio.open(src_filename, 'r') as src_im:
-        with WarpedVRT(rio.open(ref_filename, 'r'), crs=src_im.crs, resampling=Resampling.bilinear) as ref_im:
+        with WarpedVRT(rio.open(ref_filename, 'r'), crs=src_im.crs) as ref_im:
             # check coverage
-            if not box(*ref_im.bounds).covers(box(*src_im.bounds)):
-                raise ImageContentError('Reference extent does not cover image.')
+            _ref_win = expand_window_to_grid(ref_im.window(*src_im.bounds), expand_pixels=(1, 1))
+            _ref_ul = np.array((_ref_win.row_off, _ref_win.col_off))
+            _ref_shape = np.array((_ref_win.height, _ref_win.width))
+            # if not box(*ref_im.bounds).covers(box(*src_im.bounds)):
+            if np.any(_ref_ul < 0) or np.any(_ref_shape > ref_im.shape):
+                raise ImageContentError(f'Reference extent does not cover image: {src_filename.name}')
 
             src_pixel_smaller = np.prod(src_im.res) < np.prod(ref_im.res)
             cmp_str = "smaller" if src_pixel_smaller else "larger"
@@ -101,17 +104,18 @@ class ImPairReader():
     def __init__(self, src_filename, ref_filename, proc_crs='auto', overlap=(0,0), max_block_mem=np.inf):
         self._src_filename = pathlib.Path(src_filename)
         self._ref_filename = pathlib.Path(ref_filename)
+        self._proc_crs = proc_crs
         self._overlap = overlap if not np.isscalar(overlap) else (overlap, overlap)
         self._max_block_mem = max_block_mem
-        self._src_bands, self._ref_bands, self._proc_crs = _inspect_image_pair(self._src_filename, self._ref_filename,
-                                                                               proc_crs)
         self._src_im:rasterio.DatasetReader = None
         self._ref_im:rasterio.DatasetReader = None
         self._env = None
         self._src_lock = threading.Lock()
         self._ref_lock = threading.Lock()
-        # self._src_win = None
-        # self._ref_win = None
+        self._src_win = None
+        self._ref_win = None
+        self._clipped_ref_profile = None
+        self._src_profile = None
 
     @property
     def src_im(self)-> rasterio.DatasetReader:
@@ -119,6 +123,7 @@ class ImPairReader():
 
     @property
     def ref_im(self)-> rasterio.DatasetReader:
+        # TODO: get rid of this as it will conflict with clipped ref profile
         return self._ref_im
 
     @property
@@ -128,6 +133,14 @@ class ImPairReader():
     @property
     def ref_bands(self)-> Tuple[int,]:
         return self._ref_bands
+
+    @property
+    def src_profile(self)-> rasterio.DatasetReader:
+        return self._src_im.profile if self._src_im else {}
+
+    @property
+    def ref_profile(self)-> rasterio.DatasetReader:
+        return self._clipped_ref_profile if self._ref_im else {}
 
     def __enter__(self):
         self._env = rio.Env(GDAL_NUM_THREADS='ALL_CPUs').__enter__()
@@ -140,6 +153,19 @@ class ImPairReader():
         if self._env:
             self._env.__exit__(exc_type, exc_val, exc_tb)
             self._env = None
+
+    def _init_pair(self):
+        self._src_bands, self._ref_bands, self._proc_crs = _inspect_image_pair(self._src_filename, self._ref_filename,
+                                                                               self._proc_crs)
+
+        # image-wide windows that allow re-projections between src and ref without loss of data
+        self._ref_win = expand_window_to_grid(self._ref_im.window(*self._src_im.bounds))
+        self._src_win = expand_window_to_grid(self._src_im.window(*self._ref_im.window_bounds(self._ref_win)))
+
+        self._clipped_ref_profile = self._ref_im.profile.copy()
+        self._clipped_ref_profile['transform'] = self._ref_im.window_transform(self._ref_win)
+        self._clipped_ref_profile['height'] = self._ref_win.height
+        self._clipped_ref_profile['width'] = self._ref_win.width
 
 
     def open(self):
@@ -155,6 +181,7 @@ class ImPairReader():
                 self._ref_im = WarpedVRT(self._ref_im, crs=self._src_im.crs, resampling=Resampling.bilinear)
             else:
                 self._src_im = WarpedVRT(self._src_im, crs=self._ref_im.crs, resampling=Resampling.bilinear)
+        self._init_pair()
 
     def close(self):
         if self._src_im:
@@ -178,15 +205,23 @@ class ImPairReader():
         return src_ra, ref_ra
 
 
-    def _auto_block_shape(self, im_shape, mem_scale=1):
+    def _auto_block_shape(self, proc_im: rasterio.DatasetReader, other_im: rasterio.DatasetReader):
         # convert _max_block_mem from MB to Bytes in lowest res image space
+        mem_scale = np.product(np.divide(proc_im.res, other_im.res))
         max_block_mem = self._max_block_mem * (2 ** 20) / mem_scale if self._max_block_mem > 0 else np.inf
         dtype_size = np.dtype(RasterArray.default_dtype).itemsize
 
-        block_shape = np.array(im_shape).astype('float')
+        # if proc_im.is_tiled:    # adjust block_shape to be on tile boundaries, only realy useful for proc-crs==src
+        #     tile_shape = np.array((proc_im.block_shapes[0]))
+        #     tile_div = np.floor(block_shape / tile_shape)
+        #     if np.all(tile_div > 0):
+        #         block_shape = tile_div * tile_shape
+        block_shape = np.array(proc_im.shape).astype('float')
         while ((np.product(block_shape) * dtype_size > max_block_mem)):
             div_dim = np.argmax(block_shape)
             block_shape[div_dim] /= 2
+
+
         return np.ceil(block_shape).astype('int')
 
 
@@ -196,18 +231,18 @@ class ImPairReader():
         if not self._src_im or self._src_im.closed or not self._ref_im or self._ref_im.closed :
             raise IoError(f'Source and reference image pair are closed: {self._src_filename.name} and '
                           f'{self._ref_filename.name}')
-
-        # image-wide windows that allow re-projections between src and ref without loss of data
-        ref_win = expand_window_to_grid(self._ref_im.window(*self._src_im.bounds))
-        src_win = expand_window_to_grid(self._src_im.window(*self._ref_im.window_bounds(ref_win)))
+        #
+        # # image-wide windows that allow re-projections between src and ref without loss of data
+        # ref_win = expand_window_to_grid(self._ref_im.window(*self._src_im.bounds))
+        # src_win = expand_window_to_grid(self._src_im.window(*self._ref_im.window_bounds(ref_win)))
 
         # assign 'src' and 'ref' to 'proc' and 'other' according to proc_crs
         # (blocks are first formed in the 'proc' (usually the lowest resolution) image space, from which the equivalent
         # blocks in 'other' image space are then inferred)
         if self._proc_crs == 'ref':
-            proc_win, proc_im, other_im = (ref_win, self._ref_im, self._src_im)
+            proc_win, proc_im, other_im = (self._ref_win, self._ref_im, self._src_im)
         else:
-            proc_win, proc_im, other_im = (src_win, self._src_im, self._ref_im)
+            proc_win, proc_im, other_im = (self._src_win, self._src_im, self._ref_im)
 
         # initialise block formation variables
         overlap = np.array(self._overlap)
@@ -218,8 +253,7 @@ class ImPairReader():
         proc_im_br = np.array(proc_im.shape)
 
         # calculate a block shape (in proc_crs) that satisfies the max_block_mem requirement
-        mem_scale = np.product(np.divide(proc_im.res, other_im.res))
-        block_shape = self._auto_block_shape(proc_win_shape, mem_scale)
+        block_shape = self._auto_block_shape(proc_im, other_im)
 
         # TODO: form an error message in terms of kernel shape, perhaps by catching this exception
         if np.any(block_shape <= np.fmax(2 * overlap, (3, 3))):
