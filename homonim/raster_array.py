@@ -20,6 +20,7 @@
 import multiprocessing
 
 import numpy as np
+import rasterio.windows
 from rasterio import Affine
 from rasterio import transform
 from rasterio import windows
@@ -59,7 +60,7 @@ def expand_window_to_grid(win, expand_pixels=(0, 0)):
     exp_win = Window(col_off.astype('int'), row_off.astype('int'), width.astype('int'), height.astype('int'))
     return exp_win
 
-
+# TODO: think about how the round to even issue impacts on this
 def round_window_to_grid(win):
     """
     Rounds float window extents to nearest integer
@@ -115,6 +116,20 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         self._nodata = nodata
         self._nodata_mask = None
 
+    @staticmethod
+    def bounded_window_slices(window: rasterio.windows.Window, rio_dataset: rasterio.DatasetReader):
+        """ Bounded array slices and dataset window from boundless window and dataset """
+        win_ul = np.array((window.row_off, window.col_off))
+        win_br = win_ul + np.array((window.height, window.width))
+        bounded_ul = np.fmax(win_ul, (0, 0))
+        bounded_br = np.fmin(win_br, rio_dataset.shape)
+        bounded_window = Window.from_slices((bounded_ul[0], bounded_br[0]), (bounded_ul[1], bounded_br[1]))
+        bounded_start = bounded_ul - win_ul
+        bounded_stop = bounded_start + (bounded_br - bounded_ul)
+        bounded_slices = (slice(bounded_start[0], bounded_stop[0], None),
+                          slice(bounded_start[1], bounded_stop[1], None))
+        return bounded_window, bounded_slices
+
     @classmethod
     def from_profile(cls, array, profile, window=None):
         if not ('crs' and 'transform' and 'nodata' in profile):
@@ -135,23 +150,22 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         # check bands if bands have masks (i.e. internal/side-car mask or alpha channel, as opposed to nodata value)
         is_masked = any([MaskFlags.per_dataset in rio_dataset.mask_flag_enums[bi - 1] for bi in index_list])
 
-        # force nodata to default if masked or dataset nodata is None
-        # nodata = cls.default_nodata if (is_masked or rio_dataset.nodata is None) else rio_dataset.nodata
-        # array = rio_dataset.read(indexes=indexes, window=window, boundless=boundless, out_dtype=cls.default_dtype,
-        #                          fill_value=nodata)
-        if (is_masked or rio_dataset.nodata is None):
-            nodata = cls.default_nodata
-            array = rio_dataset.read(indexes=indexes, window=window, boundless=boundless, out_dtype=cls.default_dtype,
-                                 fill_value=nodata)
+        # internal implementation of boundless=True and fill_value=x, as rasterio's is slow
+        nodata = cls.default_nodata if is_masked or rio_dataset.nodata is None else rio_dataset.nodata
+        array = np.full((window.height, window.width), fill_value=nodata, dtype=cls.default_dtype)
+        if boundless and window:
+            bounded_window, bounded_slices = cls.bounded_window_slices(window, rio_dataset)
+            bounded_array = array[bounded_slices]   # bounded view into array
         else:
-            # separate this case as it is faster to read without fill_value
-            nodata = rio_dataset.nodata
-            array = rio_dataset.read(indexes=indexes, window=window, boundless=boundless, out_dtype=cls.default_dtype)
+            bounded_window = window
+            bounded_array = array
+
+        rio_dataset.read(out=bounded_array, indexes=indexes, window=bounded_window, out_dtype=cls.default_dtype)
 
         if is_masked:
             # read mask from dataset and apply it to array
-            mask = rio_dataset.dataset_mask(window=window, boundless=boundless).astype('bool', copy=False)
-            array[~mask] = nodata
+            mask = rio_dataset.dataset_mask(window=bounded_window).astype('bool', copy=False)
+            bounded_array[~mask] = nodata
 
         return cls(array, rio_dataset.crs, rio_dataset.transform, nodata=nodata, window=window)
 
@@ -239,7 +253,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         """ nodata value """
         if value is None or self._nodata is None:
             # if value is None, remove the mask, if current nodata is None,
-            # there is no mask to apply the new value to array
+            # there is no mask to incorporate the new value into array
             self._nodata = value
         elif not (nan_equals(value, self._nodata)):
             # if value is different to current nodata, set mask area in array to value

@@ -6,7 +6,7 @@ mask_partial: True
 # Use multi-threading (memory intensive)
 multithread: True
 # maximum memory for automatic block size in megabytes
-max_block_mem: .5
+max_block_mem: 1
 
 # Model configuration
 # Interpolation type (average, bilinear, cubic, cubic_spline, gauss, lanczos) for resampling from source to reference
