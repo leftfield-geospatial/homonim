@@ -331,7 +331,7 @@ class ImFuse():
             if self._config['debug_image']:
                 # create debug image file
                 #TODO: use im_pair ref_win / src_win to create profile
-                dbg_profile = self._create_debug_profile(im_pair.src_im.profile, im_pair.ref_im.profile)
+                dbg_profile = self._create_debug_profile(im_pair.src_profile, im_pair.ref_profile)
                 dbg_file_name = self._create_debug_filename(out_filename)
                 dbg_im = rio.open(dbg_file_name, 'w', **dbg_profile)
 
@@ -348,15 +348,8 @@ class ImFuse():
                     out_ra.nodata = out_im.nodata
 
                     with write_lock:
-                        # out_ul = np.array([block_pair.src_out_block.row_off, block_pair.src_out_block.col_off])
-                        # out_br = np.array([block_pair.src_out_block.height, block_pair.src_out_block.width]) + out_ul
-                        # out_ul = np.fmax(out_ul, (0, 0))
-                        # out_br = np.fmin(out_br, (out_im.height, out_im.width))
-                        # clipped_out_win = rio.windows.Window.from_slices((out_ul[0], out_br[0]), (out_ul[1], out_br[1]))
-                        # out_array = out_ra.slice_array(*out_im.window_bounds(clipped_out_win))
-                        # out_im.write(out_array, window=clipped_out_win, indexes=block_pair.band_i + 1)
-                        out_array = out_ra.slice_array(*out_im.window_bounds(block_pair.src_out_block))
-                        out_im.write(out_array, window=block_pair.src_out_block, indexes=block_pair.band_i + 1)
+                        out_ra.to_rio_dataset(out_im, window=block_pair.src_out_block, indexes=block_pair.band_i + 1,
+                                              boundless=block_pair.outer)
 
                     if self._config['debug_image']:
                         param_mask = param_ra.mask

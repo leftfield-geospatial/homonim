@@ -270,11 +270,28 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
 
     def slice_array(self, *bounds):
         window = self.window(*bounds)
-        window = round_window_to_grid(window)
+        window = round_window_to_grid(window)   # TODO: necessary?  and error checking on window and array shape
         if self._array.ndim == 2:
             return self._array[window.toslices()]
         else:
             return self._array[(slice(self._array.shape[0]), *window.toslices())]
+
+    def to_rio_dataset(self, rio_dataset: rasterio.DatasetReader, indexes=None, window=None, boundless=False):
+        if indexes is None:
+            indexes = [bi + 1 for bi in range(rio_dataset.count) if rio_dataset.colorinterp[bi] != ColorInterp.alpha]
+
+        if window and boundless:
+            # crop the window to dataset bounds
+            window, _ = self.bounded_window_slices(window, rio_dataset)
+
+        if window:
+            # slice the array to match the dataset window (if it doesn't already)
+            crop_array = self.slice_array(*rio_dataset.window_bounds(window))
+        else:
+            crop_array = self._array
+
+        rio_dataset.write(crop_array, window=window, indexes=indexes)
+
 
     def reproject(self, crs=None, transform=None, shape=None, nodata=default_nodata, dtype=default_dtype,
                   resampling=Resampling.lanczos, **kwargs):
