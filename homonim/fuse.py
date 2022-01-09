@@ -348,20 +348,20 @@ class ImFuse():
                     out_ra.nodata = out_im.nodata
 
                     with write_lock:
-                        out_ra.to_rio_dataset(out_im, window=block_pair.src_out_block, indexes=block_pair.band_i + 1,
-                                              boundless=block_pair.outer)
+                        out_ra.to_rio_dataset(out_im, indexes=block_pair.band_i + 1, window=block_pair.src_out_block)
 
                     if self._config['debug_image']:
                         param_mask = param_ra.mask
                         with dbg_lock:
-                            nonlocal accum_stats
-                            accum_stats += [param_ra.array[2, param_mask].sum(), param_mask.sum()]
-
-                            src_out_bounds = im_pair.src_im.window_bounds(block_pair.src_out_block)
-                            dbg_array = param_ra.slice_array(*src_out_bounds)
-                            dbg_out_block = round_window_to_grid(dbg_im.window(*src_out_bounds))
+                            # nonlocal accum_stats
+                            # accum_stats += [param_ra.array[2, param_mask].sum(), param_mask.sum()]
+                            #
+                            # src_out_bounds = im_pair.src_im.window_bounds(block_pair.src_out_block)
+                            # dbg_array = param_ra.slice_array(*src_out_bounds)
+                            # dbg_out_block = round_window_to_grid(dbg_im.window(*src_out_bounds))
                             indexes = np.arange(param_ra.count) * len(self._src_bands) + block_pair.band_i + 1
-                            dbg_im.write(dbg_array, window=dbg_out_block, indexes=indexes)
+                            # dbg_im.write(dbg_array, window=dbg_out_block, indexes=indexes)
+                            param_ra.to_rio_dataset(dbg_im, indexes=indexes, window=block_pair.ref_out_block)
 
                 if self._config['multithread']:
                     # process blocks in concurrent threads
@@ -384,8 +384,8 @@ class ImFuse():
                 if self._config['debug_image']:
                     dbg_im.close()
                     self._set_debug_metadata(dbg_file_name)
-                    logger.debug(
-                        f'Average kernel model R\N{SUPERSCRIPT TWO}: {accum_stats[0] / accum_stats[1]:.2f}')
+                    # logger.debug(
+                    #     f'Average kernel model R\N{SUPERSCRIPT TWO}: {accum_stats[0] / accum_stats[1]:.2f}')
 
         if self._profile:
             # print profiling info

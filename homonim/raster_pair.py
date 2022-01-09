@@ -125,6 +125,8 @@ class ImPairReader():
     def ref_im(self)-> rasterio.DatasetReader:
         # TODO: get rid of this as it will conflict with clipped ref profile
         return self._ref_im
+        # return WarpedVRT(self._ref_im, tranform=self._clipped_ref_profile['transform'],
+        #                  width=self._clipped_ref_profile['width'], height=self._clipped_ref_profile['height'])
 
     @property
     def src_bands(self)-> Tuple[int,]:
@@ -198,10 +200,10 @@ class ImPairReader():
                            f'{self._ref_filename.name}')
         with self._src_lock:
             src_ra = RasterArray.from_rio_dataset(self._src_im, indexes=self._src_bands[block.band_i],
-                                                  window=block.src_in_block, boundless=block.outer)
+                                                  window=block.src_in_block)
         with self._ref_lock:
             ref_ra = RasterArray.from_rio_dataset(self._ref_im, indexes=self._ref_bands[block.band_i],
-                                                  window=block.ref_in_block, boundless=block.outer)
+                                                  window=block.ref_in_block)
         return src_ra, ref_ra
 
 
@@ -291,9 +293,9 @@ class ImPairReader():
                 other_in_block = round_window_to_grid(other_im.window(*proc_im.window_bounds(proc_in_block)))
                 other_out_block = round_window_to_grid(other_im.window(*proc_im.window_bounds(proc_out_block)))
 
-                other_out_ul = np.fmax(np.array(other_out_block.toranges())[:, 0], (0, 0))
-                other_out_br = np.fmin(np.array(other_out_block.toranges())[:, 1], other_im.shape)
-                other_out_block = Window(*other_out_ul[::-1], *np.subtract(other_out_br, other_out_ul)[::-1])
+                # other_out_ul = np.fmax(np.array(other_out_block.toranges())[:, 0], (0, 0))
+                # other_out_br = np.fmin(np.array(other_out_block.toranges())[:, 1], other_im.shape)
+                # other_out_block = Window(*other_out_ul[::-1], *np.subtract(other_out_br, other_out_ul)[::-1])
 
                 # form the BlockPair named tuple, assigning 'proc' and 'other' back to 'src' and 'ref' for use in read()
                 if self._proc_crs == 'ref':

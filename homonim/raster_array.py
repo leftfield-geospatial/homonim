@@ -29,7 +29,7 @@ from rasterio.enums import MaskFlags, ColorInterp
 from rasterio.warp import reproject, Resampling
 from rasterio.windows import Window
 
-from homonim.errors import ImageProfileError
+from homonim.errors import ImageProfileError, ImageFormatError, RasterArrayFormatError
 
 
 def nan_equals(a, b, equal_nan=True):
@@ -142,7 +142,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         return cls(array, profile['crs'], profile['transform'], nodata=profile['nodata'], window=window)
 
     @classmethod
-    def from_rio_dataset(cls, rio_dataset, indexes=None, window=None, boundless=False):
+    def from_rio_dataset(cls, rio_dataset, indexes=None, window=None, **kwargs):
         if indexes is None:
             index_list = [bi + 1 for bi in range(rio_dataset.count) if rio_dataset.colorinterp[bi] != ColorInterp.alpha]
         else:
@@ -150,22 +150,23 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         # check bands if bands have masks (i.e. internal/side-car mask or alpha channel, as opposed to nodata value)
         is_masked = any([MaskFlags.per_dataset in rio_dataset.mask_flag_enums[bi - 1] for bi in index_list])
 
-        # internal implementation of boundless=True and fill_value=x, as rasterio's is slow
-        nodata = cls.default_nodata if is_masked or rio_dataset.nodata is None else rio_dataset.nodata
+        # homonim implementation of boundless=True and fill_value=x, as rasterio's is slow
+        nodata = cls.default_nodata if (is_masked or rio_dataset.nodata is None) else rio_dataset.nodata
         array = np.full((window.height, window.width), fill_value=nodata, dtype=cls.default_dtype)
-        if boundless and window:
+        if window:
             bounded_window, bounded_slices = cls.bounded_window_slices(window, rio_dataset)
             bounded_array = array[bounded_slices]   # bounded view into array
         else:
             bounded_window = window
             bounded_array = array
 
-        rio_dataset.read(out=bounded_array, indexes=indexes, window=bounded_window, out_dtype=cls.default_dtype)
+        rio_dataset.read(out=bounded_array, indexes=indexes, window=bounded_window, out_dtype=cls.default_dtype,
+                         **kwargs)
 
         if is_masked:
             # read mask from dataset and apply it to array
-            mask = rio_dataset.dataset_mask(window=bounded_window).astype('bool', copy=False)
-            bounded_array[~mask] = nodata
+            bounded_mask = rio_dataset.dataset_mask(window=bounded_window).astype('bool', copy=False)
+            bounded_array[~bounded_mask] = nodata
 
         return cls(array, rio_dataset.crs, rio_dataset.transform, nodata=nodata, window=window)
 
@@ -276,21 +277,59 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         else:
             return self._array[(slice(self._array.shape[0]), *window.toslices())]
 
-    def to_rio_dataset(self, rio_dataset: rasterio.DatasetReader, indexes=None, window=None, boundless=False):
+    def to_rio_dataset(self, rio_dataset: rasterio.io.DatasetWriter, indexes=None, window=None, **kwargs):
+        """
+        Write RasterArray to a rasterio dataset
+
+        Parameters
+        ----------
+        rio_dataset: rasterio.io.DatasetWriter
+                     Open rasterio dataset into which to write the RasterArray.  The dataset CRS must match that of
+                     the RasterArray.
+        indexes: int, list[int], optional
+                 1 based band index or list of band indices to write to in the dataset.
+                 The number of indices must correspond to the RasterArray count (number of bands).
+                 [default: write all dataset non-alpha bands.]
+        window: rasterio.windows.Window, optional
+                A window defining the region in the dataset to write to.  Can be a 'boundless' window i.e. extended
+                beyond the bounds of the dataset, in which case it will be cropped to fit the bounds of the dataset.
+                The RasterArray will then be cropped to fit the bounded window as necessary.
+                [default: write to the full extent of the dataset.]
+        kwargs: optional
+                Arguments to passed through the dataset's write() method.
+        """
+        if rio_dataset.crs.to_proj4() != self._crs.to_proj4():
+            raise ImageFormatError(f"The dataset CRS does not match that of the RasterArray. "
+                                    f"Dataset: {rio_dataset.crs.to_proj4()}, "
+                                    f"RastterArray: {rio_dataset.crs.to_proj4()}")
         if indexes is None:
             indexes = [bi + 1 for bi in range(rio_dataset.count) if rio_dataset.colorinterp[bi] != ColorInterp.alpha]
 
-        if window and boundless:
-            # crop the window to dataset bounds
+        if np.any(np.array(indexes) > rio_dataset.count):
+            error_indexes = np.array(indexes)[np.array(indexes) > rio_dataset.count]
+            raise ValueError(f'Band index(es) ({error_indexes}) exceed the dataset count ({rio_dataset.count})')
+
+        if (isinstance(indexes, list) and (len(indexes) > self.count)):
+            raise ValueError(f'The length of indexes ({len(indexes)}) exceeds the number of bands in the '
+                                   f'RasterArray ({self.count})')
+
+        if window is None:
+            window = Window(col_off=0, row_off=0, width=rio_dataset.width, height=rio_dataset.height)
+        else:
+            # crop the window to dataset bounds (if necessary)
             window, _ = self.bounded_window_slices(window, rio_dataset)
 
-        if window:
-            # slice the array to match the dataset window (if it doesn't already)
-            crop_array = self.slice_array(*rio_dataset.window_bounds(window))
-        else:
-            crop_array = self._array
+        # a bounded view into the array to match the dataset window (may be full array)
+        bounded_array = self.slice_array(*rio_dataset.window_bounds(window))
+        if np.any(np.array(bounded_array.shape[-2:]) <= 0):
+            raise ValueError(f'The window gives a bounded array shape ({bounded_array.shape}) with zero length '
+                             f'dimension')
 
-        rio_dataset.write(crop_array, window=window, indexes=indexes)
+        if np.any(np.array((window.height, window.width)) != np.array(bounded_array.shape[-2:])):
+            raise ValueError(f'The bounded window shape ({(window.height, window.width)}) does not match the bounded '
+                             f'array shape ({bounded_array.shape[-2:]})')
+
+        rio_dataset.write(bounded_array, window=window, indexes=indexes)
 
 
     def reproject(self, crs=None, transform=None, shape=None, nodata=default_nodata, dtype=default_dtype,

@@ -35,7 +35,16 @@ class BlockSizeError(HomonimError):
 
 
 class ImageProfileError(HomonimError):
-    """Raised when a image profile invalid"""
+    """Raised when an image profile is invalid"""
+
+
+class ImageFormatError(HomonimError):
+    """Raised when an image format is invalid"""
+
+
+class RasterArrayFormatError(HomonimError):
+    """Raised when a RasterArray format is invalid"""
+
 
 class IoError(HomonimError):
     """Raised when a reading to writing from a closed dataset"""
