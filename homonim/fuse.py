@@ -363,9 +363,33 @@ class RasterFuse():
                             # dbg_im.write(dbg_array, window=dbg_out_block, indexes=indexes)
                             # dbg_out_block = round_window_to_grid(dbg_im.window(*raster_pair.src_im.window_bounds(block_pair.src_out_block)))
                             # param_crop_ra.to_rio_dataset(dbg_im, indexes=indexes, window=None)
-                            param_crop_ra = param_ra.slice_array(*raster_pair.src_im.window_bounds(block_pair.src_out_block))
-                            dbg_out_block = dbg_im.window(*param_crop_ra.bounds)
-                            dbg_im.write(param_crop_ra.array, indexes=indexes, window=dbg_out_block)
+                            if True:
+                                # this seems to work
+                                param_crop_ra = param_ra.slice_array(*raster_pair.src_im.window_bounds(block_pair.src_out_block))
+                                dbg_out_block = round_window_to_grid(dbg_im.window(*param_crop_ra.bounds))
+                                dbg_im.write(param_crop_ra.array, indexes=indexes, window=dbg_out_block)
+
+                            if self._proc_crs == 'ref':
+                                # debugging
+                                # ref block derived from block_pair src block
+                                _ref_out_block = dbg_im.window(*raster_pair.src_im.window_bounds(block_pair.src_out_block))
+                                if block_pair.ref_out_block != round_window_to_grid(_ref_out_block):
+                                    logger.warning('block_pair.ref_out_block != _ref_out_block')
+                                # ref block derived from sliced param (ref) ra
+                                _dbg_out_block = round_window_to_grid(dbg_im.window(*param_crop_ra.bounds))
+                                if block_pair.ref_out_block != _dbg_out_block:
+                                    logger.warning('block_pair.ref_out_block != _dbg_out_block')
+
+                                _param_crop_ra = param_ra.slice_array(*dbg_im.window_bounds(block_pair.ref_out_block))
+                                _dbg_out_block = round_window_to_grid(dbg_im.window(*_param_crop_ra.bounds))
+                                if block_pair.ref_out_block != _dbg_out_block:
+                                    logger.warning('block_pair.ref_out_block != _dbg_out_block')
+
+                                # - somehow ref_out_block extends beyond raster_pair._ref_win, but not ref_in_block
+                                # - the actual param_ra only covers ref_in_block, and so cannot cover ref_out_block
+                                # - the slicing, uses what data is there and so the effective sliced window is smaller
+                                # than ref_out_block.  I think this explains the issues I'm having.  The main question \
+                                # is why does ref_out_block exceed ref_win?
 
                 if self._config['multithread']:
                     # process blocks in concurrent threads

@@ -280,8 +280,8 @@ class RasterPairReader():
                 in_ul = np.fmax(ul, proc_win_ul)
                 in_br = np.fmin(br, proc_win_br)
                 # find UL and BR corners for non-overlapping block in proc space
-                out_ul = np.fmax(ul + overlap, (0, 0))
-                out_br = np.fmin(br - overlap, proc_im.shape)
+                out_ul = np.fmax(ul + overlap, proc_win_ul)
+                out_br = np.fmin(br - overlap, proc_win_br)
                 # block touches image boundary?
                 outer = np.any(in_ul <= proc_win_ul) or np.any(in_br >= proc_win_br)
 
@@ -302,6 +302,8 @@ class RasterPairReader():
                     logger.warning("_proc_in_block != proc_in_block")
                 if (_proc_out_block != proc_out_block):
                     logger.warning("_proc_out_block != proc_out_block")
+
+                # _other_in_block =
                 # other_out_ul = np.fmax(np.array(other_out_block.toranges())[:, 0], (0, 0))
                 # other_out_br = np.fmin(np.array(other_out_block.toranges())[:, 1], other_im.shape)
                 # other_out_block = Window(*other_out_ul[::-1], *np.subtract(other_out_br, other_out_ul)[::-1])
