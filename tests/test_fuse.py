@@ -116,8 +116,15 @@ class TestFuse(unittest.TestCase):
         self.assertTrue(np.all(im_ref_r2[1, :] > 0.6), 'Homogenised R2 > 0.6')
         self.assertTrue(np.all(im_ref_r2[1, :] > im_ref_r2[0, :]), 'Homogenised vs reference R2 improvement')
 
-    def _test_ovl_blocks(self, ovl_blocks, proc_crs, overlap):
+    def _test_ovl_blocks(self, raster_pair: RasterPairReader):
         """ Test overlap blocks for sanity """
+        ovl_blocks = list(raster_pair.block_pairs())
+        proc_overlap = np.array(raster_pair._overlap)
+        res_ratio = np.divide(raster_pair.ref_im.res, raster_pair.src_im.res)
+        other_overlap = proc_overlap * res_ratio if raster_pair._proc_crs == 'ref' else proc_overlap / res_ratio
+        other_overlap = np.round(other_overlap).astype('int')
+        ref_overlap = proc_overlap if raster_pair._proc_crs == 'ref' else other_overlap
+        src_overlap = other_overlap if raster_pair._proc_crs == 'ref' else proc_overlap
         prev_ovl_block = ovl_blocks[0]
         for ovl_block in ovl_blocks[1:]:
             ovl_block = ovl_block
@@ -131,7 +138,7 @@ class TestFuse(unittest.TestCase):
                     else:
                         self.assertTrue(curr_blk.row_off == prev_blk.row_off + prev_blk.height,
                                         f'{out_blk_fld} row consecutive')
-                for in_blk_fld in ('ref_in_block',):
+                for in_blk_fld, overlap in zip(('src_in_block', 'ref_in_block'), (src_overlap, ref_overlap)):
                     curr_blk = ovl_block.__getattribute__(in_blk_fld)
                     prev_blk = prev_ovl_block.__getattribute__(in_blk_fld)
                     if curr_blk.row_off == prev_blk.row_off:
@@ -156,7 +163,7 @@ class TestFuse(unittest.TestCase):
             overlap = np.floor(np.array(kwargs['kernel_shape'])/2).astype('int')
             with RasterPairReader(src_filename, ref_filename, proc_crs=kwargs['proc_crs'], overlap=overlap,
                                   max_block_mem=self._homo_config['max_block_mem']) as raster_pair:
-                self._test_ovl_blocks(list(raster_pair.block_pairs()), kwargs['proc_crs'], overlap)
+                self._test_ovl_blocks(raster_pair)
         him.homogenise(homo_filename)
         him.build_overviews(homo_filename)
         self.assertTrue(homo_filename.exists(), 'Homogenised file exists')

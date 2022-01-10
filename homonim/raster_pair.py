@@ -114,7 +114,7 @@ class RasterPairReader():
         self._ref_lock = threading.Lock()
         self._src_win = None
         self._ref_win = None
-        self._clipped_ref_profile = None
+        self._crop_ref_profile = None
         self._src_profile = None
 
     @property
@@ -142,7 +142,7 @@ class RasterPairReader():
 
     @property
     def ref_profile(self)-> rasterio.DatasetReader:
-        return self._clipped_ref_profile if self._ref_im else {}
+        return self._crop_ref_profile if self._ref_im else {}
 
     def __enter__(self):
         self._env = rio.Env(GDAL_NUM_THREADS='ALL_CPUs').__enter__()
@@ -164,10 +164,10 @@ class RasterPairReader():
         self._ref_win = expand_window_to_grid(self._ref_im.window(*self._src_im.bounds))
         self._src_win = expand_window_to_grid(self._src_im.window(*self._ref_im.window_bounds(self._ref_win)))
 
-        self._clipped_ref_profile = self._ref_im.profile.copy()
-        self._clipped_ref_profile['transform'] = self._ref_im.window_transform(self._ref_win)
-        self._clipped_ref_profile['height'] = self._ref_win.height
-        self._clipped_ref_profile['width'] = self._ref_win.width
+        self._crop_ref_profile = self._ref_im.profile.copy()
+        self._crop_ref_profile['transform'] = self._ref_im.window_transform(self._ref_win)
+        self._crop_ref_profile['height'] = self._ref_win.height
+        self._crop_ref_profile['width'] = self._ref_win.width
 
 
     def open(self):
