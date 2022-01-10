@@ -18,6 +18,7 @@
 """
 
 import multiprocessing
+import logging
 
 import numpy as np
 import rasterio.windows
@@ -30,6 +31,8 @@ from rasterio.warp import reproject, Resampling
 from rasterio.windows import Window
 
 from homonim.errors import ImageProfileError, ImageFormatError, RasterArrayFormatError
+
+logger = logging.getLogger(__name__)
 
 
 def nan_equals(a, b, equal_nan=True):
@@ -273,9 +276,10 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         window = self.window(*bounds)
         window = round_window_to_grid(window)   # TODO: necessary?  and error checking on window and array shape
         if self._array.ndim == 2:
-            return self._array[window.toslices()]
+            array = self._array[window.toslices()]
         else:
-            return self._array[(slice(self._array.shape[0]), *window.toslices())]
+            array = self._array[(slice(self._array.shape[0]), *window.toslices())]
+        return RasterArray(array, self._crs, self.window_transform(window), nodata=self._nodata)
 
     def to_rio_dataset(self, rio_dataset: rasterio.io.DatasetWriter, indexes=None, window=None, **kwargs):
         """
@@ -298,7 +302,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         kwargs: optional
                 Arguments to passed through the dataset's write() method.
         """
-        if rio_dataset.crs.to_proj4() != self._crs.to_proj4():
+        if rio_dataset.crs != self._crs:
             raise ImageFormatError(f"The dataset CRS does not match that of the RasterArray. "
                                     f"Dataset: {rio_dataset.crs.to_proj4()}, "
                                     f"RastterArray: {rio_dataset.crs.to_proj4()}")
@@ -317,19 +321,23 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
             window = Window(col_off=0, row_off=0, width=rio_dataset.width, height=rio_dataset.height)
         else:
             # crop the window to dataset bounds (if necessary)
+            _window = window
             window, _ = self.bounded_window_slices(window, rio_dataset)
 
         # a bounded view into the array to match the dataset window (may be full array)
-        bounded_array = self.slice_array(*rio_dataset.window_bounds(window))
-        if np.any(np.array(bounded_array.shape[-2:]) <= 0):
-            raise ValueError(f'The window gives a bounded array shape ({bounded_array.shape}) with zero length '
+        bounded_ra = self.slice_array(*rio_dataset.window_bounds(window))
+        if np.any(np.array(bounded_ra.shape) <= 0):
+            raise ValueError(f'The window gives a bounded array shape ({bounded_ra.shape}) with zero length '
                              f'dimension')
 
-        if np.any(np.array((window.height, window.width)) != np.array(bounded_array.shape[-2:])):
-            raise ValueError(f'The bounded window shape ({(window.height, window.width)}) does not match the bounded '
-                             f'array shape ({bounded_array.shape[-2:]})')
+        # if np.any(np.array((window.height, window.width)) != np.array(bounded_array.shape[-2:])):
+        #     raise ValueError(f'The bounded window shape ({(window.height, window.width)}) does not match the bounded '
+        #                      f'array shape ({bounded_array.shape[-2:]})')
+        if np.any(np.array((window.height, window.width)) != np.array(bounded_ra.shape)):
+            logger.warning(f'The bounded window shape ({(window.height, window.width)}) does not match the bounded '
+                             f'array shape ({bounded_ra.shape[-2:]})')
 
-        rio_dataset.write(bounded_array, window=window, indexes=indexes)
+        rio_dataset.write(bounded_ra.array, window=window, indexes=indexes, **kwargs)
 
 
     def reproject(self, crs=None, transform=None, shape=None, nodata=default_nodata, dtype=default_dtype,

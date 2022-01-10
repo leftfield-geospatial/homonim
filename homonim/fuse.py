@@ -36,7 +36,7 @@ from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from homonim.errors import BlockSizeError
-from homonim.raster_pair import _inspect_image_pair, ImPairReader, BlockPair
+from homonim.raster_pair import _inspect_image_pair, RasterPairReader, BlockPair
 from homonim.kernel_model import KernelModel, RefSpaceModel, SrcSpaceModel
 from homonim.raster_array import RasterArray, round_window_to_grid, expand_window_to_grid
 
@@ -94,7 +94,7 @@ class ImFuse():
         self._ref_bands = None
         self._src_bands = None
         self._ref_warped_vrt_dict = None
-        self._profile = False
+        self._profile = True
         self._proc_crs = proc_crs
         self._image_init()
 
@@ -315,12 +315,13 @@ class ImFuse():
         dbg_lock = threading.Lock()
         accum_stats = np.array([0., 0.])
         bar_format = '{l_bar}{bar}|{n_fmt}/{total_fmt} blocks [{elapsed}<{remaining}]'
-        im_pair_args = dict(proc_crs=self._proc_crs, overlap=np.floor(self._kernel_shape/2).astype('int'),
+        raster_pair_args = dict(proc_crs=self._proc_crs, overlap=np.floor(self._kernel_shape/2).astype('int'),
                             max_block_mem=self._config['max_block_mem'])
 
-        with logging_redirect_tqdm(), ImPairReader(self._src_filename, self._ref_filename, **im_pair_args) as im_pair:
+        with logging_redirect_tqdm(), RasterPairReader(
+                self._src_filename, self._ref_filename, **raster_pair_args) as raster_pair:
             # TODO: use im_pair src_win to create expanded profile?
-            out_profile = self._create_out_profile(im_pair.src_im.profile)
+            out_profile = self._create_out_profile(raster_pair.src_im.profile)
             out_im = rio.open(out_filename, 'w', **out_profile)
             if self._profile:
                 # setup profiling
@@ -331,14 +332,14 @@ class ImFuse():
             if self._config['debug_image']:
                 # create debug image file
                 #TODO: use im_pair ref_win / src_win to create profile
-                dbg_profile = self._create_debug_profile(im_pair.src_profile, im_pair.ref_profile)
+                dbg_profile = self._create_debug_profile(raster_pair.src_im.profile, raster_pair.ref_im.profile)
                 dbg_file_name = self._create_debug_filename(out_filename)
                 dbg_im = rio.open(dbg_file_name, 'w', **dbg_profile)
 
             try:
                 def process_block(block_pair: BlockPair):
                     """Thread-safe function to homogenise a block of src_im"""
-                    src_ra, ref_ra = im_pair.read(block_pair)
+                    src_ra, ref_ra = raster_pair.read(block_pair)
                     param_ra = self._model.fit(ref_ra, src_ra, )
                     mask_partial = block_pair.outer and self._config['mask_partial']
                     out_ra = self._model.apply(src_ra, param_ra, mask_partial=mask_partial)
@@ -351,7 +352,6 @@ class ImFuse():
                         out_ra.to_rio_dataset(out_im, indexes=block_pair.band_i + 1, window=block_pair.src_out_block)
 
                     if self._config['debug_image']:
-                        param_mask = param_ra.mask
                         with dbg_lock:
                             # nonlocal accum_stats
                             # accum_stats += [param_ra.array[2, param_mask].sum(), param_mask.sum()]
@@ -361,13 +361,14 @@ class ImFuse():
                             # dbg_out_block = round_window_to_grid(dbg_im.window(*src_out_bounds))
                             indexes = np.arange(param_ra.count) * len(self._src_bands) + block_pair.band_i + 1
                             # dbg_im.write(dbg_array, window=dbg_out_block, indexes=indexes)
-                            param_ra.to_rio_dataset(dbg_im, indexes=indexes, window=block_pair.ref_out_block)
+                            dbg_out_block = round_window_to_grid(dbg_im.window(*raster_pair.src_im.window_bounds(block_pair.src_out_block)))
+                            param_ra.to_rio_dataset(dbg_im, indexes=indexes, window=dbg_out_block)
 
                 if self._config['multithread']:
                     # process blocks in concurrent threads
                     future_list = []
                     with concurrent.futures.ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
-                        for block_pair in im_pair.block_pairs():
+                        for block_pair in raster_pair.block_pairs():
                             future = executor.submit(process_block, block_pair)
                             future_list.append(future)
 
@@ -376,7 +377,7 @@ class ImFuse():
                             future.result()
                 else:
                     # process bands consecutively
-                    for block_pair in tqdm(im_pair.block_pairs(), bar_format=bar_format):
+                    for block_pair in tqdm(raster_pair.block_pairs(), bar_format=bar_format):
                         process_block(block_pair)
             finally:
                 out_im.close()

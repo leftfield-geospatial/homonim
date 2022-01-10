@@ -30,7 +30,7 @@ import yaml
 from click.core import ParameterSource
 from rasterio.warp import SUPPORTED_RESAMPLING
 
-from homonim.compare import ImCompare
+from homonim.compare import RasterCompare
 from homonim.fuse import ImFuse
 from homonim.kernel_model import KernelModel
 
@@ -321,7 +321,7 @@ def compare(src_file, ref_file, proc_crs, multithread, output):
             for src_filename in src_file_path.parent.glob(src_file_path.name):
                 logger.info(f'\nComparing {src_filename.name}')
                 start_ttl = datetime.datetime.now()
-                cmp = ImCompare(src_filename, ref_file, proc_crs=proc_crs, multithread=multithread)
+                cmp = RasterCompare(src_filename, ref_file, proc_crs=proc_crs, multithread=multithread)
                 # TODO: what if file stems are identical
                 res_dict[src_filename.stem] = cmp.compare()
                 ttl_time = (datetime.datetime.now() - start_ttl)

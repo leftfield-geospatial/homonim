@@ -28,7 +28,7 @@ import yaml
 from click.testing import CliRunner
 
 from homonim import root_path, cli
-from homonim.compare import ImCompare
+from homonim.compare import RasterCompare
 
 
 class TestHomonim(unittest.TestCase):
@@ -44,7 +44,7 @@ class TestHomonim(unittest.TestCase):
         self._conf_filename = root_path.joinpath('data/inputs/test_example/config.yaml')
         with open(self._conf_filename, 'r') as f:
             config = yaml.safe_load(f)
-        self._config = cli._update_existing_keys(ImCompare.default_config, **config)
+        self._config = cli._update_existing_keys(RasterCompare.default_config, **config)
 
     def _test_compare_dict(self, src_filename, band_dict):
         band_df = pd.DataFrame.from_dict(band_dict, orient='index')
@@ -56,7 +56,7 @@ class TestHomonim(unittest.TestCase):
         self.assertTrue(all(band_df['r2'] >= 0) and all(band_df['r2'] <= 1), 'r2 in range')
 
     def _test_compare_api(self, src_filename, ref_filename, proc_crs='auto'):
-        cmp = ImCompare(src_filename, ref_filename, proc_crs=proc_crs, multithread=self._config['multithread'])
+        cmp = RasterCompare(src_filename, ref_filename, proc_crs=proc_crs, multithread=self._config['multithread'])
         band_dict = cmp.compare()
         self._test_compare_dict(src_filename, band_dict)
 

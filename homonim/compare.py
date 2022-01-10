@@ -28,12 +28,12 @@ import pandas as pd
 from rasterio.warp import Resampling
 from tqdm import tqdm
 
-from homonim.raster_pair import _inspect_image_pair, ImPairReader
+from homonim.raster_pair import _inspect_image_pair, RasterPairReader
 
 logger = logging.getLogger(__name__)
 
 
-class ImCompare():
+class RasterCompare():
     default_config = dict(multithread=True)
 
     def __init__(self, src_filename, ref_filename, proc_crs='auto', multithread=default_config['multithread']):
@@ -56,9 +56,9 @@ class ImCompare():
     def compare(self):
         res_dict = OrderedDict()
         bar_format = '{l_bar}{bar}|{n_fmt}/{total_fmt} bands [{elapsed}<{remaining}]'
-        with ImPairReader(self._src_filename, self._ref_filename, proc_crs=self._proc_crs) as im_pair:
+        with RasterPairReader(self._src_filename, self._ref_filename, proc_crs=self._proc_crs) as raster_pair:
             def process_band(block_pair):
-                src_ra, ref_ra = im_pair.read(block_pair)
+                src_ra, ref_ra = raster_pair.read(block_pair)
 
                 if self._proc_crs == 'ref':
                     src_ra = src_ra.reproject(**ref_ra.proj_profile, resampling=Resampling.average)
@@ -75,15 +75,15 @@ class ImCompare():
                 src_vec = src_ra.array[mask]
                 ref_vec = ref_ra.array[mask]
                 stats_dict = get_stats(src_vec, ref_vec)
-                band_desc = (im_pair.ref_im.descriptions[im_pair.ref_bands[block_pair.band_i] - 1] or
-                             im_pair.src_im.descriptions[im_pair.src_bands[block_pair.band_i] - 1] or
+                band_desc = (raster_pair.ref_im.descriptions[raster_pair.ref_bands[block_pair.band_i] - 1] or
+                             raster_pair.src_im.descriptions[raster_pair.src_bands[block_pair.band_i] - 1] or
                              f'Band {block_pair.band_i + 1}')
                 return band_desc, stats_dict
 
             if self._multithread:
                 future_list = []
                 with concurrent.futures.ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
-                    for block_pair in im_pair.block_pairs():
+                    for block_pair in raster_pair.block_pairs():
                         future = executor.submit(process_band, block_pair)
                         future_list.append(future)
 
@@ -92,7 +92,7 @@ class ImCompare():
                         band_desc, band_dict = future.result()
                         res_dict[band_desc] = band_dict
             else:
-                for block_pair in tqdm(im_pair.block_pairs(), bar_format=bar_format):
+                for block_pair in tqdm(raster_pair.block_pairs(), bar_format=bar_format):
                     band_desc, band_dict = process_band(block_pair)
                     res_dict[band_desc] = band_dict
 

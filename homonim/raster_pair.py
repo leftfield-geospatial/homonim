@@ -100,7 +100,7 @@ def _inspect_image_pair(src_filename, ref_filename, proc_crs='auto'):
 """Overlapping block object"""
 BlockPair = namedtuple('BlockPair', ['band_i', 'src_in_block', 'ref_in_block', 'src_out_block', 'ref_out_block', 'outer'])
 
-class ImPairReader():
+class RasterPairReader():
     def __init__(self, src_filename, ref_filename, proc_crs='auto', overlap=(0,0), max_block_mem=np.inf):
         self._src_filename = pathlib.Path(src_filename)
         self._ref_filename = pathlib.Path(ref_filename)
@@ -207,7 +207,7 @@ class ImPairReader():
         return src_ra, ref_ra
 
 
-    def _auto_block_shape(self, proc_im: rasterio.DatasetReader, other_im: rasterio.DatasetReader):
+    def _auto_block_shape(self, proc_im: rasterio.DatasetReader, other_im: rasterio.DatasetReader, proc_win=None):
         # convert _max_block_mem from MB to Bytes in lowest res image space
         mem_scale = np.product(np.divide(proc_im.res, other_im.res))
         max_block_mem = self._max_block_mem * (2 ** 20) / mem_scale if self._max_block_mem > 0 else np.inf
@@ -218,7 +218,10 @@ class ImPairReader():
         #     tile_div = np.floor(block_shape / tile_shape)
         #     if np.all(tile_div > 0):
         #         block_shape = tile_div * tile_shape
-        block_shape = np.array(proc_im.shape).astype('float')
+        if proc_win is None:
+            block_shape = np.array(proc_im.shape).astype('float')
+        else:
+            block_shape = np.array((proc_win.height, proc_win.width)).astype('float')
         while ((np.product(block_shape) * dtype_size > max_block_mem)):
             div_dim = np.argmax(block_shape)
             block_shape[div_dim] /= 2
@@ -255,7 +258,7 @@ class ImPairReader():
         proc_im_br = np.array(proc_im.shape)
 
         # calculate a block shape (in proc_crs) that satisfies the max_block_mem requirement
-        block_shape = self._auto_block_shape(proc_im, other_im)
+        block_shape = self._auto_block_shape(proc_im, other_im, proc_win=proc_win)
 
         # TODO: form an error message in terms of kernel shape, perhaps by catching this exception
         if np.any(block_shape <= np.fmax(2 * overlap, (3, 3))):
@@ -293,6 +296,12 @@ class ImPairReader():
                 other_in_block = round_window_to_grid(other_im.window(*proc_im.window_bounds(proc_in_block)))
                 other_out_block = round_window_to_grid(other_im.window(*proc_im.window_bounds(proc_out_block)))
 
+                _proc_in_block = round_window_to_grid(proc_im.window(*other_im.window_bounds(other_in_block)))
+                _proc_out_block = round_window_to_grid(proc_im.window(*other_im.window_bounds(other_out_block)))
+                if (_proc_in_block != proc_in_block):
+                    logger.warning("_proc_in_block != proc_in_block")
+                if (_proc_out_block != proc_out_block):
+                    logger.warning("_proc_out_block != proc_out_block")
                 # other_out_ul = np.fmax(np.array(other_out_block.toranges())[:, 0], (0, 0))
                 # other_out_br = np.fmin(np.array(other_out_block.toranges())[:, 1], other_im.shape)
                 # other_out_block = Window(*other_out_ul[::-1], *np.subtract(other_out_br, other_out_ul)[::-1])

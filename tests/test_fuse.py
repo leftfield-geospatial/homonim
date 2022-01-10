@@ -31,8 +31,9 @@ from shapely.geometry import box
 from tqdm import tqdm
 
 from homonim import root_path, cli
-from homonim.compare import ImCompare
+from homonim.compare import RasterCompare
 from homonim.fuse import ImFuse
+from homonim.raster_pair import RasterPairReader
 
 
 class TestFuse(unittest.TestCase):
@@ -105,7 +106,7 @@ class TestFuse(unittest.TestCase):
         """Test R2 against reference before and after homogenisation"""
         im_ref_r2 = []
         for im_i, im_filename in enumerate([src_filename, homo_filename]):
-            cmp = ImCompare(im_filename, ref_filename)
+            cmp = RasterCompare(im_filename, ref_filename)
             cmp_dict = cmp.compare()
             im_ref_r2.append([band_dict['r2'] for band_dict in cmp_dict.values()])
 
@@ -115,13 +116,13 @@ class TestFuse(unittest.TestCase):
         self.assertTrue(np.all(im_ref_r2[1, :] > 0.6), 'Homogenised R2 > 0.6')
         self.assertTrue(np.all(im_ref_r2[1, :] > im_ref_r2[0, :]), 'Homogenised vs reference R2 improvement')
 
-    def _test_ovl_blocks(self, ovl_blocks):
+    def _test_ovl_blocks(self, ovl_blocks, proc_crs, overlap):
         """ Test overlap blocks for sanity """
         prev_ovl_block = ovl_blocks[0]
         for ovl_block in ovl_blocks[1:]:
             ovl_block = ovl_block
             if ovl_block.band_i == prev_ovl_block.band_i:
-                for out_blk_fld in ('src_out_block',):
+                for out_blk_fld in ('src_out_block', 'ref_out_block'):
                     curr_blk = ovl_block.__getattribute__(out_blk_fld)
                     prev_blk = prev_ovl_block.__getattribute__(out_blk_fld)
                     if curr_blk.row_off == prev_blk.row_off:
@@ -130,14 +131,14 @@ class TestFuse(unittest.TestCase):
                     else:
                         self.assertTrue(curr_blk.row_off == prev_blk.row_off + prev_blk.height,
                                         f'{out_blk_fld} row consecutive')
-                for in_blk_fld in ('src_in_block',):
+                for in_blk_fld in ('ref_in_block',):
                     curr_blk = ovl_block.__getattribute__(in_blk_fld)
                     prev_blk = prev_ovl_block.__getattribute__(in_blk_fld)
                     if curr_blk.row_off == prev_blk.row_off:
-                        self.assertTrue(curr_blk.col_off < prev_blk.col_off + prev_blk.width,
+                        self.assertTrue(curr_blk.col_off == prev_blk.col_off + prev_blk.width - 2*overlap[1],
                                         f'{in_blk_fld} col overlap')
                     else:
-                        self.assertTrue(curr_blk.row_off < prev_blk.row_off + prev_blk.height,
+                        self.assertTrue(curr_blk.row_off == prev_blk.row_off + prev_blk.height - 2*overlap[0],
                                         f'{in_blk_fld} row overlap')
             else:
                 self.assertTrue(ovl_block.band_i == prev_ovl_block.band_i + 1, f'band consecutive')
@@ -152,7 +153,10 @@ class TestFuse(unittest.TestCase):
         him = ImFuse(src_filename, ref_filename, **kwargs, homo_config=self._homo_config,
                      model_config=self._model_config, out_profile=self._out_profile)
         with self.subTest('Overlapped Blocks', src_filename=src_filename):
-            self._test_ovl_blocks(him._create_ovl_blocks())
+            overlap = np.floor(np.array(kwargs['kernel_shape'])/2).astype('int')
+            with RasterPairReader(src_filename, ref_filename, proc_crs=kwargs['proc_crs'], overlap=overlap,
+                                  max_block_mem=self._homo_config['max_block_mem']) as raster_pair:
+                self._test_ovl_blocks(list(raster_pair.block_pairs()), kwargs['proc_crs'], overlap)
         him.homogenise(homo_filename)
         him.build_overviews(homo_filename)
         self.assertTrue(homo_filename.exists(), 'Homogenised file exists')
@@ -175,9 +179,9 @@ class TestFuse(unittest.TestCase):
             dict(method='gain-im-offset', kernel_shape=(5, 5), proc_crs='ref'),
             dict(method='gain-offset', kernel_shape=(9, 9), proc_crs='ref'),
         ]
-
         for param_dict in param_list:
             self._test_api(src_filename, ref_filename, ref2_filename, **param_dict)
+        # -m unittest test_fuse.TestFuse.test_api_ref_space
 
     def test_api_src_space(self):
         """Test homogenisation API with model-crs=src and src res > ref res"""
