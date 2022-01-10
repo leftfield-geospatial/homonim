@@ -319,25 +319,19 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
 
         if window is None:
             window = rio_dataset.window(*self.bounds)
-            window, _ = self.bounded_window_slices(window, rio_dataset)
-            # window = Window(col_off=0, row_off=0, width=rio_dataset.width, height=rio_dataset.height)
+            bounded_ra = self
         else:
             # crop the window to dataset bounds (if necessary)
-            _window = window
             window, _ = self.bounded_window_slices(window, rio_dataset)
+            # a bounded view into the RasterArray to match the dataset window
+            bounded_ra = self.slice_array(*rio_dataset.window_bounds(window))
 
-        # a bounded view into the array to match the dataset window (may be full array)
-        bounded_ra = self.slice_array(*rio_dataset.window_bounds(window))
         if np.any(np.array(bounded_ra.shape) <= 0):
             raise ValueError(f'The window gives a bounded array shape ({bounded_ra.shape}) with zero length '
                              f'dimension')
 
-        # if np.any(np.array((window.height, window.width)) != np.array(bounded_array.shape[-2:])):
-        #     raise ValueError(f'The bounded window shape ({(window.height, window.width)}) does not match the bounded '
-        #                      f'array shape ({bounded_array.shape[-2:]})')
         if np.any(np.array((window.height, window.width)) != np.array(bounded_ra.shape)):
-            logger.warning(f'The bounded window shape ({(window.height, window.width)}) does not match the bounded '
-                             f'array shape ({bounded_ra.shape[-2:]})')
+            logger.warning(f"'window' extends beyond the bounds of the RasterArray")
 
         rio_dataset.write(bounded_ra.array, window=window, indexes=indexes, **kwargs)
 

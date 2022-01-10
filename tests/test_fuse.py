@@ -99,7 +99,7 @@ class TestFuse(unittest.TestCase):
                     for fn in [lambda x: x, lambda x: np.bitwise_not(x)]:
                         n_src_labels, src_labels = cv2.connectedComponents(fn(src_mask), None, 4, cv2.CV_16U)
                         n_homo_labels, homo_labels = cv2.connectedComponents(fn(homo_mask), None, 4, cv2.CV_16U)
-                        self.assertTrue(np.abs(n_src_labels - n_homo_labels) <= 1,
+                        self.assertTrue(n_src_labels == n_homo_labels or (n_src_labels == 1 and n_homo_labels == 2),
                                         'Number of source and homgenised valid/nodata areas match')
 
     def _test_homo_against_ref(self, src_filename, homo_filename, ref_filename):
@@ -197,6 +197,10 @@ class TestFuse(unittest.TestCase):
             'data/inputs/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.vrt')
         ref_filename = root_path.joinpath(
             'data/inputs/test_example/reference/COPERNICUS-S2-20151003T075826_20151003T082014_T35HKC_B432_Byte.tif')
+        # src_filename = root_path.joinpath(
+        #     'data/inputs/test_example/reference/COPERNICUS-S2-20151003T075826_20151003T082014_T35HKC_B432_Byte.vrt')
+        # ref_filename = root_path.joinpath(
+        #     'data/inputs/test_example/source/NGI_Baviaanskloof_3324c_2015_RGB.vrt')
 
         param_dict = dict(method='gain', kernel_shape=(5, 5), proc_crs='src')
         self._test_api(src_filename, ref_filename, ref_filename, **param_dict)

@@ -123,10 +123,7 @@ class RasterPairReader():
 
     @property
     def ref_im(self)-> rasterio.DatasetReader:
-        # TODO: get rid of this as it will conflict with clipped ref profile
         return self._ref_im
-        # return WarpedVRT(self._ref_im, tranform=self._clipped_ref_profile['transform'],
-        #                  width=self._clipped_ref_profile['width'], height=self._clipped_ref_profile['height'])
 
     @property
     def src_bands(self)-> Tuple[int,]:
@@ -137,12 +134,15 @@ class RasterPairReader():
         return self._ref_bands
 
     @property
-    def src_profile(self)-> rasterio.DatasetReader:
-        return self._src_im.profile if self._src_im else {}
-
-    @property
-    def ref_profile(self)-> rasterio.DatasetReader:
-        return self._crop_ref_profile if self._ref_im else {}
+    def proc_crs(self)-> str:
+        return self._proc_crs
+    # @property
+    # def src_profile(self)-> rasterio.DatasetReader:
+    #     return self._src_im.profile if self._src_im else {}
+    #
+    # @property
+    # def ref_profile(self)-> rasterio.DatasetReader:
+    #     return self._crop_ref_profile if self._ref_im else {}
 
     def __enter__(self):
         self._env = rio.Env(GDAL_NUM_THREADS='ALL_CPUs').__enter__()
@@ -159,8 +159,7 @@ class RasterPairReader():
     def _init_pair(self):
         self._src_bands, self._ref_bands, self._proc_crs = _inspect_image_pair(self._src_filename, self._ref_filename,
                                                                                self._proc_crs)
-
-        # image-wide windows that allow re-projections between src and ref without loss of data
+        # create image-wide windows that allow re-projections between src and ref without loss of data
         self._ref_win = expand_window_to_grid(self._ref_im.window(*self._src_im.bounds))
         self._src_win = expand_window_to_grid(self._src_im.window(*self._ref_im.window_bounds(self._ref_win)))
 
@@ -171,7 +170,6 @@ class RasterPairReader():
 
 
     def open(self):
-        # self._blocks = self._create_ovl_blocks(overlap=self._overlap)
         self._src_im = rio.open(self._src_filename, 'r')
         self._ref_im = rio.open(self._ref_filename, 'r')
 
@@ -213,11 +211,6 @@ class RasterPairReader():
         max_block_mem = self._max_block_mem * (2 ** 20) / mem_scale if self._max_block_mem > 0 else np.inf
         dtype_size = np.dtype(RasterArray.default_dtype).itemsize
 
-        # if proc_im.is_tiled:    # adjust block_shape to be on tile boundaries, only realy useful for proc-crs==src
-        #     tile_shape = np.array((proc_im.block_shapes[0]))
-        #     tile_div = np.floor(block_shape / tile_shape)
-        #     if np.all(tile_div > 0):
-        #         block_shape = tile_div * tile_shape
         if proc_win is None:
             block_shape = np.array(proc_im.shape).astype('float')
         else:
@@ -225,7 +218,6 @@ class RasterPairReader():
         while ((np.product(block_shape) * dtype_size > max_block_mem)):
             div_dim = np.argmax(block_shape)
             block_shape[div_dim] /= 2
-
 
         return np.ceil(block_shape).astype('int')
 
@@ -236,10 +228,6 @@ class RasterPairReader():
         if not self._src_im or self._src_im.closed or not self._ref_im or self._ref_im.closed :
             raise IoError(f'Source and reference image pair are closed: {self._src_filename.name} and '
                           f'{self._ref_filename.name}')
-        #
-        # # image-wide windows that allow re-projections between src and ref without loss of data
-        # ref_win = expand_window_to_grid(self._ref_im.window(*self._src_im.bounds))
-        # src_win = expand_window_to_grid(self._src_im.window(*self._ref_im.window_bounds(ref_win)))
 
         # assign 'src' and 'ref' to 'proc' and 'other' according to proc_crs
         # (blocks are first formed in the 'proc' (usually the lowest resolution) image space, from which the equivalent
@@ -251,11 +239,8 @@ class RasterPairReader():
 
         # initialise block formation variables
         overlap = np.array(self._overlap)
-        proc_win_shape = np.array((proc_win.height, proc_win.width))
         proc_win_ul = np.array((proc_win.row_off, proc_win.col_off))
         proc_win_br = np.array((proc_win.height + proc_win.row_off, proc_win.width + proc_win.col_off))
-        proc_im_ul = np.array([0, 0])
-        proc_im_br = np.array(proc_im.shape)
 
         # calculate a block shape (in proc_crs) that satisfies the max_block_mem requirement
         block_shape = self._auto_block_shape(proc_im, other_im, proc_win=proc_win)
@@ -295,18 +280,6 @@ class RasterPairReader():
                 # means there will be no nodata for ref pixels straddling src transform.
                 other_in_block = round_window_to_grid(other_im.window(*proc_im.window_bounds(proc_in_block)))
                 other_out_block = round_window_to_grid(other_im.window(*proc_im.window_bounds(proc_out_block)))
-
-                _proc_in_block = round_window_to_grid(proc_im.window(*other_im.window_bounds(other_in_block)))
-                _proc_out_block = round_window_to_grid(proc_im.window(*other_im.window_bounds(other_out_block)))
-                if (_proc_in_block != proc_in_block):
-                    logger.warning("_proc_in_block != proc_in_block")
-                if (_proc_out_block != proc_out_block):
-                    logger.warning("_proc_out_block != proc_out_block")
-
-                # _other_in_block =
-                # other_out_ul = np.fmax(np.array(other_out_block.toranges())[:, 0], (0, 0))
-                # other_out_br = np.fmin(np.array(other_out_block.toranges())[:, 1], other_im.shape)
-                # other_out_block = Window(*other_out_ul[::-1], *np.subtract(other_out_br, other_out_ul)[::-1])
 
                 # form the BlockPair named tuple, assigning 'proc' and 'other' back to 'src' and 'ref' for use in read()
                 if self._proc_crs == 'ref':

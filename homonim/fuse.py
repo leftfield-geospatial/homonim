@@ -90,13 +90,13 @@ class RasterFuse():
         self._kernel_shape = np.array(kernel_shape).astype(int)
         self._config = homo_config
         self._out_profile = out_profile
-
-        self._ref_bands = None
-        self._src_bands = None
-        self._ref_warped_vrt_dict = None
         self._profile = False
-        self._proc_crs = proc_crs
-        self._image_init()
+
+        # check the ref and src images via RasterPairReader, and get the proc_crs attribute
+        raster_pair_args = dict(proc_crs=proc_crs, overlap=np.floor(self._kernel_shape/2).astype('int'),
+                            max_block_mem=self._config['max_block_mem'])
+        with RasterPairReader(src_filename, ref_filename, **raster_pair_args) as raster_pair:
+            self._proc_crs = raster_pair.proc_crs
 
         if self._proc_crs == 'ref':
             self._model = RefSpaceModel(method=method, kernel_shape=kernel_shape,
@@ -107,80 +107,16 @@ class RasterFuse():
         else:
             raise ValueError(f'Unknown proc_crs option: {proc_crs}')
 
+
     @property
     def method(self):
         return self._method
+
 
     @property
     def kernel_shape(self):
         return self._kernel_shape
 
-    @property
-    def space(self):
-        return self._proc_crs
-
-    def _image_init(self):
-        """Check bounds, band count, and compression type of source and reference images"""
-        self._src_bands, self._ref_bands, self._proc_crs = _inspect_image_pair(self._src_filename, self._ref_filename,
-                                                                               self._proc_crs)
-
-        with rio.open(self._src_filename, 'r') as src_im, rio.open(self._ref_filename, 'r') as _ref_im:
-            if src_im.crs.to_proj4() != _ref_im.crs.to_proj4():  # re-project the reference image to source CRS
-                logger.debug(f'Re-projecting reference image to source CRS.')
-            with WarpedVRT(_ref_im, crs=src_im.crs, resampling=Resampling.bilinear) as ref_im:
-                ref_win = expand_window_to_grid(
-                    ref_im.window(*src_im.bounds),
-                    expand_pixels=np.ceil(np.divide(src_im.res, ref_im.res)).astype('int')
-                )
-                ref_transform = ref_im.window_transform(ref_win)
-                self._ref_warped_vrt_dict = dict(crs=src_im.crs, transform=ref_transform, width=ref_win.width,
-                                                 height=ref_win.height, resampling=Resampling.bilinear)
-
-    def _auto_block_shape(self, src_shape):
-        max_block_mem = self._config['max_block_mem'] * (2 ** 20)  # MB to Bytes
-        dtype_size = np.dtype(RasterArray.default_dtype).itemsize
-
-        block_shape = np.array(src_shape)
-        while (np.product(block_shape) * dtype_size > max_block_mem):
-            div_dim = np.argmax(block_shape)
-            block_shape[div_dim] /= 2
-        return np.round(block_shape).astype('int')
-
-    def _create_ovl_blocks(self):
-        with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
-            with WarpedVRT(rio.open(self._ref_filename, 'r'), **self._ref_warped_vrt_dict) as ref_im:
-                src_shape = np.array(src_im.shape)
-                # TODO deal with res_ratio < 1 (everywhere), and also src_kernel_shape even with proc_crs='src'
-                src_kernel_shape = np.ceil(self._kernel_shape * np.divide(ref_im.res, src_im.res)).astype(int)
-                res_ratio = np.ceil(np.divide(ref_im.res, src_im.res)).astype(int)
-                overlap = np.ceil(res_ratio + src_kernel_shape / 2).astype(int)
-                ovl_blocks = []
-                block_shape = self._auto_block_shape(src_im.shape)
-                if np.any(block_shape <= src_kernel_shape):
-                    raise BlockSizeError('Block size is less than kernel size, increase "max_block_mem" or decrease '
-                                         '"kernel_shape"')
-
-                for band_i in range(len(self._src_bands)):
-                    for ul_row, ul_col in product(range(-overlap[0], (src_shape[0] - 2 * overlap[0]), block_shape[0]),
-                                                  range(-overlap[1], (src_shape[1] - 2 * overlap[1]), block_shape[1])):
-                        ul = np.array((ul_row, ul_col))
-                        br = ul + block_shape + (2 * overlap)
-                        # include a ref pixel beyond src boundary to allow ref-space reprojections there
-                        # TODO rethink this, and the implications for src res > ref res
-                        src_ul = np.fmax(ul, -res_ratio)
-                        src_br = np.fmin(br, src_shape + res_ratio)
-                        src_block_shape = np.subtract(src_br, src_ul)
-                        outer = np.any(src_ul <= 0) or np.any(src_br >= src_shape)
-                        out_ul = ul + overlap
-                        out_br = br - overlap
-
-                        src_in_block = Window.from_slices((src_ul[0], src_br[0]), (src_ul[1], src_br[1]),
-                                                          width=src_block_shape[1], height=src_block_shape[0],
-                                                          boundless=outer)
-                        src_out_block = Window.from_slices((out_ul[0], out_br[0]), (out_ul[1], out_br[1]))
-
-                        ovl_blocks.append(OvlBlock(band_i, src_in_block, src_out_block, outer))
-        return ovl_blocks
 
     def _profile_from(self, in_profile):
         """ create a raster profile by combining an input profile with the configuration profile """
@@ -204,16 +140,17 @@ class RasterFuse():
 
         return nested_update(out_profile, self._out_profile)
 
-    def _create_out_profile(self, init_profile):
+    def _create_out_profile(self, raster_pair: RasterPairReader):
         """Create a rasterio profile for the output image based on a starting profile and configuration"""
-        out_profile = self._profile_from(init_profile)
-        out_profile['count'] = len(self._src_bands)
+        out_profile = self._profile_from(raster_pair.src_im.profile)
+        out_profile['count'] = len(raster_pair.src_bands)
         return out_profile
 
-    def _create_debug_profile(self, src_profile, ref_profile):
+    def _create_debug_profile(self, raster_pair: RasterPairReader):
         """Create a rasterio profile for the debug parameter image based on a reference or source profile"""
-        debug_profile = self._profile_from(ref_profile) if self._proc_crs == 'ref' else self._profile_from(src_profile)
-        debug_profile.update(dtype=RasterArray.default_dtype, count=len(self._src_bands) * 3,
+        init_profile = raster_pair.ref_im.profile if raster_pair.proc_crs == 'ref' else raster_pair.src_im.profile
+        debug_profile = self._profile_from(init_profile)
+        debug_profile.update(dtype=RasterArray.default_dtype, count=len(raster_pair.src_bands) * 3,
                              nodata=RasterArray.default_nodata)
         return debug_profile
 
@@ -321,7 +258,7 @@ class RasterFuse():
         with logging_redirect_tqdm(), RasterPairReader(
                 self._src_filename, self._ref_filename, **raster_pair_args) as raster_pair:
             # TODO: use im_pair src_win to create expanded profile?
-            out_profile = self._create_out_profile(raster_pair.src_im.profile)
+            out_profile = self._create_out_profile(raster_pair)
             out_im = rio.open(out_filename, 'w', **out_profile)
             if self._profile:
                 # setup profiling
@@ -331,8 +268,7 @@ class RasterFuse():
 
             if self._config['debug_image']:
                 # create debug image file
-                #TODO: use im_pair ref_win / src_win to create profile
-                dbg_profile = self._create_debug_profile(raster_pair.src_im.profile, raster_pair.ref_im.profile)
+                dbg_profile = self._create_debug_profile(raster_pair)
                 dbg_file_name = self._create_debug_filename(out_filename)
                 dbg_im = rio.open(dbg_file_name, 'w', **dbg_profile)
 
@@ -340,12 +276,9 @@ class RasterFuse():
                 def process_block(block_pair: BlockPair):
                     """Thread-safe function to homogenise a block of src_im"""
                     src_ra, ref_ra = raster_pair.read(block_pair)
-                    param_ra = self._model.fit(ref_ra, src_ra, )
+                    param_ra = self._model.fit(ref_ra, src_ra)
                     mask_partial = block_pair.outer and self._config['mask_partial']
                     out_ra = self._model.apply(src_ra, param_ra, mask_partial=mask_partial)
-                    # out_ra.mask = src_ra.mask
-                    # if block_pair.outer and self._config['mask_partial']:
-                    #     out_ra = self._model.mask_partial(out_ra, ref_ra.res)
                     out_ra.nodata = out_im.nodata
 
                     with write_lock:
@@ -356,40 +289,9 @@ class RasterFuse():
                             # nonlocal accum_stats
                             # accum_stats += [param_ra.array[2, param_mask].sum(), param_mask.sum()]
                             #
-                            # src_out_bounds = im_pair.src_im.window_bounds(block_pair.src_out_block)
-                            # dbg_array = param_ra.slice_array(*src_out_bounds)
-                            # dbg_out_block = round_window_to_grid(dbg_im.window(*src_out_bounds))
-                            indexes = np.arange(param_ra.count) * len(self._src_bands) + block_pair.band_i + 1
-                            # dbg_im.write(dbg_array, window=dbg_out_block, indexes=indexes)
-                            # dbg_out_block = round_window_to_grid(dbg_im.window(*raster_pair.src_im.window_bounds(block_pair.src_out_block)))
-                            # param_crop_ra.to_rio_dataset(dbg_im, indexes=indexes, window=None)
-                            if True:
-                                # this seems to work
-                                param_crop_ra = param_ra.slice_array(*raster_pair.src_im.window_bounds(block_pair.src_out_block))
-                                dbg_out_block = round_window_to_grid(dbg_im.window(*param_crop_ra.bounds))
-                                dbg_im.write(param_crop_ra.array, indexes=indexes, window=dbg_out_block)
-
-                            if self._proc_crs == 'ref':
-                                # debugging
-                                # ref block derived from block_pair src block
-                                _ref_out_block = dbg_im.window(*raster_pair.src_im.window_bounds(block_pair.src_out_block))
-                                if block_pair.ref_out_block != round_window_to_grid(_ref_out_block):
-                                    logger.warning('block_pair.ref_out_block != _ref_out_block')
-                                # ref block derived from sliced param (ref) ra
-                                _dbg_out_block = round_window_to_grid(dbg_im.window(*param_crop_ra.bounds))
-                                if block_pair.ref_out_block != _dbg_out_block:
-                                    logger.warning('block_pair.ref_out_block != _dbg_out_block')
-
-                                _param_crop_ra = param_ra.slice_array(*dbg_im.window_bounds(block_pair.ref_out_block))
-                                _dbg_out_block = round_window_to_grid(dbg_im.window(*_param_crop_ra.bounds))
-                                if block_pair.ref_out_block != _dbg_out_block:
-                                    logger.warning('block_pair.ref_out_block != _dbg_out_block')
-
-                                # - somehow ref_out_block extends beyond raster_pair._ref_win, but not ref_in_block
-                                # - the actual param_ra only covers ref_in_block, and so cannot cover ref_out_block
-                                # - the slicing, uses what data is there and so the effective sliced window is smaller
-                                # than ref_out_block.  I think this explains the issues I'm having.  The main question \
-                                # is why does ref_out_block exceed ref_win?
+                            indexes = np.arange(param_ra.count) * len(raster_pair.src_bands) + block_pair.band_i + 1
+                            dbg_out_block = block_pair.ref_out_block if self._proc_crs == 'ref' else block_pair.src_out_block
+                            param_ra.to_rio_dataset(dbg_im, indexes=indexes, window=dbg_out_block)
 
                 if self._config['multithread']:
                     # process blocks in concurrent threads
@@ -414,119 +316,6 @@ class RasterFuse():
                     self._set_debug_metadata(dbg_file_name)
                     # logger.debug(
                     #     f'Average kernel model R\N{SUPERSCRIPT TWO}: {accum_stats[0] / accum_stats[1]:.2f}')
-
-        if self._profile:
-            # print profiling info
-            # (tottime is the total time spent in the function alone. cumtime is the total time spent in the function
-            # plus all functions that this function called)
-            proc_profile.disable()
-            proc_stats = pstats.Stats(proc_profile).sort_stats('cumtime')
-            logger.debug(f'Processing time:')
-            proc_stats.print_stats(20)
-
-            current, peak = tracemalloc.get_traced_memory()
-            logger.debug(f"Memory usage: current: {current / 10 ** 6:.1f} MB, peak: {peak / 10 ** 6:.1f} MB")
-
-    def _homogenise(self, out_filename):
-        """
-        Homogenise an image file by block.
-
-        Parameters
-        ----------
-        out_filename: str, pathlib.Path
-                      Path of the homogenised image file to create.
-        """
-        ovl_blocks = self._create_ovl_blocks()
-        src_read_lock = threading.Lock()
-        ref_read_lock = threading.Lock()
-        write_lock = threading.Lock()
-        dbg_lock = threading.Lock()
-        accum_stats = np.array([0., 0.])
-        bar_format = '{l_bar}{bar}|{n_fmt}/{total_fmt} blocks [{elapsed}<{remaining}]'
-
-        with logging_redirect_tqdm(), rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(self._src_filename, 'r') as src_im:
-            with WarpedVRT(rio.open(self._ref_filename, 'r'), **self._ref_warped_vrt_dict) as ref_im:
-                out_profile = self._create_out_profile(src_im.profile)
-                out_im = rio.open(out_filename, 'w', **out_profile)
-                if self._profile:
-                    # setup profiling
-                    tracemalloc.start()
-                    proc_profile = cProfile.Profile()
-                    proc_profile.enable()
-
-                if self._config['debug_image']:
-                    # create debug image file
-                    dbg_profile = self._create_debug_profile(src_im.profile, ref_im.profile)
-                    dbg_file_name = self._create_debug_filename(out_filename)
-                    dbg_im = rio.open(dbg_file_name, 'w', **dbg_profile)
-
-                try:
-                    def process_block(ovl_block: OvlBlock):
-                        """Thread-safe function to homogenise a block of src_im"""
-                        with src_read_lock:
-                            src_ra = RasterArray.from_rio_dataset(
-                                src_im,
-                                indexes=self._src_bands[ovl_block.band_i],
-                                window=ovl_block.src_in_block,
-                                boundless=ovl_block.outer
-                            )
-
-                        with ref_read_lock:
-                            src_in_bounds = src_im.window_bounds(ovl_block.src_in_block)
-                            # TODO: if src res >> ref res, ref_in_block can extend beyond ref limits
-                            ref_in_block = round_window_to_grid(ref_im.window(*src_in_bounds))
-                            ref_ra = RasterArray.from_rio_dataset(
-                                ref_im,
-                                indexes=self._ref_bands[ovl_block.band_i],
-                                window=ref_in_block
-                            )
-
-                        param_ra = self._model.fit(ref_ra, src_ra, )
-                        out_ra = self._model.apply(src_ra, param_ra)
-                        out_ra.mask = src_ra.mask
-                        if ovl_block.outer and self._config['mask_partial']:
-                            out_ra = self._model.mask_partial(out_ra, ref_ra.res)
-                        out_ra.nodata = out_im.nodata
-
-                        with write_lock:
-                            out_array = out_ra.slice_array(*out_im.window_bounds(ovl_block.src_out_block))
-                            out_im.write(out_array, window=ovl_block.src_out_block, indexes=ovl_block.band_i + 1)
-
-                        if self._config['debug_image']:
-                            param_mask = param_ra.mask
-                            with dbg_lock:
-                                nonlocal accum_stats
-                                accum_stats += [param_ra.array[2, param_mask].sum(), param_mask.sum()]
-
-                                src_out_bounds = src_im.window_bounds(ovl_block.src_out_block)
-                                dbg_array = param_ra.slice_array(*src_out_bounds)
-                                dbg_out_block = round_window_to_grid(dbg_im.window(*src_out_bounds))
-                                indexes = np.arange(param_ra.count) * len(self._src_bands) + ovl_block.band_i + 1
-                                dbg_im.write(dbg_array, window=dbg_out_block, indexes=indexes)
-
-                    if self._config['multithread']:
-                        # process blocks in concurrent threads
-                        future_list = []
-                        with concurrent.futures.ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
-                            for ovl_block in ovl_blocks:
-                                future = executor.submit(process_block, ovl_block)
-                                future_list.append(future)
-
-                            # wait for threads and raise any thread generated exceptions
-                            for future in tqdm(future_list, bar_format=bar_format):
-                                future.result()
-                    else:
-                        # process bands consecutively
-                        for ovl_block in tqdm(ovl_blocks, bar_format=bar_format):
-                            process_block(ovl_block)
-                finally:
-                    out_im.close()
-                    self._set_homo_metadata(out_filename)
-                    if self._config['debug_image']:
-                        dbg_im.close()
-                        self._set_debug_metadata(dbg_file_name)
-                        logger.debug(
-                            f'Average kernel model R\N{SUPERSCRIPT TWO}: {accum_stats[0] / accum_stats[1]:.2f}')
 
         if self._profile:
             # print profiling info
