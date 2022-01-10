@@ -153,17 +153,18 @@ class TestFuse(unittest.TestCase):
             prev_ovl_block = ovl_block
 
     def _test_api(self, src_filename, ref_filename, test_filename, **kwargs):
+        with self.subTest('Overlapped Blocks', src_filename=src_filename):
+            overlap = np.floor(np.array(kwargs['kernel_shape'])/2).astype('int')
+            with RasterPairReader(src_filename, ref_filename, proc_crs=kwargs['proc_crs'], overlap=overlap,
+                                  max_block_mem=self._homo_config['max_block_mem']) as raster_pair:
+                self._test_ovl_blocks(raster_pair)
+
         homo_root = root_path.joinpath('data/outputs/test_example/homogenised')
 
         post_fix = cli._create_homo_postfix(driver=self._out_profile['driver'], **kwargs)
         homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
         him = RasterFuse(src_filename, ref_filename, **kwargs, homo_config=self._homo_config,
                          model_config=self._model_config, out_profile=self._out_profile)
-        with self.subTest('Overlapped Blocks', src_filename=src_filename):
-            overlap = np.floor(np.array(kwargs['kernel_shape'])/2).astype('int')
-            with RasterPairReader(src_filename, ref_filename, proc_crs=kwargs['proc_crs'], overlap=overlap,
-                                  max_block_mem=self._homo_config['max_block_mem']) as raster_pair:
-                self._test_ovl_blocks(raster_pair)
         him.homogenise(homo_filename)
         him.build_overviews(homo_filename)
         self.assertTrue(homo_filename.exists(), 'Homogenised file exists')

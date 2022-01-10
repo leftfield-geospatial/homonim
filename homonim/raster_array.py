@@ -318,7 +318,9 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
                                    f'RasterArray ({self.count})')
 
         if window is None:
-            window = Window(col_off=0, row_off=0, width=rio_dataset.width, height=rio_dataset.height)
+            window = rio_dataset.window(*self.bounds)
+            window, _ = self.bounded_window_slices(window, rio_dataset)
+            # window = Window(col_off=0, row_off=0, width=rio_dataset.width, height=rio_dataset.height)
         else:
             # crop the window to dataset bounds (if necessary)
             _window = window

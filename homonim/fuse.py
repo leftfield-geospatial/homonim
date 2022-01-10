@@ -94,7 +94,7 @@ class RasterFuse():
         self._ref_bands = None
         self._src_bands = None
         self._ref_warped_vrt_dict = None
-        self._profile = True
+        self._profile = False
         self._proc_crs = proc_crs
         self._image_init()
 
@@ -361,8 +361,11 @@ class RasterFuse():
                             # dbg_out_block = round_window_to_grid(dbg_im.window(*src_out_bounds))
                             indexes = np.arange(param_ra.count) * len(self._src_bands) + block_pair.band_i + 1
                             # dbg_im.write(dbg_array, window=dbg_out_block, indexes=indexes)
-                            dbg_out_block = round_window_to_grid(dbg_im.window(*raster_pair.src_im.window_bounds(block_pair.src_out_block)))
-                            param_ra.to_rio_dataset(dbg_im, indexes=indexes, window=dbg_out_block)
+                            # dbg_out_block = round_window_to_grid(dbg_im.window(*raster_pair.src_im.window_bounds(block_pair.src_out_block)))
+                            # param_crop_ra.to_rio_dataset(dbg_im, indexes=indexes, window=None)
+                            param_crop_ra = param_ra.slice_array(*raster_pair.src_im.window_bounds(block_pair.src_out_block))
+                            dbg_out_block = dbg_im.window(*param_crop_ra.bounds)
+                            dbg_im.write(param_crop_ra.array, indexes=indexes, window=dbg_out_block)
 
                 if self._config['multithread']:
                     # process blocks in concurrent threads
