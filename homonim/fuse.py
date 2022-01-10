@@ -55,7 +55,7 @@ def _update_from_nested(to_dict, from_nested_dict):
     return to_dict
 
 
-class ImFuse():
+class RasterFuse():
     default_homo_config = dict(debug_image=False, mask_partial=False, multithread=True, max_block_mem=100)
     default_out_profile = dict(driver='GTiff', dtype=RasterArray.default_dtype, nodata=RasterArray.default_nodata,
                                creation_options=dict(tiled=True, blockxsize=512, blockysize=512, compress='deflate',

@@ -31,7 +31,7 @@ from click.core import ParameterSource
 from rasterio.warp import SUPPORTED_RESAMPLING
 
 from homonim.compare import RasterCompare
-from homonim.fuse import ImFuse
+from homonim.fuse import RasterFuse
 from homonim.kernel_model import KernelModel
 
 # print formatting
@@ -155,7 +155,7 @@ class _ConfigFileCommand(click.Command):
 proc_crs_option = click.option("-pc", "--proc-crs", type=click.Choice(['ref', 'src', 'auto'], case_sensitive=False),
                                default='auto', show_default=True, help="The image CRS in which to perform processing.")
 multithread_option = click.option("-nmt", "--no-multithread", "multithread", type=click.BOOL, is_flag=True,
-                                  default=ImFuse.default_homo_config['multithread'],
+                                  default=RasterFuse.default_homo_config['multithread'],
                                   help=f"Process image blocks consecutively.")
 src_file_arg = click.argument("src-file", nargs=-1, metavar="INPUTS...",
                               type=click.Path(exists=False, dir_okay=True, readable=False, path_type=pathlib.Path))
@@ -195,14 +195,14 @@ def cli(verbose, quiet):
 @click.option("-c", "--conf", type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path),
               required=False, default=None, help="Path to a configuration file.")
 @click.option("-di", "--debug-image", type=click.BOOL, is_flag=True,  # TODO: normally on and flag to switch off?
-              default=ImFuse.default_homo_config['debug_image'],
+              default=RasterFuse.default_homo_config['debug_image'],
               help=f"Create a debug image for each source file containing parameter and R\N{SUPERSCRIPT TWO} values.")
 @click.option("-mp", "--mask-partial", type=click.BOOL, is_flag=True,
-              default=ImFuse.default_homo_config['mask_partial'],
+              default=RasterFuse.default_homo_config['mask_partial'],
               help=f"Mask output pixels produced from partial kernel, or source image coverage.")
 @multithread_option
 @click.option("-mbm", "--max-block-mem", type=click.INT, help="Maximum image block size for processing (MB)",
-              default=ImFuse.default_homo_config['max_block_mem'], show_default=True)
+              default=RasterFuse.default_homo_config['max_block_mem'], show_default=True)
 @click.option("-ds", "--downsampling", type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
               default=KernelModel.default_config['downsampling'], show_default=True,
               help="Resampling method for re-projecting from reference to source CRS.")
@@ -215,12 +215,12 @@ def cli(verbose, quiet):
                    "surrounding areas. For 'gain-offset' method only.")
 @click.option("--out-driver", "driver",
               type=click.Choice(set(rio.drivers.raster_driver_extensions().values()), case_sensitive=False),
-              default=ImFuse.default_out_profile['driver'], show_default=True, metavar="TEXT",
+              default=RasterFuse.default_out_profile['driver'], show_default=True, metavar="TEXT",
               help="Output format driver.")
 @click.option("--out-dtype", "dtype", type=click.Choice(list(rio.dtypes.dtype_fwd.values())[1:8], case_sensitive=False),
-              default=ImFuse.default_out_profile['dtype'], show_default=True, help="Output image data type.")
+              default=RasterFuse.default_out_profile['dtype'], show_default=True, help="Output image data type.")
 @click.option("--out-nodata", "nodata", type=click.STRING, callback=_parse_nodata, metavar="[NUMBER|null|nan]",
-              default=ImFuse.default_out_profile['nodata'], show_default=True,
+              default=RasterFuse.default_out_profile['nodata'], show_default=True,
               help="Output image nodata value.")
 # @click.option('--co', '--out-profile', 'creation_options', metavar='NAME=VALUE', multiple=True,
 #               default=tuple(f'{k}={v}' for k,v in ImFuse.default_out_profile['creation_options'].items()),
@@ -235,16 +235,16 @@ def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, do_cmp, buil
     """Radiometrically homogenise image(s) by fusion with a reference"""
     compare_files = []
     config = {}
-    config['homo_config'] = _update_existing_keys(ImFuse.default_homo_config, **kwargs)
-    config['model_config'] = _update_existing_keys(ImFuse.default_model_config, **kwargs)
+    config['homo_config'] = _update_existing_keys(RasterFuse.default_homo_config, **kwargs)
+    config['model_config'] = _update_existing_keys(RasterFuse.default_model_config, **kwargs)
     # if (kwargs['driver'] != ImFuse.default_out_profile['driver'] and
     #         ctx.get_parameter_source('creation_options') == ParameterSource.DEFAULT):
     #     kwargs['creation_options'] = {}
     if (ctx.get_parameter_source('driver') == ParameterSource.DEFAULT and
             ctx.get_parameter_source('creation_options') == ParameterSource.DEFAULT):
         # if no other driver or creation_options have been specified, use the defaults
-        kwargs['creation_options'] = ImFuse.default_out_profile['creation_options']
-    config['out_profile'] = _update_existing_keys(ImFuse.default_out_profile, **kwargs)
+        kwargs['creation_options'] = RasterFuse.default_out_profile['creation_options']
+    config['out_profile'] = _update_existing_keys(RasterFuse.default_out_profile, **kwargs)
 
     # iterate over and homogenise source file(s)
     try:
@@ -262,8 +262,8 @@ def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, do_cmp, buil
 
                 logger.info(f'\nHomogenising {src_filename.name}')
                 start_ttl = datetime.datetime.now()
-                him = ImFuse(src_filename, ref_file, method=method, kernel_shape=kernel_shape, proc_crs=proc_crs,
-                             **config)
+                him = RasterFuse(src_filename, ref_file, method=method, kernel_shape=kernel_shape, proc_crs=proc_crs,
+                                 **config)
 
                 # create output image filename and homogenise
                 post_fix = _create_homo_postfix(proc_crs=proc_crs, method=method, kernel_shape=kernel_shape,

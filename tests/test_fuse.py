@@ -32,7 +32,7 @@ from tqdm import tqdm
 
 from homonim import root_path, cli
 from homonim.compare import RasterCompare
-from homonim.fuse import ImFuse
+from homonim.fuse import RasterFuse
 from homonim.raster_pair import RasterPairReader
 
 
@@ -52,9 +52,9 @@ class TestFuse(unittest.TestCase):
         self._conf_filename = root_path.joinpath('data/inputs/test_example/config.yaml')
         with open(self._conf_filename, 'r') as f:
             config = yaml.safe_load(f)
-        self._homo_config = cli._update_existing_keys(ImFuse.default_homo_config, **config)
-        self._out_profile = cli._update_existing_keys(ImFuse.default_out_profile, **config)
-        self._model_config = cli._update_existing_keys(ImFuse.default_model_config, **config)
+        self._homo_config = cli._update_existing_keys(RasterFuse.default_homo_config, **config)
+        self._out_profile = cli._update_existing_keys(RasterFuse.default_out_profile, **config)
+        self._model_config = cli._update_existing_keys(RasterFuse.default_model_config, **config)
 
     def _test_homo_against_src(self, src_filename, homo_filename):
         """Test homogenised against source image"""
@@ -150,8 +150,8 @@ class TestFuse(unittest.TestCase):
 
         post_fix = cli._create_homo_postfix(driver=self._out_profile['driver'], **kwargs)
         homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
-        him = ImFuse(src_filename, ref_filename, **kwargs, homo_config=self._homo_config,
-                     model_config=self._model_config, out_profile=self._out_profile)
+        him = RasterFuse(src_filename, ref_filename, **kwargs, homo_config=self._homo_config,
+                         model_config=self._model_config, out_profile=self._out_profile)
         with self.subTest('Overlapped Blocks', src_filename=src_filename):
             overlap = np.floor(np.array(kwargs['kernel_shape'])/2).astype('int')
             with RasterPairReader(src_filename, ref_filename, proc_crs=kwargs['proc_crs'], overlap=overlap,
