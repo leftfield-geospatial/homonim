@@ -17,24 +17,24 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
-import datetime
 import json
 import logging
 import pathlib
 import sys
+from timeit import default_timer as timer
 
 import click
+import numpy as np
 import pandas as pd
 import rasterio as rio
 import yaml
 from click.core import ParameterSource
 from rasterio.warp import SUPPORTED_RESAMPLING
-import numpy as np
 
 from homonim.compare import RasterCompare
+from homonim.enums import ProcCrs, Method
 from homonim.fuse import RasterFuse
 from homonim.kernel_model import KernelModel
-from homonim.enums import ProcCrs, Method
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +78,7 @@ def _nodata_cb(ctx, param, value):
         except (TypeError, ValueError):
             raise click.BadParameter("{!r} is not a number".format(value), param=param, param_hint="nodata")
 
+
 def _kernel_shape_cb(ctx, param, value):
     """click callback to error check kernel_shape"""
     kernel_shape = np.array(value)
@@ -86,6 +87,7 @@ def _kernel_shape_cb(ctx, param, value):
     if not np.all(np.mod(kernel_shape, 2) == 1):
         raise click.BadParameter(f'Invalid kernel shape: {kernel_shape}, should be odd in both dimensions')
     return value
+
 
 def _creation_options_cb(ctx, param, value):
     """
@@ -117,6 +119,7 @@ def _creation_options_cb(ctx, param, value):
 
 class _PlainInfoFormatter(logging.Formatter):
     """logging formatter to format INFO logs without the module name etc prefix"""
+
     def format(self, record):
         if record.levelno == logging.INFO:
             self._style._fmt = "%(message)s"
@@ -130,8 +133,7 @@ class _ConfigFileCommand(click.Command):
     click Command to read config file and combine with CLI parameters.
 
     User-supplied CLI values are given priority, followed by the config file values.
-    Where neither user supplied CLI, or config file values, for a click parameter exist,
-    it will retain its default value.
+    Where neither user supplied CLI, or config file values exist, parameters retain their defaults.
     """
 
     # adapted from https://stackoverflow.com/questions/46358797/python-click-supply-arguments-and-options-from-a-configuration-file/46391887
@@ -143,8 +145,6 @@ class _ConfigFileCommand(click.Command):
             with open(config_file) as f:
                 config_dict = yaml.safe_load(f)
 
-            # Replace the click context default value parameters with any config file values
-            # Where parameter values have been specified by the user on the command line, they are left as is.
             for conf_key, conf_value in config_dict.items():
                 if not conf_key in ctx.params:
                     raise click.BadParameter(f"Unknown config file parameter '{conf_key}'", param="conf",
@@ -170,6 +170,7 @@ src_file_arg = click.argument("src-file", nargs=-1, metavar="INPUTS...",
 ref_file_arg = click.argument("ref-file", nargs=1, metavar="REFERENCE",
                               type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path))
 
+
 # define the click CLI
 @click.group()
 @click.option(
@@ -185,7 +186,9 @@ def cli(verbose, quiet):
     _configure_logging(verbosity)
 
 
+# fuse command
 @click.command(cls=_ConfigFileCommand)
+# standard options
 @src_file_arg
 @ref_file_arg
 @click.option("-k", "--kernel-shape", type=click.Tuple([click.INT, click.INT]), nargs=2, default=(5, 5),
@@ -196,32 +199,34 @@ def cli(verbose, quiet):
               default=Method.gain_im_offset.name, show_default=True,
               help="Homogenisation method.")
 @click.option("-od", "--output-dir", type=click.Path(exists=True, file_okay=False, writable=True),
-              help="Directory to create homogenised image(s) in. [default: use source image directory]")
+              help="Directory in which to create homogenised image(s). [default: use source image directory]")
 @click.option("-cmp", "--compare", "do_cmp", type=click.BOOL, is_flag=True, default=False,
               help=f"Statistically compare source and homogenised images with the reference.")
 @click.option("-nbo", "--no-build-ovw", "build_ovw", type=click.BOOL, is_flag=True, default=True,
-              help="Don't build overviews for the created image(s).")
+              help="Turn off overview building for the homogenised image(s).")
 @proc_crs_option
 @click.option("-c", "--conf", type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path),
               required=False, default=None, help="Path to a configuration file.")
-@click.option("-di", "--debug-image", type=click.BOOL, is_flag=True,  # TODO: normally on and flag to switch off?
+# advanced options
+@click.option("-di", "--debug-image", type=click.BOOL, is_flag=True,
               default=RasterFuse.default_homo_config['debug_image'],
-              help=f"Create a debug image for each source file containing parameter and R\N{SUPERSCRIPT TWO} values.")
+              help=f"Create a debug image, containing model parameters and R\N{SUPERSCRIPT TWO} values, for each "
+                   "source file.")
 @click.option("-mp", "--mask-partial", type=click.BOOL, is_flag=True,
               default=RasterFuse.default_homo_config['mask_partial'],
-              help=f"Mask output pixels produced from partial kernel, or source image coverage.")
+              help=f"Mask homogenised pixels produced from partial kernel coverage.")
 @multithread_option
 @click.option("-mbm", "--max-block-mem", type=click.INT, help="Maximum image block size for processing (MB)",
               default=RasterFuse.default_homo_config['max_block_mem'], show_default=True)
 @click.option("-ds", "--downsampling", type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
               default=KernelModel.default_config['downsampling'], show_default=True,
-              help="Resampling method for re-projecting from reference to source CRS.")
+              help="Resampling method for downsampling.")
 @click.option("-us", "--upsampling", type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
-              help="Resampling method for re-projecting from source to reference CRS.",
+              help="Resampling method for upsampling.",
               default=KernelModel.default_config['upsampling'], show_default=True)
 @click.option("-rit", "--r2-inpaint-thresh", type=click.FloatRange(min=0, max=1),
               default=KernelModel.default_config['r2_inpaint_thresh'], show_default=True, metavar="FLOAT 0-1",
-              help="R\N{SUPERSCRIPT TWO} threshold below which to inpaint (interpolate) model parameters from "
+              help="R\N{SUPERSCRIPT TWO} threshold below which to inpaint model parameters from "
                    "surrounding areas. For 'gain-offset' method only.")
 @click.option("--out-driver", "driver",
               type=click.Choice(set(rio.drivers.raster_driver_extensions().values()), case_sensitive=False),
@@ -232,29 +237,24 @@ def cli(verbose, quiet):
 @click.option("--out-nodata", "nodata", type=click.STRING, callback=_nodata_cb, metavar="[NUMBER|null|nan]",
               default=RasterFuse.default_out_profile['nodata'], show_default=True,
               help="Output image nodata value.")
-# @click.option('--co', '--out-profile', 'creation_options', metavar='NAME=VALUE', multiple=True,
-#               default=tuple(f'{k}={v}' for k,v in ImFuse.default_out_profile['creation_options'].items()),
-#               show_default=True, callback=_creation_options_cb,
-#               help="Driver specific creation options.  See the rasterio documentation for more information: "
-#                    "https://rasterio.readthedocs.io/en/latest/topics/image_options.html.")
 @click.option('--co', '--out-profile', 'creation_options', metavar='NAME=VALUE', multiple=True,
               default=(), callback=_creation_options_cb,
               help="Driver specific creation options.  See the rasterio documentation for more information.")
 @click.pass_context
 def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, do_cmp, build_ovw, proc_crs, conf, **kwargs):
     """Radiometrically homogenise image(s) by fusion with a reference"""
-    compare_files = []
+
+    # build configuration dictionaries for ImFuse
     config = {}
     config['homo_config'] = _update_existing_keys(RasterFuse.default_homo_config, **kwargs)
     config['model_config'] = _update_existing_keys(RasterFuse.default_model_config, **kwargs)
-    # if (kwargs['driver'] != ImFuse.default_out_profile['driver'] and
-    #         ctx.get_parameter_source('creation_options') == ParameterSource.DEFAULT):
-    #     kwargs['creation_options'] = {}
+
+    # use the default creation_options if no other driver or creation_options have been specified
     if (ctx.get_parameter_source('driver') == ParameterSource.DEFAULT and
             ctx.get_parameter_source('creation_options') == ParameterSource.DEFAULT):
-        # if no other driver or creation_options have been specified, use the defaults
         kwargs['creation_options'] = RasterFuse.default_out_profile['creation_options']
     config['out_profile'] = _update_existing_keys(RasterFuse.default_out_profile, **kwargs)
+    compare_files = []
 
     # iterate over and homogenise source file(s)
     try:
@@ -265,27 +265,22 @@ def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, do_cmp, buil
                                          param_hint='src_file')
 
             for src_filename in src_file_path.parent.glob(src_file_path.name):
-                if output_dir is not None:
-                    homo_root = pathlib.Path(output_dir)
-                else:
-                    homo_root = src_filename.parent
 
                 logger.info(f'\nHomogenising {src_filename.name}')
-                start_ttl = datetime.datetime.now()
-                him = RasterFuse(src_filename, ref_file, method=method, kernel_shape=kernel_shape, proc_crs=proc_crs,
-                                 **config)
-
-                # create output image filename and homogenise
+                # create output image filename
+                homo_root = pathlib.Path(output_dir) if output_dir is not None else src_filename.parent
                 post_fix = _create_homo_postfix(proc_crs=proc_crs, method=method, kernel_shape=kernel_shape,
                                                 driver=config['out_profile']['driver'])
                 homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
+
+                # create fusion object and homogenise
+                start_time = timer()
+                him = RasterFuse(src_filename, ref_file, method=method, kernel_shape=kernel_shape, proc_crs=proc_crs,
+                                 **config)
                 him.homogenise(homo_filename)
 
-                # ttl_time = (datetime.datetime.now() - start_ttl)
-                # logger.info(f'Completed in {ttl_time.total_seconds():.2f} secs')
+                # build overviews
                 if build_ovw:
-                    # build overviews
-                    # start_ttl = datetime.datetime.now()
                     logger.info(f'Building overviews for {homo_filename.name}')
                     him.build_overviews(homo_filename)
 
@@ -294,11 +289,11 @@ def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, do_cmp, buil
                         logger.info(f'Building overviews for {param_out_filename.name}')
                         him.build_overviews(param_out_filename)
 
-                ttl_time = (datetime.datetime.now() - start_ttl)
-                logger.info(f'Completed in {ttl_time.total_seconds():.2f} secs')
-                # copy individual src and homogenised filenames into context for chained downstream commands to re-use
-                # ctx.obj['src_file'] += (src_filename, homo_filename)
-                compare_files += (src_filename, homo_filename)
+                logger.info(f'Completed in {timer() - start_time:.2f} secs')
+
+                compare_files += (src_filename, homo_filename)  # build a list of files to pass to compare
+
+        # compare source and homogenised files with reference (invokes compare command with relevant parameters)
         if do_cmp:
             ctx.invoke(compare, src_file=compare_files, ref_file=ref_file, proc_crs=proc_crs,
                        multithread=kwargs['multithread'])
@@ -310,6 +305,7 @@ def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, do_cmp, buil
 cli.add_command(fuse)
 
 
+# compare command
 @click.command()
 @src_file_arg
 @ref_file_arg
@@ -317,11 +313,12 @@ cli.add_command(fuse)
 @multithread_option
 @click.option("-o", "--output",
               type=click.Path(exists=False, dir_okay=False, writable=True, resolve_path=True, path_type=pathlib.Path),
-              help="Write comparison results in json format.")
+              help="Write comparison results to a json file.")
 def compare(src_file, ref_file, proc_crs, multithread, output):
     """Statistically compare image(s) with a reference"""
     try:
         res_dict = {}
+        # iterate over source files, comparing with reference
         for src_file_spec in src_file:
             src_file_path = pathlib.Path(src_file_spec)
             if len(list(src_file_path.parent.glob(src_file_path.name))) == 0:
@@ -330,26 +327,28 @@ def compare(src_file, ref_file, proc_crs, multithread, output):
 
             for src_filename in src_file_path.parent.glob(src_file_path.name):
                 logger.info(f'\nComparing {src_filename.name}')
-                start_ttl = datetime.datetime.now()
+                start_time = timer()
                 cmp = RasterCompare(src_filename, ref_file, proc_crs=proc_crs, multithread=multithread)
                 # TODO: what if file stems are identical
-                res_dict[src_filename.stem] = cmp.compare()
-                ttl_time = (datetime.datetime.now() - start_ttl)
-                logger.info(f'Completed in {ttl_time.total_seconds():.2f} secs')
-        # print results
+                res_dict[src_filename] = cmp.compare()
+                logger.info(f'Completed in {timer() - start_time:.2f} secs')
+
+        # print a results table per source file
         summary_dict = {}
         for src_file, _res_dict in res_dict.items():
             res_df = pd.DataFrame.from_dict(_res_dict, orient='index')
             res_str = res_df.to_string(float_format="{:.2f}".format, index=True, justify="center",
-                                                        index_names=False)
+                                       index_names=False)
             logger.info(f'\n\n{src_file}:\n\n{res_str}')
             summary_dict[src_file] = _res_dict['Mean']
 
+        # print a summary results table comparing all source files
         if len(summary_dict) > 1:
             summ_df = pd.DataFrame.from_dict(summary_dict, orient='index')
             summ_df = summ_df.rename(columns=dict(zip(summ_df.columns, ('Mean ' + summ_df.columns))))
-            summ_str = summ_df.to_string(float_format="{:.2f}".format, index=True, justify="center",
-                                                          index_names=False)
+            summ_df.insert(0, 'File', [fn.name for fn in summ_df.index])
+            summ_str = summ_df.to_string(float_format="{:.2f}".format, index=False, justify="center",
+                                         index_names=False)
             logger.info(f'\n\nSummary:\n\n{summ_str}')
 
         if output is not None:
