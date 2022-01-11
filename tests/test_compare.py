@@ -29,6 +29,7 @@ from click.testing import CliRunner
 
 from homonim import root_path, cli
 from homonim.compare import RasterCompare
+from homonim.enums import ProcCrs
 
 
 class TestHomonim(unittest.TestCase):
@@ -55,7 +56,7 @@ class TestHomonim(unittest.TestCase):
         self.assertTrue(all(band_df.loc['Mean'] == band_df.iloc[-1]), 'Means are correct')
         self.assertTrue(all(band_df['r2'] >= 0) and all(band_df['r2'] <= 1), 'r2 in range')
 
-    def _test_compare_api(self, src_filename, ref_filename, proc_crs='auto'):
+    def _test_compare_api(self, src_filename, ref_filename, proc_crs=ProcCrs.auto):
         cmp = RasterCompare(src_filename, ref_filename, proc_crs=proc_crs, multithread=self._config['multithread'])
         band_dict = cmp.compare()
         self._test_compare_dict(src_filename, band_dict)
@@ -65,7 +66,7 @@ class TestHomonim(unittest.TestCase):
         src_filename = root_path.joinpath('data/inputs/test_example/source/3324c_2015_1004_05_0182_RGB.tif')
         ref_filename = root_path.joinpath(
             'data/inputs/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif')
-        self._test_compare_api(src_filename, ref_filename, proc_crs='ref')
+        self._test_compare_api(src_filename, ref_filename, proc_crs=ProcCrs.ref)
 
     def test_compare_api_src_space(self):
         """Test compare API with model_crs=ref"""
@@ -73,7 +74,7 @@ class TestHomonim(unittest.TestCase):
             'data/inputs/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.vrt')
         ref_filename = root_path.joinpath(
             'data/inputs/test_example/reference/COPERNICUS-S2-20151003T075826_20151003T082014_T35HKC_B432_Byte.tif')
-        self._test_compare_api(src_filename, ref_filename, proc_crs='src')
+        self._test_compare_api(src_filename, ref_filename, proc_crs=ProcCrs.src)
 
     def test_cli(self):
         """Test compare CLI"""

@@ -28,7 +28,8 @@ import pandas as pd
 from rasterio.warp import Resampling
 from tqdm import tqdm
 
-from homonim.raster_pair import _inspect_image_pair, RasterPairReader
+from homonim.raster_pair import RasterPairReader
+from homonim.enums import ProcCrs
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,7 @@ logger = logging.getLogger(__name__)
 class RasterCompare():
     default_config = dict(multithread=True)
 
-    def __init__(self, src_filename, ref_filename, proc_crs='auto', multithread=default_config['multithread']):
+    def __init__(self, src_filename, ref_filename, proc_crs=ProcCrs.auto, multithread=default_config['multithread']):
         """
         Class for comparing images
 
@@ -50,17 +51,21 @@ class RasterCompare():
         self._src_filename = pathlib.Path(src_filename)
         self._ref_filename = pathlib.Path(ref_filename)
         self._multithread = multithread
-        self._src_bands, self._ref_bands, self._proc_crs = _inspect_image_pair(self._src_filename, self._ref_filename,
-                                                                               proc_crs)
+
+        # check src and ref image validity and get proc_crs
+        if not isinstance(proc_crs, ProcCrs):
+            raise ValueError("'proc_crs' must be an instance of homonim.enums.ProcCrs")
+        self._raster_pair =  RasterPairReader(self._src_filename, self._ref_filename, proc_crs=proc_crs)
+        self._proc_crs = self._raster_pair.proc_crs
 
     def compare(self):
         res_dict = OrderedDict()
         bar_format = '{l_bar}{bar}|{n_fmt}/{total_fmt} bands [{elapsed}<{remaining}]'
-        with RasterPairReader(self._src_filename, self._ref_filename, proc_crs=self._proc_crs) as raster_pair:
+        with self._raster_pair as raster_pair:
             def process_band(block_pair):
                 src_ra, ref_ra = raster_pair.read(block_pair)
 
-                if self._proc_crs == 'ref':
+                if self._proc_crs == ProcCrs.ref:
                     src_ra = src_ra.reproject(**ref_ra.proj_profile, resampling=Resampling.average)
                 else:
                     ref_ra = ref_ra.reproject(**src_ra.proj_profile, resampling=Resampling.average)

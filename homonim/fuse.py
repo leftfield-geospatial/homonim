@@ -25,20 +25,17 @@ import pstats
 import threading
 import tracemalloc
 from collections import namedtuple
-from itertools import product
 
 import numpy as np
 import rasterio as rio
-from rasterio.vrt import WarpedVRT
 from rasterio.warp import Resampling
-from rasterio.windows import Window
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from homonim.errors import BlockSizeError
-from homonim.raster_pair import _inspect_image_pair, RasterPairReader, BlockPair
 from homonim.kernel_model import KernelModel, RefSpaceModel, SrcSpaceModel
-from homonim.raster_array import RasterArray, round_window_to_grid, expand_window_to_grid
+from homonim.raster_array import RasterArray
+from homonim.raster_pair import RasterPairReader, BlockPair
+from homonim.enums import Method, ProcCrs
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +59,7 @@ class RasterFuse():
                                                      interleave='band', photometric=None))
     default_model_config = KernelModel.default_config
 
-    def __init__(self, src_filename, ref_filename, method, kernel_shape, proc_crs='auto',
+    def __init__(self, src_filename, ref_filename, method, kernel_shape, proc_crs=ProcCrs.auto,
                  homo_config=default_homo_config, model_config=default_model_config, out_profile=default_out_profile):
         """
         Class for homogenising images
@@ -80,43 +77,46 @@ class RasterFuse():
         out_profile: OutConfig, optional
 
         """
+        if not isinstance(proc_crs, ProcCrs):
+            raise ValueError("'proc_crs' must be an instance of homonim.enums.ProcCrs")
+        if not isinstance(method, Method):
+            raise ValueError("'method' must be an instance of homonim.enums.Method")
+        self._method = method
+
+        self._kernel_shape = np.array(kernel_shape).astype(int)
+        if not np.all(np.mod(self._kernel_shape, 2) == 1):
+            raise ValueError(f'Invalid kernel_shape: {self._kernel_shape}, must be odd in both dimensions')
+        if not np.all(np.array(self._kernel_shape) >= 1):
+            raise ValueError(f'Invalid kernel_shape: {self._kernel_shape} must be one or more in both dimensions')
+
         self._src_filename = pathlib.Path(src_filename)
         self._ref_filename = pathlib.Path(ref_filename)
-        if not method in ['gain', 'gain-im-offset', 'gain-offset']:
-            raise ValueError('method should be one of "gain", "gain-im-offset" or "gain-offset"')
-        self._method = method
-        if not np.all(np.mod(kernel_shape, 2) == 1):
-            raise ValueError('kernel_shape must be odd in both dimensions')
-        self._kernel_shape = np.array(kernel_shape).astype(int)
         self._config = homo_config
         self._out_profile = out_profile
         self._profile = False
 
         # check the ref and src images via RasterPairReader, and get the proc_crs attribute
-        raster_pair_args = dict(proc_crs=proc_crs, overlap=np.floor(self._kernel_shape/2).astype('int'),
-                            max_block_mem=self._config['max_block_mem'])
-        with RasterPairReader(src_filename, ref_filename, **raster_pair_args) as raster_pair:
-            self._proc_crs = raster_pair.proc_crs
+        raster_pair_args = dict(proc_crs=proc_crs, overlap=np.floor(self._kernel_shape / 2).astype('int'),
+                                max_block_mem=self._config['max_block_mem'])
+        self._raster_pair =  RasterPairReader(src_filename, ref_filename, **raster_pair_args)
+        self._proc_crs = self._raster_pair.proc_crs
 
-        if self._proc_crs == 'ref':
+        if self._proc_crs == ProcCrs.ref:
             self._model = RefSpaceModel(method=method, kernel_shape=kernel_shape,
                                         debug_image=self._config['debug_image'], **model_config)
-        elif self._proc_crs == 'src':
+        elif self._proc_crs == ProcCrs.src:
             self._model = SrcSpaceModel(method=method, kernel_shape=kernel_shape,
                                         debug_image=self._config['debug_image'], **model_config)
         else:
-            raise ValueError(f'Unknown proc_crs option: {proc_crs}')
-
+            raise ValueError(f'Invalid proc_crs: {proc_crs}, should be resolved to ProcCrs.ref or ProcCrs.src')
 
     @property
     def method(self):
         return self._method
 
-
     @property
     def kernel_shape(self):
         return self._kernel_shape
-
 
     def _profile_from(self, in_profile):
         """ create a raster profile by combining an input profile with the configuration profile """
@@ -148,7 +148,7 @@ class RasterFuse():
 
     def _create_debug_profile(self, raster_pair: RasterPairReader):
         """Create a rasterio profile for the debug parameter image based on a reference or source profile"""
-        init_profile = raster_pair.ref_im.profile if raster_pair.proc_crs == 'ref' else raster_pair.src_im.profile
+        init_profile = raster_pair.ref_im.profile if raster_pair.proc_crs == ProcCrs.ref else raster_pair.src_im.profile
         debug_profile = self._profile_from(init_profile)
         debug_profile.update(dtype=RasterArray.default_dtype, count=len(raster_pair.src_bands) * 3,
                              nodata=RasterArray.default_nodata)
@@ -177,7 +177,7 @@ class RasterFuse():
             # and so there are no more than 8 levels
             max_ovw_levels = int(np.min(np.log2(im.shape)))
             num_ovw_levels = np.min([8, max_ovw_levels - 8])
-            ovw_levels = [2**m for m in range(1, num_ovw_levels + 1)]
+            ovw_levels = [2 ** m for m in range(1, num_ovw_levels + 1)]
             im.build_overviews(ovw_levels, Resampling.average)
 
     def _set_homo_metadata(self, filename):
@@ -191,7 +191,7 @@ class RasterFuse():
         """
         filename = pathlib.Path(filename)
         meta_dict = dict(HOMO_SRC_FILE=self._src_filename.name, HOMO_REF_FILE=self._ref_filename.name,
-                         HOMO_SPACE=self._proc_crs, HOMO_METHOD=self._method, HOMO_KERNEL_SHAPE=self._kernel_shape,
+                         HOMO_SPACE=self._proc_crs.name, HOMO_METHOD=self._method, HOMO_KERNEL_SHAPE=self._kernel_shape,
                          HOMO_CONF=str(self._config), HOMO_MODEL_CONF=str(self._model.config))
 
         if not filename.exists():
@@ -218,7 +218,7 @@ class RasterFuse():
         """
         filename = pathlib.Path(filename)
         meta_dict = dict(HOMO_SRC_FILE=self._src_filename.name, HOMO_REF_FILE=self._ref_filename.name,
-                         HOMO_SPACE=self._proc_crs, HOMO_METHOD=self._method,
+                         HOMO_SPACE=self._proc_crs.name, HOMO_METHOD=self._method,
                          HOMO_KERNEL_SHAPE=tuple(self._kernel_shape),
                          HOMO_CONF=str(self._config), HOMO_MODEL_CONF=str(self._model.config))
 
@@ -252,11 +252,8 @@ class RasterFuse():
         dbg_lock = threading.Lock()
         accum_stats = np.array([0., 0.])
         bar_format = '{l_bar}{bar}|{n_fmt}/{total_fmt} blocks [{elapsed}<{remaining}]'
-        raster_pair_args = dict(proc_crs=self._proc_crs, overlap=np.floor(self._kernel_shape/2).astype('int'),
-                            max_block_mem=self._config['max_block_mem'])
 
-        with logging_redirect_tqdm(), RasterPairReader(
-                self._src_filename, self._ref_filename, **raster_pair_args) as raster_pair:
+        with logging_redirect_tqdm(), self._raster_pair as raster_pair:
             # TODO: use im_pair src_win to create expanded profile?
             out_profile = self._create_out_profile(raster_pair)
             out_im = rio.open(out_filename, 'w', **out_profile)
@@ -290,7 +287,10 @@ class RasterFuse():
                             # accum_stats += [param_ra.array[2, param_mask].sum(), param_mask.sum()]
                             #
                             indexes = np.arange(param_ra.count) * len(raster_pair.src_bands) + block_pair.band_i + 1
-                            dbg_out_block = block_pair.ref_out_block if self._proc_crs == 'ref' else block_pair.src_out_block
+                            if self._proc_crs == ProcCrs.ref:
+                                dbg_out_block = block_pair.ref_out_block
+                            else:
+                                dbg_out_block = block_pair.src_out_block
                             param_ra.to_rio_dataset(dbg_im, indexes=indexes, window=dbg_out_block)
 
                 if self._config['multithread']:

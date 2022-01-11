@@ -23,6 +23,7 @@ import numpy as np
 from rasterio.fill import fillnodata
 
 from homonim.raster_array import RasterArray, nan_equals
+from homonim.enums import Method
 
 
 class KernelModel():
@@ -30,8 +31,8 @@ class KernelModel():
 
     def __init__(self, method, kernel_shape, debug_image, r2_inpaint_thresh=default_config['r2_inpaint_thresh'],
                  downsampling=default_config['downsampling'], upsampling=default_config['upsampling']):
-        if not method in ['gain', 'gain-im-offset', 'gain-offset']:
-            raise ValueError('method should be one of "gain", "gain-im-offset" or "gain-offset"')
+        if not isinstance(method, Method):
+            raise ValueError("'method' should be an instance of homonim.enums.Method")
 
         self._method = method
         if not np.all(np.mod(kernel_shape, 2) == 1):
@@ -336,9 +337,9 @@ class KernelModel():
             kernel_shape = self._kernel_shape
         kernel_shape = tuple(kernel_shape)  # force to tuple for opencv
 
-        if self._method == 'gain':
+        if self._method == Method.gain:
             param_ra = self._fit_gain(ref_ra, src_ra, kernel_shape=kernel_shape)
-        elif self._method == 'gain-im-offset':  # normalise src_ds_ra in place
+        elif self._method == Method.gain_im_offset:  # normalise src_ds_ra in place
             param_ra = self._fit_gain_im_offset(ref_ra, src_ra, kernel_shape=kernel_shape)
         else:
             param_ra = self._fit_gain_offset(ref_ra, src_ra, kernel_shape=kernel_shape)

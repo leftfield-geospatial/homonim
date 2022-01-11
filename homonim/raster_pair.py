@@ -33,6 +33,7 @@ from typing import Tuple
 
 from homonim.errors import UnsupportedImageError, ImageContentError, BlockSizeError, IoError
 from homonim.raster_array import RasterArray, expand_window_to_grid, round_window_to_grid
+from homonim.enums import ProcCrs
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +41,7 @@ logger = logging.getLogger(__name__)
 def _inspect_image(im_filename):
     im_filename = pathlib.Path(im_filename)
     if not im_filename.exists():
-        raise FileNotFoundError(f'{im_filename.name} does not exist')
+        raise FileNotFoundError(f'{im_filename} does not exist')
 
     with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(im_filename, 'r') as im:
         try:
@@ -61,7 +62,7 @@ def _inspect_image(im_filename):
     return im_bands
 
 
-def _inspect_image_pair(src_filename, ref_filename, proc_crs='auto'):
+def _inspect_image_pair(src_filename, ref_filename, proc_crs=ProcCrs.auto):
     # check ref_filename has enough bands
     src_bands = _inspect_image(src_filename)
     ref_bands = _inspect_image(ref_filename)
@@ -85,15 +86,15 @@ def _inspect_image_pair(src_filename, ref_filename, proc_crs='auto'):
 
             src_pixel_smaller = np.prod(src_im.res) < np.prod(ref_im.res)
             cmp_str = "smaller" if src_pixel_smaller else "larger"
-            if proc_crs == 'auto':
-                proc_crs = 'ref' if src_pixel_smaller else 'src'
-                logger.debug(f'Source pixel size is {cmp_str} than the reference, '
-                             f'using model_crs="{proc_crs}"')
-            elif ((proc_crs == 'src' and src_pixel_smaller) or
-                  (proc_crs == 'ref' and not src_pixel_smaller)):
-                rec_crs_str = "ref" if src_pixel_smaller else "src"
-                logger.warning(f'model_crs="{rec_crs_str}" is recommended when '
-                               f'the source image pixel size is {cmp_str} than the reference.')
+            if proc_crs == ProcCrs.auto:
+                proc_crs = ProcCrs.ref if src_pixel_smaller else ProcCrs.src
+                logger.debug(f"Source pixel size {src_im.res} is {cmp_str} than the reference {ref_im.res}, "
+                             f"using proc_crs='{proc_crs}'")
+            elif ((proc_crs == ProcCrs.src and src_pixel_smaller) or
+                  (proc_crs == ProcCrs.ref and not src_pixel_smaller)):
+                rec_crs_str = ProcCrs.ref if src_pixel_smaller else ProcCrs.src
+                logger.warning(f"proc_crs='{rec_crs_str}' is recommended when "
+                               f"the source image pixel size is {cmp_str} than the reference.")
 
     return src_bands, ref_bands, proc_crs
 
@@ -101,9 +102,11 @@ def _inspect_image_pair(src_filename, ref_filename, proc_crs='auto'):
 BlockPair = namedtuple('BlockPair', ['band_i', 'src_in_block', 'ref_in_block', 'src_out_block', 'ref_out_block', 'outer'])
 
 class RasterPairReader():
-    def __init__(self, src_filename, ref_filename, proc_crs='auto', overlap=(0,0), max_block_mem=np.inf):
+    def __init__(self, src_filename, ref_filename, proc_crs=ProcCrs.auto, overlap=(0,0), max_block_mem=np.inf):
         self._src_filename = pathlib.Path(src_filename)
         self._ref_filename = pathlib.Path(ref_filename)
+        if not isinstance(proc_crs, ProcCrs):
+            raise ValueError("'proc_crs' must be an instance of homonim.enums.ProcCrs")
         self._proc_crs = proc_crs
         self._overlap = overlap if not np.isscalar(overlap) else (overlap, overlap)
         self._max_block_mem = max_block_mem
@@ -116,6 +119,8 @@ class RasterPairReader():
         self._ref_win = None
         self._crop_ref_profile = None
         self._src_profile = None
+        self._src_bands, self._ref_bands, self._proc_crs = _inspect_image_pair(self._src_filename, self._ref_filename,
+                                                                               self._proc_crs)
 
     @property
     def src_im(self)-> rasterio.DatasetReader:
@@ -134,39 +139,17 @@ class RasterPairReader():
         return self._ref_bands
 
     @property
-    def proc_crs(self)-> str:
+    def proc_crs(self)-> ProcCrs:
         return self._proc_crs
-    # @property
-    # def src_profile(self)-> rasterio.DatasetReader:
-    #     return self._src_im.profile if self._src_im else {}
-    #
-    # @property
-    # def ref_profile(self)-> rasterio.DatasetReader:
-    #     return self._crop_ref_profile if self._ref_im else {}
 
     def __enter__(self):
         self._env = rio.Env(GDAL_NUM_THREADS='ALL_CPUs').__enter__()
         self.open()
         return self
 
-
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
-        if self._env:
-            self._env.__exit__(exc_type, exc_val, exc_tb)
-            self._env = None
-
-    def _init_pair(self):
-        self._src_bands, self._ref_bands, self._proc_crs = _inspect_image_pair(self._src_filename, self._ref_filename,
-                                                                               self._proc_crs)
-        # create image-wide windows that allow re-projections between src and ref without loss of data
-        self._ref_win = expand_window_to_grid(self._ref_im.window(*self._src_im.bounds))
-        self._src_win = expand_window_to_grid(self._src_im.window(*self._ref_im.window_bounds(self._ref_win)))
-
-        self._crop_ref_profile = self._ref_im.profile.copy()
-        self._crop_ref_profile['transform'] = self._ref_im.window_transform(self._ref_win)
-        self._crop_ref_profile['height'] = self._ref_win.height
-        self._crop_ref_profile['width'] = self._ref_win.width
+        self._env.__exit__(exc_type, exc_val, exc_tb)
 
 
     def open(self):
@@ -177,24 +160,31 @@ class RasterPairReader():
             # open the image pair in the same CRS, re-projecting the lower resolution image into the CRS of the other
             logger.warning(f'Source and reference image pair are not in the same CRS: {self._src_filename.name} and '
                            f'{self._ref_filename.name}')
-            if self._proc_crs == 'ref':
+            if self._proc_crs == ProcCrs.ref:
                 self._ref_im = WarpedVRT(self._ref_im, crs=self._src_im.crs, resampling=Resampling.bilinear)
             else:
                 self._src_im = WarpedVRT(self._src_im, crs=self._ref_im.crs, resampling=Resampling.bilinear)
-        self._init_pair()
+
+        # create image-wide windows that allow re-projections between src and ref without loss of data
+        self._ref_win = expand_window_to_grid(self._ref_im.window(*self._src_im.bounds))
+        self._src_win = expand_window_to_grid(self._src_im.window(*self._ref_im.window_bounds(self._ref_win)))
+
+        self._crop_ref_profile = self._ref_im.profile.copy()
+        self._crop_ref_profile['transform'] = self._ref_im.window_transform(self._ref_win)
+        self._crop_ref_profile['height'] = self._ref_win.height
+        self._crop_ref_profile['width'] = self._ref_win.width
+
 
     def close(self):
-        if self._src_im:
+        if not self._src_im.closed:
             self._src_im.close()
-            self._src_im = None
-        if self._ref_im:
+        if not self._ref_im.closed:
             self._ref_im.close()
-            self._ref_im = None
 
 
     def read(self, block: BlockPair):
-        if not self._src_im or self._src_im.closed or not self._ref_im or self._ref_im.closed :
-            raise IoError(f'Source and reference image pair are closed: {self._src_filename.name} and '
+        if not self._src_im or not self._ref_im or self._src_im.closed or self._ref_im.closed :
+            raise IoError(f'The raster pair has not been opened: {self._src_filename.name} and '
                            f'{self._ref_filename.name}')
         with self._src_lock:
             src_ra = RasterArray.from_rio_dataset(self._src_im, indexes=self._src_bands[block.band_i],
@@ -225,14 +215,14 @@ class RasterPairReader():
     def block_pairs(self):
         """ Iterator over co-located pairs of source and reference image blocks.  For use in read(). """
 
-        if not self._src_im or self._src_im.closed or not self._ref_im or self._ref_im.closed :
-            raise IoError(f'Source and reference image pair are closed: {self._src_filename.name} and '
-                          f'{self._ref_filename.name}')
+        if not self._src_im or not self._ref_im or self._src_im.closed or self._ref_im.closed :
+            raise IoError(f'The raster pair has not been opened: {self._src_filename.name} and '
+                           f'{self._ref_filename.name}')
 
         # assign 'src' and 'ref' to 'proc' and 'other' according to proc_crs
         # (blocks are first formed in the 'proc' (usually the lowest resolution) image space, from which the equivalent
         # blocks in 'other' image space are then inferred)
-        if self._proc_crs == 'ref':
+        if self._proc_crs == ProcCrs.ref:
             proc_win, proc_im, other_im = (self._ref_win, self._ref_im, self._src_im)
         else:
             proc_win, proc_im, other_im = (self._src_win, self._src_im, self._ref_im)
@@ -282,7 +272,7 @@ class RasterPairReader():
                 other_out_block = round_window_to_grid(other_im.window(*proc_im.window_bounds(proc_out_block)))
 
                 # form the BlockPair named tuple, assigning 'proc' and 'other' back to 'src' and 'ref' for use in read()
-                if self._proc_crs == 'ref':
+                if self._proc_crs == ProcCrs.ref:
                     block_pair = BlockPair(band_i, other_in_block, proc_in_block, other_out_block, proc_out_block,
                                            outer)
                 else:
