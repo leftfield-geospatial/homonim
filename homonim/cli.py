@@ -330,7 +330,7 @@ def compare(src_file, ref_file, proc_crs, multithread, output):
                 start_time = timer()
                 cmp = RasterCompare(src_filename, ref_file, proc_crs=proc_crs, multithread=multithread)
                 # TODO: what if file stems are identical
-                res_dict[src_filename] = cmp.compare()
+                res_dict[str(src_filename)] = cmp.compare()
                 logger.info(f'Completed in {timer() - start_time:.2f} secs')
 
         # print a results table per source file
@@ -346,7 +346,7 @@ def compare(src_file, ref_file, proc_crs, multithread, output):
         if len(summary_dict) > 1:
             summ_df = pd.DataFrame.from_dict(summary_dict, orient='index')
             summ_df = summ_df.rename(columns=dict(zip(summ_df.columns, ('Mean ' + summ_df.columns))))
-            summ_df.insert(0, 'File', [fn.name for fn in summ_df.index])
+            summ_df.insert(0, 'File', [pathlib.Path(fn).name for fn in summ_df.index])
             summ_str = summ_df.to_string(float_format="{:.2f}".format, index=False, justify="center",
                                          index_names=False)
             logger.info(f'\n\nSummary:\n\n{summ_str}')

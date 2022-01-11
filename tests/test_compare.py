@@ -92,7 +92,6 @@ class TestHomonim(unittest.TestCase):
 
         src_file_list = glob.glob(str(src_wildcard))
         for src_filename in src_file_list:
-            src_filename = pathlib.Path(src_filename)
-            self.assertTrue(src_filename.stem in cmp_dict, 'Comparison results file contain src file key')
-            band_dict = cmp_dict[src_filename.stem]
-            self._test_compare_dict(src_filename, band_dict)
+            self.assertTrue(src_filename in cmp_dict, 'Comparison results file contain src file key')
+            band_dict = cmp_dict[src_filename]
+            self._test_compare_dict(pathlib.Path(src_filename), band_dict)

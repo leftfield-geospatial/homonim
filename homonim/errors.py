@@ -27,7 +27,7 @@ class UnsupportedImageError(HomonimError):
 
 
 class ImageContentError(HomonimError):
-    """Raised when reference image has insufficient coverage or bands"""
+    """Raised when an image has insufficient coverage or bands"""
 
 
 class BlockSizeError(HomonimError):
@@ -42,12 +42,9 @@ class ImageFormatError(HomonimError):
     """Raised when an image format is invalid"""
 
 
-class RasterArrayFormatError(HomonimError):
-    """Raised when a RasterArray format is invalid"""
-
-
 class IoError(HomonimError):
-    """Raised when a reading to writing from a closed dataset"""
+    """Raised when reading or writing from/to a closed dataset"""
+
 
 class BandCountMismatchWarning(UserWarning):
     """Warn when the reference and source band counts don't match"""
@@ -55,7 +52,3 @@ class BandCountMismatchWarning(UserWarning):
 
 class NodataMaskWarning(UserWarning):
     """Warn when an image has no mask or nodata values"""
-
-
-class ModelCrsWarning(UserWarning):
-    """Warn when the model CRS appears to be incorrectly set"""

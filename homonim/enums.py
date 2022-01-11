@@ -19,13 +19,13 @@
 from enum import Enum
 
 class Method(str, Enum):
-    """Enumeration for homogenisation method"""
+    """Enumeration for the homogenisation method"""
     gain = 'gain'
     gain_im_offset = 'gain_im_offset'
     gain_offset = 'gain_offset'
 
 class ProcCrs(str, Enum):
-    """Enumeration for processing CRS (co-oridinate system)"""
+    """Enumeration for the processing space (image co-ordinate system and resolution)"""
     auto = 'auto'
     src = 'src'
     ref = 'ref'
