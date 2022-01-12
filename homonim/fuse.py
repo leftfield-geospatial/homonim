@@ -95,9 +95,12 @@ class RasterFuse():
         self._out_profile = out_profile
         self._profile = False
 
-        # check the ref and src images via RasterPairReader, and get the proc_crs attribute
-        raster_pair_args = dict(proc_crs=proc_crs, overlap=np.floor(self._kernel_shape / 2).astype('int'),
+        # block overlap should be half the kernel shape to ensure full kernel coverage of block edges,
+        # and at least 1 pixel to prevent extrapolation (rather than interpolation) when up-sampling.
+        overlap = np.fmax(np.floor(self._kernel_shape / 2).astype('int'), (1, 1))
+        raster_pair_args = dict(proc_crs=proc_crs, overlap=overlap,
                                 max_block_mem=self._config['max_block_mem'])
+        # check the ref and src images via RasterPairReader, and get the proc_crs attribute
         self._raster_pair =  RasterPairReader(src_filename, ref_filename, **raster_pair_args)
         self._proc_crs = self._raster_pair.proc_crs
 
