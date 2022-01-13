@@ -22,26 +22,45 @@ import cv2 as cv
 import numpy as np
 from rasterio.fill import fillnodata
 
-from homonim.raster_array import RasterArray, nan_equals
 from homonim.enums import Method
+from homonim.raster_array import RasterArray
+from homonim.utils import nan_equals
 
 
 class KernelModel():
+    """
+    A base class for sliding kernel linear modelling between images.
+
+    """
     default_config = dict(downsampling='cubic_spline', upsampling='average', r2_inpaint_thresh=0.25)
 
-    def __init__(self, method, kernel_shape, debug_image, r2_inpaint_thresh=default_config['r2_inpaint_thresh'],
+    def __init__(self, method, kernel_shape, debug_image=False, r2_inpaint_thresh=default_config['r2_inpaint_thresh'],
                  downsampling=default_config['downsampling'], upsampling=default_config['upsampling']):
+        """
+        Construct a KernelModel.
+        Parameters
+        ----------
+        method
+        kernel_shape
+        debug_image
+        r2_inpaint_thresh
+        downsampling
+        upsampling
+        """
+
         if not isinstance(method, Method):
             raise ValueError("'method' should be an instance of homonim.enums.Method")
-
         self._method = method
-        if not np.all(np.mod(kernel_shape, 2) == 1):
-            raise ValueError('kernel_shape must be odd in both dimensions')
         self._kernel_shape = np.array(kernel_shape).astype(int)
-        self._debug_image = debug_image  # TODO: always find R2?
+        if not np.all(np.mod(self._kernel_shape, 2) == 1):
+            raise ValueError("'kernel_shape' must be odd in both dimensions")
+        if not np.all(self._kernel_shape >= 1):
+            raise ValueError("'kernel_shape' must be a minimum of one in both dimensions")
+        self._debug_image = debug_image
         self._r2_inpaint_thresh = r2_inpaint_thresh
         self._downsampling = downsampling
         self._upsampling = upsampling
+
 
     @property
     def method(self):

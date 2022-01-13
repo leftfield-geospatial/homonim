@@ -31,9 +31,10 @@ from rasterio.warp import Resampling, transform_bounds
 from rasterio.windows import Window
 from typing import Tuple
 
-from homonim.errors import UnsupportedImageError, ImageContentError, BlockSizeError, IoError
-from homonim.raster_array import RasterArray, expand_window_to_grid, round_window_to_grid
+from homonim import errors
+from homonim.raster_array import RasterArray
 from homonim.enums import ProcCrs
+from homonim import utils
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,7 @@ def _inspect_image(im_filename):
             tmp_array = im.read(1, window=im.block_window(1, 0, 0))
         except Exception as ex:
             if im.profile['compress'] == 'jpeg':  # assume it is a 12bit JPEG
-                raise UnsupportedImageError(
+                raise errors.UnsupportedImageError(
                     f'Could not read image {im_filename.name}.  JPEG compression with NBITS==12 is unsupported, '
                     f'you probably need to recompress this image.'
                 )
@@ -67,7 +68,7 @@ def _inspect_image_pair(src_filename, ref_filename, proc_crs=ProcCrs.auto):
     src_bands = _inspect_image(src_filename)
     ref_bands = _inspect_image(ref_filename)
     if len(src_bands) > len(ref_bands):
-        raise ImageContentError(f'{ref_filename.name} has fewer non-alpha bands than {src_filename.name}.')
+        raise errors.ImageContentError(f'{ref_filename.name} has fewer non-alpha bands than {src_filename.name}.')
 
     # warn if band counts don't match
     if len(src_bands) != len(ref_bands):
@@ -77,12 +78,12 @@ def _inspect_image_pair(src_filename, ref_filename, proc_crs=ProcCrs.auto):
     with rio.open(src_filename, 'r') as src_im:
         with WarpedVRT(rio.open(ref_filename, 'r'), crs=src_im.crs) as ref_im:
             # check coverage
-            _ref_win = expand_window_to_grid(ref_im.window(*src_im.bounds), expand_pixels=(1, 1))
+            _ref_win = utils.expand_window_to_grid(ref_im.window(*src_im.bounds), expand_pixels=(1, 1))
             _ref_ul = np.array((_ref_win.row_off, _ref_win.col_off))
             _ref_shape = np.array((_ref_win.height, _ref_win.width))
             # if not box(*ref_im.bounds).covers(box(*src_im.bounds)):
             if np.any(_ref_ul < 0) or np.any(_ref_shape > ref_im.shape):
-                raise ImageContentError(f'Reference extent does not cover image: {src_filename.name}')
+                raise errors.ImageContentError(f'Reference extent does not cover image: {src_filename.name}')
 
             src_pixel_smaller = np.prod(src_im.res) < np.prod(ref_im.res)
             cmp_str = "smaller" if src_pixel_smaller else "larger"
@@ -102,13 +103,14 @@ def _inspect_image_pair(src_filename, ref_filename, proc_crs=ProcCrs.auto):
 BlockPair = namedtuple('BlockPair', ['band_i', 'src_in_block', 'ref_in_block', 'src_out_block', 'ref_out_block', 'outer'])
 
 class RasterPairReader():
-    def __init__(self, src_filename, ref_filename, proc_crs=ProcCrs.auto, overlap=(0,0), max_block_mem=np.inf):
+    def __init__(self, src_filename, ref_filename, proc_crs=ProcCrs.auto, overlap=(0, 0), max_block_mem=np.inf):
         self._src_filename = pathlib.Path(src_filename)
         self._ref_filename = pathlib.Path(ref_filename)
         if not isinstance(proc_crs, ProcCrs):
             raise ValueError("'proc_crs' must be an instance of homonim.enums.ProcCrs")
         self._proc_crs = proc_crs
-        self._overlap = overlap if not np.isscalar(overlap) else (overlap, overlap)
+        self._overlap = np.array(overlap).astype('int')
+
         self._max_block_mem = max_block_mem
         self._src_im:rasterio.DatasetReader = None
         self._ref_im:rasterio.DatasetReader = None
@@ -119,6 +121,7 @@ class RasterPairReader():
         self._ref_win = None
         self._crop_ref_profile = None
         self._src_profile = None
+        self._block_shape = None
         self._src_bands, self._ref_bands, self._proc_crs = _inspect_image_pair(self._src_filename, self._ref_filename,
                                                                                self._proc_crs)
 
@@ -142,6 +145,25 @@ class RasterPairReader():
     def proc_crs(self)-> ProcCrs:
         return self._proc_crs
 
+    @property
+    def overlap(self)-> Tuple[int,]:
+        return self._overlap
+
+    @property
+    def block_shape(self)->Tuple[int,]:
+        self._check_open()
+        if self._block_shape is None:
+            proc_win = self._ref_win if self._proc_crs == ProcCrs.ref else self._src_win
+            self._block_shape = self._auto_block_shape(proc_win=proc_win)
+
+        if np.any(self._block_shape <= np.fmax(self._overlap, (3, 3))):
+            raise errors.BlockSizeError(
+                f"The block shape ({self.block_shape}) that satisfies the maximum block size ({self._max_block_mem}MB) "
+                f"setting is too small to accommodate the overlap ({self._overlap}) between consecutive blocks . "
+                f"Increase the 'max_block_mem', or decrease the 'overlap' argument to RasterPairReader.__init__()"
+            )
+        return self._block_shape
+
     def __enter__(self):
         self._env = rio.Env(GDAL_NUM_THREADS='ALL_CPUs').__enter__()
         self.open()
@@ -151,6 +173,10 @@ class RasterPairReader():
         self.close()
         self._env.__exit__(exc_type, exc_val, exc_tb)
 
+    def _check_open(self):
+        if not self._src_im or not self._ref_im or self._src_im.closed or self._ref_im.closed :
+            raise errors.IoError(f'The raster pair has not been opened: {self._src_filename.name} and '
+                           f'{self._ref_filename.name}')
 
     def open(self):
         self._src_im = rio.open(self._src_filename, 'r')
@@ -166,8 +192,8 @@ class RasterPairReader():
                 self._src_im = WarpedVRT(self._src_im, crs=self._ref_im.crs, resampling=Resampling.bilinear)
 
         # create image-wide windows that allow re-projections between src and ref without loss of data
-        self._ref_win = expand_window_to_grid(self._ref_im.window(*self._src_im.bounds))
-        self._src_win = expand_window_to_grid(self._src_im.window(*self._ref_im.window_bounds(self._ref_win)))
+        self._ref_win = utils.expand_window_to_grid(self._ref_im.window(*self._src_im.bounds))
+        self._src_win = utils.expand_window_to_grid(self._src_im.window(*self._ref_im.window_bounds(self._ref_win)))
 
         self._crop_ref_profile = self._ref_im.profile.copy()
         self._crop_ref_profile['transform'] = self._ref_im.window_transform(self._ref_win)
@@ -183,9 +209,8 @@ class RasterPairReader():
 
 
     def read(self, block: BlockPair):
-        if not self._src_im or not self._ref_im or self._src_im.closed or self._ref_im.closed :
-            raise IoError(f'The raster pair has not been opened: {self._src_filename.name} and '
-                           f'{self._ref_filename.name}')
+        self._check_open()
+
         with self._src_lock:
             src_ra = RasterArray.from_rio_dataset(self._src_im, indexes=self._src_bands[block.band_i],
                                                   window=block.src_in_block)
@@ -195,17 +220,32 @@ class RasterPairReader():
         return src_ra, ref_ra
 
 
-    def _auto_block_shape(self, proc_im: rasterio.DatasetReader, other_im: rasterio.DatasetReader, proc_win=None):
+    def _auto_block_shape(self, proc_win=None):
         # convert _max_block_mem from MB to Bytes in lowest res image space
-        mem_scale = np.product(np.divide(proc_im.res, other_im.res))
-        max_block_mem = self._max_block_mem * (2 ** 20) / mem_scale if self._max_block_mem > 0 else np.inf
+
+        # find max_block_mem in the proc_crs space
+        # (to choose block_shape in proc_crs so that it satisfies max_block_mem in the highest resolution space,
+        # we must scale max_block_mem from proc_crs to highest resolution of the src and ref spaces.)
+        src_pix_area = np.product(self._src_im.res)
+        ref_pix_area = np.product(self._ref_im.res)
+        if self._proc_crs == ProcCrs.ref:
+            mem_scale = src_pix_area / ref_pix_area if ref_pix_area > src_pix_area else 1.
+        elif self._proc_crs == ProcCrs.src:
+            mem_scale = 1. if ref_pix_area > src_pix_area else ref_pix_area / src_pix_area
+
+        max_block_mem = self._max_block_mem * mem_scale if self._max_block_mem > 0 else np.inf
+        max_block_mem *= 2**20  # convert MB to bytes
         dtype_size = np.dtype(RasterArray.default_dtype).itemsize
 
         if proc_win is None:
-            block_shape = np.array(proc_im.shape).astype('float')
+            # set the starting block_shape in proc_crs to correspond to the entire band
+            block_shape = np.shape(self._ref_im if self._proc_crs == ProcCrs.ref else self._src_im).astype('float')
         else:
+            # set the starting block_shape in proc_crs to correspond to the entire window
             block_shape = np.array((proc_win.height, proc_win.width)).astype('float')
-        while ((np.product(block_shape) * dtype_size > max_block_mem)):
+
+        # keep halving the block_shape along the longest dimension until it satisfies max_block_mem
+        while ((np.product(block_shape) * dtype_size) > max_block_mem):
             div_dim = np.argmax(block_shape)
             block_shape[div_dim] /= 2
 
@@ -214,10 +254,7 @@ class RasterPairReader():
 
     def block_pairs(self):
         """ Iterator over co-located pairs of source and reference image blocks.  For use in read(). """
-
-        if not self._src_im or not self._ref_im or self._src_im.closed or self._ref_im.closed :
-            raise IoError(f'The raster pair has not been opened: {self._src_filename.name} and '
-                           f'{self._ref_filename.name}')
+        self._check_open()
 
         # assign 'src' and 'ref' to 'proc' and 'other' according to proc_crs
         # (blocks are first formed in the 'proc' (usually the lowest resolution) image space, from which the equivalent
@@ -228,17 +265,10 @@ class RasterPairReader():
             proc_win, proc_im, other_im = (self._src_win, self._src_im, self._ref_im)
 
         # initialise block formation variables
-        overlap = np.array(self._overlap)
+        overlap = self._overlap
+        block_shape = self.block_shape
         proc_win_ul = np.array((proc_win.row_off, proc_win.col_off))
         proc_win_br = np.array((proc_win.height + proc_win.row_off, proc_win.width + proc_win.col_off))
-
-        # calculate a block shape (in proc_crs) that satisfies the max_block_mem requirement
-        block_shape = self._auto_block_shape(proc_im, other_im, proc_win=proc_win)
-
-        # TODO: form an error message in terms of kernel shape, perhaps by catching this exception
-        if np.any(block_shape <= np.fmax(2 * overlap, (3, 3))):
-            raise BlockSizeError(f"Block size {block_shape} is smaller than overlap, "
-                                 f"increase 'max_block_mem', or decrease 'max_blocks', or 'overlap'")
 
         # form the overlapping blocks in 'proc' space, and find their equivalents in 'other' space
         block_pairs = []
@@ -268,8 +298,8 @@ class RasterPairReader():
                 #TODO: expand or round for other_in_block?  Proc_crs=ref: For ref->src round is good as that means there will be no
                 # nodata boundaries due to src transform beyond ref transform, but for src->ref, expand is good, as that
                 # means there will be no nodata for ref pixels straddling src transform.
-                other_in_block = round_window_to_grid(other_im.window(*proc_im.window_bounds(proc_in_block)))
-                other_out_block = round_window_to_grid(other_im.window(*proc_im.window_bounds(proc_out_block)))
+                other_in_block = utils.round_window_to_grid(other_im.window(*proc_im.window_bounds(proc_in_block)))
+                other_out_block = utils.round_window_to_grid(other_im.window(*proc_im.window_bounds(proc_out_block)))
 
                 # form the BlockPair named tuple, assigning 'proc' and 'other' back to 'src' and 'ref' for use in read()
                 if self._proc_crs == ProcCrs.ref:

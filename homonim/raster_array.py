@@ -23,6 +23,7 @@ import multiprocessing
 import numpy
 import numpy as np
 import rasterio.windows
+import rasterio as rio
 from rasterio import Affine
 from rasterio import transform
 from rasterio import windows
@@ -32,59 +33,11 @@ from rasterio.warp import reproject, Resampling
 from rasterio.windows import Window
 
 from homonim.errors import ImageProfileError, ImageFormatError
+from homonim.utils import round_window_to_grid, nan_equals
 
 logger = logging.getLogger(__name__)
 
 
-def nan_equals(a, b):
-    """Compare two numpy objects, returning true if both a & b elements are nan"""
-    return ((a == b) | (np.isnan(a) & np.isnan(b)))
-
-
-def expand_window_to_grid(win, expand_pixels=(0, 0)):
-    """
-    Expands decimal window extents.
-
-    For expand_pixel=(0,0) window extents are expanded to the nearest integers that include the original extents.
-
-    Parameters
-    ----------
-    win: rasterio.windows.Window
-         The window to expand.
-    expand_pixels: numpy.array_like, List[float, float], tuple, optional
-                   A two element iterable (rows, columns) specifying the number of pixels to expand the window by.
-
-    Returns
-    -------
-    win: rasterio.windows.Window
-         The expanded window
-    """
-    col_off, col_frac = np.divmod(win.col_off - expand_pixels[1], 1)
-    row_off, row_frac = np.divmod(win.row_off - expand_pixels[0], 1)
-    width = np.ceil(win.width + 2 * expand_pixels[1] + col_frac)
-    height = np.ceil(win.height + 2 * expand_pixels[0] + row_frac)
-    exp_win = Window(col_off.astype('int'), row_off.astype('int'), width.astype('int'), height.astype('int'))
-    return exp_win
-
-
-def round_window_to_grid(win):
-    """
-    Rounds decimal window extents to the nearest integers.
-
-    Parameters
-    ----------
-    win: rasterio.windows.Window
-         The window to round.
-
-    Returns
-    -------
-    win: rasterio.windows.Window
-         The rounded window.
-    """
-    row_range, col_range = win.toranges()
-    row_range = np.round(row_range).astype('int')
-    col_range = np.round(col_range).astype('int')
-    return Window(col_off=col_range[0], row_off=row_range[0], width=np.diff(col_range)[0], height=np.diff(row_range)[0])
 
 
 class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
@@ -257,7 +210,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         if np.all(value.shape[-2:] == self._array.shape[-2:]):
             self._array = value
         else:
-            raise ValueError("'value' and current array width and height must match")
+            raise ValueError("'value' and 'array' shapes must match")
 
     @property
     def crs(self):
@@ -364,13 +317,12 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
     def slice_to_bounds(self, *bounds):
         """
         Create a new RasterArray representing a sub-region of this RasterArray.
-
-        Note that the created RasterArray is a view into the present array, not a copy.
+        Note that the created RasterArray is a view into the current array, not a copy.
 
         Parameters
         ----------
         bounds: Tuple
-                The co-ordinate bounds in the current CRS to slice the new array to (left, bottom, right, top)
+                The co-ordinate bounds to slice the new array to (left, bottom, right, top), in the current CRS.
         Returns
         -------
         ra: RasterArray
@@ -381,7 +333,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         ul = np.array((window.row_off, window.col_off))
         shape = np.array((window.height, window.width))
         if np.any(ul<0) or np.any(shape > self._array.shape[-2:]):
-            raise ValueError(f'The provided bounds ({bounds}) lie outside the extent of the current RasterArray '
+            raise ValueError(f'The provided bounds ({bounds}) lie outside the extent of the RasterArray '
                              f'({self.bounds})')
 
         if self._array.ndim == 2:
@@ -445,6 +397,25 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
                              f'bounds of the RasterArray ({bounded_ra.bounds})')
 
         rio_dataset.write(bounded_ra.array, window=window, indexes=indexes, **kwargs)
+
+    def to_file(self, filename, driver='GTiff', **kwargs):
+        """
+        Write the RasterArray to a raster file.
+
+        Parameters
+        ----------
+        filename: str, pathlib.Path
+                  The name of the file to create.
+        driver: str, optional
+                A valid raster short format driver name - see http://www.gdal.org/formats_list.html.
+        kwargs: dict, optional
+                Driver specific creation options e.g. compression='deflate' for a geotiff.
+                See the rasterio documentation for more details:
+        """
+        with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
+            with rio.open(filename, 'w', driver=driver, **self.profile, **kwargs) as out_im:
+                out_im.write(self._array, indexes=range(1, self.count+1) if self.count > 1 else 1)
+
 
     def reproject(self, crs=None, transform=None, shape=None, nodata=default_nodata, dtype=default_dtype,
                   resampling=Resampling.lanczos, **kwargs):

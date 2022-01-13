@@ -216,8 +216,8 @@ class TestFuse(unittest.TestCase):
         homo_root = root_path.joinpath('data/outputs/test_example/homogenised')
 
         param_list = [
-            dict(method=Method.gain, kernel_shape=(3, 3), proc_crs=ProcCrs.ref),
-            dict(method=Method.gain_im_offset, kernel_shape=(5, 5), proc_crs=ProcCrs.ref),
+            dict(method=Method.gain, kernel_shape=(1, 1), proc_crs=ProcCrs.ref),
+            dict(method=Method.gain_im_offset, kernel_shape=(3, 3), proc_crs=ProcCrs.ref),
             dict(method=Method.gain_offset, kernel_shape=(9, 9), proc_crs=ProcCrs.ref),
         ]
 

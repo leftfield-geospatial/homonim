@@ -36,6 +36,8 @@ from homonim.kernel_model import KernelModel, RefSpaceModel, SrcSpaceModel
 from homonim.raster_array import RasterArray
 from homonim.raster_pair import RasterPairReader, BlockPair
 from homonim.enums import Method, ProcCrs
+from homonim import utils
+from homonim import errors
 
 logger = logging.getLogger(__name__)
 
@@ -83,11 +85,7 @@ class RasterFuse():
             raise ValueError("'method' must be an instance of homonim.enums.Method")
         self._method = method
 
-        self._kernel_shape = np.array(kernel_shape).astype(int)
-        if not np.all(np.mod(self._kernel_shape, 2) == 1):
-            raise ValueError(f'Invalid kernel_shape: {self._kernel_shape}, must be odd in both dimensions')
-        if not np.all(np.array(self._kernel_shape) >= 1):
-            raise ValueError(f'Invalid kernel_shape: {self._kernel_shape} must be one or more in both dimensions')
+        self._kernel_shape = utils.check_kernel_shape(kernel_shape)
 
         self._src_filename = pathlib.Path(src_filename)
         self._ref_filename = pathlib.Path(ref_filename)
@@ -95,14 +93,24 @@ class RasterFuse():
         self._out_profile = out_profile
         self._profile = False
 
-        # block overlap should be half the kernel shape to ensure full kernel coverage of block edges,
-        # and at least 1 pixel to prevent extrapolation (rather than interpolation) when up-sampling.
-        overlap = np.fmax(np.floor(self._kernel_shape / 2).astype('int'), (1, 1))
+        # Block overlap should be at least half the kernel 'shape' to ensure full kernel coverage at block edges, and a
+        # minimum of (1, 1) to avoid including extrapolated (rather than interpolated) pixels when up-sampling.
+        overlap = utils.overlap_for_kernel(self._kernel_shape)
+
+        # check the ref and src images via RasterPairReader, and get the proc_crs attribute
         raster_pair_args = dict(proc_crs=proc_crs, overlap=overlap,
                                 max_block_mem=self._config['max_block_mem'])
-        # check the ref and src images via RasterPairReader, and get the proc_crs attribute
         self._raster_pair =  RasterPairReader(src_filename, ref_filename, **raster_pair_args)
-        self._proc_crs = self._raster_pair.proc_crs
+        with self._raster_pair as raster_pair:
+            self._proc_crs = raster_pair.proc_crs
+            block_shape = raster_pair.block_shape
+            if np.any(block_shape < self._kernel_shape):
+                raise errors.BlockSizeError(
+                    f"The block shape ({block_shape}) that satisfies the maximum block size "
+                    f"({self._homo_config['max_block_mem']}MB) setting is too small to accommodate a kernel shape of "
+                    f"({self._kernel_shape}). Increase 'max_block_mem' in 'homo_config', or decrease "
+                    f"'kernel_shape'."
+                )
 
         if self._proc_crs == ProcCrs.ref:
             self._model = RefSpaceModel(method=method, kernel_shape=kernel_shape,
@@ -135,7 +143,7 @@ class RasterFuse():
             """Update self_dict with a flattened version of other_dict"""
             for other_key, other_value in other_dict.items():
                 if isinstance(other_value, dict):
-                    # flatten the driver specific nested dict into root dict
+                    # flatten the driver specific nested dict into the root dict
                     nested_update(self_dict, other_value)
                 elif other_value is not None:
                     self_dict[other_key] = other_value
@@ -194,8 +202,9 @@ class RasterFuse():
         """
         filename = pathlib.Path(filename)
         meta_dict = dict(HOMO_SRC_FILE=self._src_filename.name, HOMO_REF_FILE=self._ref_filename.name,
-                         HOMO_SPACE=self._proc_crs.name, HOMO_METHOD=self._method, HOMO_KERNEL_SHAPE=self._kernel_shape,
-                         HOMO_CONF=str(self._config), HOMO_MODEL_CONF=str(self._model.config))
+                         HOMO_PROC_CRS=self._proc_crs.name, HOMO_METHOD=self._method.name,
+                         HOMO_KERNEL_SHAPE=self._kernel_shape, HOMO_CONF=str(self._config),
+                         HOMO_MODEL_CONF=str(self._model.config))
 
         if not filename.exists():
             raise FileNotFoundError(f'{filename} does not exist')

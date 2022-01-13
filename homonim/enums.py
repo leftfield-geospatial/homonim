@@ -21,8 +21,8 @@ from enum import Enum
 class Method(str, Enum):
     """Enumeration for the homogenisation method"""
     gain = 'gain'
-    gain_im_offset = 'gain_im_offset'
-    gain_offset = 'gain_offset'
+    gain_im_offset = 'gain-im-offset'
+    gain_offset = 'gain-offset'
 
 class ProcCrs(str, Enum):
     """Enumeration for the processing space (image co-ordinate system and resolution)"""
