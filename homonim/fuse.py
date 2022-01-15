@@ -41,21 +41,9 @@ from homonim import errors
 
 logger = logging.getLogger(__name__)
 
-"""Overlapping block object"""
-OvlBlock = namedtuple('OvlBlock', ['band_i', 'src_in_block', 'src_out_block', 'outer'])
-
-
-def _update_from_nested(to_dict, from_nested_dict):
-    for key, value in from_nested_dict.items():
-        if isinstance(value, dict):
-            _update_from_nested(to_dict, value)
-        elif value is not None:
-            to_dict[key] = value
-    return to_dict
-
 
 class RasterFuse():
-    default_homo_config = dict(debug_image=False, mask_partial=False, multithread=True, max_block_mem=100)
+    default_homo_config = dict(debug_image=False, multithread=True, max_block_mem=100)
     default_out_profile = dict(driver='GTiff', dtype=RasterArray.default_dtype, nodata=RasterArray.default_nodata,
                                creation_options=dict(tiled=True, blockxsize=512, blockysize=512, compress='deflate',
                                                      interleave='band', photometric=None))
@@ -286,8 +274,7 @@ class RasterFuse():
                     """Thread-safe function to homogenise a block of src_im"""
                     src_ra, ref_ra = raster_pair.read(block_pair)
                     param_ra = self._model.fit(ref_ra, src_ra)
-                    mask_partial = block_pair.outer and self._config['mask_partial']
-                    out_ra = self._model.apply(src_ra, param_ra, mask_partial=mask_partial)
+                    out_ra = self._model.apply(src_ra, param_ra)
                     out_ra.nodata = out_im.nodata
 
                     with write_lock:

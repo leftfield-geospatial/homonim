@@ -20,6 +20,7 @@
 import cv2
 import cv2 as cv
 import numpy as np
+from rasterio.enums import Resampling
 from rasterio.fill import fillnodata
 
 from homonim.enums import Method
@@ -32,21 +33,11 @@ class KernelModel():
     A base class for sliding kernel linear modelling between images.
 
     """
-    default_config = dict(downsampling='cubic_spline', upsampling='average', r2_inpaint_thresh=0.25)
+    default_config = dict(downsampling='cubic_spline', upsampling='average', r2_inpaint_thresh=0.25, mask_partial=False)
 
     def __init__(self, method, kernel_shape, debug_image=False, r2_inpaint_thresh=default_config['r2_inpaint_thresh'],
-                 downsampling=default_config['downsampling'], upsampling=default_config['upsampling']):
-        """
-        Construct a KernelModel.
-        Parameters
-        ----------
-        method
-        kernel_shape
-        debug_image
-        r2_inpaint_thresh
-        downsampling
-        upsampling
-        """
+                 mask_partial=default_config['mask_partial'], downsampling=default_config['downsampling'],
+                 upsampling=default_config['upsampling']):
 
         if not isinstance(method, Method):
             raise ValueError("'method' should be an instance of homonim.enums.Method")
@@ -58,9 +49,9 @@ class KernelModel():
             raise ValueError("'kernel_shape' must be a minimum of one in both dimensions")
         self._debug_image = debug_image
         self._r2_inpaint_thresh = r2_inpaint_thresh
+        self._mask_partial = mask_partial
         self._downsampling = downsampling
         self._upsampling = upsampling
-
 
     @property
     def method(self):
@@ -200,6 +191,12 @@ class KernelModel():
             # Find R2 of the sliding kernel models
             self._r2_array(ref_array, src_array, param_ra.array[:1], mask=mask, ref_sum=ref_sum, src_sum=src_sum,
                            dest_array=param_ra.array[2], kernel_shape=kernel_shape)
+
+        # if self._mask_partial:  # mask pixels with partial kernel coverage
+        #     mask_sum = cv.boxFilter(mask.astype(RasterArray.default_dtype, copy=False), -1, kernel_shape, **filter_args)
+        #     mask_partial = mask_sum >= np.prod(kernel_shape)
+        #     param_ra.mask = mask_partial
+
         return param_ra
 
     def _fit_gain_im_offset(self, ref_ra: RasterArray, src_ra: RasterArray, kernel_shape=None) -> RasterArray:
@@ -310,32 +307,45 @@ class KernelModel():
             r2_mask = ~r2_mask & mask
             np.divide(ref_sum - mask_sum * param_ra.array[1], src_sum, out=param_ra.array[0], where=r2_mask)
 
+        # if self._mask_partial:  # mask pixels with partial kernel coverage
+        #     mask_partial = mask_sum >= np.prod(kernel_shape)
+        #     param_ra.mask = mask_partial
+
         return param_ra
 
-    def _mask_partial(self, out_ra: RasterArray, mask_kernel_shape=None) -> RasterArray:
-        if mask_kernel_shape is None:
-            mask_kernel_shape = self._kernel_shape
-        mask = out_ra.mask
-        se = cv2.getStructuringElement(cv2.MORPH_RECT, tuple(mask_kernel_shape))
-        mask = cv2.erode(mask.astype('uint8', copy=False), se).astype('bool', copy=False)
-        out_ra.mask = mask
-        return out_ra
-
-    def _apply(self, src_ra: RasterArray, param_ra: RasterArray, mask_kernel_shape=None) -> RasterArray:
+    def _full_coverage_mask(self, in_mask_ra: RasterArray, param_ra: RasterArray):
         """
-        Applies sliding kernel models to a source array
+        Create a mask of pixels (in proc_crs) fully covered by src/ref images and sliding kernels.
+
+        Note: that this is a strict approach that avoids any kind of partial coverage (src/ref image, extrapolation,
+        and kernel).
 
         Parameters
         ----------
-        src_ra: homonim.RasterArray
-                   M x N RasterArray of source data, collocated, and of similar spectral content, to ref_ra
+        in_mask_ra: RasterArray
+                    An initial mask of valid src/ref pixels, as a uint8 RasterArray.
+        param_ra: RasterArray
+                    The parameter RasterArray as returned by fit() i.e. this is a RasterArray in proc_crs space,
+                    whose mask corresponds to the combined ref & src masks.
+        Returns
+        -------
+        mask_ra: RasterArray
+                 The full coverage mask as a uint8 RasterArray
         """
-        out_array = (param_ra.array[0] * src_ra.array) + param_ra.array[1]
-        out_ra = RasterArray.from_profile(out_array, param_ra.profile)
-        out_ra.mask = src_ra.mask
-        if mask_kernel_shape is not None:
-            out_ra = self._mask_partial(out_ra, mask_kernel_shape=mask_kernel_shape)
-        return out_ra
+
+        # reproject the input mask into proc_crs
+        mask_ra = in_mask_ra.reproject(**param_ra.proj_profile, nodata=None, resampling=Resampling.average)
+        # find the mask of proc_crs pixels fully covered by mask_ra
+        mask = (mask_ra.array >= 1).astype('uint8', copy=False)  # ref pixels fully covered by src
+        # combine with the other (src/ref) mask via param_ra
+        mask &= param_ra.mask
+
+        # Mask out partial kernel coverage.  Similar to the block overlap amount, this removes ceil(kernel_shape/2)
+        # pixels from the nodata edge.  This is the strict approach for proc_crs = ref, it could be
+        # floor(kernel_shape/2) for proc_crs = src, which avoids the additional upsampling step.
+        se = cv2.getStructuringElement(cv2.MORPH_RECT, tuple(self._kernel_shape + 2))
+        mask_ra.array = cv2.erode(mask, se, borderType=cv2.BORDER_CONSTANT, borderValue=0)
+        return mask_ra
 
     def fit(self, ref_ra: RasterArray, src_ra: RasterArray, kernel_shape=None) -> RasterArray:
         """
@@ -365,36 +375,61 @@ class KernelModel():
 
         return param_ra
 
-    def apply(self, src_ra: RasterArray, param_ra: RasterArray, mask_partial=False):
-        mask_kernel_shape = self._kernel_shape if mask_partial else None
-        return self._apply(src_ra, param_ra, mask_kernel_shape=mask_kernel_shape)
+    def apply(self, src_ra: RasterArray, param_ra: RasterArray) -> RasterArray:
+        """
+        Applies sliding kernel models to a source array
+
+        Parameters
+        ----------
+        src_ra: homonim.RasterArray
+                   M x N RasterArray of source data, collocated, and of similar spectral content, to ref_ra
+        """
+        out_array = (param_ra.array[0] * src_ra.array) + param_ra.array[1]
+        out_ra = RasterArray.from_profile(out_array, param_ra.profile)
+        return out_ra
 
 
 class RefSpaceModel(KernelModel):
+    def _mask_partial(self, src_ra, param_ra):
+        pass
+
     def fit(self, ref_ra: RasterArray, src_ra: RasterArray, **kwargs) -> RasterArray:
         # downsample src_ra to ref crs and grid
         resampling = self._downsampling if np.prod(src_ra.res) < np.prod(ref_ra.res) else self._upsampling
         src_ds_ra = src_ra.reproject(**ref_ra.proj_profile, resampling=resampling)
         return KernelModel.fit(self, ref_ra, src_ds_ra, kernel_shape=self._kernel_shape)
 
-    def apply(self, src_ra: RasterArray, param_ra: RasterArray, mask_partial=False):
+    def apply(self, src_ra: RasterArray, param_ra: RasterArray):
         # upsample the param_ra to src crs and grid
         _param_ra = RasterArray.from_profile(param_ra.array[:2], param_ra.profile)
         resampling = self._upsampling if np.prod(src_ra.res) < np.prod(param_ra.res) else self._downsampling
         param_us_ra = _param_ra.reproject(**src_ra.proj_profile, resampling=resampling)
-        if mask_partial:
-            mask_kernel_shape = np.ceil(np.divide(param_ra.res, src_ra.res) * self._kernel_shape).astype('int')
+
+        if self._mask_partial:
+            # find the mask of fully covered pixel in proc_crs=ref
+            mask_ra = self._full_coverage_mask(src_ra.mask_ra, param_ra)
+            # reproject the mask to src crs and apply to parameters
+            mask_us_ra = mask_ra.reproject(**src_ra.proj_profile, nodata=0, resampling=Resampling.nearest)
+            param_us_ra.mask = mask_us_ra.array.astype('bool', copy=False)
         else:
-            mask_kernel_shape = None
-        return KernelModel._apply(self, src_ra, param_us_ra, mask_kernel_shape=mask_kernel_shape)
+            param_us_ra.mask = src_ra.mask
+
+        return KernelModel.apply(self, src_ra, param_us_ra)
 
 
 class SrcSpaceModel(KernelModel):
     def fit(self, ref_ra: RasterArray, src_ra: RasterArray, **kwargs):
         # upsample ref_ra to src crs and grid
-        # src_kernel_shape = np.ceil(np.divide(ref_ra.res, src_ra.res) * self._kernel_shape).astype('int')
-
         resampling = self._upsampling if np.prod(src_ra.res) < np.prod(ref_ra.res) else self._downsampling
         ref_us_ra = ref_ra.reproject(**src_ra.proj_profile, resampling=resampling)
         _src_ra = src_ra.copy()  # avoid in-place changes to src_ra in fit() below
-        return KernelModel.fit(self, ref_us_ra, _src_ra, kernel_shape=self._kernel_shape)
+        param_ra = KernelModel.fit(self, ref_us_ra, _src_ra, kernel_shape=self._kernel_shape)
+
+        if self._mask_partial:
+            # find the mask of fully covered pixel in proc_crs=src
+            mask_ra = self._full_coverage_mask(ref_ra.mask_ra, param_ra)
+            param_ra.mask = mask_ra.array.astype('bool', copy=False)
+        else:
+            param_ra.mask = src_ra.mask
+
+        return param_ra

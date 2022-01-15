@@ -276,8 +276,8 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
     def mask(self):
         """A 2D boolean mask corresponding to valid pixels in the array."""
         if self._nodata is None:
-            return np.full(self.shape, True)
-        mask = ~nan_equals(self.array, self.nodata)
+            return np.full(self._array.shape[-2:], True)
+        mask = ~nan_equals(self._array, self._nodata)
         if self._array.ndim > 2:
             mask = np.all(mask, axis=0)
         return mask
@@ -288,6 +288,12 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
             self._array[~value] = self._nodata
         else:
             self._array[:, ~value] = self._nodata
+
+    @property
+    def mask_ra(self):
+        """A RasterArray containing the 2D mask as uint8 data type, and with nodata=None"""
+        mask = self.mask.astype('uint8', copy=False)
+        return RasterArray(mask, crs=self._crs, transform=self._transform, nodata=None)
 
     @property
     def nodata(self):
@@ -400,7 +406,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
 
     def to_file(self, filename, driver='GTiff', **kwargs):
         """
-        Write the RasterArray to a raster file.
+        Write the RasterArray to an image file.
 
         Parameters
         ----------

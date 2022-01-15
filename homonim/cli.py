@@ -213,7 +213,7 @@ def cli(verbose, quiet):
               help=f"Create a debug image, containing model parameters and R\N{SUPERSCRIPT TWO} values, for each "
                    "source file.")
 @click.option("-mp", "--mask-partial", type=click.BOOL, is_flag=True,
-              default=RasterFuse.default_homo_config['mask_partial'],
+              default=KernelModel.default_config['mask_partial'],
               help=f"Mask homogenised pixels produced from partial kernel coverage.")
 @multithread_option
 @click.option("-mbm", "--max-block-mem", type=click.INT, help="Maximum image block size for processing (MB)",

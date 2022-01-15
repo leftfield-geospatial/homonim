@@ -88,7 +88,7 @@ class TestFuse(unittest.TestCase):
                 for bi in range(src_im.count):
                     src_mask = src_im.read_masks(bi + 1)
                     homo_mask = homo_im.read_masks(bi + 1)
-                    if self._homo_config['mask_partial']:
+                    if self._model_config['mask_partial']:
                         self.assertTrue(np.abs(src_mask.mean() - homo_mask.mean()) / 255 < .2,
                                         'Source and homogenised images have similar valid areas')
                     else:
@@ -100,7 +100,9 @@ class TestFuse(unittest.TestCase):
                     for fn in [lambda x: x, lambda x: np.bitwise_not(x)]:
                         n_src_labels, src_labels = cv2.connectedComponents(fn(src_mask), None, 4, cv2.CV_16U)
                         n_homo_labels, homo_labels = cv2.connectedComponents(fn(homo_mask), None, 4, cv2.CV_16U)
-                        self.assertTrue(n_src_labels == n_homo_labels or (n_src_labels == 1 and n_homo_labels == 2),
+                        # there can be small areas that become separated from main mask with mask_partial, so make it
+                        # a near, rather than exact match.
+                        self.assertTrue(np.abs(n_src_labels - n_homo_labels) <= 2,
                                         'Number of source and homgenised valid/nodata areas match')
 
     def _test_homo_against_ref(self, src_filename, homo_filename, ref_filename):
