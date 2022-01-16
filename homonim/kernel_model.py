@@ -30,23 +30,62 @@ from homonim.utils import nan_equals
 
 class KernelModel():
     """
-    A base class for sliding kernel linear modelling between images.
+    A base class for radiometric modelling and fusing/harmonising image data.
 
+    Linear models are fitted in a sliding kernel (window) between a source and reference image, and subsequently
+    applied to the source image.
+
+    Based on the paper:
+    Harris, Dugal & Van Niekerk, Adriaan. (2018). Radiometric homogenisation of aerial images by calibrating with
+    satellite data. International Journal of Remote Sensing. 40. 1-25. 10.1080/01431161.2018.1528404.
+    https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data
     """
+
     default_config = dict(downsampling='cubic_spline', upsampling='average', r2_inpaint_thresh=0.25, mask_partial=False)
 
     def __init__(self, method, kernel_shape, debug_image=False, r2_inpaint_thresh=default_config['r2_inpaint_thresh'],
                  mask_partial=default_config['mask_partial'], downsampling=default_config['downsampling'],
                  upsampling=default_config['upsampling']):
+        """
+        Construct a KernelModel.
+
+        Parameters
+        ----------
+        method: homonim.enums.Method
+                The radiometric homogenisation method.
+        kernel_shape: tuple
+                The (height, width) of the kernel in pixels.
+        debug_image: bool, optional
+                Turn on/off the calculation of Pearson's correlation coefficient (r2) for each kernel model.
+                (Typically used for producing 'debug' images of the model parameters and accuracies.)
+                [default: False]
+        r2_inpaint_thresh: float, optional
+                The R2 (coefficient of determination) threshold below which to 'in-paint' kernel model parameters from
+                surrounding areas (applies to 'method' == Method.gain_offset only).  For pixels where the model gives a
+                poor approximation to the data (this can occur in e.g. shadowed areas, poor source-reference
+                co-registration, or areas where there has been land cover change between the source and reference
+                images), model offsets are interpolated from surrounding areas, and gains re-estimated.  It can be set
+                to 'None' to turn off in-painting.
+                [default: 0.25]
+        mask_partial: bool, optional
+                Masks output pixels that were not produced by full kernel or source/reference image coverage.  Useful
+                for ensuring strict model validity, and reducing seam-lines between adjacent images. [default: False]
+        downsampling: rasterio.enums.Resampling
+                The resampling method to use when downsampling.  [default: Resampling.average]
+        upsampling: rasterio.enums.Resampling
+                The resampling method to use when upsampling.  [default: Resampling.cubic_spline]
+        """
 
         if not isinstance(method, Method):
             raise ValueError("'method' should be an instance of homonim.enums.Method")
         self._method = method
+
         self._kernel_shape = np.array(kernel_shape).astype(int)
         if not np.all(np.mod(self._kernel_shape, 2) == 1):
             raise ValueError("'kernel_shape' must be odd in both dimensions")
         if not np.all(self._kernel_shape >= 1):
             raise ValueError("'kernel_shape' must be a minimum of one in both dimensions")
+
         self._debug_image = debug_image
         self._r2_inpaint_thresh = r2_inpaint_thresh
         self._mask_partial = mask_partial
@@ -55,28 +94,37 @@ class KernelModel():
 
     @property
     def method(self):
+        """The homogenisation method."""
         return self._method
 
     @property
     def kernel_shape(self):
+        """The kernel (height, width)."""
         return self._kernel_shape
 
     @property
     def config(self):
+        """A dict containing the KernelModel configuration."""
         return dict(r2_inpaint_thresh=self._r2_inpaint_thresh, downsampling=self._downsampling,
                     upsampling=self._upsampling)
 
     def _r2_array(self, ref_array, src_array, param_array, mask=None, mask_sum=None, ref_sum=None, src_sum=None,
                   ref2_sum=None, src2_sum=None, src_ref_sum=None, dest_array=None, kernel_shape=None):
+        """
+        Helper function to find R2 coefficient of determination at each pixel/kernel location for the given matrices.
+        """
+
         if kernel_shape is None:
             kernel_shape = self._kernel_shape
         kernel_shape = tuple(kernel_shape)  # force to tuple for opencv
         filter_args = dict(normalize=False, borderType=cv.BORDER_CONSTANT)  # common opencv arguments
 
-        # if mask is passed, it is assumed invalid pixels in ref_ and src_array have been zeroed
+
+        # find the keyword arguments that were not provided
         if mask is None:
-            mask = (nan_equals(src_array, RasterArray.default_nodata) & nan_equals(ref_array,
-                                                                                   RasterArray.default_nodata))
+            # if mask is passed, assume that it has been applied ref_array and src_array, otherwise do that here
+            mask = (nan_equals(src_array, RasterArray.default_nodata) &
+                    nan_equals(ref_array, RasterArray.default_nodata))
             ref_array[~mask] = 0
             src_array[~mask] = 0
         if mask_sum is None:
@@ -90,11 +138,20 @@ class KernelModel():
         if src_ref_sum is None:
             src_ref_sum = cv.boxFilter(src_array * ref_array, -1, kernel_shape, **filter_args)
 
+        # R2 is found using: R2 = 1 - (residual sum of squares)/(total sum of squares) = 1 - RSS/TSS
+
+        # TSS = sum((ref - mean(ref))**2), which can be expanded and expressed in terms of cv2.boxFilter kernel sums as:
         ss_tot_array = (mask_sum * ref2_sum) - (ref_sum ** 2)
 
-        if param_array.shape[0] > 1:  # gain and offset
+
+        if param_array.shape[0] > 1:
+            # find RSS for method == Method.gain_offset
             if src_sum is None:
                 src_sum = cv.boxFilter(src_array, -1, kernel_shape, **filter_args)
+
+            # RSS = sum((ref - ref_hat)**2)
+            #     = sum((ref - (m*src + c))**2), where m and c are the first 2 bands of param_array
+            # The above can be expanded, simplified and re-expressed in terms of cv2.boxFilter kernel sums as:
 
             ss_res_array = (((param_array[0] ** 2) * src2_sum) +
                             (2 * np.product(param_array[:2], axis=0) * src_sum) -
@@ -102,85 +159,90 @@ class KernelModel():
                             (2 * param_array[1] * ref_sum) +
                             ref2_sum + (mask_sum * (param_array[1] ** 2)))
         else:
-            ss_res_array = (((param_array[0] ** 2) * src2_sum) -
-                            (2 * param_array[0] * src_ref_sum) +
-                            ref2_sum)
+            # find RSS for method == Method.gain or Method.gain_im_offset
+            # RSS = sum((ref - m*src)**2), where m is the first band of param_array
+            # The above can be expanded, simplified and re-expressed in terms of cv2.boxFilter kernel sums as:
+            ss_res_array = (((param_array[0] ** 2) * src2_sum) - (2 * param_array[0] * src_ref_sum) + ref2_sum)
 
         ss_res_array *= mask_sum
 
         if dest_array is None:
+            # assign a destination array to write R2 into, if it was not provided
             dest_array = np.full(src_array.shape, fill_value=RasterArray.default_nodata,
                                  dtype=RasterArray.default_dtype)
+
+        # find R2 = 1 - RSS/TSS, and write into dest_array
         np.divide(ss_res_array, ss_tot_array, out=dest_array, where=mask)
         np.subtract(1, dest_array, out=dest_array, where=mask)
         return dest_array
 
-    def _fit_im_offset(self, ref_ra: RasterArray, src_ra: RasterArray):
+    def _fit_block_norm(self, ref_ra: RasterArray, src_ra: RasterArray):
         """
-        Offset source image band (in place) to match reference image band. Uses basic dark object subtraction (DOS)
-        type approach.
+        Find a scale and offset for a source block, so that the standard deviation and first percentile of the source
+        and reference blocks match.  (Can be thought of as a rough dark object subtraction (DOS) approach).
 
         Parameters
         ----------
         ref_ra : RasterArray
-            Reference block in a RasterArray.
+            Reference data block in a RasterArray.
         src_ra : RasterArray
-            Source block, co-located with ref_ra and the same shape.
+            Source data block in a RasterArray, with the same CRS, shape & extents as ref_ra.
 
         Returns
         -------
-        : numpy.array
-        A two element array of linear offset model i.e. [1, offset]
+        norm_model: numpy.array
+            A two element [gain, offset] model to 'normalise' the source block.
         """
-        offset_model = np.zeros(2)
+        norm_model = np.zeros(2)
         mask = ref_ra.mask & src_ra.mask
         if not np.any(mask):
-            return offset_model
-        offset_model[0] = np.std(ref_ra.array, where=mask) / np.std(src_ra.array, where=mask)
-        offset_model[1] = np.percentile(ref_ra.array[mask], 1) - np.percentile(src_ra.array[mask], 1) * offset_model[0]
-        return offset_model
+            return norm_model
+        norm_model[0] = np.std(ref_ra.array, where=mask) / np.std(src_ra.array, where=mask)
+        norm_model[1] = np.percentile(ref_ra.array[mask], 1) - np.percentile(src_ra.array[mask], 1) * norm_model[0]
+        return norm_model
 
     def _fit_gain(self, ref_ra: RasterArray, src_ra: RasterArray, kernel_shape=None) -> RasterArray:
         """
-        Find sliding kernel gains for a band using opencv convolution.
+        Find sliding kernel gains, for a band, using opencv convolution.
 
         Parameters
         ----------
         ref_ra : RasterArray
-            Reference block in a RasterArray.
+            Reference data block in a RasterArray.
         src_ra : RasterArray
-            Source block, co-located with ref_ra and the same shape.
-        kernel_shape : numpy.array_like, list, tuple, optional
-            Sliding kernel [width, height] in pixels.
+            Source data block in a RasterArray, with the same CRS, shape & extents as ref_ra.
+        kernel_shape : tuple, optional
+            Sliding kernel [height, width] in pixels.
 
         Returns
         -------
         param_ra :RasterArray
-        RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second, and optionally
-        R2 for each kernel model in the third band when debug is on.
+            RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second, and optionally
+            R2 for each kernel model in the third band when debug_image==True.
         """
         # adapted from https://www.mathsisfun.com/data/least-squares-regression.html with c=0
-        # get arrays and find a combined ref & src mask
         if kernel_shape is None:
             kernel_shape = self._kernel_shape
         kernel_shape = tuple(kernel_shape)  # force to tuple for opencv
 
+        # mask invalid pixels with 0 so that these do not contribute to kernel sums in *boxFilter()
         ref_array = ref_ra.array
         src_array = src_ra.array
+        mask = ref_ra.mask & src_ra.mask
+        ref_array[~mask] = 0
+        src_array[~mask] = 0
+
+        # setup a RasterArray profile for the parameters
         param_profile = src_ra.profile.copy()
         param_profile.update(count=3 if self._debug_image else 2, nodata=RasterArray.default_nodata,
                              dtype=RasterArray.default_dtype)
-        mask = ref_ra.mask & src_ra.mask
-        # mask invalid pixels with 0 so that these do not contribute to kernel sums in *boxFilter()
-        ref_array[~mask] = 0
-        src_array[~mask] = 0
 
         # convolve the kernel with src and ref to get kernel sums (uses DFT for large kernels)
         filter_args = dict(normalize=False, borderType=cv.BORDER_CONSTANT)  # common opencv arguments
         src_sum = cv.boxFilter(src_array, -1, kernel_shape, **filter_args)
         ref_sum = cv.boxFilter(ref_array, -1, kernel_shape, **filter_args)
 
-        # create parameter array filled with nodata
+        # create parameter RasterArray filled with nodata
         param_ra = RasterArray.from_profile(None, param_profile)
         param_ra.array[1, mask] = 0  # set offsets to 0
 
@@ -192,86 +254,84 @@ class KernelModel():
             self._r2_array(ref_array, src_array, param_ra.array[:1], mask=mask, ref_sum=ref_sum, src_sum=src_sum,
                            dest_array=param_ra.array[2], kernel_shape=kernel_shape)
 
-        # if self._mask_partial:  # mask pixels with partial kernel coverage
-        #     mask_sum = cv.boxFilter(mask.astype(RasterArray.default_dtype, copy=False), -1, kernel_shape, **filter_args)
-        #     mask_partial = mask_sum >= np.prod(kernel_shape)
-        #     param_ra.mask = mask_partial
-
         return param_ra
 
     def _fit_gain_im_offset(self, ref_ra: RasterArray, src_ra: RasterArray, kernel_shape=None) -> RasterArray:
         """
-        Find sliding kernel gains and 'image' (i.e. block) offset for a band using opencv convolution.
+        Find sliding kernel gains and 'image' (i.e. block) offset, for a band, using opencv convolution.
 
-        Parameters
-        ----------
         ref_ra : RasterArray
-            Reference block in a RasterArray.
+            Reference data block in a RasterArray.
         src_ra : RasterArray
-            Source block, co-located with ref_ra and the same shape.
+            Source data block in a RasterArray, with the same CRS, shape & extents as ref_ra.
+        kernel_shape : tuple, optional
+            Sliding kernel [height, width] in pixels.
 
         Returns
         -------
         param_ra :RasterArray
-        RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second, and optionally
-        R2 for each kernel model in the third band when debug is on.
+            RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second, and optionally
+            R2 for each kernel model in the third band when debug_image==True.
         """
         if kernel_shape is None:
             kernel_shape = self._kernel_shape
         kernel_shape = tuple(kernel_shape)  # force to tuple for opencv
 
-        offset_model = self._fit_im_offset(ref_ra, src_ra)
-        # force nodata to nan so that operation below remains correctly masked
+        # find the source->reference normalisation
+        norm_model = self._fit_block_norm(ref_ra, src_ra)
+
+        # force src nodata to nan so that operation below remains correctly masked
         src_ra.nodata = RasterArray.default_nodata
 
-        # apply the offset model
-        src_ra.array = (src_ra.array * offset_model[0]) + offset_model[1]
+        # apply the normalisation (block gain and offset)
+        src_ra.array = (src_ra.array * norm_model[0]) + norm_model[1]
 
-        # find gains for offset src
+        # find gains for normalised source
         param_ra = self._fit_gain(ref_ra, src_ra, kernel_shape=kernel_shape)
 
-        # incorporate the offset model in the parameter RasterArray
-        param_ra.array[1] = param_ra.array[0] * offset_model[1]
-        param_ra.array[0] *= offset_model[0]
+        # incorporate the normalisation model in the parameter RasterArray
+        param_ra.array[1] = param_ra.array[0] * norm_model[1]
+        param_ra.array[0] *= norm_model[0]
         return param_ra
 
     def _fit_gain_offset(self, ref_ra: RasterArray, src_ra: RasterArray, kernel_shape=None) -> RasterArray:
         """
         Find sliding kernel full linear model for a band using opencv convolution.
 
-        Parameters
-        ----------
+        Find sliding kernel gains and 'image' (i.e. block) offset, for a band, using opencv convolution.
+
         ref_ra : RasterArray
-            Reference block in a RasterArray.
+            Reference data block in a RasterArray.
         src_ra : RasterArray
-            Source block, co-located with ref_ra and the same shape.
-        kernel_shape : numpy.array_like, list, tuple, optional
-            Sliding kernel [width, height] in pixels.
+            Source data block in a RasterArray, with the same CRS, shape & extents as ref_ra.
+        kernel_shape : tuple, optional
+            Sliding kernel [height, width] in pixels.
 
         Returns
         -------
         param_ra :RasterArray
-        RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second, and optionally
-        R2 for each kernel model in the third band when debug is on.
+            RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second, and optionally
+            R2 for each kernel model in the third band when debug_image==True.
         """
         # Least squares formulae adapted from https://www.mathsisfun.com/data/least-squares-regression.html
-
-        # get arrays and find a combined ref & src mask
-        ref_array = ref_ra.array
-        src_array = src_ra.array
-        param_profile = src_ra.profile.copy()
-        param_count = 3 if self._debug_image or (self._r2_inpaint_thresh is not None) else 2
-        param_profile.update(count=param_count, nodata=RasterArray.default_nodata, dtype=RasterArray.default_dtype)
-        mask = ref_ra.mask & src_ra.mask
-        # mask invalid pixels with 0 so that these do not contribute to kernel sums in *boxFilter()
-        ref_array[~mask] = 0
-        src_array[~mask] = 0
         if kernel_shape is None:
             kernel_shape = self._kernel_shape
         kernel_shape = tuple(kernel_shape)  # force to tuple for opencv
 
+        # mask invalid pixels with 0 so that these do not contribute to kernel sums in *boxFilter()
+        ref_array = ref_ra.array
+        src_array = src_ra.array
+        mask = ref_ra.mask & src_ra.mask
+        ref_array[~mask] = 0
+        src_array[~mask] = 0
+
+        # setup a RasterArray profile for the parameters
+        param_profile = src_ra.profile.copy()
+        param_profile.update(count=3 if self._debug_image else 2, nodata=RasterArray.default_nodata,
+                             dtype=RasterArray.default_dtype)
+
         # find the numerator for the gain i.e N*cov(ref, src)
-        filter_args = dict(normalize=False, borderType=cv.BORDER_CONSTANT)
+        filter_args = dict(normalize=False, borderType=cv.BORDER_CONSTANT)  # common opencv arguments
         src_sum = cv.boxFilter(src_array, -1, kernel_shape, **filter_args)
         ref_sum = cv.boxFilter(ref_array, -1, kernel_shape, **filter_args)
         src_ref_sum = cv.boxFilter(src_array * ref_array, -1, kernel_shape, **filter_args)
@@ -298,7 +358,7 @@ class KernelModel():
                            kernel_shape=kernel_shape)
 
         if self._r2_inpaint_thresh is not None:
-            # fill/inpaint low R2 areas and negative gain areas in the offset parameter
+            # fill/inpaint low R2 and negative gain areas in the offset parameter
             r2_mask = (param_ra.array[2] > self._r2_inpaint_thresh) & (param_ra.array[0] > 0) & mask
             param_ra.array[1] = fillnodata(param_ra.array[1], r2_mask)
             param_ra.mask = mask  # re-mask as nodata areas will have been filled above
@@ -307,60 +367,65 @@ class KernelModel():
             r2_mask = ~r2_mask & mask
             np.divide(ref_sum - mask_sum * param_ra.array[1], src_sum, out=param_ra.array[0], where=r2_mask)
 
-        # if self._mask_partial:  # mask pixels with partial kernel coverage
-        #     mask_partial = mask_sum >= np.prod(kernel_shape)
-        #     param_ra.mask = mask_partial
-
         return param_ra
 
     def _full_coverage_mask(self, in_mask_ra: RasterArray, param_ra: RasterArray):
         """
-        Create a mask of pixels (in proc_crs) fully covered by src/ref images and sliding kernels.
+        Helper function to create a full coverage mask i.e. a mask of output pixels fully covered by source/reference
+        data, sliding (model) kernels, and resampling kernels.
 
-        Note: that this is a strict approach that avoids any kind of partial coverage (src/ref image, extrapolation,
-        and kernel).
+        Note: that this is a strict approach that avoids any kind of partial coverage.
 
         Parameters
         ----------
         in_mask_ra: RasterArray
-                    An initial mask of valid src/ref pixels, as a uint8 RasterArray.
+            An initial mask of valid source/reference pixels, as a RasterArray with dtype=='uint8'.
         param_ra: RasterArray
-                    The parameter RasterArray as returned by fit() i.e. this is a RasterArray in proc_crs space,
-                    whose mask corresponds to the combined ref & src masks.
+            A parameter RasterArray as returned by fit() i.e. a RasterArray in the CRS and grid corresponding to the
+            'proc_crs' attribute, whose mask corresponds to the combined reference & source masks.
         Returns
         -------
         mask_ra: RasterArray
-                 The full coverage mask as a uint8 RasterArray
+            The full coverage mask as a RasterArray with dtype=='uint8'
         """
 
-        # reproject the input mask into proc_crs
+        # re-project the initial mask into proc_crs (the CRS and grid corresponding to the proc_crs attribute)
         mask_ra = in_mask_ra.reproject(**param_ra.proj_profile, nodata=None, resampling=Resampling.average)
-        # find the mask of proc_crs pixels fully covered by mask_ra
+        # find the mask of proc_crs pixels fully covered by in_mask_ra
         mask = (mask_ra.array >= 1).astype('uint8', copy=False)  # ref pixels fully covered by src
-        # combine with the other (src/ref) mask via param_ra
+        # combine mask with the other (src/ref) mask via param_ra
         mask &= param_ra.mask
 
-        # Mask out partial kernel coverage.  Similar to the block overlap amount, this removes ceil(kernel_shape/2)
-        # pixels from the nodata edge.  This is the strict approach for proc_crs = ref, it could be
-        # floor(kernel_shape/2) for proc_crs = src, which avoids the additional upsampling step.
+        # Mask out partial kernel coverage.
+        # Similar to the block overlap amount, this removes ceil(kernel_shape/2) pixels from the nodata edge.  Note,
+        # that this is the strict approach for proc_crs == ref, it could be floor(kernel_shape/2) for proc_crs == src,
+        # which avoids the additional upsampling step.
         se = cv2.getStructuringElement(cv2.MORPH_RECT, tuple(self._kernel_shape + 2))
         mask_ra.array = cv2.erode(mask, se, borderType=cv2.BORDER_CONSTANT, borderValue=0)
         return mask_ra
 
     def fit(self, ref_ra: RasterArray, src_ra: RasterArray, kernel_shape=None) -> RasterArray:
         """
-        Fits sliding kernel models to reference and source arrays
+        Fit sliding kernel models to reference and source blocks.
 
         Parameters
         ----------
-        ref_ra: homonim.RasterArray
-                   M x N RasterArray of reference data, collocated, and of similar spectral content, to src_ra
-        src_ra: homonim.RasterArray
-                   M x N RasterArray of source data, collocated, and of similar spectral content, to ref_ra
+        ref_ra : RasterArray
+            Reference data block in a RasterArray.
+        src_ra : RasterArray
+            Source data block in a RasterArray, with the same CRS, shape & extents as ref_ra.
+        kernel_shape : tuple, optional
+            Sliding kernel [height, width] in pixels.
+
+        Returns
+        -------
+        param_ra :RasterArray
+            RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second, and optionally
+            R2 for each kernel model in the third band when debug_image==True.
         """
         if ((ref_ra.transform != src_ra.transform) or (ref_ra.crs.to_proj4() != src_ra.crs.to_proj4()) or
                 (ref_ra.shape != src_ra.shape)):
-            raise ValueError('ref_ra and src_ra must have the same CRS, transform and shape')
+            raise ValueError("'ref_ra' and 'src_ra' must have the same CRS, transform and shape")
 
         if kernel_shape is None:
             kernel_shape = self._kernel_shape
@@ -368,7 +433,7 @@ class KernelModel():
 
         if self._method == Method.gain:
             param_ra = self._fit_gain(ref_ra, src_ra, kernel_shape=kernel_shape)
-        elif self._method == Method.gain_im_offset:  # normalise src_ds_ra in place
+        elif self._method == Method.gain_im_offset:
             param_ra = self._fit_gain_im_offset(ref_ra, src_ra, kernel_shape=kernel_shape)
         else:
             param_ra = self._fit_gain_offset(ref_ra, src_ra, kernel_shape=kernel_shape)
@@ -377,12 +442,20 @@ class KernelModel():
 
     def apply(self, src_ra: RasterArray, param_ra: RasterArray) -> RasterArray:
         """
-        Applies sliding kernel models to a source array
+        Apply kernel models to a source block.
 
         Parameters
         ----------
-        src_ra: homonim.RasterArray
-                   M x N RasterArray of source data, collocated, and of similar spectral content, to ref_ra
+        src_ra : RasterArray
+            Source data block in a RasterArray.
+        param_ra :RasterArray
+            RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second, and the same
+            CRS, shape & extents as src_ra.
+
+        Returns
+        -------
+        out_ra :RasterArray
+            Homogenised block in a RasterArray.
         """
         out_array = (param_ra.array[0] * src_ra.array) + param_ra.array[1]
         out_ra = RasterArray.from_profile(out_array, param_ra.profile)
@@ -390,43 +463,58 @@ class KernelModel():
 
 
 class RefSpaceModel(KernelModel):
-    def _mask_partial(self, src_ra, param_ra):
-        pass
+    """
+    A KernelModel subclass, for processing in the 'reference space' i.e. reference image CRS and grid.
+    Recommended for the most common use case where the reference image has a lower resolution than the source image.
+    """
 
     def fit(self, ref_ra: RasterArray, src_ra: RasterArray, **kwargs) -> RasterArray:
-        # downsample src_ra to ref crs and grid
+        # choose resampling method based on whether we are up- or downsampling
         resampling = self._downsampling if np.prod(src_ra.res) < np.prod(ref_ra.res) else self._upsampling
+        # downsample src_ra to reference CRS and grid
         src_ds_ra = src_ra.reproject(**ref_ra.proj_profile, resampling=resampling)
+        # call base class fit with reference and source RasterArrays in the reference CRS & grid
         return KernelModel.fit(self, ref_ra, src_ds_ra, kernel_shape=self._kernel_shape)
 
     def apply(self, src_ra: RasterArray, param_ra: RasterArray):
-        # upsample the param_ra to src crs and grid
+        # create a parameter RasterArray containing only the first two bands of param_ra
+        # (to speed up the re-projection below)
         _param_ra = RasterArray.from_profile(param_ra.array[:2], param_ra.profile)
+        # choose resampling method based on whether we are up- or downsampling
         resampling = self._upsampling if np.prod(src_ra.res) < np.prod(param_ra.res) else self._downsampling
+        # re-project param_ra to source CRS and grid
         param_us_ra = _param_ra.reproject(**src_ra.proj_profile, resampling=resampling)
 
         if self._mask_partial:
-            # find the mask of fully covered pixel in proc_crs=ref
+            # find the mask of fully covered pixels in reference CRS and grid
             mask_ra = self._full_coverage_mask(src_ra.mask_ra, param_ra)
-            # reproject the mask to src crs and apply to parameters
+            # re-project the mask to source CRS and grid, and apply to the parameters
             mask_us_ra = mask_ra.reproject(**src_ra.proj_profile, nodata=0, resampling=Resampling.nearest)
             param_us_ra.mask = mask_us_ra.array.astype('bool', copy=False)
         else:
             param_us_ra.mask = src_ra.mask
 
+        # call base class apply with source and parameter RasterArrays in the source CRS & grid
         return KernelModel.apply(self, src_ra, param_us_ra)
 
 
 class SrcSpaceModel(KernelModel):
+    """
+    A KernelModel subclass, for processing in the 'source space' i.e. source image CRS and grid.
+    Recommended for the unusual use case where the source image has a lower resolution than the reference image.
+    """
     def fit(self, ref_ra: RasterArray, src_ra: RasterArray, **kwargs):
-        # upsample ref_ra to src crs and grid
+        # choose resampling method based on whether we are up- or downsampling
         resampling = self._upsampling if np.prod(src_ra.res) < np.prod(ref_ra.res) else self._downsampling
+        # upsample ref_ra to the source CRS and grid
         ref_us_ra = ref_ra.reproject(**src_ra.proj_profile, resampling=resampling)
-        _src_ra = src_ra.copy()  # avoid in-place changes to src_ra in fit() below
+
+        _src_ra = src_ra.copy()  # copy the source to avoid in-place changes in fit() below
+        # call base class fit with source and parameter RasterArrays in the source CRS & grid
         param_ra = KernelModel.fit(self, ref_us_ra, _src_ra, kernel_shape=self._kernel_shape)
 
         if self._mask_partial:
-            # find the mask of fully covered pixel in proc_crs=src
+            # find the mask of fully covered pixels in source CRS and grid, and apply it to the parameters
             mask_ra = self._full_coverage_mask(ref_ra.mask_ra, param_ra)
             param_ra.mask = mask_ra.array.astype('bool', copy=False)
         else:
