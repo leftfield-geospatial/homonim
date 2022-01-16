@@ -25,7 +25,7 @@ from rasterio.fill import fillnodata
 
 from homonim.enums import Method
 from homonim.raster_array import RasterArray
-from homonim.utils import nan_equals
+from homonim import utils
 
 
 class KernelModel():
@@ -80,11 +80,7 @@ class KernelModel():
             raise ValueError("'method' should be an instance of homonim.enums.Method")
         self._method = method
 
-        self._kernel_shape = np.array(kernel_shape).astype(int)
-        if not np.all(np.mod(self._kernel_shape, 2) == 1):
-            raise ValueError("'kernel_shape' must be odd in both dimensions")
-        if not np.all(self._kernel_shape >= 1):
-            raise ValueError("'kernel_shape' must be a minimum of one in both dimensions")
+        self._kernel_shape = utils.check_kernel_shape(kernel_shape)
 
         self._debug_image = debug_image
         self._r2_inpaint_thresh = r2_inpaint_thresh
@@ -119,12 +115,11 @@ class KernelModel():
         kernel_shape = tuple(kernel_shape)  # force to tuple for opencv
         filter_args = dict(normalize=False, borderType=cv.BORDER_CONSTANT)  # common opencv arguments
 
-
         # find the keyword arguments that were not provided
         if mask is None:
             # if mask is passed, assume that it has been applied ref_array and src_array, otherwise do that here
-            mask = (nan_equals(src_array, RasterArray.default_nodata) &
-                    nan_equals(ref_array, RasterArray.default_nodata))
+            mask = (utils.nan_equals(src_array, RasterArray.default_nodata) &
+                    utils.nan_equals(ref_array, RasterArray.default_nodata))
             ref_array[~mask] = 0
             src_array[~mask] = 0
         if mask_sum is None:
@@ -143,7 +138,6 @@ class KernelModel():
         # TSS = sum((ref - mean(ref))**2), which can be expanded and expressed in terms of cv2.boxFilter kernel sums as:
         ss_tot_array = (mask_sum * ref2_sum) - (ref_sum ** 2)
 
-
         if param_array.shape[0] > 1:
             # find RSS for method == Method.gain_offset
             if src_sum is None:
@@ -151,7 +145,7 @@ class KernelModel():
 
             # RSS = sum((ref - ref_hat)**2)
             #     = sum((ref - (m*src + c))**2), where m and c are the first 2 bands of param_array
-            # The above can be expanded, simplified and re-expressed in terms of cv2.boxFilter kernel sums as:
+            # The above can be expanded and expressed in terms of cv2.boxFilter kernel sums as:
 
             ss_res_array = (((param_array[0] ** 2) * src2_sum) +
                             (2 * np.product(param_array[:2], axis=0) * src_sum) -
@@ -161,7 +155,7 @@ class KernelModel():
         else:
             # find RSS for method == Method.gain or Method.gain_im_offset
             # RSS = sum((ref - m*src)**2), where m is the first band of param_array
-            # The above can be expanded, simplified and re-expressed in terms of cv2.boxFilter kernel sums as:
+            # The above can be expanded and expressed in terms of cv2.boxFilter kernel sums as:
             ss_res_array = (((param_array[0] ** 2) * src2_sum) - (2 * param_array[0] * src_ref_sum) + ref2_sum)
 
         ss_res_array *= mask_sum
@@ -503,6 +497,7 @@ class SrcSpaceModel(KernelModel):
     A KernelModel subclass, for processing in the 'source space' i.e. source image CRS and grid.
     Recommended for the unusual use case where the source image has a lower resolution than the reference image.
     """
+
     def fit(self, ref_ra: RasterArray, src_ra: RasterArray, **kwargs):
         # choose resampling method based on whether we are up- or downsampling
         resampling = self._upsampling if np.prod(src_ra.res) < np.prod(ref_ra.res) else self._downsampling

@@ -16,47 +16,34 @@
     You should have received a copy of the GNU Affero General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
-import logging
-import pathlib
-import threading
-from collections import namedtuple
-from itertools import product
 
 import numpy as np
 import rasterio
-import rasterio as rio
-from rasterio.enums import ColorInterp, MaskFlags
-from rasterio.vrt import WarpedVRT
-from rasterio.warp import Resampling, transform_bounds
 from rasterio.windows import Window
-from typing import Tuple
-
-from homonim.errors import UnsupportedImageError, ImageContentError, BlockSizeError, IoError
-from homonim.enums import ProcCrs
 
 
 def nan_equals(a, b):
-    """Compare two numpy objects, returning true if both a & b elements are nan"""
-    return ((a == b) | (np.isnan(a) & np.isnan(b)))
+    """Compare two numpy objects a & b, returning true where elements of both a & b are nan"""
+    return (a == b) | (np.isnan(a) & np.isnan(b))
 
 
 def expand_window_to_grid(win, expand_pixels=(0, 0)):
     """
-    Expands decimal window extents.
-
-    For expand_pixel=(0,0) window extents are expanded to the nearest integers that include the original extents.
+    Expand rasterio window extents to nearest whole numbers i.e. for expand_pixels >= (0, 0), it will return a window
+    that contains the original extents.
 
     Parameters
     ----------
     win: rasterio.windows.Window
-         The window to expand.
-    expand_pixels: numpy.array_like, List[float, float], tuple, optional
-                   A two element iterable (rows, columns) specifying the number of pixels to expand the window by.
+        The window to expand.
+    expand_pixels: tuple, optional
+        A tuple specifying the number of (rows, columns) pixels to expand the window by.
+        [default: (0, 0)]
 
     Returns
     -------
     win: rasterio.windows.Window
-         The expanded window
+         The expanded window.
     """
     col_off, col_frac = np.divmod(win.col_off - expand_pixels[1], 1)
     row_off, row_frac = np.divmod(win.row_off - expand_pixels[0], 1)
@@ -68,31 +55,59 @@ def expand_window_to_grid(win, expand_pixels=(0, 0)):
 
 def round_window_to_grid(win):
     """
-    Rounds decimal window extents to the nearest integers.
+    Rounds window extents to the nearest whole numbers.
 
     Parameters
     ----------
     win: rasterio.windows.Window
-         The window to round.
+        The window to round.
 
     Returns
     -------
     win: rasterio.windows.Window
-         The rounded window.
+        The rounded window with integer extents.
     """
     row_range, col_range = win.toranges()
     row_range = np.round(row_range).astype('int')
     col_range = np.round(col_range).astype('int')
     return Window(col_off=col_range[0], row_off=row_range[0], width=np.diff(col_range)[0], height=np.diff(row_range)[0])
 
+
 def check_kernel_shape(kernel_shape):
+    """
+    Check a kernel_shape (height, width) tuple for validity.  Raises ValueError if kernel_shape is invalid.
+
+    Parameters
+    ----------
+    kernel_shape: tuple
+        The kernel (height, width) in pixels.
+
+    Returns
+    -------
+    kernel_shape: numpy.array
+        The validated kernel_shape as a numpy array.
+    """
     kernel_shape = np.array(kernel_shape).astype(int)
     if not np.all(np.mod(kernel_shape, 2) == 1):
-        raise ValueError("'kernel_shape' must be odd in both dimensions")
+        raise ValueError("kernel shape must be odd in both dimensions.")
     if not np.all(kernel_shape >= 1):
-        raise ValueError("'kernel_shape' must be a minimum of one in both dimensions")
+        raise ValueError("kernel shape must be a minimum of one in both dimensions.")
     return kernel_shape
 
+
 def overlap_for_kernel(kernel_shape):
+    """
+    Return the block overlap for a kernel shape.
+
+    Parameters
+    ----------
+    kernel_shape: tuple
+        The kernel (height, width) in pixels.
+
+    Returns
+    -------
+    overlap: numpy.array
+        The overlap (height, width) in integer pixels as a numpy.array.
+    """
     kernel_shape = np.array(kernel_shape).astype(int)
-    return np.ceil(kernel_shape/2).astype('int')
+    return np.ceil(kernel_shape / 2).astype('int')

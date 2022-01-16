@@ -35,6 +35,7 @@ from homonim.compare import RasterCompare
 from homonim.enums import ProcCrs, Method
 from homonim.fuse import RasterFuse
 from homonim.kernel_model import KernelModel
+from homonim.utils import check_kernel_shape
 
 logger = logging.getLogger(__name__)
 
@@ -81,12 +82,11 @@ def _nodata_cb(ctx, param, value):
 
 def _kernel_shape_cb(ctx, param, value):
     """click callback to error check kernel_shape"""
-    kernel_shape = np.array(value)
-    if np.any(kernel_shape < 1):
-        raise click.BadParameter(f'Invalid kernel shape: {kernel_shape}, should be a minimum of one in both dimensions')
-    if not np.all(np.mod(kernel_shape, 2) == 1):
-        raise click.BadParameter(f'Invalid kernel shape: {kernel_shape}, should be odd in both dimensions')
-    return value
+    try:
+        kernel_shape = check_kernel_shape(value)
+    except Exception as ex:
+        raise click.BadParameter(str(ex))
+    return kernel_shape
 
 
 def _creation_options_cb(ctx, param, value):
