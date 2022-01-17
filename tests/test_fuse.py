@@ -187,7 +187,7 @@ class TestFuse(unittest.TestCase):
 
         param_list = [
             dict(method=Method.gain, kernel_shape=(3, 3), proc_crs=ProcCrs.ref),
-            dict(method=Method.gain_im_offset, kernel_shape=(5, 5), proc_crs=ProcCrs.ref),
+            dict(method=Method.gain_blk_offset, kernel_shape=(5, 5), proc_crs=ProcCrs.ref),
             dict(method=Method.gain_offset, kernel_shape=(9, 9), proc_crs=ProcCrs.ref),
         ]
         for param_dict in param_list:
@@ -219,7 +219,7 @@ class TestFuse(unittest.TestCase):
 
         param_list = [
             dict(method=Method.gain, kernel_shape=(1, 1), proc_crs=ProcCrs.ref),
-            dict(method=Method.gain_im_offset, kernel_shape=(3, 3), proc_crs=ProcCrs.ref),
+            dict(method=Method.gain_blk_offset, kernel_shape=(3, 3), proc_crs=ProcCrs.ref),
             dict(method=Method.gain_offset, kernel_shape=(9, 9), proc_crs=ProcCrs.ref),
         ]
 

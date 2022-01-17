@@ -196,7 +196,7 @@ def cli(verbose, quiet):
               help="Kernel height and width in pixels (of the the lowest resolution of the source and reference "
                    "images).")
 @click.option("-m", "--method", type=click.Choice(Method, case_sensitive=False),
-              default=Method.gain_im_offset.name, show_default=True,
+              default=Method.gain_blk_offset.name, show_default=True,
               help="Homogenisation method.")
 @click.option("-od", "--output-dir", type=click.Path(exists=True, file_okay=False, writable=True),
               help="Directory in which to create homogenised image(s). [default: use source image directory]")

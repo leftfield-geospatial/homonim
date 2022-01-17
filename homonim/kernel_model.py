@@ -427,7 +427,7 @@ class KernelModel():
 
         if self._method == Method.gain:
             param_ra = self._fit_gain(ref_ra, src_ra, kernel_shape=kernel_shape)
-        elif self._method == Method.gain_im_offset:
+        elif self._method == Method.gain_blk_offset:
             param_ra = self._fit_gain_im_offset(ref_ra, src_ra, kernel_shape=kernel_shape)
         else:
             param_ra = self._fit_gain_offset(ref_ra, src_ra, kernel_shape=kernel_shape)
