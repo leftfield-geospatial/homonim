@@ -43,6 +43,8 @@ logger = logging.getLogger(__name__)
 class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
     """
     A class for encapsulating a masked, geo-referenced numpy array.
+
+    Provides methods for re-projecting and reading/writing from/to rasterio datasets.
     """
     default_nodata = float('nan')   # default internal nodata value
     default_dtype = 'float32'       # default internal data type
@@ -291,7 +293,10 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
 
     @property
     def mask_ra(self):
-        """A RasterArray containing the 2D mask as uint8 data type, and with nodata=None"""
+        """
+        A RasterArray containing the 2D mask as 'uint8' data type, and with nodata=None.  Useful for re-projecting
+        the mask.
+        """
         mask = self.mask.astype('uint8', copy=False)
         return RasterArray(mask, crs=self._crs, transform=self._transform, nodata=None)
 
@@ -322,7 +327,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
 
     def slice_to_bounds(self, *bounds):
         """
-        Create a new RasterArray representing a sub-region of this RasterArray.
+        Create a new RasterArray representing a rectangular sub-region of this RasterArray.
         Note that the created RasterArray is a view into the current array, not a copy.
 
         Parameters
@@ -383,7 +388,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
 
         if np.any(np.array(indexes) > rio_dataset.count):
             error_indexes = np.array(indexes)[np.array(indexes) > rio_dataset.count]
-            raise ValueError(f'Band index(es) ({error_indexes}) exceed the dataset count ({rio_dataset.count})')
+            raise ValueError(f'Band index(es) ({error_indexes}) exceed the dataset band count ({rio_dataset.count})')
 
         if (isinstance(indexes, list) and (len(indexes) > self.count)):
             raise ValueError(f'The length of indexes ({len(indexes)}) exceeds the number of bands in the '

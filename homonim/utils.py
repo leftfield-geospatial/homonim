@@ -55,7 +55,7 @@ def expand_window_to_grid(win, expand_pixels=(0, 0)):
 
 def round_window_to_grid(win):
     """
-    Rounds window extents to the nearest whole numbers.
+    Round window extents to the nearest whole numbers.
 
     Parameters
     ----------
