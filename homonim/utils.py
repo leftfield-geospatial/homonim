@@ -109,5 +109,7 @@ def overlap_for_kernel(kernel_shape):
     overlap: numpy.array
         The overlap (height, width) in integer pixels as a numpy.array.
     """
+    # Block overlap should be at least half the kernel 'shape' to ensure full kernel coverage at block edges, and a
+    # minimum of (1, 1) to avoid including extrapolated (rather than interpolated) pixels when up-sampling.
     kernel_shape = np.array(kernel_shape).astype(int)
     return np.ceil(kernel_shape / 2).astype('int')

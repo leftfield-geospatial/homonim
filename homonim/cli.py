@@ -214,7 +214,7 @@ def cli(verbose, quiet):
                    "source file.")
 @click.option("-mp", "--mask-partial", type=click.BOOL, is_flag=True,
               default=KernelModel.default_config['mask_partial'],
-              help=f"Mask homogenised pixels produced from partial kernel coverage.")
+              help=f"Mask homogenised pixels produced from partial kernel or image coverage.")
 @multithread_option
 @click.option("-mbm", "--max-block-mem", type=click.INT, help="Maximum image block size for processing (MB)",
               default=RasterFuse.default_homo_config['max_block_mem'], show_default=True)
@@ -285,7 +285,7 @@ def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, do_cmp, buil
                     him.build_overviews(homo_filename)
 
                     if config['homo_config']['debug_image']:
-                        param_out_filename = him._create_debug_filename(homo_filename)
+                        param_out_filename = him._debug_filename(homo_filename)
                         logger.info(f'Building overviews for {param_out_filename.name}')
                         him.build_overviews(param_out_filename)
 

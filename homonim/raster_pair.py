@@ -247,11 +247,13 @@ class RasterPairReader():
     @property
     def src_im(self) -> rasterio.DatasetReader:
         """The source rasterio dataset."""
+        self._assert_open()
         return self._src_im
 
     @property
     def ref_im(self) -> rasterio.DatasetReader:
         """The reference rasterio dataset."""
+        self._assert_open()
         return self._ref_im
 
     @property
