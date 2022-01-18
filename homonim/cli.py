@@ -77,16 +77,6 @@ def _src_file_cb(ctx, param, value):
             raise click.BadParameter(f'Could not find any source image(s) matching {src_file_path.name}')
     return value
 
-
-def _kernel_shape_cb(ctx, param, value):
-    """click callback to validate kernel_shape"""
-    try:
-        kernel_shape = utils.validate_kernel_shape(value)
-    except Exception as ex:
-        raise click.BadParameter(str(ex))
-    return kernel_shape
-
-
 def _threads_cb(ctx, param, value):
     """click callback to validate threads"""
     try:
@@ -213,12 +203,11 @@ def cli(verbose, quiet):
 @src_file_arg
 @ref_file_arg
 @click.option("-k", "--kernel-shape", type=click.Tuple([click.INT, click.INT]), nargs=2, default=(5, 5),
-              show_default=True, callback=_kernel_shape_cb, metavar='<HEIGHT WIDTH>',
+              show_default=True, metavar='<HEIGHT WIDTH>',
               help="Kernel height and width in pixels (of the the lowest resolution of the source and reference "
                    "images).")
 @click.option("-m", "--method", type=click.Choice(Method, case_sensitive=False),
-              default=Method.gain_blk_offset.name, show_default=True,
-              help="Homogenisation method.")
+              default=Method.gain_blk_offset.name, show_default=True, help="Homogenisation method.")
 @click.option("-od", "--output-dir", type=click.Path(exists=True, file_okay=False, writable=True),
               help="Directory in which to create homogenised image(s). [default: use source image directory]")
 @click.option("-cmp", "--compare", "do_cmp", type=click.BOOL, is_flag=True, default=False,
@@ -264,6 +253,10 @@ def cli(verbose, quiet):
 @click.pass_context
 def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, do_cmp, build_ovw, proc_crs, conf, **kwargs):
     """Radiometrically homogenise image(s) by fusion with a reference"""
+    try:
+        kernel_shape = utils.validate_kernel_shape(kernel_shape, method=method)
+    except Exception as ex:
+        raise click.BadParameter(str(ex))
 
     # build configuration dictionaries for ImFuse
     config = {}
@@ -305,6 +298,12 @@ def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, do_cmp, buil
                         param_out_filename = him._create_debug_filename(homo_filename)
                         logger.info(f'Building overviews for {param_out_filename.name}')
                         utils.build_overviews(param_out_filename)
+
+                if config['homo_config']['debug_image'] and (logger.getEffectiveLevel() <= logging.DEBUG):
+                    param_out_filename = him._create_debug_filename(homo_filename)
+                    _, stats_str = utils.debug_stats(param_out_filename, method=method,
+                                                     r2_inpaint_thresh=kwargs['r2_inpaint_thresh'])
+                    logger.debug(f'\n\n{param_out_filename.name} Stats:\n\n{stats_str}')
 
                 logger.info(f'Completed in {timer() - start_time:.2f} secs')
 

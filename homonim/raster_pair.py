@@ -99,6 +99,8 @@ class RasterPairReader():
         self._block_shape = None
         self._src_bands, self._ref_bands, self._proc_crs = self._inspect_image_pair(self._src_filename,
                                                                                     self._ref_filename, self._proc_crs)
+        logger.debug(f'Block overlap: {self._overlap} ({self._proc_crs.name} pixels)')
+
 
     @staticmethod
     def _inspect_image(filename):
@@ -161,8 +163,8 @@ class RasterPairReader():
                 if proc_crs == ProcCrs.auto:
                     # set proc_crs to the lowest resolution of the source and reference images
                     proc_crs = ProcCrs.ref if src_pixel_smaller else ProcCrs.src
-                    logger.debug(f"Source pixel size {src_im.res} is {cmp_str} than the reference {ref_im.res}, "
-                                 f"using proc_crs='{proc_crs}'")
+                    logger.debug(f"Source pixel size {np.round(src_im.res, decimals=3)} is {cmp_str} than the reference "
+                                 f"{np.round(ref_im.res, decimals=3)}. Using proc_crs='{proc_crs}'.")
                 elif ((proc_crs == ProcCrs.src and src_pixel_smaller) or
                       (proc_crs == ProcCrs.ref and not src_pixel_smaller)):
                     # warn if the proc_crs value does not correspond to the lowest resolution of the source and

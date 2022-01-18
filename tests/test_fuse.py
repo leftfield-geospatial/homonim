@@ -224,7 +224,7 @@ class TestFuse(unittest.TestCase):
         ]
 
         for param_dict in param_list:
-            cli_str = (f'fuse {src_wildcard} {ref_filename} -k {param_dict["kernel_shape"][0]} '
+            cli_str = (f'-v fuse {src_wildcard} {ref_filename} -k {param_dict["kernel_shape"][0]} '
                        f'{param_dict["kernel_shape"][1]} -m {param_dict["method"]} -od {homo_root} -c '
                        f'{self._conf_filename} -pc {param_dict["proc_crs"]}')
 

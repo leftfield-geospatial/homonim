@@ -114,12 +114,13 @@ class RasterFuse():
             raise ValueError("'method' must be an instance of homonim.enums.Method")
         self._method = method
 
-        self._kernel_shape = utils.validate_kernel_shape(kernel_shape)
+        self._kernel_shape = utils.validate_kernel_shape(kernel_shape, method=method)
         homo_config['threads'] = utils.validate_threads(homo_config['threads'])
 
         self._src_filename = pathlib.Path(src_filename)
         self._ref_filename = pathlib.Path(ref_filename)
         self._config = homo_config
+        self._model_config = model_config
         self._out_profile = out_profile
         self._profile = True
 

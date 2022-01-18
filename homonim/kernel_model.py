@@ -81,7 +81,7 @@ class KernelModel():
             raise ValueError("'method' should be an instance of homonim.enums.Method")
         self._method = method
 
-        self._kernel_shape = utils.validate_kernel_shape(kernel_shape)
+        self._kernel_shape = utils.validate_kernel_shape(kernel_shape, method=method)
 
         self._debug_image = debug_image
         self._r2_inpaint_thresh = r2_inpaint_thresh
