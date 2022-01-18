@@ -137,6 +137,11 @@ def validate_threads(threads):
         raise ValueError(f"'threads' is limited to the number of processors ({_cpu_count})")
     return threads
 
+def create_debug_filename(filename):
+    """Create a debug image filename, given the homogenised image filename"""
+    filename = pathlib.Path(filename)
+    return filename.parent.joinpath(f'{filename.stem}_DEBUG{filename.suffix}')
+
 
 def build_overviews(filename):
     """

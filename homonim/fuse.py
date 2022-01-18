@@ -162,11 +162,6 @@ class RasterFuse():
         """Kernel shape."""
         return self._kernel_shape
 
-    def _create_debug_filename(self, filename):
-        """Create a debug image filename, given the homogenised image filename"""
-        filename = pathlib.Path(filename)
-        return filename.parent.joinpath(f'{filename.stem}_DEBUG{filename.suffix}')
-
     def _combine_with_config(self, in_profile):
         """Update an input rasterio profile with the configuration profile."""
 
@@ -286,7 +281,7 @@ class RasterFuse():
         """
         write_lock = threading.Lock()
         dbg_lock = threading.Lock()
-        dbg_filename = self._create_debug_filename(out_filename)
+        dbg_filename = utils.create_debug_filename(out_filename)
 
         with ExitStack() as stack:  # use ExitStack for managing multiple contexts
             # redirect console logging to tqdm.write()

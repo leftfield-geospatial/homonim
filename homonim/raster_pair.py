@@ -204,7 +204,7 @@ class RasterPairReader():
             self._ref_im.close()
 
     def __enter__(self):
-        self._env = rio.Env(GDAL_NUM_THREADS='ALL_CPUs').__enter__()
+        self._env = rio.Env(GDAL_NUM_THREADS=1).__enter__()
         self.open()
         return self
 
