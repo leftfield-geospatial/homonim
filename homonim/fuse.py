@@ -33,8 +33,7 @@ from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 from contextlib import ExitStack
 
-from homonim import errors
-from homonim import utils
+from homonim import errors, utils
 from homonim.enums import Method, ProcCrs
 from homonim.kernel_model import KernelModel, RefSpaceModel, SrcSpaceModel
 from homonim.raster_array import RasterArray
@@ -115,14 +114,14 @@ class RasterFuse():
             raise ValueError("'method' must be an instance of homonim.enums.Method")
         self._method = method
 
-        self._kernel_shape = utils.parse_kernel_shape(kernel_shape)
-        homo_config['threads'] = utils.parse_threads(homo_config['threads'])
+        self._kernel_shape = utils.validate_kernel_shape(kernel_shape)
+        homo_config['threads'] = utils.validate_threads(homo_config['threads'])
 
         self._src_filename = pathlib.Path(src_filename)
         self._ref_filename = pathlib.Path(ref_filename)
         self._config = homo_config
         self._out_profile = out_profile
-        self._profile = False
+        self._profile = True
 
         # get the block overlap for kernel_shape
         overlap = utils.overlap_for_kernel(self._kernel_shape)
@@ -313,7 +312,7 @@ class RasterFuse():
                 # fit and apply the sliding kernel models
                 param_ra = self._model.fit(ref_ra, src_ra)
                 out_ra = self._model.apply(src_ra, param_ra)
-                # change the output nodata value if necessary
+                # change the output nodata value so that is is masked correctly for out_im
                 out_ra.nodata = out_im.nodata
 
                 with write_lock:    # write the output block
@@ -327,15 +326,14 @@ class RasterFuse():
             # process blocks in concurrent threads
 
             with concurrent.futures.ThreadPoolExecutor(max_workers=self._config['threads']) as executor:
-                futures = []
-                for block_pair in self._raster_pair.block_pairs():
-                    future = executor.submit(process_block, block_pair)
-                    futures.append(future)
+                # submit blocks for processing
+                futures = [executor.submit(process_block, block_pair) for block_pair in self._raster_pair.block_pairs()]
 
-                # wait for threads and raise any thread generated exceptions
+                # wait for threads in order of completion, and raise any thread generated exceptions
                 for future in tqdm(concurrent.futures.as_completed(futures), bar_format=bar_format, total=len(futures)):
                     future.result()
 
+        # set output and debug image metadata
         self._set_homo_metadata(out_filename)
         if self._config['debug_image']:
             self._set_debug_metadata(dbg_filename)

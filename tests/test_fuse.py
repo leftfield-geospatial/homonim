@@ -34,7 +34,7 @@ from homonim import root_path, cli
 from homonim.compare import RasterCompare
 from homonim.fuse import RasterFuse
 from homonim.raster_pair import RasterPairReader
-from homonim.enums import Method, ProcCrs
+from homonim import utils, enums
 
 
 class TestFuse(unittest.TestCase):
@@ -124,10 +124,10 @@ class TestFuse(unittest.TestCase):
         ovl_blocks = list(raster_pair.block_pairs())
         proc_overlap = np.array(raster_pair._overlap)
         res_ratio = np.divide(raster_pair.ref_im.res, raster_pair.src_im.res)
-        other_overlap = proc_overlap * res_ratio if raster_pair._proc_crs == ProcCrs.ref else proc_overlap / res_ratio
+        other_overlap = proc_overlap * res_ratio if raster_pair._proc_crs == enums.ProcCrs.ref else proc_overlap / res_ratio
         other_overlap = np.round(other_overlap).astype('int')
-        ref_overlap = proc_overlap if raster_pair._proc_crs == ProcCrs.ref else other_overlap
-        src_overlap = other_overlap if raster_pair._proc_crs == ProcCrs.ref else proc_overlap
+        ref_overlap = proc_overlap if raster_pair._proc_crs == enums.ProcCrs.ref else other_overlap
+        src_overlap = other_overlap if raster_pair._proc_crs == enums.ProcCrs.ref else proc_overlap
         prev_ovl_block = ovl_blocks[0]
         for ovl_block in ovl_blocks[1:]:
             ovl_block = ovl_block
@@ -169,7 +169,7 @@ class TestFuse(unittest.TestCase):
         him = RasterFuse(src_filename, ref_filename, **kwargs, homo_config=self._homo_config,
                          model_config=self._model_config, out_profile=self._out_profile)
         him.homogenise(homo_filename)
-        him.build_overviews(homo_filename)
+        utils.build_overviews(homo_filename)
         self.assertTrue(homo_filename.exists(), 'Homogenised file exists')
         with self.subTest('Homogenised vs Source', src_filename=src_filename, homo_filename=homo_filename):
             self._test_homo_against_src(src_filename, homo_filename)
@@ -186,9 +186,9 @@ class TestFuse(unittest.TestCase):
             'data/inputs/test_example/reference/COPERNICUS-S2-20151003T075826_20151003T082014_T35HKC_B432_Byte.tif')
 
         param_list = [
-            dict(method=Method.gain, kernel_shape=(3, 3), proc_crs=ProcCrs.ref),
-            dict(method=Method.gain_blk_offset, kernel_shape=(5, 5), proc_crs=ProcCrs.ref),
-            dict(method=Method.gain_offset, kernel_shape=(9, 9), proc_crs=ProcCrs.ref),
+            dict(method=enums.Method.gain, kernel_shape=(3, 3), proc_crs=enums.ProcCrs.ref),
+            dict(method=enums.Method.gain_blk_offset, kernel_shape=(5, 5), proc_crs=enums.ProcCrs.ref),
+            dict(method=enums.Method.gain_offset, kernel_shape=(9, 9), proc_crs=enums.ProcCrs.ref),
         ]
         for param_dict in param_list:
             self._test_api(src_filename, ref_filename, ref2_filename, **param_dict)
@@ -205,7 +205,7 @@ class TestFuse(unittest.TestCase):
         # ref_filename = root_path.joinpath(
         #     'data/inputs/test_example/source/NGI_Baviaanskloof_3324c_2015_RGB.vrt')
 
-        param_dict = dict(method=Method.gain, kernel_shape=(5, 5), proc_crs=ProcCrs.src)
+        param_dict = dict(method=enums.Method.gain, kernel_shape=(5, 5), proc_crs=enums.ProcCrs.src)
         self._test_api(src_filename, ref_filename, ref_filename, **param_dict)
 
     def test_cli(self):
@@ -218,9 +218,9 @@ class TestFuse(unittest.TestCase):
         homo_root = root_path.joinpath('data/outputs/test_example/homogenised')
 
         param_list = [
-            dict(method=Method.gain, kernel_shape=(1, 1), proc_crs=ProcCrs.ref),
-            dict(method=Method.gain_blk_offset, kernel_shape=(3, 3), proc_crs=ProcCrs.ref),
-            dict(method=Method.gain_offset, kernel_shape=(9, 9), proc_crs=ProcCrs.ref),
+            dict(method=enums.Method.gain, kernel_shape=(1, 1), proc_crs=enums.ProcCrs.ref),
+            dict(method=enums.Method.gain_blk_offset, kernel_shape=(3, 3), proc_crs=enums.ProcCrs.ref),
+            dict(method=enums.Method.gain_offset, kernel_shape=(9, 9), proc_crs=enums.ProcCrs.ref),
         ]
 
         for param_dict in param_list:

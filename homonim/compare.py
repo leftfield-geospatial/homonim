@@ -58,7 +58,7 @@ class RasterCompare():
         """
         self._src_filename = pathlib.Path(src_filename)
         self._ref_filename = pathlib.Path(ref_filename)
-        self._threads = utils.parse_threads(threads)
+        self._threads = utils.validate_threads(threads)
 
         # check src and ref image validity via RasterPairReader and get proc_crs
         # self._raster_pair is initialised to read in bands (not blocks)

@@ -76,7 +76,7 @@ def round_window_to_grid(win):
     return Window(col_off=col_range[0], row_off=row_range[0], width=np.diff(col_range)[0], height=np.diff(row_range)[0])
 
 
-def parse_kernel_shape(kernel_shape):
+def validate_kernel_shape(kernel_shape):
     """
     Check a kernel_shape (height, width) tuple for validity.  Raises ValueError if kernel_shape is invalid.
 
@@ -117,7 +117,7 @@ def overlap_for_kernel(kernel_shape):
     kernel_shape = np.array(kernel_shape).astype(int)
     return np.ceil(kernel_shape / 2).astype('int')
 
-def parse_threads(threads):
+def validate_threads(threads):
     """Parse number of threads parameter."""
     _cpu_count = cpu_count()
     threads = _cpu_count if threads == 0 else threads

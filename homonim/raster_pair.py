@@ -135,6 +135,8 @@ class RasterPairReader():
         """ Inspect a source - reference image pair for valid use, and return the non-alpha source & reference."""
         src_bands = RasterPairReader._inspect_image(src_filename)
         ref_bands = RasterPairReader._inspect_image(ref_filename)
+        logger.debug(f'{src_filename.name} non-alpha bands: {src_bands}')
+        logger.debug(f'{ref_filename.name} non-alpha bands: {ref_bands}')
         # check reference has enough bands
         if len(src_bands) > len(ref_bands):
             raise errors.ImageContentError(f'{ref_filename.name} has fewer non-alpha bands than {src_filename.name}.')
@@ -284,6 +286,7 @@ class RasterPairReader():
         if self._block_shape is None:
             proc_win = self._ref_win if self._proc_crs == ProcCrs.ref else self._src_win
             self._block_shape = self._auto_block_shape(proc_win=proc_win)
+            logger.debug(f'Auto block shape: {self._block_shape} ({self._proc_crs.name} pixels)')
 
         # check that the block shape is at least (3, 3) and bigger than the overlap
         if np.any(self._block_shape <= np.fmax(self._overlap, (3, 3))):

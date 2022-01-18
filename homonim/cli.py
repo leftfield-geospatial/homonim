@@ -24,19 +24,17 @@ import sys
 from timeit import default_timer as timer
 
 import click
-import numpy as np
 import pandas as pd
 import rasterio as rio
 import yaml
 from click.core import ParameterSource
 from rasterio.warp import SUPPORTED_RESAMPLING
-from multiprocessing import cpu_count
 
+from homonim import utils
 from homonim.compare import RasterCompare
 from homonim.enums import ProcCrs, Method
 from homonim.fuse import RasterFuse
 from homonim.kernel_model import KernelModel
-from homonim import utils
 
 logger = logging.getLogger(__name__)
 
@@ -59,12 +57,43 @@ def _configure_logging(verbosity):
     """configure python logging level"""
     # adapted from rasterio https://github.com/rasterio/rasterio
     log_level = max(10, 20 - 10 * verbosity)
+
+    # limit logging config to homonim by applying to package logger, rather than root logger
+    # pkg_logger level etc are then 'inherited' by logger = getLogger(__name__) in the modules
+    pkg_logger = logging.getLogger(__package__)
     formatter = _PlainInfoFormatter()
     handler = logging.StreamHandler(sys.stderr)
     handler.setFormatter(formatter)
-    logging.root.addHandler(handler)
-    logging.root.setLevel(log_level)
+    pkg_logger.addHandler(handler)
+    pkg_logger.setLevel(log_level)
     logging.captureWarnings(True)
+
+
+def _src_file_cb(ctx, param, value):
+    """click callback to validate src_file"""
+    for src_file_spec in value:
+        src_file_path = pathlib.Path(src_file_spec)
+        if len(list(src_file_path.parent.glob(src_file_path.name))) == 0:
+            raise click.BadParameter(f'Could not find any source image(s) matching {src_file_path.name}')
+    return value
+
+
+def _kernel_shape_cb(ctx, param, value):
+    """click callback to validate kernel_shape"""
+    try:
+        kernel_shape = utils.validate_kernel_shape(value)
+    except Exception as ex:
+        raise click.BadParameter(str(ex))
+    return kernel_shape
+
+
+def _threads_cb(ctx, param, value):
+    """click callback to validate threads"""
+    try:
+        threads = utils.validate_threads(value)
+    except Exception as ex:
+        raise click.BadParameter(str(ex))
+    return threads
 
 
 def _nodata_cb(ctx, param, value):
@@ -79,23 +108,6 @@ def _nodata_cb(ctx, param, value):
             return float(value)
         except (TypeError, ValueError):
             raise click.BadParameter("{!r} is not a number".format(value), param=param, param_hint="nodata")
-
-
-def _kernel_shape_cb(ctx, param, value):
-    """click callback to error check kernel_shape"""
-    try:
-        kernel_shape = utils.parse_kernel_shape(value)
-    except Exception as ex:
-        raise click.BadParameter(str(ex))
-    return kernel_shape
-
-def _threads_cb(ctx, param, value):
-    """click callback to parse threads"""
-    try:
-        threads = utils.parse_threads(value)
-    except Exception as ex:
-        raise click.BadParameter(str(ex))
-    return threads
 
 
 def _creation_options_cb(ctx, param, value):
@@ -156,8 +168,7 @@ class _ConfigFileCommand(click.Command):
 
             for conf_key, conf_value in config_dict.items():
                 if not conf_key in ctx.params:
-                    raise click.BadParameter(f"Unknown config file parameter '{conf_key}'", param="conf",
-                                             param_hint="conf")
+                    raise click.BadParameter(f"Unknown config file parameter '{conf_key}'", ctx=ctx, param_hint="conf")
                 else:
                     param_src = ctx.get_parameter_source(conf_key)
                     # overwrite default parameters with values from config file
@@ -175,7 +186,8 @@ threads_option = click.option("-t", "--threads", type=click.INT, default=RasterF
                               show_default=True, callback=_threads_cb,
                               help=f"Number of threads to use for processing (0 = use all cpus).")
 src_file_arg = click.argument("src-file", nargs=-1, metavar="INPUTS...",
-                              type=click.Path(exists=False, dir_okay=True, readable=False, path_type=pathlib.Path))
+                              type=click.Path(exists=False, dir_okay=True, readable=False, path_type=pathlib.Path),
+                              callback=_src_file_cb)
 ref_file_arg = click.argument("ref-file", nargs=1, metavar="REFERENCE",
                               type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path))
 
@@ -269,10 +281,6 @@ def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, do_cmp, buil
     try:
         for src_file_spec in src_file:
             src_file_path = pathlib.Path(src_file_spec)
-            if len(list(src_file_path.parent.glob(src_file_path.name))) == 0:
-                raise click.BadParameter(f'Could not find any source image(s) matching {src_file_path.name}',
-                                         param_hint='src_file')
-
             for src_filename in src_file_path.parent.glob(src_file_path.name):
 
                 logger.info(f'\nHomogenising {src_filename.name}')
@@ -305,7 +313,7 @@ def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, do_cmp, buil
         # compare source and homogenised files with reference (invokes compare command with relevant parameters)
         if do_cmp:
             ctx.invoke(compare, src_file=compare_files, ref_file=ref_file, proc_crs=proc_crs,
-                       multithread=kwargs['threads'])
+                       threads=kwargs['threads'])
     except Exception:
         logger.exception("Exception caught during processing")
         raise click.Abort()
@@ -330,10 +338,6 @@ def compare(src_file, ref_file, proc_crs, threads, output):
         # iterate over source files, comparing with reference
         for src_file_spec in src_file:
             src_file_path = pathlib.Path(src_file_spec)
-            if len(list(src_file_path.parent.glob(src_file_path.name))) == 0:
-                raise click.BadParameter(f'Could not find any source image(s) matching {src_file_path.name}',
-                                         param='src_file', param_hint='src_file')
-
             for src_filename in src_file_path.parent.glob(src_file_path.name):
                 logger.info(f'\nComparing {src_filename.name}')
                 start_time = timer()
