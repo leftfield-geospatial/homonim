@@ -30,12 +30,13 @@ import rasterio as rio
 import yaml
 from click.core import ParameterSource
 from rasterio.warp import SUPPORTED_RESAMPLING
+from multiprocessing import cpu_count
 
 from homonim.compare import RasterCompare
 from homonim.enums import ProcCrs, Method
 from homonim.fuse import RasterFuse
 from homonim.kernel_model import KernelModel
-from homonim.utils import check_kernel_shape
+from homonim import utils
 
 logger = logging.getLogger(__name__)
 
@@ -83,10 +84,18 @@ def _nodata_cb(ctx, param, value):
 def _kernel_shape_cb(ctx, param, value):
     """click callback to error check kernel_shape"""
     try:
-        kernel_shape = check_kernel_shape(value)
+        kernel_shape = utils.parse_kernel_shape(value)
     except Exception as ex:
         raise click.BadParameter(str(ex))
     return kernel_shape
+
+def _threads_cb(ctx, param, value):
+    """click callback to parse threads"""
+    try:
+        threads = utils.parse_threads(value)
+    except Exception as ex:
+        raise click.BadParameter(str(ex))
+    return threads
 
 
 def _creation_options_cb(ctx, param, value):
@@ -162,9 +171,9 @@ class _ConfigFileCommand(click.Command):
 proc_crs_option = click.option("-pc", "--proc-crs", type=click.Choice(ProcCrs, case_sensitive=False),
                                default=ProcCrs.auto.name, show_default=True,
                                help="The image CRS in which to perform processing.")
-multithread_option = click.option("-nmt", "--no-multithread", "multithread", type=click.BOOL, is_flag=True,
-                                  default=RasterFuse.default_homo_config['multithread'],
-                                  help=f"Process image blocks consecutively.")
+threads_option = click.option("-t", "--threads", type=click.INT, default=RasterFuse.default_homo_config['threads'],
+                              show_default=True, callback=_threads_cb,
+                              help=f"Number of threads to use for processing (0 = use all cpus).")
 src_file_arg = click.argument("src-file", nargs=-1, metavar="INPUTS...",
                               type=click.Path(exists=False, dir_okay=True, readable=False, path_type=pathlib.Path))
 ref_file_arg = click.argument("ref-file", nargs=1, metavar="REFERENCE",
@@ -215,7 +224,7 @@ def cli(verbose, quiet):
 @click.option("-mp", "--mask-partial", type=click.BOOL, is_flag=True,
               default=KernelModel.default_config['mask_partial'],
               help=f"Mask homogenised pixels produced from partial kernel or image coverage.")
-@multithread_option
+@threads_option
 @click.option("-mbm", "--max-block-mem", type=click.INT, help="Maximum image block size for processing (MB)",
               default=RasterFuse.default_homo_config['max_block_mem'], show_default=True)
 @click.option("-ds", "--downsampling", type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
@@ -282,12 +291,12 @@ def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, do_cmp, buil
                 # build overviews
                 if build_ovw:
                     logger.info(f'Building overviews for {homo_filename.name}')
-                    him.build_overviews(homo_filename)
+                    utils.build_overviews(homo_filename)
 
                     if config['homo_config']['debug_image']:
-                        param_out_filename = him._debug_filename(homo_filename)
+                        param_out_filename = him._create_debug_filename(homo_filename)
                         logger.info(f'Building overviews for {param_out_filename.name}')
-                        him.build_overviews(param_out_filename)
+                        utils.build_overviews(param_out_filename)
 
                 logger.info(f'Completed in {timer() - start_time:.2f} secs')
 
@@ -296,7 +305,7 @@ def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, do_cmp, buil
         # compare source and homogenised files with reference (invokes compare command with relevant parameters)
         if do_cmp:
             ctx.invoke(compare, src_file=compare_files, ref_file=ref_file, proc_crs=proc_crs,
-                       multithread=kwargs['multithread'])
+                       multithread=kwargs['threads'])
     except Exception:
         logger.exception("Exception caught during processing")
         raise click.Abort()
@@ -310,11 +319,11 @@ cli.add_command(fuse)
 @src_file_arg
 @ref_file_arg
 @proc_crs_option
-@multithread_option
+@threads_option
 @click.option("-o", "--output",
               type=click.Path(exists=False, dir_okay=False, writable=True, resolve_path=True, path_type=pathlib.Path),
               help="Write comparison results to a json file.")
-def compare(src_file, ref_file, proc_crs, multithread, output):
+def compare(src_file, ref_file, proc_crs, threads, output):
     """Statistically compare image(s) with a reference"""
     try:
         res_dict = {}
@@ -328,7 +337,7 @@ def compare(src_file, ref_file, proc_crs, multithread, output):
             for src_filename in src_file_path.parent.glob(src_file_path.name):
                 logger.info(f'\nComparing {src_filename.name}')
                 start_time = timer()
-                cmp = RasterCompare(src_filename, ref_file, proc_crs=proc_crs, multithread=multithread)
+                cmp = RasterCompare(src_filename, ref_file, proc_crs=proc_crs, threads=threads)
                 # TODO: what if file stems are identical
                 res_dict[str(src_filename)] = cmp.compare()
                 logger.info(f'Completed in {timer() - start_time:.2f} secs')

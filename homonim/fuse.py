@@ -47,7 +47,7 @@ class RasterFuse():
     """Class for radiometrically homogenising ('fusing') a source image with a reference image."""
 
     # default configuration dicts
-    default_homo_config = dict(debug_image=False, multithread=True, max_block_mem=100)
+    default_homo_config = dict(debug_image=False, threads=multiprocessing.cpu_count()-1, max_block_mem=100)
     default_out_profile = dict(driver='GTiff', dtype=RasterArray.default_dtype, nodata=RasterArray.default_nodata,
                                creation_options=dict(tiled=True, blockxsize=512, blockysize=512, compress='deflate',
                                                      interleave='band', photometric=None))
@@ -67,10 +67,10 @@ class RasterFuse():
             pixel boundary, and it should have at least as many bands as src_filename.  The ordering of the bands
             in src_filename and ref_filename should match.
         method: homonim.enums.Method
-                The radiometric homogenisation method.
+            The radiometric homogenisation method.
         kernel_shape: tuple
-                The (height, width) of the kernel in pixels of the proc_crs image (the lowest resolution image, if
-                proc_crs=ProcCrs.auto).
+            The (height, width) of the kernel in pixels of the proc_crs image (the lowest resolution image, if
+            proc_crs=ProcCrs.auto).
         proc_crs: homonim.enums.ProcCrs
             The initial proc_crs setting, specifying which of the source/reference image spaces should be used for
             processing.  If proc_crs=ProcCrs.auto (recommended), the lowest resolution image space will be used.
@@ -79,8 +79,9 @@ class RasterFuse():
             General homogenisation configuration dict with items:
                 debug_image: bool
                     Turn on/off the production of a debug image containing homogenisation parameters and R2 values.
-                multithread: bool
-                    Turn on/off the concurrent processing of image blocks.
+                threads: int
+                    The number of threads to use for concurrent processing of blocks (requires more memory).
+                    0 = use all cpus.
                 max_block_mem: float
                     An upper limit on the image block size in MB.  Useful for limiting the memory used by each block-
                     processing thread. Note that this is not a limit on the total memory consumed by a thread, as a
@@ -114,7 +115,8 @@ class RasterFuse():
             raise ValueError("'method' must be an instance of homonim.enums.Method")
         self._method = method
 
-        self._kernel_shape = utils.check_kernel_shape(kernel_shape)
+        self._kernel_shape = utils.parse_kernel_shape(kernel_shape)
+        homo_config['threads'] = utils.parse_threads(homo_config['threads'])
 
         self._src_filename = pathlib.Path(src_filename)
         self._ref_filename = pathlib.Path(ref_filename)
@@ -160,6 +162,11 @@ class RasterFuse():
         """Kernel shape."""
         return self._kernel_shape
 
+    def _create_debug_filename(self, filename):
+        """Create a debug image filename, given the homogenised image filename"""
+        filename = pathlib.Path(filename)
+        return filename.parent.joinpath(f'{filename.stem}_DEBUG{filename.suffix}')
+
     def _combine_with_config(self, in_profile):
         """Update an input rasterio profile with the configuration profile."""
 
@@ -199,11 +206,6 @@ class RasterFuse():
         debug_profile.update(dtype=RasterArray.default_dtype, count=len(self._raster_pair.src_bands) * 3,
                              nodata=RasterArray.default_nodata)
         return debug_profile
-
-    def _debug_filename(self, filename):
-        """Create a debug image filename, given the homogenised image filename"""
-        filename = pathlib.Path(filename)
-        return filename.parent.joinpath(f'{filename.stem}_DEBUG{filename.suffix}')
 
     def _set_metatdata(self, filename):
         """Helper function to copy the RasterFuse configuration info to an image (GeoTiff) file."""
@@ -265,36 +267,12 @@ class RasterFuse():
 
     def _write_debug_block(self, block_pair:BlockPair, param_ra:RasterArray, dbg_im:rasterio.io.DatasetWriter):
         """Write a block of parameter data to a debug image"""
-        # nonlocal accum_stats
-        # accum_stats += [param_ra.array[2, param_mask].sum(), param_mask.sum()]
-        #
         indexes = np.arange(param_ra.count) * len(self._raster_pair.src_bands) + block_pair.band_i + 1
         if self._proc_crs == ProcCrs.ref:
             dbg_out_block = block_pair.ref_out_block
         else:
             dbg_out_block = block_pair.src_out_block
         param_ra.to_rio_dataset(dbg_im, indexes=indexes, window=dbg_out_block)
-
-    def build_overviews(self, filename):
-        """
-        Builds internal overviews for an existing image file.
-
-        Parameters
-        ----------
-        filename: str, pathlib.Path
-                  Path to the image file to build overviews for.
-        """
-        filename = pathlib.Path(filename)
-
-        if not filename.exists():
-            raise Exception(f'{filename} does not exist')
-        with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(filename, 'r+') as im:
-            # limit overviews so that the highest level has at least 2**8=256 pixels along the shortest dimension,
-            # and so there are no more than 8 levels.
-            max_ovw_levels = int(np.min(np.log2(im.shape)))
-            num_ovw_levels = np.min([8, max_ovw_levels - 8])
-            ovw_levels = [2 ** m for m in range(1, num_ovw_levels + 1)]
-            im.build_overviews(ovw_levels, Resampling.average)
 
 
     def homogenise(self, out_filename):
@@ -308,10 +286,9 @@ class RasterFuse():
         """
         write_lock = threading.Lock()
         dbg_lock = threading.Lock()
-        bar_format = '{l_bar}{bar}|{n_fmt}/{total_fmt} blocks [{elapsed}<{remaining}]'
-        dbg_filename = self._debug_filename(out_filename)
+        dbg_filename = self._create_debug_filename(out_filename)
 
-        with ExitStack() as stack:
+        with ExitStack() as stack:  # use ExitStack for managing multiple contexts
             # redirect console logging to tqdm.write()
             stack.enter_context(logging_redirect_tqdm())
             # open the source and reference images for reading
@@ -330,6 +307,7 @@ class RasterFuse():
 
             def process_block(block_pair: BlockPair):
                 """Thread-safe function to homogenise a source image block"""
+
                 # read source and reference blocks
                 src_ra, ref_ra = self._raster_pair.read(block_pair)
                 # fit and apply the sliding kernel models
@@ -338,28 +316,25 @@ class RasterFuse():
                 # change the output nodata value if necessary
                 out_ra.nodata = out_im.nodata
 
-                with write_lock:
+                with write_lock:    # write the output block
                     out_ra.to_rio_dataset(out_im, indexes=block_pair.band_i + 1, window=block_pair.src_out_block)
 
                 if self._config['debug_image']:
-                    with dbg_lock:
+                    with dbg_lock:  # write the parameter block
                         self._write_debug_block(block_pair, param_ra, dbg_im)
 
-            if self._config['multithread']:
-                # process blocks in concurrent threads
-                future_list = []
-                with concurrent.futures.ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
-                    for block_pair in self._raster_pair.block_pairs():
-                        future = executor.submit(process_block, block_pair)
-                        future_list.append(future)
+            bar_format = '{l_bar}{bar}|{n_fmt}/{total_fmt} blocks [{elapsed}<{remaining}]'  # tqdm progress bar format
+            # process blocks in concurrent threads
 
-                    # wait for threads and raise any thread generated exceptions
-                    for future in tqdm(future_list, bar_format=bar_format):
-                        future.result()
-            else:
-                # process blocks consecutively
-                for block_pair in tqdm(self._raster_pair.block_pairs(), bar_format=bar_format):
-                    process_block(block_pair)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=self._config['threads']) as executor:
+                futures = []
+                for block_pair in self._raster_pair.block_pairs():
+                    future = executor.submit(process_block, block_pair)
+                    futures.append(future)
+
+                # wait for threads and raise any thread generated exceptions
+                for future in tqdm(concurrent.futures.as_completed(futures), bar_format=bar_format, total=len(futures)):
+                    future.result()
 
         self._set_homo_metadata(out_filename)
         if self._config['debug_image']:

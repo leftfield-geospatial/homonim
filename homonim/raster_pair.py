@@ -345,8 +345,8 @@ class RasterPairReader():
         proc_win_ul = np.array((proc_win.row_off, proc_win.col_off))
         proc_win_br = np.array((proc_win.height + proc_win.row_off, proc_win.width + proc_win.col_off))
 
-        # Form the overlapping blocks in proc_crs, and find their equivalents in 'other' space.
-        # Outer loop over bands to have so that all blocks in band are yielded consecutively - this is fastest for
+        # Create the overlapping blocks in proc_crs, and find their equivalents in 'other' space.
+        # Outer loop over bands so that all blocks in a band are yielded consecutively - this is fastest for
         # reading band interleaved images.
         for band_i in range(len(self._src_bands)):
             # Inner loop over the upper left corner row, col for each overlapping block

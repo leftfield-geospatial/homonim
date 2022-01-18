@@ -22,6 +22,7 @@ import logging
 import multiprocessing
 import pathlib
 from collections import OrderedDict
+from multiprocessing import cpu_count
 
 import numpy as np
 import pandas as pd
@@ -30,33 +31,34 @@ from tqdm import tqdm
 
 from homonim.enums import ProcCrs
 from homonim.raster_pair import RasterPairReader
+from homonim import utils
 
 logger = logging.getLogger(__name__)
 
 
 class RasterCompare():
     """Class to statistically compare an image against a reference"""
-    default_config = dict(multithread=True)
+    default_config = dict(threads=cpu_count()-1)
 
-    def __init__(self, src_filename, ref_filename, proc_crs=ProcCrs.auto, multithread=default_config['multithread']):
+    def __init__(self, src_filename, ref_filename, proc_crs=ProcCrs.auto, threads=default_config['threads']):
         """
         Construct the RasterCompare object
 
         Parameters
         ----------
         src_filename: pathlib.Path, str
-                      Path to the source image file
+            Path to the source image file
         ref_filename: pathlib.Path, str
-                      Path to the reference image file (whose spatial extent should cover that of src_filename)
+            Path to the reference image file (whose spatial extent should cover that of src_filename)
         proc_crs: homonim.enums.ProcCrs, optional
-                  The image CRS and resolution in which to perform the comparison.  proc_crs=ProcCrs.auto will
-                  automatically choose the lowest resolution of the source and reference CRS's (recommended)
-        multithread: bool, optional
-                     Compare image bands concurrently (requires more memory).
+            The image CRS and resolution in which to perform the comparison.  proc_crs=ProcCrs.auto will
+            automatically choose the lowest resolution of the source and reference CRS's (recommended)
+        threads: int, optional
+            The number of threads to use for concurrent processing of bands (requires more memory).  0 = use all cpus.
         """
         self._src_filename = pathlib.Path(src_filename)
         self._ref_filename = pathlib.Path(ref_filename)
-        self._multithread = multithread
+        self._threads = utils.parse_threads(threads)
 
         # check src and ref image validity via RasterPairReader and get proc_crs
         # self._raster_pair is initialised to read in bands (not blocks)
@@ -109,22 +111,13 @@ class RasterCompare():
                              f'Band {block_pair.band_i + 1}')
                 return band_desc, stats_dict
 
-            if self._multithread:
-                # process bands in parallel
-                future_list = []
-                with concurrent.futures.ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
-                    for block_pair in raster_pair.block_pairs():
-                        future = executor.submit(process_band, block_pair)
-                        future_list.append(future)
+            # process bands concurrently
+            with concurrent.futures.ThreadPoolExecutor(max_workers=self._threads) as executor:
+                futures = [executor.submit(process_band, block_pair) for block_pair in raster_pair.block_pairs()]
 
-                    # wait for threads, get results and raise any thread generated exceptions
-                    for future in tqdm(future_list, bar_format=bar_format):
-                        band_desc, band_dict = future.result()
-                        res_dict[band_desc] = band_dict
-            else:
-                # process bands consecutively
-                for block_pair in tqdm(raster_pair.block_pairs(), bar_format=bar_format):
-                    band_desc, band_dict = process_band(block_pair)
+                # wait for threads, get results and raise any thread generated exceptions
+                for future in tqdm(concurrent.futures.as_completed(futures), bar_format=bar_format, total=len(futures)):
+                    band_desc, band_dict = future.result()
                     res_dict[band_desc] = band_dict
 
         # use a pandas dataframe to find the mean of the statistics over the bands

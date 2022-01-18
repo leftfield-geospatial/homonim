@@ -57,7 +57,7 @@ class TestHomonim(unittest.TestCase):
         self.assertTrue(all(band_df['r2'] >= 0) and all(band_df['r2'] <= 1), 'r2 in range')
 
     def _test_compare_api(self, src_filename, ref_filename, proc_crs=ProcCrs.auto):
-        cmp = RasterCompare(src_filename, ref_filename, proc_crs=proc_crs, multithread=self._config['multithread'])
+        cmp = RasterCompare(src_filename, ref_filename, proc_crs=proc_crs, threads=self._config['threads'])
         band_dict = cmp.compare()
         self._test_compare_dict(src_filename, band_dict)
 

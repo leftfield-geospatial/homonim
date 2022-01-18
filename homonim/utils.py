@@ -18,8 +18,11 @@
 """
 
 import numpy as np
-import rasterio
+import rasterio as rio
+from rasterio.enums import Resampling
 from rasterio.windows import Window
+from multiprocessing import cpu_count
+import pathlib
 
 
 def nan_equals(a, b):
@@ -73,7 +76,7 @@ def round_window_to_grid(win):
     return Window(col_off=col_range[0], row_off=row_range[0], width=np.diff(col_range)[0], height=np.diff(row_range)[0])
 
 
-def check_kernel_shape(kernel_shape):
+def parse_kernel_shape(kernel_shape):
     """
     Check a kernel_shape (height, width) tuple for validity.  Raises ValueError if kernel_shape is invalid.
 
@@ -113,3 +116,32 @@ def overlap_for_kernel(kernel_shape):
     # minimum of (1, 1) to avoid including extrapolated (rather than interpolated) pixels when up-sampling.
     kernel_shape = np.array(kernel_shape).astype(int)
     return np.ceil(kernel_shape / 2).astype('int')
+
+def parse_threads(threads):
+    """Parse number of threads parameter."""
+    _cpu_count = cpu_count()
+    threads = _cpu_count if threads == 0 else threads
+    if threads > _cpu_count:
+        raise ValueError(f"'threads' is limited to the number of processors ({_cpu_count})")
+    return threads
+
+def build_overviews(filename):
+    """
+    Build internal overviews for an existing image file.
+
+    Parameters
+    ----------
+    filename: str, pathlib.Path
+              Path to the image file to build overviews for.
+    """
+    filename = pathlib.Path(filename)
+
+    if not filename.exists():
+        raise Exception(f'{filename} does not exist')
+    with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(filename, 'r+') as im:
+        # limit overviews so that the highest level has at least 2**8=256 pixels along the shortest dimension,
+        # and so there are no more than 8 levels.
+        max_ovw_levels = int(np.min(np.log2(im.shape)))
+        num_ovw_levels = np.min([8, max_ovw_levels - 8])
+        ovw_levels = [2 ** m for m in range(1, num_ovw_levels + 1)]
+        im.build_overviews(ovw_levels, Resampling.average)
