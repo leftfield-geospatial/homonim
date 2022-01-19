@@ -175,7 +175,7 @@ proc_crs_option = click.option("-pc", "--proc-crs", type=click.Choice(ProcCrs, c
                                help="The image CRS in which to perform processing.")
 threads_option = click.option("-t", "--threads", type=click.INT, default=RasterFuse.default_homo_config['threads'],
                               show_default=True, callback=_threads_cb,
-                              help=f"Number of threads to use for processing (0 = use all cpus).")
+                              help=f"Number of image blocks to process concurrently (0 = use all cpus).")
 src_file_arg = click.argument("src-file", nargs=-1, metavar="INPUTS...",
                               type=click.Path(exists=False, dir_okay=True, readable=False, path_type=pathlib.Path),
                               callback=_src_file_cb)
@@ -279,11 +279,13 @@ def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, overwrite, d
         for src_file_spec in src_file:
             src_file_path = pathlib.Path(src_file_spec)
             for src_filename in src_file_path.parent.glob(src_file_path.name):
+                him = RasterFuse(src_filename, ref_file, method=method, kernel_shape=kernel_shape, proc_crs=proc_crs,
+                                 **config)
 
                 logger.info(f'\nHomogenising {src_filename.name}')
                 # create output image filename
                 homo_root = pathlib.Path(output_dir) if output_dir is not None else src_filename.parent
-                post_fix = _create_homo_postfix(proc_crs=proc_crs, method=method, kernel_shape=kernel_shape,
+                post_fix = _create_homo_postfix(proc_crs=him.proc_crs, method=method, kernel_shape=kernel_shape,
                                                 driver=config['out_profile']['driver'])
                 homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
                 dbg_filename = utils.create_debug_filename(homo_filename)
@@ -298,8 +300,6 @@ def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, overwrite, d
 
                 # create fusion object and homogenise
                 start_time = timer()
-                him = RasterFuse(src_filename, ref_file, method=method, kernel_shape=kernel_shape, proc_crs=proc_crs,
-                                 **config)
                 him.homogenise(homo_filename)
 
                 # build overviews

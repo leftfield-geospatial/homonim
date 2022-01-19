@@ -39,3 +39,4 @@ creation_options:
   # Photometric interpretation, see https://gdal.org/drivers/raster/gtiff.html for options (None = same as source image)
   photometric:
   # NODATA value (None = same as source image)
+  num_threads: ALL_CPUS

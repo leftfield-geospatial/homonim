@@ -204,7 +204,7 @@ class RasterPairReader():
             self._ref_im.close()
 
     def __enter__(self):
-        self._env = rio.Env(GDAL_NUM_THREADS=1).__enter__()
+        self._env = rio.Env(GDAL_NUM_THREADS='ALL_CPUs').__enter__()
         self.open()
         return self
 
@@ -288,7 +288,8 @@ class RasterPairReader():
         if self._block_shape is None:
             proc_win = self._ref_win if self._proc_crs == ProcCrs.ref else self._src_win
             self._block_shape = self._auto_block_shape(proc_win=proc_win)
-            logger.debug(f'Auto block shape: {self._block_shape} ({self._proc_crs.name} pixels)')
+            logger.debug(f'Auto block shape: {self._block_shape}, of image shape: {[proc_win.height, proc_win.width]}'
+                         f' ({self._proc_crs.name} pixels)')
 
         # check that the block shape is at least (3, 3) and bigger than the overlap
         if np.any(self._block_shape <= np.fmax(self._overlap, (3, 3))):

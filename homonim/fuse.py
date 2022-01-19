@@ -16,22 +16,18 @@
     You should have received a copy of the GNU Affero General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
-import cProfile
 import concurrent.futures
 import logging
 import multiprocessing
 import pathlib
-import pstats
 import threading
-import tracemalloc
+from contextlib import ExitStack
 
 import numpy as np
 import rasterio as rio
 import rasterio.io
-from rasterio.warp import Resampling
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
-from contextlib import ExitStack
 
 from homonim import errors, utils
 from homonim.enums import Method, ProcCrs
@@ -46,7 +42,7 @@ class RasterFuse():
     """Class for radiometrically homogenising ('fusing') a source image with a reference image."""
 
     # default configuration dicts
-    default_homo_config = dict(debug_image=False, threads=multiprocessing.cpu_count()-1, max_block_mem=100)
+    default_homo_config = dict(debug_image=False, threads=multiprocessing.cpu_count(), max_block_mem=100)
     default_out_profile = dict(driver='GTiff', dtype=RasterArray.default_dtype, nodata=RasterArray.default_nodata,
                                creation_options=dict(tiled=True, blockxsize=512, blockysize=512, compress='deflate',
                                                      interleave='band', photometric=None))
@@ -79,8 +75,7 @@ class RasterFuse():
                 debug_image: bool
                     Turn on/off the production of a debug image containing homogenisation parameters and R2 values.
                 threads: int
-                    The number of threads to use for concurrent processing of blocks (requires more memory).
-                    0 = use all cpus.
+                    The number of blocks process concurrently (requires more memory). 0 = use all cpus.
                 max_block_mem: float
                     An upper limit on the image block size in MB.  Useful for limiting the memory used by each block-
                     processing thread. Note that this is not a limit on the total memory consumed by a thread, as a
@@ -122,7 +117,6 @@ class RasterFuse():
         self._config = homo_config
         self._model_config = model_config
         self._out_profile = out_profile
-        self._profile = True
 
         # get the block overlap for kernel_shape
         overlap = utils.overlap_for_kernel(self._kernel_shape)
@@ -162,6 +156,11 @@ class RasterFuse():
         """Kernel shape."""
         return self._kernel_shape
 
+    @property
+    def proc_crs(self):
+        """The 'processing CRS' i.e. which of the source/reference image spaces is selected for processing."""
+        return self._proc_crs
+
     def _combine_with_config(self, in_profile):
         """Update an input rasterio profile with the configuration profile."""
 
@@ -170,7 +169,7 @@ class RasterFuse():
             copy_keys = ['driver', 'width', 'height', 'count', 'dtype', 'crs', 'transform']
             out_profile = {copy_key: in_profile[copy_key] for copy_key in copy_keys}
         else:
-            out_profile = in_profile.copy()     # copy the whole input profile
+            out_profile = in_profile.copy()  # copy the whole input profile
 
         def nested_update(self_dict, other_dict):
             """Update self_dict with a flattened version of other_dict"""
@@ -260,7 +259,7 @@ class RasterFuse():
                                      k in ['ABBREV', 'ID', 'NAME']}
                     dbg_im.update_tags(param_i + 1, **dbg_meta_dict)
 
-    def _write_debug_block(self, block_pair:BlockPair, param_ra:RasterArray, dbg_im:rasterio.io.DatasetWriter):
+    def _write_debug_block(self, block_pair: BlockPair, param_ra: RasterArray, dbg_im: rasterio.io.DatasetWriter):
         """Write a block of parameter data to a debug image"""
         indexes = np.arange(param_ra.count) * len(self._raster_pair.src_bands) + block_pair.band_i + 1
         if self._proc_crs == ProcCrs.ref:
@@ -268,7 +267,6 @@ class RasterFuse():
         else:
             dbg_out_block = block_pair.src_out_block
         param_ra.to_rio_dataset(dbg_im, indexes=indexes, window=dbg_out_block)
-
 
     def homogenise(self, out_filename):
         """
@@ -286,19 +284,12 @@ class RasterFuse():
         with ExitStack() as stack:  # use ExitStack for managing multiple contexts
             # redirect console logging to tqdm.write()
             stack.enter_context(logging_redirect_tqdm())
-            # open the source and reference images for reading
+            # open the source and reference images for reading, and the output image for writing
             stack.enter_context(self._raster_pair)
-            # open the output image for writing
             out_im = stack.enter_context(rio.open(out_filename, 'w', **self._create_out_profile()))
 
-            if self._config['debug_image']: # open the debug image for writing
+            if self._config['debug_image']:  # open the debug image for writing
                 dbg_im = stack.enter_context(rio.open(dbg_filename, 'w', **self._create_debug_profile()))
-
-            if self._profile:
-                # setup profiling
-                tracemalloc.start()
-                proc_profile = cProfile.Profile()
-                proc_profile.enable()
 
             def process_block(block_pair: BlockPair):
                 """Thread-safe function to homogenise a source image block"""
@@ -311,37 +302,33 @@ class RasterFuse():
                 # change the output nodata value so that is is masked correctly for out_im
                 out_ra.nodata = out_im.nodata
 
-                with write_lock:    # write the output block
+                with write_lock:  # write the output block
                     out_ra.to_rio_dataset(out_im, indexes=block_pair.band_i + 1, window=block_pair.src_out_block)
 
                 if self._config['debug_image']:
                     with dbg_lock:  # write the parameter block
                         self._write_debug_block(block_pair, param_ra, dbg_im)
 
+            # process blocks
             bar_format = '{l_bar}{bar}|{n_fmt}/{total_fmt} blocks [{elapsed}<{remaining}]'  # tqdm progress bar format
-            # process blocks in concurrent threads
+            if self._config['threads'] == 1:
+                # process blocks consecutively in the main thread (useful for profiling)
+                block_pairs = [block_pair for block_pair in self._raster_pair.block_pairs()]
+                for block_pair in tqdm(block_pairs):
+                    process_block(block_pair)
+            else:
+                # process blocks concurrently
+                with concurrent.futures.ThreadPoolExecutor(max_workers=self._config['threads']) as executor:
+                    # submit blocks for processing
+                    futures = [executor.submit(process_block, block_pair)
+                               for block_pair in self._raster_pair.block_pairs()]
 
-            with concurrent.futures.ThreadPoolExecutor(max_workers=self._config['threads']) as executor:
-                # submit blocks for processing
-                futures = [executor.submit(process_block, block_pair) for block_pair in self._raster_pair.block_pairs()]
-
-                # wait for threads in order of completion, and raise any thread generated exceptions
-                for future in tqdm(concurrent.futures.as_completed(futures), bar_format=bar_format, total=len(futures)):
-                    future.result()
+                    # wait for threads in order of completion, and raise any thread generated exceptions
+                    for future in tqdm(concurrent.futures.as_completed(futures), bar_format=bar_format,
+                                       total=len(futures)):
+                        future.result()
 
         # set output and debug image metadata
         self._set_homo_metadata(out_filename)
         if self._config['debug_image']:
             self._set_debug_metadata(dbg_filename)
-
-        if self._profile:
-            # print profiling info
-            # (tottime is the total time spent in the function alone. cumtime is the total time spent in the function
-            # plus all functions that this function called)
-            proc_profile.disable()
-            proc_stats = pstats.Stats(proc_profile).sort_stats('cumtime')
-            logger.debug(f'Processing time:')
-            proc_stats.print_stats(20)
-
-            current, peak = tracemalloc.get_traced_memory()
-            logger.debug(f"Memory usage: current: {current / 10 ** 6:.1f} MB, peak: {peak / 10 ** 6:.1f} MB")

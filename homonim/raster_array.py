@@ -168,9 +168,13 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         nodata = cls.default_nodata if (is_masked or rio_dataset.nodata is None) else rio_dataset.nodata
 
         # construct an array of nodata matching the (possibly boundless) window dimension
-        array = np.full((window.height, window.width), fill_value=nodata, dtype=cls.default_dtype)
         bounded_window, bounded_slices = cls.bounded_window_slices(rio_dataset, window)
-        bounded_array = array[bounded_slices]  # a bounded view into array
+        if len(index_list) > 1:
+            array = np.full((len(index_list), window.height, window.width), fill_value=nodata, dtype=cls.default_dtype)
+            bounded_array = array[(slice(array.shape[0]), *bounded_slices)]  # a bounded view into array
+        else:
+            array = np.full((window.height, window.width), fill_value=nodata, dtype=cls.default_dtype)
+            bounded_array = array[bounded_slices]  # a bounded view into array
 
         # read into the bounded section of the array
         rio_dataset.read(out=bounded_array, indexes=indexes, window=bounded_window, out_dtype=cls.default_dtype,
@@ -379,10 +383,10 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         kwargs: optional
                 Arguments to passed through the dataset's write() method.
         """
-        if rio_dataset.crs != self._crs:
-            raise ImageFormatError(f"The dataset CRS does not match that of the RasterArray. "
-                                   f"Dataset: {rio_dataset.crs.to_proj4()}, "
-                                   f"RastterArray: {rio_dataset.crs.to_proj4()}")
+        if not np.all(self.res == rio_dataset.res) or (rio_dataset.crs != self._crs):
+            raise ImageFormatError(f"The dataset resolution or CRS does not match that of the RasterArray. "
+                                   f"Dataset CRS: {rio_dataset.crs.to_proj4()}, res: {rio_dataset.res} "
+                                   f"RastterArray CRS: {rio_dataset.crs.to_proj4()}, res: {self.res}")
         if indexes is None:
             indexes = [bi + 1 for bi in range(rio_dataset.count) if rio_dataset.colorinterp[bi] != ColorInterp.alpha]
 
