@@ -22,13 +22,14 @@ import cv2 as cv
 import numpy as np
 from rasterio.enums import Resampling
 from rasterio.fill import fillnodata
+from typing import Tuple
 
 from homonim.enums import Method
 from homonim.raster_array import RasterArray
 from homonim import utils
 
 
-class KernelModel():
+class KernelModel:
     """
     A base class for radiometric modelling and fusing/harmonising image data.
 
@@ -90,17 +91,17 @@ class KernelModel():
         self._upsampling = upsampling
 
     @property
-    def method(self):
+    def method(self) -> Method:
         """The homogenisation method."""
         return self._method
 
     @property
-    def kernel_shape(self):
+    def kernel_shape(self) -> Tuple[int, int]:
         """The kernel (height, width)."""
-        return self._kernel_shape
+        return tuple(self._kernel_shape)
 
     @property
-    def config(self):
+    def config(self) -> dict:
         """A dict containing the KernelModel configuration."""
         return dict(r2_inpaint_thresh=self._r2_inpaint_thresh, downsampling=self._downsampling,
                     upsampling=self._upsampling)
@@ -171,7 +172,8 @@ class KernelModel():
         np.subtract(1, dest_array, out=dest_array, where=mask)
         return dest_array
 
-    def _fit_block_norm(self, ref_ra: RasterArray, src_ra: RasterArray):
+    @staticmethod
+    def _fit_block_norm(ref_ra, src_ra):
         """
         Find a scale and offset for a source block, so that the standard deviation and first percentile of the source
         and reference blocks match.  (Can be thought of as a rough dark object subtraction (DOS) approach).
@@ -196,7 +198,7 @@ class KernelModel():
         norm_model[1] = np.percentile(ref_ra.array[mask], 1) - np.percentile(src_ra.array[mask], 1) * norm_model[0]
         return norm_model
 
-    def _fit_gain(self, ref_ra: RasterArray, src_ra: RasterArray, kernel_shape=None) -> RasterArray:
+    def _fit_gain(self, ref_ra, src_ra, kernel_shape=None):
         """
         Find sliding kernel gains, for a band, using opencv convolution.
 
@@ -251,7 +253,7 @@ class KernelModel():
 
         return param_ra
 
-    def _fit_gain_im_offset(self, ref_ra: RasterArray, src_ra: RasterArray, kernel_shape=None) -> RasterArray:
+    def _fit_gain_im_offset(self, ref_ra, src_ra, kernel_shape=None):
         """
         Find sliding kernel gains and 'image' (i.e. block) offset, for a band, using opencv convolution.
 
@@ -289,7 +291,7 @@ class KernelModel():
         param_ra.array[0] *= norm_model[0]
         return param_ra
 
-    def _fit_gain_offset(self, ref_ra: RasterArray, src_ra: RasterArray, kernel_shape=None) -> RasterArray:
+    def _fit_gain_offset(self, ref_ra, src_ra, kernel_shape=None):
         """
         Find sliding kernel full linear model for a band using opencv convolution.
 
@@ -346,7 +348,7 @@ class KernelModel():
         # solve for the offset c = y - mx, given that the linear model passes through (mean(ref), mean(src))
         np.divide(ref_sum - (param_ra.array[0] * src_sum), mask_sum, out=param_ra.array[1], where=mask)
 
-        if (self._debug_image) or (self._r2_inpaint_thresh is not None):
+        if self._debug_image or (self._r2_inpaint_thresh is not None):
             # Find R2 of the sliding kernel models
             self._r2_array(ref_array, src_array, param_ra.array[:2], mask=mask, mask_sum=mask_sum, ref_sum=ref_sum,
                            src_sum=src_sum, src2_sum=src2_sum, src_ref_sum=src_ref_sum, dest_array=param_ra.array[2],
@@ -364,7 +366,7 @@ class KernelModel():
 
         return param_ra
 
-    def _full_coverage_mask(self, in_mask_ra: RasterArray, param_ra: RasterArray):
+    def _full_coverage_mask(self, in_mask_ra, param_ra):
         """
         Helper function to create a full coverage mask i.e. a mask of output pixels fully covered by source/reference
         data, sliding (model) kernels, and resampling kernels.
@@ -399,7 +401,7 @@ class KernelModel():
         mask_ra.array = cv2.erode(mask, se, borderType=cv2.BORDER_CONSTANT, borderValue=0)
         return mask_ra
 
-    def fit(self, ref_ra: RasterArray, src_ra: RasterArray, kernel_shape=None) -> RasterArray:
+    def fit(self, ref_ra, src_ra, kernel_shape=None):
         """
         Fit sliding kernel models to reference and source blocks.
 
@@ -435,7 +437,7 @@ class KernelModel():
 
         return param_ra
 
-    def apply(self, src_ra: RasterArray, param_ra: RasterArray) -> RasterArray:
+    def apply(self, src_ra, param_ra):
         """
         Apply kernel models to a source block.
 
@@ -463,7 +465,7 @@ class RefSpaceModel(KernelModel):
     Recommended for the most common use case where the reference image has a lower resolution than the source image.
     """
 
-    def fit(self, ref_ra: RasterArray, src_ra: RasterArray, **kwargs) -> RasterArray:
+    def fit(self, ref_ra, src_ra, **kwargs):
         # choose resampling method based on whether we are up- or downsampling
         resampling = self._downsampling if np.prod(src_ra.res) < np.prod(ref_ra.res) else self._upsampling
         # downsample src_ra to reference CRS and grid
@@ -471,7 +473,7 @@ class RefSpaceModel(KernelModel):
         # call base class fit with reference and source RasterArrays in the reference CRS & grid
         return KernelModel.fit(self, ref_ra, src_ds_ra, kernel_shape=self._kernel_shape)
 
-    def apply(self, src_ra: RasterArray, param_ra: RasterArray):
+    def apply(self, src_ra, param_ra):
         # create a parameter RasterArray containing only the first two bands of param_ra
         # (to speed up the re-projection below)
         _param_ra = RasterArray.from_profile(param_ra.array[:2], param_ra.profile)
@@ -499,7 +501,7 @@ class SrcSpaceModel(KernelModel):
     Recommended for the unusual use case where the source image has a lower resolution than the reference image.
     """
 
-    def fit(self, ref_ra: RasterArray, src_ra: RasterArray, **kwargs):
+    def fit(self, ref_ra, src_ra, **kwargs):
         # choose resampling method based on whether we are up- or downsampling
         resampling = self._upsampling if np.prod(src_ra.res) < np.prod(ref_ra.res) else self._downsampling
         # upsample ref_ra to the source CRS and grid

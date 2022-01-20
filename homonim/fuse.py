@@ -22,6 +22,7 @@ import multiprocessing
 import pathlib
 import threading
 from contextlib import ExitStack
+from typing import Tuple
 
 import numpy as np
 import rasterio as rio
@@ -29,7 +30,7 @@ import rasterio.io
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from homonim import errors, utils
+from homonim import utils
 from homonim.enums import Method, ProcCrs
 from homonim.kernel_model import KernelModel, RefSpaceModel, SrcSpaceModel
 from homonim.raster_array import RasterArray
@@ -38,7 +39,7 @@ from homonim.raster_pair import RasterPairReader, BlockPair
 logger = logging.getLogger(__name__)
 
 
-class RasterFuse():
+class RasterFuse:
     """Class for radiometrically homogenising ('fusing') a source image with a reference image."""
 
     # default configuration dicts
@@ -49,7 +50,7 @@ class RasterFuse():
     default_model_config = KernelModel.default_config
 
     def __init__(self, src_filename, ref_filename, method, kernel_shape, proc_crs=ProcCrs.auto,
-                 homo_config=default_homo_config, model_config=default_model_config, out_profile=default_out_profile):
+                 homo_config=None, model_config=None, out_profile=None):
         """
         Create a RasterFuse class.
 
@@ -114,9 +115,9 @@ class RasterFuse():
 
         self._src_filename = pathlib.Path(src_filename)
         self._ref_filename = pathlib.Path(ref_filename)
-        self._config = homo_config
-        self._model_config = model_config
-        self._out_profile = out_profile
+        self._config = homo_config if homo_config else self.default_homo_config
+        self._model_config = model_config if model_config else self.default_model_config
+        self._out_profile = out_profile if out_profile else self.default_out_profile
 
         # get the block overlap for kernel_shape
         overlap = utils.overlap_for_kernel(self._kernel_shape)
@@ -126,15 +127,7 @@ class RasterFuse():
         self._raster_pair = RasterPairReader(src_filename, ref_filename, **raster_pair_args)
         with self._raster_pair as raster_pair:
             self._proc_crs = raster_pair.proc_crs
-            block_shape = raster_pair.block_shape
-            # raise an exception if the block shape is smaller than a kernel
-            if np.any(block_shape < self._kernel_shape):
-                raise errors.BlockSizeError(
-                    f"The block shape ({block_shape}) that satisfies the maximum block size "
-                    f"({self._homo_config['max_block_mem']}MB) is too small to accommodate a kernel shape of "
-                    f"({self._kernel_shape}). Increase 'max_block_mem' in 'homo_config', or decrease "
-                    f"'kernel_shape'."
-                )
+            _ = raster_pair.block_shape
 
         # create the KernelModel according to proc_crs
         if self._proc_crs == ProcCrs.ref:
@@ -147,17 +140,17 @@ class RasterFuse():
             raise ValueError(f'Invalid proc_crs: {proc_crs}, should be resolved to ProcCrs.ref or ProcCrs.src')
 
     @property
-    def method(self):
+    def method(self) -> Method:
         """Homogenisation method."""
         return self._method
 
     @property
-    def kernel_shape(self):
+    def kernel_shape(self) -> Tuple[int, int]:
         """Kernel shape."""
-        return self._kernel_shape
+        return tuple(self._kernel_shape)
 
     @property
-    def proc_crs(self):
+    def proc_crs(self) -> ProcCrs:
         """The 'processing CRS' i.e. which of the source/reference image spaces is selected for processing."""
         return self._proc_crs
 
@@ -201,7 +194,7 @@ class RasterFuse():
                              nodata=RasterArray.default_nodata)
         return debug_profile
 
-    def _set_metatdata(self, filename):
+    def _set_metadata(self, filename):
         """Helper function to copy the RasterFuse configuration info to an image (GeoTiff) file."""
         filename = pathlib.Path(filename)
         meta_dict = dict(HOMO_SRC_FILE=self._src_filename.name, HOMO_REF_FILE=self._ref_filename.name,
@@ -225,7 +218,7 @@ class RasterFuse():
                   Path to the GeoTIFF image file to copy metadata to.
         """
         filename = pathlib.Path(filename)
-        self._set_metatdata(filename)
+        self._set_metadata(filename)
 
         # Copy any band metadata (like geedim band names etc.) from the reference file
         with rio.open(self._ref_filename, 'r') as ref_im, rio.open(filename, 'r+') as homo_im:
@@ -245,7 +238,7 @@ class RasterFuse():
                   Path to the image file to copy metadata to.
         """
         filename = pathlib.Path(filename)
-        self._set_metatdata(filename)
+        self._set_metadata(filename)
 
         with rio.open(self._ref_filename, 'r') as ref_im, rio.open(filename, 'r+') as dbg_im:
             # Use reference file band descriptions to make debug image band descriptions

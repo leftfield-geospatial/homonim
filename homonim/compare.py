@@ -19,7 +19,6 @@
 
 import concurrent.futures
 import logging
-import multiprocessing
 import pathlib
 from collections import OrderedDict
 from multiprocessing import cpu_count
@@ -36,9 +35,9 @@ from homonim import utils
 logger = logging.getLogger(__name__)
 
 
-class RasterCompare():
-    """Class to statistically compare an image against a reference"""
-    default_config = dict(threads=cpu_count()-1)
+class RasterCompare:
+    """Class to statistically compare an image against a reference."""
+    default_config = dict(threads=cpu_count() - 1)
 
     def __init__(self, src_filename, ref_filename, proc_crs=ProcCrs.auto, threads=default_config['threads']):
         """
@@ -83,7 +82,7 @@ class RasterCompare():
 
             def process_band(block_pair):
                 """Thread-safe function to process a block (that encompasses the full band)"""
-                src_ra, ref_ra = raster_pair.read(block_pair)   # read src and ref bands
+                src_ra, ref_ra = raster_pair.read(block_pair)  # read src and ref bands
 
                 # re-project into the lowest resolution (_proc_crs) space
                 if self._proc_crs == ProcCrs.ref:
@@ -91,25 +90,25 @@ class RasterCompare():
                 else:
                     ref_ra = ref_ra.reproject(**src_ra.proj_profile, resampling=Resampling.average)
 
-                def get_stats(src_vec, ref_vec):
+                def get_stats(vec1, vec2):
                     """Find comparison statistics between two vectors"""
-                    r = float(np.corrcoef(src_vec, ref_vec)[0, 1])  # Pearson's correlation coefficient
-                    rmse = float(np.sqrt(np.mean((src_vec - ref_vec) ** 2)))    # Root mean square error
-                    rrmse = float(rmse / np.mean(ref_vec))  # Relative RMSE
-                    return OrderedDict(r2=r ** 2, RMSE=rmse, rRMSE=rrmse, N=len(src_vec))
+                    r = float(np.corrcoef(vec1, vec2)[0, 1])  # Pearson's correlation coefficient
+                    rmse = float(np.sqrt(np.mean((vec1 - vec2) ** 2)))  # Root mean square error
+                    rrmse = float(rmse / np.mean(vec2))  # Relative RMSE
+                    return OrderedDict(r2=r ** 2, RMSE=rmse, rRMSE=rrmse, N=len(vec1))
 
-                mask = src_ra.mask & ref_ra.mask    # combined src and ref mask
+                mask = src_ra.mask & ref_ra.mask  # combined src and ref mask
 
                 # find stats of valid data
                 src_vec = src_ra.array[mask]
                 ref_vec = ref_ra.array[mask]
                 stats_dict = get_stats(src_vec, ref_vec)
 
-                # form a string desribing the band
-                band_desc = (raster_pair.ref_im.descriptions[raster_pair.ref_bands[block_pair.band_i] - 1] or
-                             raster_pair.src_im.descriptions[raster_pair.src_bands[block_pair.band_i] - 1] or
-                             f'Band {block_pair.band_i + 1}')
-                return band_desc, stats_dict
+                # form a string describing the band
+                desc = (raster_pair.ref_im.descriptions[raster_pair.ref_bands[block_pair.band_i] - 1] or
+                        raster_pair.src_im.descriptions[raster_pair.src_bands[block_pair.band_i] - 1] or
+                        f'Band {block_pair.band_i + 1}')
+                return desc, stats_dict
 
             # process bands concurrently
             with concurrent.futures.ThreadPoolExecutor(max_workers=self._threads) as executor:

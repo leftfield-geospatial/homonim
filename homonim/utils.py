@@ -27,6 +27,7 @@ import pandas as pd
 import rasterio as rio
 from rasterio.enums import Resampling
 from rasterio.windows import Window, get_data_window
+from rasterio.vrt import WarpedVRT
 
 from homonim.enums import Method
 
@@ -92,6 +93,8 @@ def validate_kernel_shape(kernel_shape, method=Method.gain_blk_offset):
     ----------
     kernel_shape: tuple
         The kernel (height, width) in pixels.
+    method: Method, optional
+        The modelling method kernel_shape will be used with.
 
     Returns
     -------
@@ -137,6 +140,7 @@ def validate_threads(threads):
         raise ValueError(f"'threads' is limited to the number of processors ({_cpu_count})")
     return threads
 
+
 def create_debug_filename(filename):
     """Create a debug image filename, given the homogenised image filename"""
     filename = pathlib.Path(filename)
@@ -179,7 +183,7 @@ def debug_stats(dbg_filename, method, r2_inpaint_thresh):
         win = get_data_window(_mask, nodata=0)
         mask = im.dataset_mask(window=win).astype('bool', copy=False)
         for band_i in range(im.count):
-            band_array = im.read(indexes=band_i + 1, window=win ,out_dtype='float32')
+            band_array = im.read(indexes=band_i + 1, window=win, out_dtype='float32')
             band_vec = band_array[mask]
 
             def stats(v):
@@ -187,7 +191,7 @@ def debug_stats(dbg_filename, method, r2_inpaint_thresh):
                 return OrderedDict(Mean=vm.mean(), Std=vm.std(), Min=vm.min(), Max=vm.max())
 
             stats_dict = stats(band_vec)
-            if (method == Method.gain_offset) and (band_i >= im.count*2/3):
+            if (method == Method.gain_offset) and (band_i >= im.count * 2 / 3):
                 inpaint_portion = np.nansum(band_vec < r2_inpaint_thresh) / len(~np.isnan(band_vec))
                 stats_dict['Inpaint (%)'] = inpaint_portion * 100
 
@@ -197,3 +201,26 @@ def debug_stats(dbg_filename, method, r2_inpaint_thresh):
         band_str = band_df.to_string(float_format="{:.2f}".format, index=True, justify="center",
                                      index_names=False)
         return band_dict, band_str
+
+def covers(im1, im2):
+    """
+    Determines if the spatial extents of one image cover another image
+
+    Parameters
+    ----------
+    im1: rasterio.DatasetReader
+        An open rasterio dataset.
+    im2: rasterio.DatasetReader
+        Another open rasterio dataset.
+
+    Returns
+    -------
+    covers: bool
+        True if im1 covers im2 else False.
+    """
+    _im2 = WarpedVRT(im2, crs=im1.crs) if im1.crs != im2.crs else im2
+    _im1_win = im1.window(*_im2.bounds)
+    win_ul = np.array((_im1_win.row_off, _im1_win.col_off))
+    win_shape = np.array((_im1_win.height, _im1_win.width))
+    return False if np.any(win_ul < 0) or np.any(win_shape > im1.shape) else True
+

@@ -158,12 +158,12 @@ class _ConfigFileCommand(click.Command):
                 config_dict = yaml.safe_load(f)
 
             for conf_key, conf_value in config_dict.items():
-                if not conf_key in ctx.params:
+                if conf_key not in ctx.params:
                     raise click.BadParameter(f"Unknown config file parameter '{conf_key}'", ctx=ctx, param_hint="conf")
                 else:
                     param_src = ctx.get_parameter_source(conf_key)
                     # overwrite default parameters with values from config file
-                    if (ctx.params[conf_key] is None or param_src == ParameterSource.DEFAULT):
+                    if ctx.params[conf_key] is None or param_src == ParameterSource.DEFAULT:
                         ctx.params[conf_key] = conf_value
                         ctx.set_parameter_source(conf_key, ParameterSource.COMMANDLINE)
         return click.Command.invoke(self, ctx)
@@ -229,7 +229,7 @@ def cli(verbose, quiet):
               default=KernelModel.default_config['mask_partial'],
               help=f"Mask homogenised pixels produced from partial kernel or image coverage.")
 @threads_option
-@click.option("-mbm", "--max-block-mem", type=click.INT, help="Maximum image block size for processing (MB)",
+@click.option("-mbm", "--max-block-mem", type=click.FLOAT, help="Maximum image block size for processing (MB)",
               default=RasterFuse.default_homo_config['max_block_mem'], show_default=True)
 @click.option("-ds", "--downsampling", type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
               default=KernelModel.default_config['downsampling'], show_default=True,
@@ -242,7 +242,7 @@ def cli(verbose, quiet):
               help="R\N{SUPERSCRIPT TWO} threshold below which to inpaint model parameters from "
                    "surrounding areas. For 'gain-offset' method only.")
 @click.option("--out-driver", "driver",
-              type=click.Choice(set(rio.drivers.raster_driver_extensions().values()), case_sensitive=False),
+              type=click.Choice(list(rio.drivers.raster_driver_extensions().values()), case_sensitive=False),
               default=RasterFuse.default_out_profile['driver'], show_default=True, metavar="TEXT",
               help="Output format driver.")
 @click.option("--out-dtype", "dtype", type=click.Choice(list(rio.dtypes.dtype_fwd.values())[1:8], case_sensitive=False),
@@ -263,9 +263,8 @@ def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, overwrite, d
         raise click.BadParameter(str(ex))
 
     # build configuration dictionaries for ImFuse
-    config = {}
-    config['homo_config'] = _update_existing_keys(RasterFuse.default_homo_config, **kwargs)
-    config['model_config'] = _update_existing_keys(RasterFuse.default_model_config, **kwargs)
+    config = dict(homo_config=_update_existing_keys(RasterFuse.default_homo_config, **kwargs),
+                  model_config=_update_existing_keys(RasterFuse.default_model_config, **kwargs))
 
     # use the default creation_options if no other driver or creation_options have been specified
     if (ctx.get_parameter_source('driver') == ParameterSource.DEFAULT and

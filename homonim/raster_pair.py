@@ -40,15 +40,15 @@ logger = logging.getLogger(__name__)
 
 """Named tuple to contain a set of matching block windows for a source-reference image pair"""
 BlockPair = namedtuple('BlockPair',
-                       ['band_i',           # band index (0 based)
-                        'src_in_block',     # overlapping source window
-                        'ref_in_block',     # overlapping reference window
-                        'src_out_block',    # non-overlapping source window
-                        'ref_out_block',    # non-overlapping reference window
-                        'outer'])           # True if src_*_block touches the boundary of the source image
+                       ['band_i',  # band index (0 based)
+                        'src_in_block',  # overlapping source window
+                        'ref_in_block',  # overlapping reference window
+                        'src_out_block',  # non-overlapping source window
+                        'ref_out_block',  # non-overlapping reference window
+                        'outer'])  # True if src_*_block touches the boundary of the source image
 
 
-class RasterPairReader():
+class RasterPairReader:
     """
     A thread-safe class for reading matching blocks from a source and reference image pair.
 
@@ -87,8 +87,8 @@ class RasterPairReader():
         self._overlap = np.array(overlap).astype('int')
         self._max_block_mem = max_block_mem
 
-        self._src_im: rasterio.DatasetReader = None
-        self._ref_im: rasterio.DatasetReader = None
+        self._src_im = None
+        self._ref_im = None
         self._env = None
         self._src_lock = threading.Lock()
         self._ref_lock = threading.Lock()
@@ -101,7 +101,6 @@ class RasterPairReader():
                                                                                     self._ref_filename, self._proc_crs)
         logger.debug(f'Block overlap: {self._overlap} ({self._proc_crs.name} pixels)')
 
-
     @staticmethod
     def _inspect_image(filename):
         """Inspect an image file for valid use as a source or reference, and return it's non-alpha band indices."""
@@ -112,7 +111,7 @@ class RasterPairReader():
         # check for 12 bit JPEG format
         with rio.open(filename, 'r') as im:
             try:
-                tmp_array = im.read(1, window=im.block_window(1, 0, 0))
+                _ = im.read(1, window=im.block_window(1, 0, 0))
             except Exception as ex:
                 if im.profile['compress'] == 'jpeg':  # assume it is a 12bit JPEG
                     raise errors.UnsupportedImageError(
@@ -163,8 +162,9 @@ class RasterPairReader():
                 if proc_crs == ProcCrs.auto:
                     # set proc_crs to the lowest resolution of the source and reference images
                     proc_crs = ProcCrs.ref if src_pixel_smaller else ProcCrs.src
-                    logger.debug(f"Source pixel size {np.round(src_im.res, decimals=3)} is {cmp_str} than the reference "
-                                 f"{np.round(ref_im.res, decimals=3)}. Using proc_crs='{proc_crs}'.")
+                    logger.debug(
+                        f"Source pixel size {np.round(src_im.res, decimals=3)} is {cmp_str} than the reference "
+                        f"{np.round(ref_im.res, decimals=3)}. Using proc_crs='{proc_crs}'.")
                 elif ((proc_crs == ProcCrs.src and src_pixel_smaller) or
                       (proc_crs == ProcCrs.ref and not src_pixel_smaller)):
                     # warn if the proc_crs value does not correspond to the lowest resolution of the source and
@@ -223,12 +223,15 @@ class RasterPairReader():
 
         # adjust max_block_mem to represent the size of a block in the highest resolution image, but scaled to the
         # equivalent in proc_crs.
+        self._assert_open()
         src_pix_area = np.product(self._src_im.res)
         ref_pix_area = np.product(self._ref_im.res)
         if self._proc_crs == ProcCrs.ref:
             mem_scale = src_pix_area / ref_pix_area if ref_pix_area > src_pix_area else 1.
         elif self._proc_crs == ProcCrs.src:
             mem_scale = 1. if ref_pix_area > src_pix_area else ref_pix_area / src_pix_area
+        else:
+            raise ValueError("'proc_crs' has not been resolved - the raster pair must be opened first.")
         max_block_mem = self._max_block_mem * mem_scale if self._max_block_mem > 0 else np.inf
 
         max_block_mem *= 2 ** 20  # convert MB to bytes
@@ -242,7 +245,7 @@ class RasterPairReader():
             block_shape = np.array((proc_win.height, proc_win.width)).astype('float')
 
         # keep halving the block_shape along the longest dimension until it satisfies max_block_mem
-        while ((np.product(block_shape) * dtype_size) > max_block_mem):
+        while (np.product(block_shape) * dtype_size) > max_block_mem:
             div_dim = np.argmax(block_shape)
             block_shape[div_dim] /= 2
 
@@ -261,12 +264,12 @@ class RasterPairReader():
         return self._ref_im
 
     @property
-    def src_bands(self) -> Tuple[int,]:
+    def src_bands(self) -> Tuple[int, ]:
         """The source non-alpha band indices (1-based)."""
         return self._src_bands
 
     @property
-    def ref_bands(self) -> Tuple[int,]:
+    def ref_bands(self) -> Tuple[int, ]:
         """The reference non-alpha band indices (1-based)."""
         return self._ref_bands
 
@@ -276,12 +279,12 @@ class RasterPairReader():
         return self._proc_crs
 
     @property
-    def overlap(self) -> Tuple[int,]:
+    def overlap(self) -> Tuple[int, int]:
         """The block overlap (rows, columns) in pixels of the 'proc_crs' image."""
         return tuple(self._overlap)
 
     @property
-    def block_shape(self) -> Tuple[int,]:
+    def block_shape(self) -> Tuple[int, int]:
         """The image block shape (rows, columns) in pixels of the 'proc_crs' image."""
         self._assert_open()
         # find the block shape if it has not been found already
@@ -294,8 +297,8 @@ class RasterPairReader():
         # check that the block shape is at least (3, 3) and bigger than the overlap
         if np.any(self._block_shape <= np.fmax(self._overlap, (3, 3))):
             raise errors.BlockSizeError(
-                f"The block shape ({self.block_shape}) that satisfies the maximum block size ({self._max_block_mem}MB) "
-                f"is too small to accommodate the overlap ({self._overlap}) between consecutive blocks. "
+                f"The block shape ({self._block_shape}) that satisfies the maximum block size ({self._max_block_mem}MB)"
+                f" is too small to accommodate the overlap ({self._overlap}) between consecutive blocks. "
                 f"Increase the 'max_block_mem', or decrease the 'overlap' argument(s) to RasterPairReader.__init__()"
             )
         return self._block_shape

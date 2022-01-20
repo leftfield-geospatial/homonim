@@ -19,11 +19,12 @@
 
 import logging
 import multiprocessing
+from typing import Tuple
 
 import numpy
 import numpy as np
-import rasterio.windows
 import rasterio as rio
+import rasterio.windows
 from rasterio import Affine
 from rasterio import transform
 from rasterio import windows
@@ -38,16 +39,14 @@ from homonim.utils import round_window_to_grid, nan_equals
 logger = logging.getLogger(__name__)
 
 
-
-
 class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
     """
     A class for encapsulating a masked, geo-referenced numpy array.
 
     Provides methods for re-projecting and reading/writing from/to rasterio datasets.
     """
-    default_nodata = float('nan')   # default internal nodata value
-    default_dtype = 'float32'       # default internal data type
+    default_nodata = float('nan')  # default internal nodata value
+    default_dtype = 'float32'  # default internal data type
 
     def __init__(self, array, crs, transform, nodata=default_nodata, window=None):
         """
@@ -98,7 +97,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
 
         Parameters
         ----------
-        array: numpy.ndarray
+        array: numpy.ndarray, None
                A 2 or 3D array of image data, if 3D, bands are along the first dimension.
                Can be None, in which case a nodata array is created with the 'width', 'height', 'count', 'dtype' and
                'nodata' fields in profile.
@@ -188,7 +187,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         return cls(array, rio_dataset.crs, rio_dataset.transform, nodata=nodata, window=window)
 
     @staticmethod
-    def bounded_window_slices(rio_dataset: rasterio.DatasetReader, window: rasterio.windows.Window):
+    def bounded_window_slices(rio_dataset, window):
         """ Bounded array slices and dataset window from boundless dataset and window """
 
         # find window UL and BR corners and crop to rio_dataset bounds
@@ -205,72 +204,71 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
                           slice(bounded_start[1], bounded_stop[1], None))
         return bounded_window, bounded_slices
 
-
     @property
-    def array(self):
+    def array(self) -> numpy.ndarray:
         """A 2 or 3D array of image data, if 3D, bands are along the first dimension."""
         return self._array
 
     @array.setter
-    def array(self, value):
+    def array(self, value: numpy.ndarray):
         if np.all(value.shape[-2:] == self._array.shape[-2:]):
             self._array = value
         else:
             raise ValueError("'value' and 'array' shapes must match")
 
     @property
-    def crs(self):
+    def crs(self) -> rasterio.crs.CRS:
         """The coordinate reference system."""
         return self._crs
 
     @property
-    def width(self):
+    def width(self) -> int:
         """The array width in pixels."""
         return self.shape[-1]
 
     @property
-    def height(self):
+    def height(self) -> int:
         """The array height in pixels."""
         return self.shape[-2]
 
     @property
-    def shape(self):
+    def shape(self) -> Tuple[int, int]:
         """The array shape (height, width) in pixels."""
-        return self._array.shape[-2:]
+        return tuple(self._array.shape[-2:])
 
     @property
-    def count(self):
+    def count(self) -> int:
         """The number of bands."""
         return self._array.shape[0] if self.array.ndim == 3 else 1
 
     @property
-    def dtype(self):
+    def dtype(self) -> str:
         """The internal data type of the image data."""
-        return self._array.dtype
+        return self._array.dtype.name
 
     @property
-    def transform(self):
+    def transform(self) -> rasterio.transform.Affine:
         """An affine geo-transform describing the location and orientation of the array in the CRS."""
         return self._transform
 
     @property
-    def res(self):
+    def res(self) -> Tuple[float, float]:
         """Array (x, y) resolution (m)."""
-        return np.abs((self._transform.a, self._transform.e))
+        return tuple(np.abs((self._transform.a, self._transform.e)))
 
     @property
-    def bounds(self):
+    def bounds(self) -> Tuple[float, ]:
         """The (left, bottom, right, top) co-ordinates of the array extent."""
         return windows.bounds(windows.Window(0, 0, self.width, self.height), self._transform)
 
     @property
-    def profile(self):
+    def profile(self) -> dict:
         """The RasterArray properties formatted as a dictionary, compatible with rasterio."""
         return dict(crs=self._crs, transform=self._transform, nodata=self._nodata, count=self.count,
                     width=self.width, height=self.height, bounds=self.bounds, dtype=self.dtype)
 
     @property
-    def proj_profile(self):
+    def proj_profile(self) -> dict:
         """
         RasterArray properties relevant to re-projection (i.e. 'crs', 'transform' and 'shape') formatted as a
         dictionary.
@@ -279,7 +277,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         return dict(crs=self._crs, transform=self._transform, shape=self.shape)
 
     @property
-    def mask(self):
+    def mask(self) -> numpy.ndarray:
         """A 2D boolean mask corresponding to valid pixels in the array."""
         if self._nodata is None:
             return np.full(self._array.shape[-2:], True)
@@ -289,14 +287,14 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         return mask
 
     @mask.setter
-    def mask(self, value):
+    def mask(self, value: numpy.ndarray):
         if self._array.ndim == 2:
             self._array[~value] = self._nodata
         else:
             self._array[:, ~value] = self._nodata
 
     @property
-    def mask_ra(self):
+    def mask_ra(self) -> 'RasterArray':
         """
         A RasterArray containing the 2D mask as 'uint8' data type, and with nodata=None.  Useful for re-projecting
         the mask.
@@ -305,12 +303,12 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         return RasterArray(mask, crs=self._crs, transform=self._transform, nodata=None)
 
     @property
-    def nodata(self):
+    def nodata(self) -> float:
         """The nodata value."""
         return self._nodata
 
     @nodata.setter
-    def nodata(self, value):
+    def nodata(self, value: float):
         if value is None or self._nodata is None:
             # if new nodata value is None, remove the current mask
             # if current nodata is None, there is no mask, so just set the new nodata value and return
@@ -347,7 +345,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         window = round_window_to_grid(window)
         ul = np.array((window.row_off, window.col_off))
         shape = np.array((window.height, window.width))
-        if np.any(ul<0) or np.any(shape > self._array.shape[-2:]):
+        if np.any(ul < 0) or np.any(shape > self._array.shape[-2:]):
             raise ValueError(f'The provided bounds ({bounds}) lie outside the extent of the RasterArray '
                              f'({self.bounds})')
 
@@ -386,7 +384,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         if not np.all(self.res == rio_dataset.res) or (rio_dataset.crs != self._crs):
             raise ImageFormatError(f"The dataset resolution or CRS does not match that of the RasterArray. "
                                    f"Dataset CRS: {rio_dataset.crs.to_proj4()}, res: {rio_dataset.res} "
-                                   f"RastterArray CRS: {rio_dataset.crs.to_proj4()}, res: {self.res}")
+                                   f"RasterArray CRS: {rio_dataset.crs.to_proj4()}, res: {self.res}")
         if indexes is None:
             indexes = [bi + 1 for bi in range(rio_dataset.count) if rio_dataset.colorinterp[bi] != ColorInterp.alpha]
 
@@ -394,7 +392,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
             error_indexes = np.array(indexes)[np.array(indexes) > rio_dataset.count]
             raise ValueError(f'Band index(es) ({error_indexes}) exceed the dataset band count ({rio_dataset.count})')
 
-        if (isinstance(indexes, list) and (len(indexes) > self.count)):
+        if isinstance(indexes, list) and (len(indexes) > self.count):
             raise ValueError(f'The length of indexes ({len(indexes)}) exceeds the number of bands in the '
                              f'RasterArray ({self.count})')
 
@@ -429,8 +427,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         """
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
             with rio.open(filename, 'w', driver=driver, **self.profile, **kwargs) as out_im:
-                out_im.write(self._array, indexes=range(1, self.count+1) if self.count > 1 else 1)
-
+                out_im.write(self._array, indexes=range(1, self.count + 1) if self.count > 1 else 1)
 
     def reproject(self, crs=None, transform=None, shape=None, nodata=default_nodata, dtype=default_dtype,
                   resampling=Resampling.lanczos, **kwargs):

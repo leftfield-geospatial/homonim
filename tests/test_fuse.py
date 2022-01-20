@@ -27,14 +27,13 @@ import numpy as np
 import rasterio as rio
 import yaml
 from click.testing import CliRunner
-from shapely.geometry import box
 from tqdm import tqdm
 
 from homonim import root_path, cli
+from homonim import utils, enums
 from homonim.compare import RasterCompare
 from homonim.fuse import RasterFuse
 from homonim.raster_pair import RasterPairReader
-from homonim import utils, enums
 
 
 class TestFuse(unittest.TestCase):
@@ -62,16 +61,18 @@ class TestFuse(unittest.TestCase):
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
             with rio.open(homo_filename, 'r') as homo_im, rio.open(src_filename, 'r') as src_im:
                 # check homo_filename configured correctly
-                def flatten_profile(in_profile, out_profile={}):
+                def flatten_profile(in_profile, out_profile=None):
+                    out_profile = out_profile if out_profile else {}
                     for k, v in in_profile.items():
                         if isinstance(v, dict):
                             out_profile = flatten_profile(v, out_profile=out_profile)
                         else:
                             out_profile[k] = v
                     return out_profile
+
                 out_profile = flatten_profile(self._out_profile.copy())
                 for attr in out_profile.keys():
-                    if (out_profile[attr] is not None):
+                    if out_profile[attr] is not None:
                         out_attr = out_profile[attr]
                     elif (attr in src_im.profile) and (src_im.profile['driver'] == out_profile['driver']):
                         out_attr = src_im.profile[attr]
@@ -82,9 +83,7 @@ class TestFuse(unittest.TestCase):
                 # check homo_filename against source
                 self.assertTrue(src_im.crs.to_proj4() == homo_im.crs.to_proj4(), 'Source and homogenised crs match')
                 self.assertTrue(src_im.count == homo_im.count, 'Source and homogenised band counts match')
-                src_box = box(*src_im.bounds)
-                homo_box = box(*homo_im.bounds)
-                self.assertTrue(src_box.covers(homo_box), 'Source bounds cover homogenised bounds')
+                self.assertTrue(utils.covers(src_im, homo_im), 'Source bounds cover homogenised bounds')
                 for bi in range(src_im.count):
                     src_mask = src_im.read_masks(bi + 1)
                     homo_mask = homo_im.read_masks(bi + 1)
@@ -114,7 +113,7 @@ class TestFuse(unittest.TestCase):
             im_ref_r2.append([band_dict['r2'] for band_dict in cmp_dict.values()])
 
         im_ref_r2 = np.array(im_ref_r2)
-        tqdm.write(f'Pre-homogensied R2 : {im_ref_r2[0, :]}')
+        tqdm.write(f'Pre-homogenised R2 : {im_ref_r2[0, :]}')
         tqdm.write(f'Post-homogenised R2: {im_ref_r2[1, :]}')
         self.assertTrue(np.all(im_ref_r2[1, :] > 0.6), 'Homogenised R2 > 0.6')
         self.assertTrue(np.all(im_ref_r2[1, :] > im_ref_r2[0, :]), 'Homogenised vs reference R2 improvement')
@@ -124,7 +123,10 @@ class TestFuse(unittest.TestCase):
         ovl_blocks = list(raster_pair.block_pairs())
         proc_overlap = np.array(raster_pair._overlap)
         res_ratio = np.divide(raster_pair.ref_im.res, raster_pair.src_im.res)
-        other_overlap = proc_overlap * res_ratio if raster_pair._proc_crs == enums.ProcCrs.ref else proc_overlap / res_ratio
+        if raster_pair._proc_crs == enums.ProcCrs.ref:
+            other_overlap = proc_overlap * res_ratio
+        else:
+            other_overlap = proc_overlap / res_ratio
         other_overlap = np.round(other_overlap).astype('int')
         ref_overlap = proc_overlap if raster_pair._proc_crs == enums.ProcCrs.ref else other_overlap
         src_overlap = other_overlap if raster_pair._proc_crs == enums.ProcCrs.ref else proc_overlap
@@ -145,10 +147,10 @@ class TestFuse(unittest.TestCase):
                     curr_blk = ovl_block.__getattribute__(in_blk_fld)
                     prev_blk = prev_ovl_block.__getattribute__(in_blk_fld)
                     if curr_blk.row_off == prev_blk.row_off:
-                        self.assertTrue(curr_blk.col_off == prev_blk.col_off + prev_blk.width - 2*overlap[1],
+                        self.assertTrue(curr_blk.col_off == prev_blk.col_off + prev_blk.width - 2 * overlap[1],
                                         f'{in_blk_fld} col overlap')
                     else:
-                        self.assertTrue(curr_blk.row_off == prev_blk.row_off + prev_blk.height - 2*overlap[0],
+                        self.assertTrue(curr_blk.row_off == prev_blk.row_off + prev_blk.height - 2 * overlap[0],
                                         f'{in_blk_fld} row overlap')
             else:
                 self.assertTrue(ovl_block.band_i == prev_ovl_block.band_i + 1, f'band consecutive')
@@ -157,7 +159,7 @@ class TestFuse(unittest.TestCase):
 
     def _test_api(self, src_filename, ref_filename, test_filename, **kwargs):
         with self.subTest('Overlapped Blocks', src_filename=src_filename):
-            overlap = np.floor(np.array(kwargs['kernel_shape'])/2).astype('int')
+            overlap = np.floor(np.array(kwargs['kernel_shape']) / 2).astype('int')
             with RasterPairReader(src_filename, ref_filename, proc_crs=kwargs['proc_crs'], overlap=overlap,
                                   max_block_mem=self._homo_config['max_block_mem']) as raster_pair:
                 self._test_ovl_blocks(raster_pair)

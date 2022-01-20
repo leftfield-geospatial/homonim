@@ -83,7 +83,7 @@ class TestHomonim(unittest.TestCase):
             'data/inputs/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif')
         cmp_filename = root_path.joinpath('data/outputs/test_example/comparison.json')
 
-        cli_str = (f'compare {src_wildcard} {ref_filename} -pc ref --output {cmp_filename}')
+        cli_str = f'compare {src_wildcard} {ref_filename} -pc ref --output {cmp_filename}'
         result = CliRunner().invoke(cli.cli, cli_str.split(), terminal_width=100, catch_exceptions=True)
         self.assertTrue(result.exit_code == 0, result.output)
         self.assertTrue(cmp_filename.exists(), 'Comparison results file exists')
