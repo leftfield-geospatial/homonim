@@ -150,10 +150,7 @@ class RasterPairReader:
         with rio.open(src_filename, 'r') as src_im:
             with WarpedVRT(rio.open(ref_filename, 'r'), crs=src_im.crs) as ref_im:
                 # check reference image extents cover the source
-                _ref_win = utils.expand_window_to_grid(ref_im.window(*src_im.bounds), expand_pixels=(1, 1))
-                _ref_ul = np.array((_ref_win.row_off, _ref_win.col_off))
-                _ref_shape = np.array((_ref_win.height, _ref_win.width))
-                if np.any(_ref_ul < 0) or np.any(_ref_shape > ref_im.shape):
+                if not utils.covers_bounds(ref_im, src_im):
                     raise errors.ImageContentError(f'Reference extent does not cover source image: {src_filename.name}')
 
                 # compare source and reference resolutions

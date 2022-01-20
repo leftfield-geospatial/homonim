@@ -83,7 +83,7 @@ class TestFuse(unittest.TestCase):
                 # check homo_filename against source
                 self.assertTrue(src_im.crs.to_proj4() == homo_im.crs.to_proj4(), 'Source and homogenised crs match')
                 self.assertTrue(src_im.count == homo_im.count, 'Source and homogenised band counts match')
-                self.assertTrue(utils.covers(src_im, homo_im), 'Source bounds cover homogenised bounds')
+                self.assertTrue(utils.covers_bounds(src_im, homo_im), 'Source bounds cover homogenised bounds')
                 for bi in range(src_im.count):
                     src_mask = src_im.read_masks(bi + 1)
                     homo_mask = homo_im.read_masks(bi + 1)

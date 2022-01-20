@@ -202,7 +202,7 @@ def debug_stats(dbg_filename, method, r2_inpaint_thresh):
                                      index_names=False)
         return band_dict, band_str
 
-def covers(im1, im2):
+def covers_bounds(im1, im2, expand_pixels=(0, 0)):
     """
     Determines if the spatial extents of one image cover another image
 
@@ -212,15 +212,20 @@ def covers(im1, im2):
         An open rasterio dataset.
     im2: rasterio.DatasetReader
         Another open rasterio dataset.
+    expand_pixels: Tuple[int, int], optional
+        Expand the im2 bounds by this many pixels.
 
     Returns
     -------
-    covers: bool
+    covers_bounds: bool
         True if im1 covers im2 else False.
     """
+    # use WarpedVRT to get the datasets in the same crs
     _im2 = WarpedVRT(im2, crs=im1.crs) if im1.crs != im2.crs else im2
-    _im1_win = im1.window(*_im2.bounds)
-    win_ul = np.array((_im1_win.row_off, _im1_win.col_off))
-    win_shape = np.array((_im1_win.height, _im1_win.width))
+    im1_win = im1.window(*_im2.bounds)
+    if not np.all(np.array(expand_pixels)==0):
+        im1_win = expand_window_to_grid(im1_win, expand_pixels)
+    win_ul = np.array((im1_win.row_off, im1_win.col_off))
+    win_shape = np.array((im1_win.height, im1_win.width))
     return False if np.any(win_ul < 0) or np.any(win_shape > im1.shape) else True
 
