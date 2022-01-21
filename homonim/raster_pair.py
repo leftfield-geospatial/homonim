@@ -168,11 +168,6 @@ class RasterPairReader:
                            f"the source image pixel size is {cmp_str} than the reference.")
         return proc_crs
 
-    def _assert_open(self):
-        """Raise an IoError if the source and reference images are not open."""
-        if not self._src_im or not self._ref_im or self._src_im.closed or self._ref_im.closed:
-            raise errors.IoError(f'The raster pair has not been opened: {self._src_filename.name} and '
-                                 f'{self._ref_filename.name}')
 
     def _auto_block_shape(self, proc_win=None):
         """Find a block shape that satisfies max_block_mem."""
@@ -235,11 +230,17 @@ class RasterPairReader:
             # generate the auto block shape for reading
             proc_win = self._ref_win if self._proc_crs == ProcCrs.ref else self._src_win
             self._block_shape = self._auto_block_shape(proc_win=proc_win)
-            logger.debug(f'Block overlap: {self._overlap} ({self._proc_crs.name} pixels)')
             logger.debug(f'Auto block shape: {self._block_shape}, of image shape: {[proc_win.height, proc_win.width]}'
                          f' ({self._proc_crs.name} pixels)')
+            logger.debug(f'Block overlap: {self._overlap} ({self._proc_crs.name} pixels)')
         finally:
             self.close()
+
+    def _assert_open(self):
+        """Raise an IoError if the source and reference images are not open."""
+        if not self._src_im or not self._ref_im or self._src_im.closed or self._ref_im.closed:
+            raise errors.IoError(f'The raster pair has not been opened: {self._src_filename.name} and '
+                                 f'{self._ref_filename.name}')
 
     def open(self):
         """Open the source and reference images for reading."""
@@ -273,7 +274,6 @@ class RasterPairReader:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
         self._env.__exit__(exc_type, exc_val, exc_tb)
-
 
     @property
     def src_im(self) -> rasterio.DatasetReader:
@@ -359,7 +359,7 @@ class RasterPairReader:
         else:
             proc_win, proc_im, other_im = (self._src_win, self._src_im, self._ref_im)
         overlap = self._overlap
-        block_shape = self.block_shape
+        block_shape = self._block_shape
         proc_win_ul = np.array((proc_win.row_off, proc_win.col_off))
         proc_win_br = np.array((proc_win.height + proc_win.row_off, proc_win.width + proc_win.col_off))
 
@@ -368,12 +368,13 @@ class RasterPairReader:
         # reading band interleaved images.
         for band_i in range(len(self._src_bands)):
             # Inner loop over the upper left corner row, col for each overlapping block
-            for ul_row, ul_col in product(
-                    range(proc_win.row_off - overlap[0], proc_win.row_off + proc_win.height - 2 * overlap[0],
-                          block_shape[0]),
-                    range(proc_win.col_off - overlap[1], proc_win.col_off + proc_win.width - 2 * overlap[1],
-                          block_shape[1])
-            ):
+            ul_row_range = range(proc_win.row_off - overlap[0],
+                                 proc_win.row_off + proc_win.height - overlap[0],
+                                 block_shape[0])
+            ul_col_range = range(proc_win.col_off - overlap[1],
+                                 proc_win.col_off + proc_win.width - overlap[1],
+                                 block_shape[1])
+            for ul_row, ul_col in product(ul_row_range, ul_col_range):
                 # find UL and BR corners for overlapping block in proc space
                 ul = np.array((ul_row, ul_col))
                 br = ul + block_shape + (2 * overlap)
