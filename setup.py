@@ -50,7 +50,8 @@ setup(
     url="https://github.com/dugalh/homonim",
     license='AGPLv3',
     packages=find_packages(exclude=['tests', 'data'], include=['homonim']),
-    install_requires=["numpy>=1.2", "rasterio>=1.1", "click>=8", "tqdm>=4.6", "pyyaml>=5.4", "opencv-python>=4.5"],
+    install_requires=["numpy>=1.2", "rasterio>=1.1", "click>=8", "tqdm>=4.6", "pyyaml>=5.4", "opencv-python>=4.5",
+                      "pandas>=1.3"],
     python_requires=">=3.6",
     classifiers=[
         "Programming Language :: Python :: 3",

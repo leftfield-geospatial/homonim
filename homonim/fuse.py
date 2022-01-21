@@ -125,9 +125,7 @@ class RasterFuse:
         # check the reference and source image validity via RasterPairReader, and get the proc_crs attribute
         raster_pair_args = dict(proc_crs=proc_crs, overlap=overlap, max_block_mem=self._config['max_block_mem'])
         self._raster_pair = RasterPairReader(src_filename, ref_filename, **raster_pair_args)
-        with self._raster_pair as raster_pair:
-            self._proc_crs = raster_pair.proc_crs
-            _ = raster_pair.block_shape
+        self._proc_crs = self._raster_pair.proc_crs
 
         # create the KernelModel according to proc_crs
         if self._proc_crs == ProcCrs.ref:
@@ -307,7 +305,7 @@ class RasterFuse:
             if self._config['threads'] == 1:
                 # process blocks consecutively in the main thread (useful for profiling)
                 block_pairs = [block_pair for block_pair in self._raster_pair.block_pairs()]
-                for block_pair in tqdm(block_pairs):
+                for block_pair in tqdm(block_pairs, bar_format=bar_format):
                     process_block(block_pair)
             else:
                 # process blocks concurrently

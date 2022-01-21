@@ -25,7 +25,7 @@ from multiprocessing import cpu_count
 import numpy as np
 import pandas as pd
 import rasterio as rio
-from rasterio.enums import Resampling
+from rasterio.enums import Resampling, ColorInterp
 from rasterio.windows import Window, get_data_window
 from rasterio.vrt import WarpedVRT
 
@@ -202,6 +202,7 @@ def debug_stats(dbg_filename, method, r2_inpaint_thresh):
                                      index_names=False)
         return band_dict, band_str
 
+
 def covers_bounds(im1, im2, expand_pixels=(0, 0)):
     """
     Determines if the spatial extents of one image cover another image
@@ -223,9 +224,26 @@ def covers_bounds(im1, im2, expand_pixels=(0, 0)):
     # use WarpedVRT to get the datasets in the same crs
     _im2 = WarpedVRT(im2, crs=im1.crs) if im1.crs != im2.crs else im2
     im1_win = im1.window(*_im2.bounds)
-    if not np.all(np.array(expand_pixels)==0):
+    if not np.all(np.array(expand_pixels) == 0):
         im1_win = expand_window_to_grid(im1_win, expand_pixels)
     win_ul = np.array((im1_win.row_off, im1_win.col_off))
     win_shape = np.array((im1_win.height, im1_win.width))
     return False if np.any(win_ul < 0) or np.any(win_shape > im1.shape) else True
 
+
+def get_nonalpha_bands(im):
+    """
+    Return a list of non-alpha band indices from a rasterio dataset.
+
+    Parameters
+    ----------
+    im: rasterio.DatasetReader
+        Retrieve band indices from this dataset.
+
+    Returns
+    -------
+    bands: list[int, ]
+        The list of 1-based band indices.
+    """
+    bands = tuple([bi + 1 for bi in range(im.count) if im.colorinterp[bi] != ColorInterp.alpha])
+    return bands

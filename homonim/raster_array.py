@@ -34,7 +34,7 @@ from rasterio.warp import reproject, Resampling
 from rasterio.windows import Window
 
 from homonim.errors import ImageProfileError, ImageFormatError
-from homonim.utils import round_window_to_grid, nan_equals
+from homonim import utils
 
 logger = logging.getLogger(__name__)
 
@@ -152,7 +152,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         """
         # form a list of indexes
         if indexes is None:
-            index_list = [bi + 1 for bi in range(rio_dataset.count) if rio_dataset.colorinterp[bi] != ColorInterp.alpha]
+            index_list = utils.get_nonalpha_bands(rio_dataset)
         else:
             index_list = [indexes] if np.isscalar(indexes) else indexes
 
@@ -281,7 +281,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         """A 2D boolean mask corresponding to valid pixels in the array."""
         if self._nodata is None:
             return np.full(self._array.shape[-2:], True)
-        mask = ~nan_equals(self._array, self._nodata)
+        mask = ~utils.nan_equals(self._array, self._nodata)
         if self._array.ndim > 2:
             mask = np.all(mask, axis=0)
         return mask
@@ -313,7 +313,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
             # if new nodata value is None, remove the current mask
             # if current nodata is None, there is no mask, so just set the new nodata value and return
             self._nodata = value
-        elif not (nan_equals(value, self._nodata)):
+        elif not (utils.nan_equals(value, self._nodata)):
             # if the new nodata value is different to the current nodata,
             # set the mask area in array to the new nodata value and return
             nodata_mask = ~self.mask
@@ -342,7 +342,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
             The sliced RasterArray.
         """
         window = self.window(*bounds)
-        window = round_window_to_grid(window)
+        window = utils.round_window_to_grid(window)
         ul = np.array((window.row_off, window.col_off))
         shape = np.array((window.height, window.width))
         if np.any(ul < 0) or np.any(shape > self._array.shape[-2:]):
@@ -386,7 +386,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
                                    f"Dataset CRS: {rio_dataset.crs.to_proj4()}, res: {rio_dataset.res} "
                                    f"RasterArray CRS: {rio_dataset.crs.to_proj4()}, res: {self.res}")
         if indexes is None:
-            indexes = [bi + 1 for bi in range(rio_dataset.count) if rio_dataset.colorinterp[bi] != ColorInterp.alpha]
+            indexes = utils.get_nonalpha_bands(rio_dataset)
 
         if np.any(np.array(indexes) > rio_dataset.count):
             error_indexes = np.array(indexes)[np.array(indexes) > rio_dataset.count]
