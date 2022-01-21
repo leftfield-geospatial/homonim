@@ -2,7 +2,7 @@
 # Produce debug outputs (0=None, 1=profiling, 2=parameter rasters)
 debug_image: True
 # Mask output pixels that were derived from kernels, and or ref pixels, without full source coverage
-mask_partial: False
+mask_partial: True
 # Use multi-threading (memory intensive)
 threads: 0
 # maximum memory for automatic block size in megabytes

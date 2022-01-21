@@ -28,6 +28,7 @@ import rasterio as rio
 import yaml
 from click.testing import CliRunner
 from tqdm import tqdm
+import pandas as pd
 
 from homonim import root_path, cli
 from homonim import utils, enums
@@ -110,13 +111,12 @@ class TestFuse(unittest.TestCase):
         for im_i, im_filename in enumerate([src_filename, homo_filename]):
             cmp = RasterCompare(im_filename, ref_filename)
             cmp_dict = cmp.compare()
-            im_ref_r2.append([band_dict['r2'] for band_dict in cmp_dict.values()])
+            im_ref_r2.append({band_key:band_val['r2'] for band_key, band_val in cmp_dict.items()})
 
-        im_ref_r2 = np.array(im_ref_r2)
-        tqdm.write(f'Pre-homogenised R2 : {im_ref_r2[0, :]}')
-        tqdm.write(f'Post-homogenised R2: {im_ref_r2[1, :]}')
-        self.assertTrue(np.all(im_ref_r2[1, :] > 0.6), 'Homogenised R2 > 0.6')
-        self.assertTrue(np.all(im_ref_r2[1, :] > im_ref_r2[0, :]), 'Homogenised vs reference R2 improvement')
+        im_ref_r2_df = pd.DataFrame(im_ref_r2, index=['Src R2', 'Homo R2'])
+        tqdm.write(im_ref_r2_df.to_string())
+        self.assertTrue(np.all(im_ref_r2_df.iloc[1, :] > 0.6), 'Homogenised R2 > 0.6')
+        self.assertTrue(np.all(im_ref_r2_df.iloc[1, :] > im_ref_r2_df.iloc[0, :]), 'Homogenised vs reference R2 improvement')
 
     def _test_ovl_blocks(self, raster_pair: RasterPairReader):
         """ Test overlap blocks for sanity """
