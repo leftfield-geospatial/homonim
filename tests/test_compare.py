@@ -37,12 +37,12 @@ class TestHomonim(unittest.TestCase):
 
     def setUp(self):
         """Delete old test outputs and load config"""
-        test_out_dir = root_path.joinpath('data/outputs/test_example')
+        test_out_dir = root_path.joinpath('data/test_example')
         file_list = glob.glob(str(test_out_dir.joinpath('*.json')))
         for f in file_list:
             os.remove(f)
 
-        self._conf_filename = root_path.joinpath('data/inputs/test_example/config.yaml')
+        self._conf_filename = root_path.joinpath('data/test_example/config.yaml')
         with open(self._conf_filename, 'r') as f:
             config = yaml.safe_load(f)
         self._config = cli._update_existing_keys(RasterCompare.default_config, **config)
@@ -63,25 +63,25 @@ class TestHomonim(unittest.TestCase):
 
     def test_compare_api_ref_space(self):
         """Test compare API with model_crs=ref"""
-        src_filename = root_path.joinpath('data/inputs/test_example/source/3324c_2015_1004_05_0182_RGB.tif')
+        src_filename = root_path.joinpath('data/test_example/source/3324c_2015_1004_05_0182_RGB.tif')
         ref_filename = root_path.joinpath(
-            'data/inputs/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif')
+            'data/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif')
         self._test_compare_api(src_filename, ref_filename, proc_crs=ProcCrs.ref)
 
     def test_compare_api_src_space(self):
         """Test compare API with model_crs=ref"""
         src_filename = root_path.joinpath(
-            'data/inputs/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.vrt')
+            'data/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.vrt')
         ref_filename = root_path.joinpath(
-            'data/inputs/test_example/reference/COPERNICUS-S2-20151003T075826_20151003T082014_T35HKC_B432_Byte.tif')
+            'data/test_example/reference/COPERNICUS-S2-20151003T075826_20151003T082014_T35HKC_B432_Byte.tif')
         self._test_compare_api(src_filename, ref_filename, proc_crs=ProcCrs.src)
 
     def test_cli(self):
         """Test compare CLI"""
-        src_wildcard = root_path.joinpath('data/inputs/test_example/source/3324c_2015_*_RGB.tif')
+        src_wildcard = root_path.joinpath('data/test_example/source/3324c_2015_*_RGB.tif')
         ref_filename = root_path.joinpath(
-            'data/inputs/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif')
-        cmp_filename = root_path.joinpath('data/outputs/test_example/comparison.json')
+            'data/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif')
+        cmp_filename = root_path.joinpath('data/test_example/comparison.json')
 
         cli_str = f'compare {src_wildcard} {ref_filename} -pc ref --output {cmp_filename}'
         result = CliRunner().invoke(cli.cli, cli_str.split(), terminal_width=100, catch_exceptions=True)

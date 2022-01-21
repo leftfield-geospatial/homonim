@@ -42,14 +42,14 @@ class TestFuse(unittest.TestCase):
     def setUp(self):
         """Delete old test outputs and load config"""
         warnings.filterwarnings("ignore", category=DeprecationWarning)
-        test_out_dir = root_path.joinpath('data/outputs/test_example/homogenised')
+        test_out_dir = root_path.joinpath('data/test_example/homogenised')
         if not test_out_dir.exists():
             os.makedirs(test_out_dir)
         file_list = glob.glob(str(test_out_dir.joinpath('*')))
         for f in file_list:
             os.remove(f)
 
-        self._conf_filename = root_path.joinpath('data/inputs/test_example/config.yaml')
+        self._conf_filename = root_path.joinpath('data/test_example/config.yaml')
         with open(self._conf_filename, 'r') as f:
             config = yaml.safe_load(f)
         self._homo_config = cli._update_existing_keys(RasterFuse.default_homo_config, **config)
@@ -164,7 +164,7 @@ class TestFuse(unittest.TestCase):
                                   max_block_mem=self._homo_config['max_block_mem']) as raster_pair:
                 self._test_ovl_blocks(raster_pair)
 
-        homo_root = root_path.joinpath('data/outputs/test_example/homogenised')
+        homo_root = root_path.joinpath('data/test_example/homogenised')
 
         post_fix = cli._create_homo_postfix(driver=self._out_profile['driver'], **kwargs)
         homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
@@ -181,11 +181,11 @@ class TestFuse(unittest.TestCase):
 
     def test_api_ref_space(self):
         """Test homogenisation API with model-crs=ref"""
-        src_filename = root_path.joinpath('data/inputs/test_example/source/3324c_2015_1004_05_0182_RGB.tif')
+        src_filename = root_path.joinpath('data/test_example/source/3324c_2015_1004_05_0182_RGB.tif')
         ref_filename = root_path.joinpath(
-            'data/inputs/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif')
+            'data/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif')
         ref2_filename = root_path.joinpath(
-            'data/inputs/test_example/reference/COPERNICUS-S2-20151003T075826_20151003T082014_T35HKC_B432_Byte.tif')
+            'data/test_example/reference/COPERNICUS-S2-20151003T075826_20151003T082014_T35HKC_B432_Byte.tif')
 
         param_list = [
             dict(method=enums.Method.gain, kernel_shape=(3, 3), proc_crs=enums.ProcCrs.ref),
@@ -199,25 +199,25 @@ class TestFuse(unittest.TestCase):
     def test_api_src_space(self):
         """Test homogenisation API with model-crs=src and src res > ref res"""
         src_filename = root_path.joinpath(
-            'data/inputs/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.vrt')
+            'data/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.vrt')
         ref_filename = root_path.joinpath(
-            'data/inputs/test_example/reference/COPERNICUS-S2-20151003T075826_20151003T082014_T35HKC_B432_Byte.tif')
+            'data/test_example/reference/COPERNICUS-S2-20151003T075826_20151003T082014_T35HKC_B432_Byte.tif')
         # src_filename = root_path.joinpath(
-        #     'data/inputs/test_example/reference/COPERNICUS-S2-20151003T075826_20151003T082014_T35HKC_B432_Byte.vrt')
+        #     'data/test_example/reference/COPERNICUS-S2-20151003T075826_20151003T082014_T35HKC_B432_Byte.vrt')
         # ref_filename = root_path.joinpath(
-        #     'data/inputs/test_example/source/NGI_Baviaanskloof_3324c_2015_RGB.vrt')
+        #     'data/test_example/source/NGI_Baviaanskloof_3324c_2015_RGB.vrt')
 
         param_dict = dict(method=enums.Method.gain, kernel_shape=(5, 5), proc_crs=enums.ProcCrs.src)
         self._test_api(src_filename, ref_filename, ref_filename, **param_dict)
 
     def test_cli(self):
         """Test homogenisation CLI"""
-        src_wildcard = root_path.joinpath('data/inputs/test_example/source/3324c_2015_*_RGB.tif')
+        src_wildcard = root_path.joinpath('data/test_example/source/3324c_2015_*_RGB.tif')
         ref_filename = root_path.joinpath(
-            'data/inputs/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif')
+            'data/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif')
         ref2_filename = root_path.joinpath(
-            'data/inputs/test_example/reference/COPERNICUS-S2-20151003T075826_20151003T082014_T35HKC_B432_Byte.tif')
-        homo_root = root_path.joinpath('data/outputs/test_example/homogenised')
+            'data/test_example/reference/COPERNICUS-S2-20151003T075826_20151003T082014_T35HKC_B432_Byte.tif')
+        homo_root = root_path.joinpath('data/test_example/homogenised')
 
         param_list = [
             dict(method=enums.Method.gain, kernel_shape=(1, 1), proc_crs=enums.ProcCrs.ref),

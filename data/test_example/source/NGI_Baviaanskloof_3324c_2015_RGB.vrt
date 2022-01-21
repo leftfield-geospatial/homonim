@@ -2,6 +2,14 @@
   <SRS dataAxisToSRSAxisMapping="1,2">PROJCS["unnamed",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",25],PARAMETER["scale_factor",1],PARAMETER["false_easting",0],PARAMETER["false_northing",0],UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["Easting",EAST],AXIS["Northing",NORTH]]</SRS>
   <GeoTransform> -5.9703572983482431e+04,  5.0000000000000000e+00,  0.0000000000000000e+00, -3.7238378048744886e+06,  0.0000000000000000e+00, -5.0000000000000000e+00</GeoTransform>
   <VRTRasterBand dataType="Byte" band="1">
+    <Metadata>
+      <MDI key="STATISTICS_APPROXIMATE">YES</MDI>
+      <MDI key="STATISTICS_MAXIMUM">255</MDI>
+      <MDI key="STATISTICS_MEAN">121.21554323605</MDI>
+      <MDI key="STATISTICS_MINIMUM">49</MDI>
+      <MDI key="STATISTICS_STDDEV">37.890887358486</MDI>
+      <MDI key="STATISTICS_VALID_PERCENT">88.23</MDI>
+    </Metadata>
     <NoDataValue>0</NoDataValue>
     <ColorInterp>Gray</ColorInterp>
     <ComplexSource>
@@ -38,6 +46,14 @@
     </ComplexSource>
   </VRTRasterBand>
   <VRTRasterBand dataType="Byte" band="2">
+    <Metadata>
+      <MDI key="STATISTICS_APPROXIMATE">YES</MDI>
+      <MDI key="STATISTICS_MAXIMUM">255</MDI>
+      <MDI key="STATISTICS_MEAN">123.87373764702</MDI>
+      <MDI key="STATISTICS_MINIMUM">52</MDI>
+      <MDI key="STATISTICS_STDDEV">35.365642163346</MDI>
+      <MDI key="STATISTICS_VALID_PERCENT">88.23</MDI>
+    </Metadata>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
       <SourceFilename relativeToVRT="1">3324c_2015_1004_05_0182_RGB.tif</SourceFilename>
@@ -73,6 +89,14 @@
     </ComplexSource>
   </VRTRasterBand>
   <VRTRasterBand dataType="Byte" band="3">
+    <Metadata>
+      <MDI key="STATISTICS_APPROXIMATE">YES</MDI>
+      <MDI key="STATISTICS_MAXIMUM">255</MDI>
+      <MDI key="STATISTICS_MEAN">121.44285777531</MDI>
+      <MDI key="STATISTICS_MINIMUM">62</MDI>
+      <MDI key="STATISTICS_STDDEV">26.106242954576</MDI>
+      <MDI key="STATISTICS_VALID_PERCENT">88.23</MDI>
+    </Metadata>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
       <SourceFilename relativeToVRT="1">3324c_2015_1004_05_0182_RGB.tif</SourceFilename>

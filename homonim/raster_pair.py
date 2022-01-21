@@ -205,8 +205,8 @@ class RasterPairReader:
         block_shape = np.ceil(block_shape).astype('int')
         # warn if the block shape in the highest res image is less than a typical tile
         if np.any(block_shape / mem_scale < (256, 256)):
-            logger.warning(f"The auto block shape is small: {block_shape}.  Increasing 'max_block_mem' is recommended "
-                           f"and will improve processing times.")
+            logger.warning(f"The auto block shape is small: {block_shape}.  Increase 'max_block_mem' to improve "
+                           f"processing times.")
 
         return block_shape
 
