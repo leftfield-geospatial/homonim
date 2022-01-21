@@ -37,6 +37,7 @@ class TestHomonim(unittest.TestCase):
 
     def setUp(self):
         """Delete old test outputs and load config"""
+        # TODO some of the below is common to test_fuse - make a single base class
         test_out_dir = root_path.joinpath('data/test_example')
         file_list = glob.glob(str(test_out_dir.joinpath('*.json')))
         for f in file_list:

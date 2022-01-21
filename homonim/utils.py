@@ -104,8 +104,7 @@ def validate_kernel_shape(kernel_shape, method=Method.gain_blk_offset):
     kernel_shape = np.array(kernel_shape).astype(int)
     if not np.all(np.mod(kernel_shape, 2) == 1):
         raise ValueError("kernel shape must be odd in both dimensions.")
-    if method == Method.gain_offset:
-        if not np.product(kernel_shape) >= 25:
+    if method == Method.gain_offset and not np.product(kernel_shape) >= 25:
             raise ValueError("kernel shape should contain at least 25 elements for the gain-offset method.")
     if not np.all(kernel_shape >= 1):
         raise ValueError("kernel shape must be a minimum of one in both dimensions.")
@@ -159,7 +158,7 @@ def build_overviews(filename):
     filename = pathlib.Path(filename)
 
     if not filename.exists():
-        raise Exception(f'{filename} does not exist')
+        raise FileNotFoundError(f'{filename} does not exist')
     with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(filename, 'r+') as im:
         # limit overviews so that the highest level has at least 2**8=256 pixels along the shortest dimension,
         # and so there are no more than 8 levels.
@@ -247,3 +246,42 @@ def get_nonalpha_bands(im):
     """
     bands = tuple([bi + 1 for bi in range(im.count) if im.colorinterp[bi] != ColorInterp.alpha])
     return bands
+
+
+def combine_profiles(in_profile, config_profile):
+    """
+    Update an input rasterio profile with a configuration profile.
+
+    Parameters
+    ----------
+    in_profile: dict
+        The input/initial rasterio profile to update.  Driver-specific items are in the root dict.
+    config_profile: dict
+        The configuration profile.  Driver specific options are contained in a nested dict, with 'creation_options' key.
+        E.g. see homonim.fuse.RasterFuse.default_out_profile.
+
+    Returns
+    -------
+    out_profile: dict
+        The combined profile.
+    """
+
+    if in_profile['driver'].lower() != config_profile['driver'].lower():
+        # copy only non driver specific keys from input profile when the driver is different to the configured val
+        copy_keys = ['driver', 'width', 'height', 'count', 'dtype', 'crs', 'transform']
+        out_profile = {copy_key: in_profile[copy_key] for copy_key in copy_keys}
+    else:
+        out_profile = in_profile.copy()  # copy the whole input profile
+
+    def nested_update(self_dict, other_dict):
+        """Update self_dict with a flattened version of other_dict"""
+        for other_key, other_value in other_dict.items():
+            if isinstance(other_value, dict):
+                # flatten the driver specific nested dict into the root dict
+                nested_update(self_dict, other_value)
+            elif other_value is not None:
+                self_dict[other_key] = other_value
+        return self_dict
+
+    # update out_profile with a flattened config_profile
+    return nested_update(out_profile, config_profile)

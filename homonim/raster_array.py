@@ -70,8 +70,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
             raise ValueError("'array' must be have 2 or 3 dimensions with bands along the first dimension")
         self._array = array
 
-        if window is not None:
-            if (window.height, window.width) != array.shape[-2:]:
+        if window is not None and (window.height, window.width) != array.shape[-2:]:
                 raise ValueError("'window' and 'array' width and height must match")
 
         if isinstance(crs, CRS):
