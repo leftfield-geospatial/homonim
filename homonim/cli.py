@@ -140,9 +140,9 @@ class _PlainInfoFormatter(logging.Formatter):
         return super().format(record)
 
 
-class _ConfigFileCommand(click.Command):
+class _FuseCommand(click.Command):
     """
-    click Command to read config file and combine with CLI parameters.
+    click Command class that combines config file and context parameters.
 
     User-supplied CLI values are given priority, followed by the config file values.
     Where neither user supplied CLI, or config file values exist, parameters retain their defaults.
@@ -166,6 +166,13 @@ class _ConfigFileCommand(click.Command):
                     if ctx.params[conf_key] is None or param_src == ParameterSource.DEFAULT:
                         ctx.params[conf_key] = conf_value
                         ctx.set_parameter_source(conf_key, ParameterSource.COMMANDLINE)
+
+        # set the default creation_options if no other driver or creation_options have been specified
+        # (this can't be done in a callback as it depends on 'driver')
+        if (ctx.get_parameter_source('driver') == ParameterSource.DEFAULT and
+                ctx.get_parameter_source('creation_options') == ParameterSource.DEFAULT):
+            ctx.params['creation_options'] = RasterFuse.default_out_profile['creation_options']
+
         return click.Command.invoke(self, ctx)
 
 
@@ -199,7 +206,7 @@ def cli(verbose, quiet):
 
 
 # fuse command
-@click.command(cls=_ConfigFileCommand)
+@click.command(cls=_FuseCommand)
 # standard options
 @src_file_arg
 @ref_file_arg
@@ -250,7 +257,7 @@ def cli(verbose, quiet):
 @click.option("--out-nodata", "nodata", type=click.STRING, callback=_nodata_cb, metavar="[NUMBER|null|nan]",
               default=RasterFuse.default_out_profile['nodata'], show_default=True,
               help="Output image nodata value.")
-@click.option('--co', '--out-profile', 'creation_options', metavar='NAME=VALUE', multiple=True,
+@click.option('-co', '--out-profile', 'creation_options', metavar='NAME=VALUE', multiple=True,
               default=(), callback=_creation_options_cb,
               help="Driver specific creation options.  See the rasterio documentation for more information.")
 @click.pass_context
@@ -264,60 +271,53 @@ def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, overwrite, d
 
     # build configuration dictionaries for ImFuse
     config = dict(homo_config=_update_existing_keys(RasterFuse.default_homo_config, **kwargs),
-                  model_config=_update_existing_keys(RasterFuse.default_model_config, **kwargs))
-
-    # use the default creation_options if no other driver or creation_options have been specified
-    if (ctx.get_parameter_source('driver') == ParameterSource.DEFAULT and
-            ctx.get_parameter_source('creation_options') == ParameterSource.DEFAULT):
-        kwargs['creation_options'] = RasterFuse.default_out_profile['creation_options']
-    config['out_profile'] = _update_existing_keys(RasterFuse.default_out_profile, **kwargs)
+                  model_config=_update_existing_keys(RasterFuse.default_model_config, **kwargs),
+                  out_profile=_update_existing_keys(RasterFuse.default_out_profile, **kwargs))
     compare_files = []
 
     # iterate over and homogenise source file(s)
     try:
-        for src_file_spec in src_file:
-            src_file_path = pathlib.Path(src_file_spec)
-            for src_filename in src_file_path.parent.glob(src_file_path.name):
-                him = RasterFuse(src_filename, ref_file, method=method, kernel_shape=kernel_shape, proc_crs=proc_crs,
-                                 **config)
+        for src_filename in src_file:
+            him = RasterFuse(src_filename, ref_file, method=method, kernel_shape=kernel_shape, proc_crs=proc_crs,
+                             **config)
 
-                logger.info(f'\nHomogenising {src_filename.name}')
-                # create output image filename
-                homo_root = pathlib.Path(output_dir) if output_dir is not None else src_filename.parent
-                post_fix = _create_homo_postfix(proc_crs=him.proc_crs, method=method, kernel_shape=kernel_shape,
-                                                driver=config['out_profile']['driver'])
-                homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
-                dbg_filename = utils.create_debug_filename(homo_filename)
+            logger.info(f'\nHomogenising {src_filename.name}')
+            # create output image filename
+            homo_root = pathlib.Path(output_dir) if output_dir is not None else src_filename.parent
+            post_fix = _create_homo_postfix(proc_crs=him.proc_crs, method=method, kernel_shape=kernel_shape,
+                                            driver=config['out_profile']['driver'])
+            homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
+            dbg_filename = utils.create_debug_filename(homo_filename)
 
-                if not overwrite:
-                    if homo_filename.exists():
-                        raise FileExistsError(f"Homogenised image file exists and won't be overwritten without the "
-                                              f"'--overwrite' option: {homo_filename}")
-                    if config['homo_config']['debug_image'] and dbg_filename.exists():
-                        raise FileExistsError(f"Debug image file exists and won't be overwritten without the "
-                                              f"'--overwrite' option: {dbg_filename}")
+            if not overwrite:
+                if homo_filename.exists():
+                    raise FileExistsError(f"Homogenised image file exists and won't be overwritten without the "
+                                          f"'--overwrite' option: {homo_filename}")
+                if config['homo_config']['debug_image'] and dbg_filename.exists():
+                    raise FileExistsError(f"Debug image file exists and won't be overwritten without the "
+                                          f"'--overwrite' option: {dbg_filename}")
 
-                # create fusion object and homogenise
-                start_time = timer()
-                him.homogenise(homo_filename)
+            # create fusion object and homogenise
+            start_time = timer()
+            him.homogenise(homo_filename)
 
-                # build overviews
-                if build_ovw:
-                    logger.info(f'Building overviews for {homo_filename.name}')
-                    utils.build_overviews(homo_filename)
+            # build overviews
+            if build_ovw:
+                logger.info(f'Building overviews for {homo_filename.name}')
+                utils.build_overviews(homo_filename)
 
-                    if config['homo_config']['debug_image']:
-                        logger.info(f'Building overviews for {dbg_filename.name}')
-                        utils.build_overviews(dbg_filename)
+                if config['homo_config']['debug_image']:
+                    logger.info(f'Building overviews for {dbg_filename.name}')
+                    utils.build_overviews(dbg_filename)
 
-                if config['homo_config']['debug_image'] and (logger.getEffectiveLevel() <= logging.DEBUG):
-                    _, stats_str = utils.debug_stats(dbg_filename, method=method,
-                                                     r2_inpaint_thresh=kwargs['r2_inpaint_thresh'])
-                    logger.debug(f'\n\n{dbg_filename.name} Stats:\n\n{stats_str}')
+            if config['homo_config']['debug_image'] and (logger.getEffectiveLevel() <= logging.DEBUG):
+                _, stats_str = utils.debug_stats(dbg_filename, method=method,
+                                                 r2_inpaint_thresh=kwargs['r2_inpaint_thresh'])
+                logger.debug(f'\n\n{dbg_filename.name} Stats:\n\n{stats_str}')
 
-                logger.info(f'Completed in {timer() - start_time:.2f} secs')
+            logger.info(f'Completed in {timer() - start_time:.2f} secs')
 
-                compare_files += (src_filename, homo_filename)  # build a list of files to pass to compare
+            compare_files += (src_filename, homo_filename)  # build a list of files to pass to compare
 
         # compare source and homogenised files with reference (invokes compare command with relevant parameters)
         if do_cmp:
@@ -345,15 +345,12 @@ def compare(src_file, ref_file, proc_crs, threads, output):
     try:
         res_dict = {}
         # iterate over source files, comparing with reference
-        for src_file_spec in src_file:
-            src_file_path = pathlib.Path(src_file_spec)
-            for src_filename in src_file_path.parent.glob(src_file_path.name):
-                logger.info(f'\nComparing {src_filename.name}')
-                start_time = timer()
-                cmp = RasterCompare(src_filename, ref_file, proc_crs=proc_crs, threads=threads)
-                # TODO: what if file stems are identical
-                res_dict[str(src_filename)] = cmp.compare()
-                logger.info(f'Completed in {timer() - start_time:.2f} secs')
+        for src_filename in src_file:
+            logger.info(f'\nComparing {src_filename.name}')
+            start_time = timer()
+            cmp = RasterCompare(src_filename, ref_file, proc_crs=proc_crs, threads=threads)
+            res_dict[str(src_filename)] = cmp.compare()
+            logger.info(f'Completed in {timer() - start_time:.2f} secs')
 
         # print a results table per source file
         summary_dict = {}

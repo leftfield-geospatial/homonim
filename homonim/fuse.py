@@ -266,7 +266,7 @@ class RasterFuse:
         Parameters
         ----------
         out_filename: str, pathlib.Path
-                      Path of the homogenised image file to create.
+            Path of the homogenised image file to create.
         """
         write_lock = threading.Lock()
         dbg_lock = threading.Lock()
