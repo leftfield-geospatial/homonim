@@ -388,7 +388,7 @@ class KernelModel:
 
         # re-project the initial mask into proc_crs (the CRS and grid corresponding to the proc_crs attribute)
         mask_ra = in_mask_ra.reproject(**param_ra.proj_profile, nodata=None, resampling=Resampling.average)
-        # find the mask of proc_crs pixels fully covered by in_mask_ra
+        # find the mask of proc_crs pixels fully covered by mask_ra
         mask = (mask_ra.array >= 1).astype('uint8', copy=False)  # ref pixels fully covered by src
         # combine mask with the other (src/ref) mask via param_ra
         mask &= param_ra.mask
@@ -484,7 +484,7 @@ class RefSpaceModel(KernelModel):
 
         if self._mask_partial:
             # find the mask of fully covered pixels in reference CRS and grid
-            mask_ra = self._full_coverage_mask(src_ra.mask_ra, param_ra)
+            mask_ra = self._full_coverage_mask(src_ra.mask_ra, _param_ra)
             # re-project the mask to source CRS and grid, and apply to the parameters
             mask_us_ra = mask_ra.reproject(**src_ra.proj_profile, nodata=0, resampling=Resampling.nearest)
             param_us_ra.mask = mask_us_ra.array.astype('bool', copy=False)
@@ -512,8 +512,10 @@ class SrcSpaceModel(KernelModel):
         param_ra = KernelModel.fit(self, ref_us_ra, _src_ra, kernel_shape=self._kernel_shape)
 
         if self._mask_partial:
+            # remove r2 band from param masking
+            _param_ra = RasterArray.from_profile(param_ra.array[:2], param_ra.profile)
             # find the mask of fully covered pixels in source CRS and grid, and apply it to the parameters
-            mask_ra = self._full_coverage_mask(ref_ra.mask_ra, param_ra)
+            mask_ra = self._full_coverage_mask(ref_ra.mask_ra, _param_ra)
             param_ra.mask = mask_ra.array.astype('bool', copy=False)
         else:
             param_ra.mask = src_ra.mask
