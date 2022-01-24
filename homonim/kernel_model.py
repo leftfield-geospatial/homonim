@@ -324,7 +324,8 @@ class KernelModel:
 
         # setup a RasterArray profile for the parameters
         param_profile = src_ra.profile.copy()
-        param_profile.update(count=3 if self._debug_image else 2, nodata=RasterArray.default_nodata,
+        find_r2 = self._debug_image or (self._r2_inpaint_thresh is not None)
+        param_profile.update(count=3 if find_r2 else 2, nodata=RasterArray.default_nodata,
                              dtype=RasterArray.default_dtype)
 
         # find the numerator for the gain i.e N*cov(ref, src)
@@ -348,7 +349,7 @@ class KernelModel:
         # solve for the offset c = y - mx, given that the linear model passes through (mean(ref), mean(src))
         np.divide(ref_sum - (param_ra.array[0] * src_sum), mask_sum, out=param_ra.array[1], where=mask)
 
-        if self._debug_image or (self._r2_inpaint_thresh is not None):
+        if find_r2:
             # Find R2 of the sliding kernel models
             self._r2_array(ref_array, src_array, param_ra.array[:2], mask=mask, mask_sum=mask_sum, ref_sum=ref_sum,
                            src_sum=src_sum, src2_sum=src2_sum, src_ref_sum=src_ref_sum, dest_array=param_ra.array[2],
