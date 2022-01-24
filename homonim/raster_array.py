@@ -29,12 +29,12 @@ from rasterio import Affine
 from rasterio import transform
 from rasterio import windows
 from rasterio.crs import CRS
-from rasterio.enums import MaskFlags, ColorInterp
+from rasterio.enums import MaskFlags
 from rasterio.warp import reproject, Resampling
 from rasterio.windows import Window
 
-from homonim.errors import ImageProfileError, ImageFormatError
 from homonim import utils
+from homonim.errors import ImageProfileError, ImageFormatError
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         self._array = array
 
         if window is not None and (window.height, window.width) != array.shape[-2:]:
-                raise ValueError("'window' and 'array' width and height must match")
+            raise ValueError("'window' and 'array' width and height must match")
 
         if isinstance(crs, CRS):
             self._crs = crs
@@ -256,7 +256,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         return tuple(np.abs((self._transform.a, self._transform.e)))
 
     @property
-    def bounds(self) -> Tuple[float, ]:
+    def bounds(self) -> Tuple[float,]:
         """The (left, bottom, right, top) co-ordinates of the array extent."""
         return windows.bounds(windows.Window(0, 0, self.width, self.height), self._transform)
 
@@ -380,10 +380,10 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         kwargs: optional
                 Arguments to passed through the dataset's write() method.
         """
-        if not np.all(self.res == rio_dataset.res) or (rio_dataset.crs != self._crs):
-            raise ImageFormatError(f"The dataset resolution or CRS does not match that of the RasterArray. "
-                                   f"Dataset CRS: {rio_dataset.crs.to_proj4()}, res: {rio_dataset.res} "
-                                   f"RasterArray CRS: {rio_dataset.crs.to_proj4()}, res: {self.res}")
+        # TODO: include a CRS comparison below i.e. one that is faster that rasterio's current implementation
+        if not np.all(self.res == rio_dataset.res):
+            raise ImageFormatError(f"The dataset resolution does not match that of the RasterArray. "
+                                   f"Dataset res: {rio_dataset.res}, RasterArray res: {self.res}")
         if indexes is None:
             indexes = utils.get_nonalpha_bands(rio_dataset)
 
@@ -405,7 +405,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         bounded_ra = self.slice_to_bounds(*rio_dataset.window_bounds(window))
 
         if np.any(bounded_ra.shape != np.array((window.height, window.width))):
-            raise ValueError(f'The bounds of the dataset window ({rio_dataset.window_bounds(window)}) lie outside the '
+            raise ValueError(f'The bounds of the dataset / window ({rio_dataset.window_bounds(window)}) lie outside the '
                              f'bounds of the RasterArray ({bounded_ra.bounds})')
 
         rio_dataset.write(bounded_ra.array, window=window, indexes=indexes, **kwargs)
