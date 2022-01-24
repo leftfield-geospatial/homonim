@@ -282,7 +282,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
             return np.full(self._array.shape[-2:], True)
         mask = ~utils.nan_equals(self._array, self._nodata)
         if self._array.ndim > 2:
-            mask = np.all(mask, axis=0)
+            mask = np.any(mask, axis=0)
         return mask
 
     @mask.setter
