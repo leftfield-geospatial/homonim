@@ -39,15 +39,6 @@ from homonim.kernel_model import KernelModel
 logger = logging.getLogger(__name__)
 
 
-def _create_homo_postfix(proc_crs, method, kernel_shape, driver='GTiff'):
-    """Create a postfix string, including extension, for the homogenised image file"""
-    ext_dict = rio.drivers.raster_driver_extensions()
-    ext_idx = list(ext_dict.values()).index(driver)
-    ext = list(ext_dict.keys())[ext_idx]
-    post_fix = f'_HOMO_c{proc_crs.name.upper()}_m{method.upper()}_k{kernel_shape[0]}_{kernel_shape[1]}.{ext}'
-    return post_fix
-
-
 def _update_existing_keys(default_dict, **kwargs):
     """Update values in a dict with args from matching keys in **kwargs"""
     return {k: kwargs.get(k, v) for k, v in default_dict.items()}
@@ -279,42 +270,27 @@ def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, overwrite, d
     # iterate over and homogenise source file(s)
     try:
         for src_filename in src_file:
-            homo_root = pathlib.Path(output_dir) if output_dir is not None else src_filename.parent
-            post_fix = _create_homo_postfix(proc_crs=proc_crs, method=method, kernel_shape=kernel_shape,
-                                            driver=config['out_profile']['driver'])
-            # create output image filename
-            homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
-            param_filename = utils.create_param_filename(homo_filename)
-            if not overwrite:
-                if homo_filename.exists():
-                    raise FileExistsError(f"Homogenised image file exists and won't be overwritten without the "
-                                          f"'--overwrite' option: {homo_filename}")
-                if config['homo_config']['param_image'] and param_filename.exists():
-                    raise FileExistsError(f"Debug image file exists and won't be overwritten without the "
-                                          f"'--overwrite' option: {param_filename}")
+            homo_path = pathlib.Path(output_dir) if output_dir is not None else src_filename.parent
 
-            with RasterFuse(src_filename, ref_file, homo_filename, method=method, kernel_shape=kernel_shape,
-                             proc_crs=proc_crs, **config) as raster_fuse:
-
+            with RasterFuse(src_filename, ref_file, homo_path, method=method, kernel_shape=kernel_shape,
+                            proc_crs=proc_crs, overwrite=overwrite, **config) as raster_fuse:
                 logger.info(f'\nHomogenising {src_filename.name}')
-
-                # create fusion object and homogenise
                 start_time = timer()
                 raster_fuse.process()
-
                 # build overviews
                 if build_ovw:
-                    logger.info(f'Building overviews...')
+                    logger.info(f'Building overviews')
                     raster_fuse.build_overviews()
 
             logger.info(f'Completed in {timer() - start_time:.2f} secs')
+
             if kwargs['param_image'] and (logger.getEffectiveLevel() <= logging.DEBUG):
                 # log parameter statistics
-                _, stats_str = utils.param_stats(param_filename, method=method,
+                _, stats_str = utils.param_stats(raster_fuse.param_filename, method=method,
                                                  r2_inpaint_thresh=kwargs['r2_inpaint_thresh'])
-                logger.debug(f'\n\n{param_filename.name} Stats:\n\n{stats_str}')
+                logger.debug(f'\n\n{raster_fuse.param_filename.name} Stats:\n\n{stats_str}')
 
-            compare_files += (src_filename, homo_filename)  # build a list of files to pass to compare
+            compare_files += (src_filename, raster_fuse.homo_filename)  # build a list of files to pass to compare
 
         # compare source and homogenised files with reference (invokes compare command with relevant parameters)
         if do_cmp:

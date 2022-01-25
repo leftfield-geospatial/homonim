@@ -51,8 +51,8 @@ class RasterFuse:
                                                      interleave='band', photometric=None))
     default_model_config = KernelModel.default_config
 
-    def __init__(self, src_filename, ref_filename, homo_filename, method, kernel_shape, proc_crs=ProcCrs.auto,
-                 homo_config=None, model_config=None, out_profile=None):
+    def __init__(self, src_filename, ref_filename, homo_path, method, kernel_shape, proc_crs=ProcCrs.auto,
+                 overwrite=True, homo_config=None, model_config=None, out_profile=None):
         """
         Create a RasterFuse class.
 
@@ -64,18 +64,21 @@ class RasterFuse:
             Path to the reference image file.  The extents of this image should cover src_filename with at least a 2
             pixel boundary, and it should have at least as many bands as src_filename.  The ordering of the bands
             in src_filename and ref_filename should match.
-        homo_filename: str, pathlib.Path
-            Path to the homogenised file to create.
+        homo_path: str, pathlib.Path
+            Path to the homogenised file to create, or a directory in which in which to create an automatically named
+            file.
         method: homonim.enums.Method
             The radiometric homogenisation method.
         kernel_shape: tuple
             The (height, width) of the kernel in pixels of the proc_crs image (the lowest resolution image, if
             proc_crs=ProcCrs.auto).
-        proc_crs: homonim.enums.ProcCrs
+        proc_crs: homonim.enums.ProcCrs, optional
             The initial proc_crs setting, specifying which of the source/reference image spaces should be used for
             processing.  If proc_crs=ProcCrs.auto (recommended), the lowest resolution image space will be used.
             [default: ProcCrs.auto]
-        homo_config: dict
+        overwrite: bool, optional
+            Overwrite the output file(s) if they exist. [default: True]
+        homo_config: dict, optional
             General homogenisation configuration dict with items:
                 param_image: bool
                     Turn on/off the production of a debug image containing homogenisation parameters and R2 values.
@@ -86,7 +89,7 @@ class RasterFuse:
                     processing thread. Note that this is not a limit on the total memory consumed by a thread, as a
                     number of working block-sized arrays are created, but is proportional to the total memory consumed
                     by a thread.
-        model_config: dict
+        model_config: dict, optional
             Radiometric modelling configuration dict with items:
                 downsampling: rasterio.enums.Resampling, str
                     Resampling method for downsampling.
@@ -97,7 +100,7 @@ class RasterFuse:
                     For 'gain-offset' method only.
                 mask_partial: bool
                     Mask homogenised pixels produced from partial kernel or image coverage.
-        out_profile: dict
+        out_profile: dict, optional
             Output image configuration dict with the items:
                 driver: str
                     Output format driver.
@@ -119,7 +122,6 @@ class RasterFuse:
 
         self._src_filename = pathlib.Path(src_filename)
         self._ref_filename = pathlib.Path(ref_filename)
-        self._homo_filename = pathlib.Path(homo_filename)
         self._config = homo_config if homo_config else self.default_homo_config
         self._model_config = model_config if model_config else self.default_model_config
         self._out_profile = out_profile if out_profile else self.default_out_profile
@@ -132,6 +134,8 @@ class RasterFuse:
         self._raster_pair = RasterPairReader(src_filename, ref_filename, **raster_pair_args)
         self._proc_crs = self._raster_pair.proc_crs
 
+        self._init_out_filenames(pathlib.Path(homo_path), overwrite)
+
         # create the KernelModel according to proc_crs
         if self._proc_crs == ProcCrs.ref:
             self._model = RefSpaceModel(method=method, kernel_shape=kernel_shape,
@@ -143,12 +147,31 @@ class RasterFuse:
             raise ValueError(f'Invalid proc_crs: {proc_crs}, should be resolved to ProcCrs.ref or ProcCrs.src')
 
         # initialise other variables
-        self._param_filename = utils.create_param_filename(self._homo_filename)
         self._write_lock = threading.Lock()
         self._param_lock = threading.Lock()
         self._out_im = None
         self._param_im = None
         self._stack = None
+
+    def _init_out_filenames(self, homo_path: pathlib.Path, overwrite: bool = True):
+        """set up the homogenised and parameter image filenames."""
+        homo_path = pathlib.Path(homo_path)
+        if homo_path.is_dir():
+            # create a filename for the homogenised file in the provided directory
+            post_fix = utils.create_homo_postfix(self._proc_crs, self._method, self._kernel_shape,
+                                                 self._out_profile['driver'])
+            self._homo_filename = homo_path.joinpath(self._src_filename.stem + post_fix)
+        else:
+            self._homo_filename = homo_path
+
+        self._param_filename = utils.create_param_filename(self._homo_filename)
+
+        if not overwrite and self._homo_filename.exists():
+            raise FileExistsError(f"Homogenised image file exists and won't be overwritten without the "
+                                  f"'overwrite' option: {self._homo_filename}")
+        if not overwrite and self._config['param_image'] and self._param_filename.exists():
+            raise FileExistsError(f"Parameter image file exists and won't be overwritten without the "
+                                  f"'overwrite' option: {self._param_filename}")
 
     def _combine_with_config(self, in_profile):
         """Update an input rasterio profile with the configuration profile."""
@@ -236,7 +259,7 @@ class RasterFuse:
             for param_i, param_name in zip(range(bi, im.count, num_src_bands), ['GAIN', 'OFFSET', 'R2']):
                 im.set_band_description(param_i + 1, f'{ref_descr}_{param_name}')
                 param_meta_dict = {k: f'{v.upper()} {param_name}' for k, v in ref_meta_dict.items() if
-                                 k in ['ABBREV', 'ID', 'NAME']}
+                                   k in ['ABBREV', 'ID', 'NAME']}
                 im.update_tags(param_i + 1, **param_meta_dict)
 
     def _assert_open(self):
@@ -292,8 +315,17 @@ class RasterFuse:
         """True when the RasterFuse images are closed, otherwise False."""
         return not self._out_im or self._out_im.closed or not self._raster_pair or self._raster_pair.closed
 
-    @staticmethod
-    def _build_overviews(im):
+    @property
+    def homo_filename(self) -> pathlib.Path:
+        """Path to the homogenised image file."""
+        return self._homo_filename
+
+    @property
+    def param_filename(self) -> pathlib.Path:
+        """Path to the parameter image file."""
+        return self._param_filename if self._config['param_image'] else None
+
+    def _build_overviews(self, im):
         """
         Build internal overviews for a rasterio dataset.
 
@@ -367,9 +399,3 @@ class RasterFuse:
                 for future in tqdm(concurrent.futures.as_completed(futures), bar_format=bar_format,
                                    total=len(futures)):
                     future.result()
-
-        # if self._config['param_image'] and (logger.getEffectiveLevel() <= logging.DEBUG):
-        #     # log parameter statistics
-        #     _, stats_str = utils.param_stats(self._param_filename, method=self._method,
-        #                                      r2_inpaint_thresh=self._model_config['r2_inpaint_thresh'])
-        #     logger.debug(f'\n\n{self._param_filename.name} Stats:\n\n{stats_str}')

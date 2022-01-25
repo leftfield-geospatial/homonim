@@ -16,7 +16,6 @@
     You should have received a copy of the GNU Affero General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
-import glob
 import pathlib
 from typing import Tuple
 
@@ -138,10 +137,10 @@ class TestFuse(TestBase):
                 self._test_block_pairs(raster_pair)
 
         # homogenise and validate the results
-        post_fix = cli._create_homo_postfix(driver=self._out_profile['driver'], **kwargs)
+        post_fix = utils.create_homo_postfix(driver=self._out_profile['driver'], **kwargs)
         homo_filename = self.homo_root.joinpath(src_filename.stem + post_fix)
         with RasterFuse(src_filename, ref_filename, homo_filename, **kwargs, homo_config=self._homo_config,
-                         model_config=self._model_config, out_profile=self._out_profile) as raster_fuse:
+                        model_config=self._model_config, out_profile=self._out_profile) as raster_fuse:
             raster_fuse.process()
             raster_fuse.build_overviews()
         self.assertTrue(homo_filename.exists(), 'Homogenised file exists')
@@ -182,7 +181,7 @@ class TestFuse(TestBase):
             result = CliRunner().invoke(cli.cli, cli_str.split(), terminal_width=100, catch_exceptions=True)
             self.assertTrue(result.exit_code == 0, result.output)
 
-            homo_post_fix = cli._create_homo_postfix(driver=self._out_profile['driver'], **param_dict)
+            homo_post_fix = utils.create_homo_postfix(driver=self._out_profile['driver'], **param_dict)
             for src_filename in self.aerial_filenames:
                 src_filename = pathlib.Path(src_filename)
                 homo_filename = self.homo_root.joinpath(src_filename.stem + homo_post_fix)

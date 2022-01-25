@@ -21,7 +21,6 @@ import logging
 import pathlib
 from collections import OrderedDict
 from multiprocessing import cpu_count
-from typing import Tuple
 
 import numpy as np
 import pandas as pd
@@ -30,7 +29,7 @@ from rasterio.enums import Resampling, ColorInterp
 from rasterio.vrt import WarpedVRT
 from rasterio.windows import Window, get_data_window
 
-from homonim.enums import Method, ProcCrs
+from homonim.enums import Method
 
 logger = logging.getLogger(__name__)
 
@@ -141,14 +140,13 @@ def validate_threads(threads):
     return threads
 
 
-def create_homo_filename(src_filename: pathlib.Path, proc_crs: ProcCrs, method: Method, kernel_shape: Tuple[int, int],
-                         driver: str = 'GTiff'):
-    """Create a homogenised filename, given a source image filename, and homogenisation parameters."""
+def create_homo_postfix(proc_crs, method, kernel_shape, driver='GTiff'):
+    """Create a filename postfix, including extension, for the homogenised image file"""
     ext_dict = rio.drivers.raster_driver_extensions()
     ext_idx = list(ext_dict.values()).index(driver)
     ext = list(ext_dict.keys())[ext_idx]
     post_fix = f'_HOMO_c{proc_crs.name.upper()}_m{method.upper()}_k{kernel_shape[0]}_{kernel_shape[1]}.{ext}'
-    return src_filename.parent.joinpath(src_filename.stem + post_fix)
+    return post_fix
 
 
 def create_param_filename(filename: pathlib.Path):
