@@ -45,7 +45,7 @@ class KernelModel:
     default_config = dict(downsampling='cubic_spline', upsampling='average', r2_inpaint_thresh=0.25,
                           mask_partial=False)
 
-    def __init__(self, method, kernel_shape, debug_image=False, r2_inpaint_thresh=default_config['r2_inpaint_thresh'],
+    def __init__(self, method, kernel_shape, param_image=False, r2_inpaint_thresh=default_config['r2_inpaint_thresh'],
                  mask_partial=default_config['mask_partial'], downsampling=default_config['downsampling'],
                  upsampling=default_config['upsampling']):
         """
@@ -57,7 +57,7 @@ class KernelModel:
                 The radiometric homogenisation method.
         kernel_shape: tuple
                 The (height, width) of the kernel in pixels.
-        debug_image: bool, optional
+        param_image: bool, optional
                 Turn on/off the calculation of Pearson's correlation coefficient (r2) for each kernel model.
                 (Typically used for producing 'debug' images of the model parameters and accuracies.)
                 [default: False]
@@ -84,7 +84,7 @@ class KernelModel:
 
         self._kernel_shape = utils.validate_kernel_shape(kernel_shape, method=method)
 
-        self._debug_image = debug_image
+        self._param_image = param_image
         self._r2_inpaint_thresh = r2_inpaint_thresh
         self._mask_partial = mask_partial
         self._downsampling = downsampling
@@ -215,7 +215,7 @@ class KernelModel:
         -------
         param_ra :RasterArray
             RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second, and optionally
-            R2 for each kernel model in the third band when debug_image==True.
+            R2 for each kernel model in the third band when param_image==True.
         """
         # adapted from https://www.mathsisfun.com/data/least-squares-regression.html with c=0
         if kernel_shape is None:
@@ -231,7 +231,7 @@ class KernelModel:
 
         # setup a RasterArray profile for the parameters
         param_profile = src_ra.profile.copy()
-        param_profile.update(count=3 if self._debug_image else 2, nodata=RasterArray.default_nodata,
+        param_profile.update(count=3 if self._param_image else 2, nodata=RasterArray.default_nodata,
                              dtype=RasterArray.default_dtype)
 
         # convolve the kernel with src and ref to get kernel sums (uses DFT for large kernels)
@@ -246,7 +246,7 @@ class KernelModel:
         # find sliding kernel gains, avoiding divide by 0
         np.divide(ref_sum, src_sum, out=param_ra.array[0], where=mask)
 
-        if self._debug_image:
+        if self._param_image:
             # Find R2 of the sliding kernel models
             self._r2_array(ref_array, src_array, param_ra.array[:1], mask=mask, ref_sum=ref_sum, src_sum=src_sum,
                            dest_array=param_ra.array[2], kernel_shape=kernel_shape)
@@ -268,7 +268,7 @@ class KernelModel:
         -------
         param_ra :RasterArray
             RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second, and optionally
-            R2 for each kernel model in the third band when debug_image==True.
+            R2 for each kernel model in the third band when param_image==True.
         """
         if kernel_shape is None:
             kernel_shape = self._kernel_shape
@@ -308,7 +308,7 @@ class KernelModel:
         -------
         param_ra :RasterArray
             RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second, and optionally
-            R2 for each kernel model in the third band when debug_image==True.
+            R2 for each kernel model in the third band when param_image==True.
         """
         # Least squares formulae adapted from https://www.mathsisfun.com/data/least-squares-regression.html
         if kernel_shape is None:
@@ -324,7 +324,7 @@ class KernelModel:
 
         # setup a RasterArray profile for the parameters
         param_profile = src_ra.profile.copy()
-        find_r2 = self._debug_image or (self._r2_inpaint_thresh is not None)
+        find_r2 = self._param_image or (self._r2_inpaint_thresh is not None)
         param_profile.update(count=3 if find_r2 else 2, nodata=RasterArray.default_nodata,
                              dtype=RasterArray.default_dtype)
 
@@ -419,7 +419,7 @@ class KernelModel:
         -------
         param_ra :RasterArray
             RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second, and optionally
-            R2 for each kernel model in the third band when debug_image==True.
+            R2 for each kernel model in the third band when param_image==True.
         """
         # TODO: include a CRS comparison below i.e. one that is faster that rasterio's current implementation
         if ((ref_ra.transform != src_ra.transform) or (ref_ra.shape != src_ra.shape)):

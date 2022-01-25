@@ -21,15 +21,16 @@ import logging
 import pathlib
 from collections import OrderedDict
 from multiprocessing import cpu_count
+from typing import Tuple
 
 import numpy as np
 import pandas as pd
 import rasterio as rio
 from rasterio.enums import Resampling, ColorInterp
-from rasterio.windows import Window, get_data_window
 from rasterio.vrt import WarpedVRT
+from rasterio.windows import Window, get_data_window
 
-from homonim.enums import Method
+from homonim.enums import Method, ProcCrs
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +106,7 @@ def validate_kernel_shape(kernel_shape, method=Method.gain_blk_offset):
     if not np.all(np.mod(kernel_shape, 2) == 1):
         raise ValueError("kernel shape must be odd in both dimensions.")
     if method == Method.gain_offset and not np.product(kernel_shape) >= 25:
-            raise ValueError("kernel shape area should contain at least 25 elements for the gain-offset method.")
+        raise ValueError("kernel shape area should contain at least 25 elements for the gain-offset method.")
     if not np.all(kernel_shape >= 1):
         raise ValueError("kernel shape must be a minimum of one in both dimensions.")
     return kernel_shape
@@ -140,10 +141,20 @@ def validate_threads(threads):
     return threads
 
 
-def create_debug_filename(filename):
+def create_homo_filename(src_filename: pathlib.Path, proc_crs: ProcCrs, method: Method, kernel_shape: Tuple[int, int],
+                         driver: str = 'GTiff'):
+    """Create a homogenised filename, given a source image filename, and homogenisation parameters."""
+    ext_dict = rio.drivers.raster_driver_extensions()
+    ext_idx = list(ext_dict.values()).index(driver)
+    ext = list(ext_dict.keys())[ext_idx]
+    post_fix = f'_HOMO_c{proc_crs.name.upper()}_m{method.upper()}_k{kernel_shape[0]}_{kernel_shape[1]}.{ext}'
+    return src_filename.parent.joinpath(src_filename.stem + post_fix)
+
+
+def create_param_filename(filename: pathlib.Path):
     """Create a debug image filename, given the homogenised image filename"""
     filename = pathlib.Path(filename)
-    return filename.parent.joinpath(f'{filename.stem}_DEBUG{filename.suffix}')
+    return filename.parent.joinpath(f'{filename.stem}_PARAM{filename.suffix}')
 
 
 def build_overviews(filename):
@@ -168,38 +179,64 @@ def build_overviews(filename):
         im.build_overviews(ovw_levels, Resampling.average)
 
 
-def debug_stats(dbg_filename, method, r2_inpaint_thresh):
-    dbg_filename = pathlib.Path(dbg_filename)
-    if not dbg_filename.exists():
-        raise FileNotFoundError(f'{dbg_filename} does not exist')
+def param_stats(param_filename, method, r2_inpaint_thresh):
+    """
+    Find mean, standard deviation etc. statistics of homogenisation parameters and r2 values.
 
-    with rio.open(dbg_filename, 'r') as im:
-        band_dict = {}
-        band_desc = im.descriptions
-        if len(np.unique(band_desc)) != im.count:
-            band_desc = [f'Band {i + 1}' for i in range(im.count)]
+    Parameters
+    ----------
+    param_filename: pathlib.Path, str
+        Path to the parameter image.
+    method: homonim.enums.Method
+        Homogenisation method used to produce 'param_filename'.
+    r2_inpaint_thresh: float
+        The R2 inpaint threshold used to produce 'param_filename'.
+
+    Returns
+    -------
+    param_dict: dict
+        A dictionary of parameter statistics.
+    param_str: str
+        A string table of parameter statistics.
+    """
+    param_filename = pathlib.Path(param_filename)
+    if not param_filename.exists():
+        raise FileNotFoundError(f'{param_filename} does not exist')
+
+    with rio.open(param_filename, 'r') as im:
+        param_dict = {}
+        # get parameter descriptions
+        param_desc = im.descriptions
+        if len(np.unique(param_desc)) != im.count:
+            param_desc = [f'Band {i + 1}' for i in range(im.count)]
         _mask = im.dataset_mask()
+        # get window of valid pixels and read mask
         win = get_data_window(_mask, nodata=0)
         mask = im.dataset_mask(window=win).astype('bool', copy=False)
+
+        # loop over bands (i.e. parameters), finding statistics
         for band_i in range(im.count):
-            band_array = im.read(indexes=band_i + 1, window=win, out_dtype='float32')
-            band_vec = band_array[mask]
+            param_array = im.read(indexes=band_i + 1, window=win, out_dtype='float32')
+            param_vec = param_array[mask]  # vector of valid parameter values
+            param_vec = np.ma.masked_invalid(param_vec)  # mask out nan and inf values
 
             def stats(v):
-                vm = np.ma.masked_invalid(v)
-                return OrderedDict(Mean=vm.mean(), Std=vm.std(), Min=vm.min(), Max=vm.max())
+                """Find mean, std, min & max statistics for a vector."""
+                return OrderedDict(Mean=v.mean(), Std=v.std(), Min=v.min(), Max=v.max())
 
-            stats_dict = stats(band_vec)
+            stats_dict = stats(param_vec)
             if (method == Method.gain_offset) and (band_i >= im.count * 2 / 3):
-                inpaint_portion = np.nansum(band_vec < r2_inpaint_thresh) / len(~np.isnan(band_vec))
+                # Find the r2 inpaint portion if these parameters are from Method.gain_offset
+                inpaint_portion = np.sum(param_vec < r2_inpaint_thresh) / len(param_vec)
                 stats_dict['Inpaint (%)'] = inpaint_portion * 100
 
-            band_dict[band_desc[band_i]] = stats_dict
+            param_dict[param_desc[band_i]] = stats_dict
 
-        band_df = pd.DataFrame.from_dict(band_dict, orient='index')
-        band_str = band_df.to_string(float_format="{:.2f}".format, index=True, justify="center",
-                                     index_names=False)
-        return band_dict, band_str
+        # format the statistics as a table to get printable string
+        param_df = pd.DataFrame.from_dict(param_dict, orient='index')
+        param_str = param_df.to_string(float_format="{:.2f}".format, index=True, justify="center",
+                                       index_names=False)
+        return param_dict, param_str
 
 
 def covers_bounds(im1, im2, expand_pixels=(0, 0)):

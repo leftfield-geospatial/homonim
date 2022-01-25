@@ -228,8 +228,8 @@ def cli(verbose, quiet):
 @click.option("-c", "--conf", type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path),
               required=False, default=None, help="Path to a configuration file.")
 # advanced options
-@click.option("-di", "--debug-image", type=click.BOOL, is_flag=True,
-              default=RasterFuse.default_homo_config['debug_image'],
+@click.option("-pi", "--param-image", type=click.BOOL, is_flag=True,
+              default=RasterFuse.default_homo_config['param_image'],
               help=f"Create a debug image, containing model parameters and R\N{SUPERSCRIPT TWO} values, for each "
                    "source file.")
 @click.option("-mp", "--mask-partial", type=click.BOOL, is_flag=True,
@@ -264,6 +264,7 @@ def cli(verbose, quiet):
 def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, overwrite, do_cmp, build_ovw, proc_crs, conf,
          **kwargs):
     """Radiometrically homogenise image(s) by fusion with a reference"""
+
     try:
         kernel_shape = utils.validate_kernel_shape(kernel_shape, method=method)
     except Exception as ex:
@@ -278,44 +279,40 @@ def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, overwrite, d
     # iterate over and homogenise source file(s)
     try:
         for src_filename in src_file:
-            him = RasterFuse(src_filename, ref_file, method=method, kernel_shape=kernel_shape, proc_crs=proc_crs,
-                             **config)
-
-            logger.info(f'\nHomogenising {src_filename.name}')
-            # create output image filename
             homo_root = pathlib.Path(output_dir) if output_dir is not None else src_filename.parent
-            post_fix = _create_homo_postfix(proc_crs=him.proc_crs, method=method, kernel_shape=kernel_shape,
+            post_fix = _create_homo_postfix(proc_crs=proc_crs, method=method, kernel_shape=kernel_shape,
                                             driver=config['out_profile']['driver'])
+            # create output image filename
             homo_filename = homo_root.joinpath(src_filename.stem + post_fix)
-            dbg_filename = utils.create_debug_filename(homo_filename)
-
+            param_filename = utils.create_param_filename(homo_filename)
             if not overwrite:
                 if homo_filename.exists():
                     raise FileExistsError(f"Homogenised image file exists and won't be overwritten without the "
                                           f"'--overwrite' option: {homo_filename}")
-                if config['homo_config']['debug_image'] and dbg_filename.exists():
+                if config['homo_config']['param_image'] and param_filename.exists():
                     raise FileExistsError(f"Debug image file exists and won't be overwritten without the "
-                                          f"'--overwrite' option: {dbg_filename}")
+                                          f"'--overwrite' option: {param_filename}")
 
-            # create fusion object and homogenise
-            start_time = timer()
-            him.homogenise(homo_filename)
+            with RasterFuse(src_filename, ref_file, homo_filename, method=method, kernel_shape=kernel_shape,
+                             proc_crs=proc_crs, **config) as raster_fuse:
 
-            # build overviews
-            if build_ovw:
-                logger.info(f'Building overviews for {homo_filename.name}')
-                utils.build_overviews(homo_filename)
+                logger.info(f'\nHomogenising {src_filename.name}')
 
-                if config['homo_config']['debug_image']:
-                    logger.info(f'Building overviews for {dbg_filename.name}')
-                    utils.build_overviews(dbg_filename)
+                # create fusion object and homogenise
+                start_time = timer()
+                raster_fuse.process()
 
-            if config['homo_config']['debug_image'] and (logger.getEffectiveLevel() <= logging.DEBUG):
-                _, stats_str = utils.debug_stats(dbg_filename, method=method,
-                                                 r2_inpaint_thresh=kwargs['r2_inpaint_thresh'])
-                logger.debug(f'\n\n{dbg_filename.name} Stats:\n\n{stats_str}')
+                # build overviews
+                if build_ovw:
+                    logger.info(f'Building overviews...')
+                    raster_fuse.build_overviews()
 
             logger.info(f'Completed in {timer() - start_time:.2f} secs')
+            if kwargs['param_image'] and (logger.getEffectiveLevel() <= logging.DEBUG):
+                # log parameter statistics
+                _, stats_str = utils.param_stats(param_filename, method=method,
+                                                 r2_inpaint_thresh=kwargs['r2_inpaint_thresh'])
+                logger.debug(f'\n\n{param_filename.name} Stats:\n\n{stats_str}')
 
             compare_files += (src_filename, homo_filename)  # build a list of files to pass to compare
 

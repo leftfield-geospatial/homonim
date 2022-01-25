@@ -238,7 +238,7 @@ class RasterPairReader:
 
     def _assert_open(self):
         """Raise an IoError if the source and reference images are not open."""
-        if not self._src_im or not self._ref_im or self._src_im.closed or self._ref_im.closed:
+        if self.closed:
             raise errors.IoError(f'The raster pair has not been opened: {self._src_filename.name} and '
                                  f'{self._ref_filename.name}')
 
@@ -261,10 +261,8 @@ class RasterPairReader:
 
     def close(self):
         """Close the source and reference image datasets."""
-        if not self._src_im.closed:
-            self._src_im.close()
-        if not self._ref_im.closed:
-            self._ref_im.close()
+        self._src_im.close()
+        self._ref_im.close()
 
     def __enter__(self):
         self._env = rio.Env(GDAL_NUM_THREADS='ALL_CPUs').__enter__()
@@ -311,6 +309,11 @@ class RasterPairReader:
     def block_shape(self) -> Tuple[int, int]:
         """The image block shape (rows, columns) in pixels of the 'proc_crs' image."""
         return self._block_shape
+
+    @property
+    def closed(self) -> bool:
+        """True when the RasterPair is closed, otherwise False."""
+        return not self._src_im or not self._ref_im or self._src_im.closed or self._ref_im.closed
 
     def read(self, block: BlockPair):
         """

@@ -140,10 +140,10 @@ class TestFuse(TestBase):
         # homogenise and validate the results
         post_fix = cli._create_homo_postfix(driver=self._out_profile['driver'], **kwargs)
         homo_filename = self.homo_root.joinpath(src_filename.stem + post_fix)
-        him = RasterFuse(src_filename, ref_filename, **kwargs, homo_config=self._homo_config,
-                         model_config=self._model_config, out_profile=self._out_profile)
-        him.homogenise(homo_filename)
-        utils.build_overviews(homo_filename)
+        with RasterFuse(src_filename, ref_filename, homo_filename, **kwargs, homo_config=self._homo_config,
+                         model_config=self._model_config, out_profile=self._out_profile) as raster_fuse:
+            raster_fuse.process()
+            raster_fuse.build_overviews()
         self.assertTrue(homo_filename.exists(), 'Homogenised file exists')
         self._test_homo_profile(src_filename, homo_filename)
         self._test_homo_mask(src_filename, homo_filename, mask_partial=self._model_config['mask_partial'])
