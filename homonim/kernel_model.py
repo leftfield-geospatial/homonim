@@ -155,7 +155,7 @@ class KernelModel:
                             (2 * param_array[1] * ref_sum) +
                             ref2_sum + (mask_sum * (param_array[1] ** 2)))
         else:
-            # find RSS for method == Method.gain or Method.gain_im_offset
+            # find RSS for method == Method.gain or Method.gain_blk_offset
             # RSS = sum((ref - m*src)**2), where m is the first band of param_array
             # The above can be expanded and expressed in terms of cv2.boxFilter kernel sums as:
             ss_res_array = (((param_array[0] ** 2) * src2_sum) - (2 * param_array[0] * src_ref_sum) + ref2_sum)
@@ -253,7 +253,7 @@ class KernelModel:
 
         return param_ra
 
-    def _fit_gain_im_offset(self, ref_ra, src_ra, kernel_shape=None):
+    def _fit_gain_blk_offset(self, ref_ra, src_ra, kernel_shape=None):
         """
         Find sliding kernel gains and 'image' (i.e. block) offset, for a band, using opencv convolution.
 
@@ -294,8 +294,6 @@ class KernelModel:
     def _fit_gain_offset(self, ref_ra, src_ra, kernel_shape=None):
         """
         Find sliding kernel full linear model for a band using opencv convolution.
-
-        Find sliding kernel gains and 'image' (i.e. block) offset, for a band, using opencv convolution.
 
         ref_ra : RasterArray
             Reference data block in a RasterArray.
@@ -432,7 +430,7 @@ class KernelModel:
         if self._method == Method.gain:
             param_ra = self._fit_gain(ref_ra, src_ra, kernel_shape=kernel_shape)
         elif self._method == Method.gain_blk_offset:
-            param_ra = self._fit_gain_im_offset(ref_ra, src_ra, kernel_shape=kernel_shape)
+            param_ra = self._fit_gain_blk_offset(ref_ra, src_ra, kernel_shape=kernel_shape)
         else:
             param_ra = self._fit_gain_offset(ref_ra, src_ra, kernel_shape=kernel_shape)
 

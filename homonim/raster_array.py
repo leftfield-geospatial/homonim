@@ -112,11 +112,11 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         ra: RasterArray
             The constructed RasterArray.
         """
-        if not ('crs' and 'transform' and 'nodata' in profile):
+        if not {'crs' and 'transform' and 'nodata'} <= set(profile):
             raise ImageProfileError("'profile' should include 'crs', 'transform' and 'nodata' keys")
 
         if array is None:  # create array filled with nodata
-            if not ('width' and 'height' and 'count' and 'dtype' in profile):
+            if not {'width' and 'height' and 'count' and 'dtype'} <= set(profile):
                 raise ImageProfileError("'profile' should include 'width', 'height', 'count' and 'dtype' keys")
             array_shape = (profile['count'], profile['height'], profile['width'])
             array = np.full(array_shape, fill_value=profile['nodata'], dtype=profile['dtype'])
@@ -256,7 +256,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         return tuple(np.abs((self._transform.a, self._transform.e)))
 
     @property
-    def bounds(self) -> Tuple[float,]:
+    def bounds(self) -> Tuple[float, ]:
         """The (left, bottom, right, top) co-ordinates of the array extent."""
         return windows.bounds(windows.Window(0, 0, self.width, self.height), self._transform)
 
@@ -405,8 +405,9 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         bounded_ra = self.slice_to_bounds(*rio_dataset.window_bounds(window))
 
         if np.any(bounded_ra.shape != np.array((window.height, window.width))):
-            raise ValueError(f'The bounds of the dataset / window ({rio_dataset.window_bounds(window)}) lie outside the '
-                             f'bounds of the RasterArray ({bounded_ra.bounds})')
+            raise ValueError(
+                f'The bounds of the dataset / window ({rio_dataset.window_bounds(window)}) lie outside the '
+                f'bounds of the RasterArray ({bounded_ra.bounds})')
 
         rio_dataset.write(bounded_ra.array, window=window, indexes=indexes, **kwargs)
 

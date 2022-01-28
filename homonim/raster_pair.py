@@ -168,7 +168,6 @@ class RasterPairReader:
                            f"the source image pixel size is {cmp_str} than the reference.")
         return proc_crs
 
-
     def _auto_block_shape(self, proc_win=None):
         """Find a block shape that satisfies max_block_mem."""
 
@@ -286,12 +285,12 @@ class RasterPairReader:
         return self._ref_im
 
     @property
-    def src_bands(self) -> Tuple[int,]:
+    def src_bands(self) -> Tuple[int, ]:
         """The source non-alpha band indices (1-based)."""
         return self._src_bands
 
     @property
-    def ref_bands(self) -> Tuple[int,]:
+    def ref_bands(self) -> Tuple[int, ]:
         """The reference non-alpha band indices (1-based)."""
         return self._ref_bands
 

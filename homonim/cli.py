@@ -60,15 +60,6 @@ def _configure_logging(verbosity):
     logging.captureWarnings(True)
 
 
-def _src_file_cb(ctx, param, value):
-    """click callback to validate src_file"""
-    for src_file_spec in value:
-        src_file_path = pathlib.Path(src_file_spec)
-        if len(list(src_file_path.parent.glob(src_file_path.name))) == 0:
-            raise click.BadParameter(f'Could not find any source image(s) matching {src_file_path.name}')
-    return value
-
-
 def _threads_cb(ctx, param, value):
     """click callback to validate threads"""
     try:
@@ -118,6 +109,22 @@ def _creation_options_cb(ctx, param, value):
                 v = v.lower()
                 out[k] = None if v.lower() in ['none', 'null', 'nil', 'nada'] else yaml.safe_load(v)
         return out
+
+
+def _param_file_cb(ctx, param, value):
+    """click callback to validate parameter image file(s)"""
+    for filename in value:
+        filename = pathlib.Path(filename)
+
+        if not filename.exists():
+            raise click.BadParameter(f'{filename} does not exist')
+
+        with rio.open(filename) as param_im:
+            tags = param_im.tags()
+            if (divmod(param_im.count, 3)[1] != 0 or
+                    not {'HOMO_METHOD', 'HOMO_MODEL_CONF', 'HOMO_PROC_CRS'} <= set(tags)):
+                raise click.BadParameter(f'{filename.name} is not a valid homonim parameter image.', param=param)
+    return value
 
 
 class _PlainInfoFormatter(logging.Formatter):
@@ -175,10 +182,13 @@ threads_option = click.option("-t", "--threads", type=click.INT, default=RasterF
                               show_default=True, callback=_threads_cb,
                               help=f"Number of image blocks to process concurrently (0 = use all cpus).")
 src_file_arg = click.argument("src-file", nargs=-1, metavar="INPUTS...",
-                              type=click.Path(exists=False, dir_okay=True, readable=False, path_type=pathlib.Path),
-                              callback=_src_file_cb)
+                              type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path))
 ref_file_arg = click.argument("ref-file", nargs=1, metavar="REFERENCE",
-                              type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path))
+                              type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path))
+output_option = click.option("-o", "--output",
+                             type=click.Path(exists=False, dir_okay=False, writable=True, resolve_path=True,
+                                             path_type=pathlib.Path),
+                             help="Write results to a json file.")
 
 
 # define the click CLI
@@ -283,13 +293,6 @@ def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, overwrite, d
                     raster_fuse.build_overviews()
 
             logger.info(f'Completed in {timer() - start_time:.2f} secs')
-
-            if kwargs['param_image'] and (logger.getEffectiveLevel() <= logging.DEBUG):
-                # log parameter statistics
-                _, stats_str = utils.param_stats(raster_fuse.param_filename, method=method,
-                                                 r2_inpaint_thresh=kwargs['r2_inpaint_thresh'])
-                logger.debug(f'\n\n{raster_fuse.param_filename.name} Stats:\n\n{stats_str}')
-
             compare_files += (src_filename, raster_fuse.homo_filename)  # build a list of files to pass to compare
 
         # compare source and homogenised files with reference (invokes compare command with relevant parameters)
@@ -310,11 +313,9 @@ cli.add_command(fuse)
 @ref_file_arg
 @proc_crs_option
 @threads_option
-@click.option("-o", "--output",
-              type=click.Path(exists=False, dir_okay=False, writable=True, resolve_path=True, path_type=pathlib.Path),
-              help="Write comparison results to a json file.")
+@output_option
 def compare(src_file, ref_file, proc_crs, threads, output):
-    """Statistically compare image(s) with a reference"""
+    """Compare image(s) with a reference"""
     try:
         res_dict = {}
         # iterate over source files, comparing with reference
@@ -354,5 +355,45 @@ def compare(src_file, ref_file, proc_crs, threads, output):
 
 
 cli.add_command(compare)
+
+
+@click.command()
+@click.argument("param-file", nargs=-1, metavar="INPUTS...",
+                type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path), callback=_param_file_cb)
+@output_option
+def stats(param_file, output):
+    """Print parameter image statistics"""
+    try:
+        cmb_dict = {}
+        # iterate over source files, comparing with reference
+        for param_filename in param_file:
+            with rio.open(param_filename, 'r') as param_im:
+                tags = param_im.tags()
+                method = tags['HOMO_METHOD'].replace('_','-')
+                r2_inpaint_thresh = yaml.safe_load(tags['HOMO_MODEL_CONF'])['r2_inpaint_thresh']
+
+                logger.info(f'\n\n{param_filename.name}:\n')
+                logger.info(f'Method: {method}')
+                logger.info(f'Kernel shape: {tags["HOMO_KERNEL_SHAPE"]}')
+                logger.info(f'Processing CRS: {tags["HOMO_PROC_CRS"]}')
+                if method == 'gain_offset':
+                    logger.info(f'R\N{SUPERSCRIPT TWO} inpaint threshold: {r2_inpaint_thresh}')
+
+            cmb_dict[str(param_filename)], stats_str = utils.param_stats(param_filename, method=Method(method),
+                                                      r2_inpaint_thresh=r2_inpaint_thresh)
+            logger.info(f'Stats:\n\n{stats_str}')
+
+        if output is not None:
+            with open(output, 'w') as file:
+                json.dump(cmb_dict, file)
+
+    except Exception:
+        logger.exception("Exception caught during processing")
+        raise click.Abort()
+
+
+cli.add_command(stats)
+
+##
 
 ##

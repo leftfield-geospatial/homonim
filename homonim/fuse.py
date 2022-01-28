@@ -369,10 +369,7 @@ class RasterFuse:
         if self._config['param_image']:
             with self._param_lock:  # write the parameter block
                 indexes = np.arange(param_ra.count) * len(self._raster_pair.src_bands) + block_pair.band_i + 1
-                if self._proc_crs == ProcCrs.ref:
-                    param_out_block = block_pair.ref_out_block
-                else:
-                    param_out_block = block_pair.src_out_block
+                param_out_block = block_pair.ref_out_block if self._proc_crs == ProcCrs.ref else block_pair.src_out_block
                 param_ra.to_rio_dataset(self._param_im, indexes=indexes, window=param_out_block)
 
     def process(self):

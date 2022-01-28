@@ -30,6 +30,7 @@ from rasterio.vrt import WarpedVRT
 from rasterio.windows import Window, get_data_window
 
 from homonim.enums import Method
+from homonim.errors import ImageFormatError
 
 logger = logging.getLogger(__name__)
 
@@ -216,7 +217,7 @@ def param_stats(param_filename, method, r2_inpaint_thresh):
         for band_i in range(im.count):
             param_array = im.read(indexes=band_i + 1, window=win, out_dtype='float32')
             param_vec = param_array[mask]  # vector of valid parameter values
-            param_vec = np.ma.masked_invalid(param_vec)  # mask out nan and inf values
+            param_vec = np.ma.masked_invalid(param_vec).astype('float')  # mask out nan and inf values
 
             def stats(v):
                 """Find mean, std, min & max statistics for a vector."""
