@@ -98,13 +98,12 @@ class RasterPairReader:
     def _validate_image(im: rasterio.DatasetReader):
         """Validate an open rasterio dataset for use as a source or reference image."""
 
-        filename = pathlib.Path(im.name)
         try:
             _ = im.read(1, window=im.block_window(1, 0, 0))
         except Exception as ex:
-            if im.profile['compress'] == 'jpeg':  # assume it is a 12bit JPEG
+            if 'compress' in im.profile and im.profile['compress'] == 'jpeg':  # assume it is a 12bit JPEG
                 raise errors.UnsupportedImageError(
-                    f'Could not read image {filename.name}.  JPEG compression with NBITS==12 is not supported, '
+                    f'Could not read image {im.name}.  JPEG compression with NBITS==12 is not supported, '
                     f'you probably need to recompress this image.'
                 )
             else:
@@ -113,15 +112,12 @@ class RasterPairReader:
         # warn if there is no nodata or associated mask
         is_masked = any([MaskFlags.all_valid not in im.mask_flag_enums[bi] for bi in range(im.count)])
         if im.nodata is None and not is_masked:
-            logger.warning(f'{filename.name} has no mask or nodata value, '
+            logger.warning(f'{im.name} has no mask or nodata value, '
                            f'any invalid pixels should be masked before processing.')
 
     @staticmethod
     def _validate_image_pair(src_im, ref_im):
         """Validate a pair of rasterio datasets for use as a source-reference image pair."""
-
-        src_filename = pathlib.Path(src_im.name)
-        ref_filename = pathlib.Path(ref_im.name)
 
         for im in (src_im, ref_im):
             RasterPairReader._validate_image(im)
@@ -135,8 +131,8 @@ class RasterPairReader:
 
         # check reference has enough bands
         if len(src_bands) > len(ref_bands):
-            raise errors.ImageContentError(f'Reference ({ref_filename.name}) has fewer non-alpha bands than '
-                                           f'source ({src_filename.name}).')
+            raise errors.ImageContentError(f'Reference ({ref_im.name}) has fewer non-alpha bands than '
+                                           f'source ({src_im.name}).')
 
         # warn if source and reference band counts don't match
         if len(src_bands) != len(ref_bands):

@@ -376,7 +376,7 @@ def stats(param_file, output):
                 logger.info(f'Method: {method}')
                 logger.info(f'Kernel shape: {tags["HOMO_KERNEL_SHAPE"]}')
                 logger.info(f'Processing CRS: {tags["HOMO_PROC_CRS"]}')
-                if method == 'gain_offset':
+                if method == 'gain-offset':
                     logger.info(f'R\N{SUPERSCRIPT TWO} inpaint threshold: {r2_inpaint_thresh}')
 
             cmb_dict[str(param_filename)], stats_str = utils.param_stats(param_filename, method=Method(method),

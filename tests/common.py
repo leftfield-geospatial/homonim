@@ -34,9 +34,9 @@ class TestBase(unittest.TestCase):
     def setUp(self):
         """Delete old test files and load common configuration."""
         warnings.filterwarnings("ignore", category=DeprecationWarning)
-        self.source_root = root_path.joinpath('data/test_example/source')
-        self.ref_root = root_path.joinpath('data/test_example/reference')
-        self.homo_root = root_path.joinpath('data/test_example/homogenised')
+        self.source_root = root_path.joinpath('data/test_example/source/')
+        self.ref_root = root_path.joinpath('data/test_example/reference/')
+        self.homo_root = root_path.joinpath('data/test_example/homogenised/')
         self.aerial_filename = self.source_root.joinpath('3324c_2015_1004_05_0182_RGB.tif')
         self.aerial_filenames = [str(fn) for fn in self.aerial_filename.parent.glob('3324c_2015_*_RGB.tif')]
         self.landsat_filename = self.ref_root.joinpath('LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif')

@@ -16,7 +16,7 @@ source:
 requirements:
   run:
     - python >=3.6
-    - numpy >=1.2
+    - numpy >=1.19
     - rasterio >=1.1
     - click >= 8
     - tqdm >=4.6

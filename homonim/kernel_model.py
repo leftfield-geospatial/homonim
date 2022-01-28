@@ -194,7 +194,7 @@ class KernelModel:
         mask = ref_ra.mask & src_ra.mask
         if not np.any(mask):
             return norm_model
-        norm_model[0] = np.std(ref_ra.array, where=mask) / np.std(src_ra.array, where=mask)
+        norm_model[0] = np.std(ref_ra.array[mask]) / np.std(src_ra.array[mask])
         norm_model[1] = np.percentile(ref_ra.array[mask], 1) - np.percentile(src_ra.array[mask], 1) * norm_model[0]
         return norm_model
 
