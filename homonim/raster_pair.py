@@ -139,6 +139,12 @@ class RasterPairReader:
             logger.warning(f'Source and reference image non-alpha band counts don`t match. '
                            f'Using the first {len(src_bands)} non-alpha bands of reference.')
 
+        # warn if the source and reference are not in the same CRS
+        if src_im.crs.to_proj4() != ref_im.crs.to_proj4():
+            logger.warning(f'Source and reference image pair are not in the same CRS: {src_im.name} and '
+                           f'{ref_im.name}')
+
+
     @staticmethod
     def _resolve_proc_crs(src_im, ref_im, proc_crs=ProcCrs.auto):
         """
@@ -247,8 +253,6 @@ class RasterPairReader:
         if self._src_im.crs.to_proj4() != self._ref_im.crs.to_proj4():
             # open the image pair in the same CRS, re-projecting the proc_crs (usually lower resolution) image into the
             # CRS of the other
-            logger.warning(f'Source and reference image pair are not in the same CRS: {self._src_filename.name} and '
-                           f'{self._ref_filename.name}')
             if self._proc_crs == ProcCrs.ref:
                 self._ref_im = WarpedVRT(self._ref_im, crs=self._src_im.crs, resampling=Resampling.bilinear)
             else:

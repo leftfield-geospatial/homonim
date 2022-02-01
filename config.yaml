@@ -2,7 +2,7 @@
 # Produce debug outputs (0=None, 1=profiling, 2=parameter rasters)
 param_image: True
 # Mask output pixels that were derived from kernels, and or ref pixels, without full source coverage
-mask_partial: True
+mask_partial: False
 # Use multi-threading (memory intensive)
 threads: 0
 # maximum memory for automatic block size in megabytes
@@ -24,6 +24,7 @@ r2_inpaint_thresh: 0.25
 driver: GTiff
 # Data type (be aware that homogenised reflectances may be negative in some instances)
 dtype: float32
+# NODATA value (None = same as source image)
 nodata: .nan
 
 # driver specific creation options
@@ -38,5 +39,3 @@ creation_options:
   interleave: band
   # Photometric interpretation, see https://gdal.org/drivers/raster/gtiff.html for options (None = same as source image)
   photometric:
-  # NODATA value (None = same as source image)
-  num_threads: ALL_CPUS

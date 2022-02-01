@@ -27,7 +27,7 @@ from setuptools import setup, find_packages
      python -m twine upload --repository testpypi dist/*
 
  Install from testpypi:
-    python -m pip install --extra-index-url https://test.pypi.org/simple/ geedim
+    python -m pip install --extra-index-url https://test.pypi.org/simple/ homonim
 
  Install local development version:
     pip install -e .

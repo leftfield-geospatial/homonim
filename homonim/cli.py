@@ -264,7 +264,7 @@ def cli(verbose, quiet):
 @click.pass_context
 def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, overwrite, do_cmp, build_ovw, proc_crs, conf,
          **kwargs):
-    """Radiometrically homogenise image(s) by fusion with a reference"""
+    """Radiometrically homogenise image(s) by fusion with a reference."""
 
     try:
         kernel_shape = utils.validate_kernel_shape(kernel_shape, method=method)
@@ -282,9 +282,9 @@ def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, overwrite, d
         for src_filename in src_file:
             homo_path = pathlib.Path(output_dir) if output_dir is not None else src_filename.parent
 
+            logger.info(f'\nHomogenising {src_filename.name}')
             with RasterFuse(src_filename, ref_file, homo_path, method=method, kernel_shape=kernel_shape,
                             proc_crs=proc_crs, overwrite=overwrite, **config) as raster_fuse:
-                logger.info(f'\nHomogenising {src_filename.name}')
                 start_time = timer()
                 raster_fuse.process()
                 # build overviews
@@ -315,7 +315,7 @@ cli.add_command(fuse)
 @threads_option
 @output_option
 def compare(src_file, ref_file, proc_crs, threads, output):
-    """Compare image(s) with a reference"""
+    """Compare image(s) with a reference."""
     try:
         res_dict = {}
         # iterate over source files, comparing with reference
@@ -362,7 +362,7 @@ cli.add_command(compare)
                 type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path), callback=_param_file_cb)
 @output_option
 def stats(param_file, output):
-    """Print parameter image statistics"""
+    """Print parameter image statistics."""
     try:
         cmb_dict = {}
         # iterate over source files, comparing with reference
