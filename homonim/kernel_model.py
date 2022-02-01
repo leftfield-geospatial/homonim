@@ -42,7 +42,7 @@ class KernelModel:
     https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data
     """
 
-    default_config = dict(downsampling='cubic_spline', upsampling='average', r2_inpaint_thresh=0.25,
+    default_config = dict(downsampling='average', upsampling='cubic_spline', r2_inpaint_thresh=0.25,
                           mask_partial=False)
 
     def __init__(self, method, kernel_shape, param_image=False, r2_inpaint_thresh=default_config['r2_inpaint_thresh'],
