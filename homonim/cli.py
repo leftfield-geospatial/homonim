@@ -175,16 +175,16 @@ class _FuseCommand(click.Command):
 
 
 # define click options and arguments common to more than one command
+src_file_arg = click.argument("src-file", nargs=-1, metavar="INPUTS...",
+                              type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path))
+ref_file_arg = click.argument("ref-file", nargs=1, metavar="REFERENCE",
+                              type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path))
 proc_crs_option = click.option("-pc", "--proc-crs", type=click.Choice(ProcCrs, case_sensitive=False),
                                default=ProcCrs.auto.name, show_default=True,
                                help="The image CRS in which to perform processing.")
 threads_option = click.option("-t", "--threads", type=click.INT, default=RasterFuse.default_homo_config['threads'],
                               show_default=True, callback=_threads_cb,
                               help=f"Number of image blocks to process concurrently (0 = use all cpus).")
-src_file_arg = click.argument("src-file", nargs=-1, metavar="INPUTS...",
-                              type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path))
-ref_file_arg = click.argument("ref-file", nargs=1, metavar="REFERENCE",
-                              type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path))
 output_option = click.option("-o", "--output",
                              type=click.Path(exists=False, dir_okay=False, writable=True, resolve_path=True,
                                              path_type=pathlib.Path),
@@ -211,12 +211,12 @@ def cli(verbose, quiet):
 # standard options
 @src_file_arg
 @ref_file_arg
+@click.option("-m", "--method", type=click.Choice(Method, case_sensitive=False),
+              default=Method.gain_blk_offset.name, show_default=True, help="Homogenisation method.")
 @click.option("-k", "--kernel-shape", type=click.Tuple([click.INT, click.INT]), nargs=2, default=(5, 5),
               show_default=True, metavar='<HEIGHT WIDTH>',
               help="Kernel height and width in pixels (of the the lowest resolution of the source and reference "
                    "images).")
-@click.option("-m", "--method", type=click.Choice(Method, case_sensitive=False),
-              default=Method.gain_blk_offset.name, show_default=True, help="Homogenisation method.")
 @click.option("-od", "--output-dir", type=click.Path(exists=True, file_okay=False, writable=True),
               help="Directory in which to create homogenised image(s). [default: use source image directory]")
 @click.option("-ovw", "--overwrite", "overwrite", is_flag=True, type=bool, default=False,
@@ -227,7 +227,7 @@ def cli(verbose, quiet):
               help="Turn off overview building for the homogenised image(s).")
 @proc_crs_option
 @click.option("-c", "--conf", type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path),
-              required=False, default=None, help="Path to a configuration file.")
+              required=False, default=None, show_default=True, help="Path to an optional configuration file.")
 # advanced options
 @click.option("-pi", "--param-image", type=click.BOOL, is_flag=True,
               default=RasterFuse.default_homo_config['param_image'],
@@ -237,14 +237,15 @@ def cli(verbose, quiet):
               default=KernelModel.default_config['mask_partial'],
               help=f"Mask homogenised pixels produced from partial kernel or image coverage.")
 @threads_option
-@click.option("-mbm", "--max-block-mem", type=click.FLOAT, help="Maximum image block size for processing (MB)",
-              default=RasterFuse.default_homo_config['max_block_mem'], show_default=True)
+@click.option("-mbm", "--max-block-mem", type=click.FLOAT,
+              default=RasterFuse.default_homo_config['max_block_mem'], show_default=True,
+              help="Maximum image block size for concurrent processing (MB)")
 @click.option("-ds", "--downsampling", type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
               default=KernelModel.default_config['downsampling'], show_default=True,
               help="Resampling method for downsampling.")
 @click.option("-us", "--upsampling", type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
-              help="Resampling method for upsampling.",
-              default=KernelModel.default_config['upsampling'], show_default=True)
+              default=KernelModel.default_config['upsampling'], show_default=True,
+              help="Resampling method for upsampling.")
 @click.option("-rit", "--r2-inpaint-thresh", type=click.FloatRange(min=0, max=1),
               default=KernelModel.default_config['r2_inpaint_thresh'], show_default=True, metavar="FLOAT 0-1",
               help="R\N{SUPERSCRIPT TWO} threshold below which to inpaint model parameters from "
@@ -262,9 +263,40 @@ def cli(verbose, quiet):
               default=(), callback=_creation_options_cb,
               help="Driver specific creation options.  See the rasterio documentation for more information.")
 @click.pass_context
-def fuse(ctx, src_file, ref_file, kernel_shape, method, output_dir, overwrite, do_cmp, build_ovw, proc_crs, conf,
+def fuse(ctx, src_file, ref_file, method, kernel_shape, output_dir, overwrite, do_cmp, build_ovw, proc_crs, conf,
          **kwargs):
-    """Radiometrically homogenise image(s) by fusion with a reference."""
+    """
+    Radiometrically homogenise image(s) by fusion with a reference.
+
+    INPUTS      Path(s) to source image(s) to be homogenised.
+
+    REFERENCE   Path to a surface reflectance reference image.
+
+    Reference image extents should encompass those of the source image(s), and source / reference band ordering should
+    match (i.e. reference band 1 corresponds to source band 1, reference band 2 corresponds to source band
+    2 etc).
+
+    For best results, the reference and source image(s) should be concurrent, co-located (accurately co-registered /
+    orthorectified), and spectrally similar (with overlapping band spectral responses).
+
+    \b
+    Examples:
+    ---------
+
+    Homogenise 'input.tif' with 'reference.tif', using the 'gain-blk-offset' method, and a kernel of 5 x 5 pixels.
+
+    \b
+        $ homonim fuse -m gain-blk-offset -k 5 5 input.tif reference.tif
+
+    Homogenise files matching 'input*.tif' with 'reference.tif', using the 'gain-offset' method, a kernel of 15 x 15
+    pixels, and placing homogenised files in the './homog' directory.  Produce debug parameter images, and mask
+    partially covered pixels in the homogenised images.
+
+    \b
+        $ homonim fuse -m gain-offset -k 15 15 -od ./homog --param-image
+          --mask-partial input*.tif reference.tif
+
+    """
 
     try:
         kernel_shape = utils.validate_kernel_shape(kernel_shape, method=method)
@@ -315,7 +347,27 @@ cli.add_command(fuse)
 @threads_option
 @output_option
 def compare(src_file, ref_file, proc_crs, threads, output):
-    """Compare image(s) with a reference."""
+    """
+    Compare image(s) with a reference.
+
+    INPUTS      Path(s) to image(s) to be compared.
+
+    REFERENCE   Path to a surface reflectance reference image.
+
+    Reference image extents should encompass those of the input image(s), and input / reference band ordering should
+    match (i.e. reference band 1 corresponds to input band 1, reference band 2 corresponds to input band
+    2 etc).
+
+    \b
+    Examples:
+    ---------
+
+    Compare 'input.tif' and 'homogenised.tif with 'reference.tif'.
+
+    \b
+        $ homonim compare input.tif homogenised.tif reference.tif
+    """
+
     try:
         res_dict = {}
         # iterate over source files, comparing with reference
@@ -362,7 +414,12 @@ cli.add_command(compare)
                 type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path), callback=_param_file_cb)
 @output_option
 def stats(param_file, output):
-    """Print parameter image statistics."""
+    """
+    Print parameter image statistics.
+
+    INPUTS      Path(s) to parameter image(s).
+    """
+
     try:
         cmb_dict = {}
         # iterate over source files, comparing with reference
