@@ -34,7 +34,7 @@ $ homonim compare <path to source image> <path to homogenised image> <path to re
 ## Example
 Mosaics of 0.5 m resolution aerial imagery before and after homogenisation.  A Landsat-7 surface reflectance image was used as reference, and is shown in the background.  Homogenisation was performed using the `im-blk-offset` method and a 5 x 5 pixel kernel.  
 
-<img src="data/readme_eg.jpeg" data-canonical-src="data/readme_eg.jpg" alt="Before and after homogenisation" width="800"/>
+<img src="data/readme_eg.jpg" data-canonical-src="data/readme_eg.jpg" alt="Before and after homogenisation" width="800"/>
 
 ## Usage
 ### Terminology
