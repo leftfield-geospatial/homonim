@@ -28,13 +28,12 @@ import pandas as pd
 import rasterio as rio
 import yaml
 from click.core import ParameterSource
-from rasterio.warp import SUPPORTED_RESAMPLING
-
 from homonim import utils
 from homonim.compare import RasterCompare
 from homonim.enums import ProcCrs, Method
 from homonim.fuse import RasterFuse
 from homonim.kernel_model import KernelModel
+from rasterio.warp import SUPPORTED_RESAMPLING
 
 logger = logging.getLogger(__name__)
 
@@ -219,15 +218,16 @@ def cli(verbose, quiet):
                    "images).")
 @click.option("-od", "--output-dir", type=click.Path(exists=True, file_okay=False, writable=True),
               help="Directory in which to create homogenised image(s). [default: use source image directory]")
-@click.option("-ovw", "--overwrite", "overwrite", is_flag=True, type=bool, default=False,
+@click.option("-ovw", "--overwrite", "overwrite", is_flag=True, type=bool, default=False, show_default=True,
               help="Overwrite existing output file(s).")
 @click.option("-cmp", "--compare", "do_cmp", type=click.BOOL, is_flag=True, default=False,
-              help=f"Statistically compare source and homogenised images with the reference.")
+              help="Statistically compare source and homogenised images with the reference.")
 @click.option("-nbo", "--no-build-ovw", "build_ovw", type=click.BOOL, is_flag=True, default=True,
               help="Turn off overview building for the homogenised image(s).")
 @proc_crs_option
 @click.option("-c", "--conf", type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path),
-              required=False, default=None, show_default=True, help="Path to an optional configuration file.")
+              required=False, default=None, show_default=True,
+              help="Path to an optional yaml configuration file, that specifies the options that follow.")
 # advanced options
 @click.option("-pi", "--param-image", type=click.BOOL, is_flag=True,
               default=RasterFuse.default_homo_config['param_image'],
@@ -288,8 +288,8 @@ def fuse(ctx, src_file, ref_file, method, kernel_shape, output_dir, overwrite, d
     \b
         $ homonim fuse -m gain-blk-offset -k 5 5 input.tif reference.tif
 
-    Homogenise files matching 'input*.tif' with 'reference.tif', using the 'gain-offset' method, a kernel of 15 x 15
-    pixels, and placing homogenised files in the './homog' directory.  Produce debug parameter images, and mask
+    Homogenise files matching 'input*.tif' with 'reference.tif', using the 'gain-offset' method and a kernel of 15 x 15
+    pixels. Place homogenised files in the './homog' directory, produce parameter images, and mask
     partially covered pixels in the homogenised images.
 
     \b
@@ -426,7 +426,7 @@ def stats(param_file, output):
         for param_filename in param_file:
             with rio.open(param_filename, 'r') as param_im:
                 tags = param_im.tags()
-                method = tags['HOMO_METHOD'].replace('_','-')
+                method = tags['HOMO_METHOD'].replace('_', '-')
                 r2_inpaint_thresh = yaml.safe_load(tags['HOMO_MODEL_CONF'])['r2_inpaint_thresh']
 
                 logger.info(f'\n\n{param_filename.name}:\n')
@@ -437,7 +437,7 @@ def stats(param_file, output):
                     logger.info(f'R\N{SUPERSCRIPT TWO} inpaint threshold: {r2_inpaint_thresh}')
 
             cmb_dict[str(param_filename)], stats_str = utils.param_stats(param_filename, method=Method(method),
-                                                      r2_inpaint_thresh=r2_inpaint_thresh)
+                                                                         r2_inpaint_thresh=r2_inpaint_thresh)
             logger.info(f'Stats:\n\n{stats_str}')
 
         if output is not None:
@@ -450,7 +450,5 @@ def stats(param_file, output):
 
 
 cli.add_command(stats)
-
-##
 
 ##

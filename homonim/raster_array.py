@@ -25,6 +25,8 @@ import numpy
 import numpy as np
 import rasterio as rio
 import rasterio.windows
+from homonim import utils
+from homonim.errors import ImageProfileError, ImageFormatError
 from rasterio import Affine
 from rasterio import transform
 from rasterio import windows
@@ -33,17 +35,13 @@ from rasterio.enums import MaskFlags
 from rasterio.warp import reproject, Resampling
 from rasterio.windows import Window
 
-from homonim import utils
-from homonim.errors import ImageProfileError, ImageFormatError
-
 logger = logging.getLogger(__name__)
 
 
 class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
     """
     A class for encapsulating a masked, geo-referenced numpy array.
-
-    Provides methods for re-projecting and reading/writing from/to rasterio datasets.
+    Provides methods for re-projection, and reading/writing from/to rasterio datasets.
     """
     default_nodata = float('nan')  # default internal nodata value
     default_dtype = 'float32'  # default internal data type
@@ -256,7 +254,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         return tuple(np.abs((self._transform.a, self._transform.e)))
 
     @property
-    def bounds(self) -> Tuple[float, ]:
+    def bounds(self) -> Tuple[float,]:
         """The (left, bottom, right, top) co-ordinates of the array extent."""
         return windows.bounds(windows.Window(0, 0, self.width, self.height), self._transform)
 

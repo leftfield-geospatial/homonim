@@ -17,24 +17,25 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
+from typing import Tuple
+
 import cv2
 import cv2 as cv
 import numpy as np
-from rasterio.enums import Resampling
-from rasterio.fill import fillnodata
-from typing import Tuple
-
+from homonim import utils
 from homonim.enums import Method
 from homonim.raster_array import RasterArray
-from homonim import utils
+from rasterio.enums import Resampling
+from rasterio.fill import fillnodata
 
 
 class KernelModel:
     """
-    A base class for radiometric modelling and fusing/harmonising image data.
+    A base class for surface reflectance modelling and homogenisation of blocks of image data.
 
-    Linear models are fitted in a sliding kernel (window) between a source and reference image, and subsequently
-    applied to the source image.
+    The surface reflectance relationship between source and reference image blocks is approximated with localised linear
+    models.  Models are estimated for each pixel location inside a small rectangular kernel (window), using a fast DFT
+    approach.  The homogenised output is produced by applying the model parameters to the source image.
 
     Based on the paper:
     Harris, Dugal & Van Niekerk, Adriaan. (2018). Radiometric homogenisation of aerial images by calibrating with
@@ -460,7 +461,11 @@ class KernelModel:
 
 class RefSpaceModel(KernelModel):
     """
-    A KernelModel subclass, for processing in the 'reference space' i.e. reference image CRS and grid.
+    A KernelModel subclass, for estimating model parmaeters in the reference image CRS and grid.
+
+    The source image block is re-projected into the reference CRS to estimate the parameters.  Estimated parameters are
+    subsequently re-projected to the source CRS for application to the (original) source image block.
+
     Recommended for the most common use case where the reference image has a lower resolution than the source image.
     """
 
@@ -496,7 +501,11 @@ class RefSpaceModel(KernelModel):
 
 class SrcSpaceModel(KernelModel):
     """
-    A KernelModel subclass, for processing in the 'source space' i.e. source image CRS and grid.
+    A KernelModel subclass, for estimating model parmaeters in the source image CRS and grid.
+
+    The reference image block is re-projected into the source CRS to estimate the parameters.  Estimated parameters are
+    subsequently applied (directly) to the source image block.
+
     Recommended for the unusual use case where the source image has a lower resolution than the reference image.
     """
 

@@ -25,12 +25,10 @@ from multiprocessing import cpu_count
 import numpy as np
 import pandas as pd
 import rasterio as rio
+from homonim.enums import Method
 from rasterio.enums import Resampling, ColorInterp
 from rasterio.vrt import WarpedVRT
 from rasterio.windows import Window, get_data_window
-
-from homonim.enums import Method
-from homonim.errors import ImageFormatError
 
 logger = logging.getLogger(__name__)
 

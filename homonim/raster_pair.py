@@ -26,15 +26,14 @@ from typing import Tuple
 import numpy as np
 import rasterio
 import rasterio as rio
-from rasterio.enums import MaskFlags
-from rasterio.vrt import WarpedVRT
-from rasterio.warp import Resampling
-from rasterio.windows import Window
-
 from homonim import errors
 from homonim import utils
 from homonim.enums import ProcCrs
 from homonim.raster_array import RasterArray
+from rasterio.enums import MaskFlags
+from rasterio.vrt import WarpedVRT
+from rasterio.warp import Resampling
+from rasterio.windows import Window
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +115,7 @@ class RasterPairReader:
                            f'any invalid pixels should be masked before processing.')
 
     @staticmethod
-    def _validate_image_pair(src_im, ref_im):
+    def _validate_image_pair(src_im: rasterio.DatasetReader, ref_im: rasterio.DatasetReader):
         """Validate a pair of rasterio datasets for use as a source-reference image pair."""
 
         for im in (src_im, ref_im):
@@ -144,9 +143,9 @@ class RasterPairReader:
             logger.warning(f'Source and reference image pair are not in the same CRS: {src_im.name} and '
                            f'{ref_im.name}')
 
-
     @staticmethod
-    def _resolve_proc_crs(src_im, ref_im, proc_crs=ProcCrs.auto):
+    def _resolve_proc_crs(src_im: rasterio.DatasetReader, ref_im: rasterio.DatasetReader,
+                          proc_crs: ProcCrs = ProcCrs.auto):
         """
         Resolve proc_crs from auto to the lowest resolution of the source and reference image pair.  If it is already
         resolved, then warn if it does not correspond to the lowest resolution image of the pair.
@@ -170,7 +169,7 @@ class RasterPairReader:
                            f"the source image pixel size is {cmp_str} than the reference.")
         return proc_crs
 
-    def _auto_block_shape(self, proc_win=None):
+    def _auto_block_shape(self, proc_win: Window = None):
         """Find a block shape that satisfies max_block_mem."""
 
         # adjust max_block_mem to represent the size of a block in the highest resolution image, but scaled to the
@@ -285,12 +284,12 @@ class RasterPairReader:
         return self._ref_im
 
     @property
-    def src_bands(self) -> Tuple[int, ]:
+    def src_bands(self) -> Tuple[int,]:
         """The source non-alpha band indices (1-based)."""
         return self._src_bands
 
     @property
-    def ref_bands(self) -> Tuple[int, ]:
+    def ref_bands(self) -> Tuple[int,]:
         """The reference non-alpha band indices (1-based)."""
         return self._ref_bands
 
@@ -314,7 +313,7 @@ class RasterPairReader:
         """True when the RasterPair is closed, otherwise False."""
         return not self._src_im or not self._ref_im or self._src_im.closed or self._ref_im.closed
 
-    def read(self, block: BlockPair):
+    def read(self, block):
         """
         Read a matching pair of source and reference image blocks.
 

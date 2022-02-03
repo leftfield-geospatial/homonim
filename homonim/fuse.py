@@ -27,22 +27,23 @@ from typing import Tuple
 import numpy as np
 import rasterio as rio
 import rasterio.io
-from rasterio.enums import Resampling
-from tqdm import tqdm
-from tqdm.contrib.logging import logging_redirect_tqdm
-
 from homonim import utils
 from homonim.enums import Method, ProcCrs
 from homonim.errors import IoError
 from homonim.kernel_model import KernelModel, RefSpaceModel, SrcSpaceModel
 from homonim.raster_array import RasterArray
 from homonim.raster_pair import RasterPairReader, BlockPair
+from rasterio.enums import Resampling
+from tqdm import tqdm
+from tqdm.contrib.logging import logging_redirect_tqdm
 
 logger = logging.getLogger(__name__)
 
 
 class RasterFuse:
-    """Class for radiometrically homogenising ('fusing') a source image with a reference image."""
+    """
+    Class for homogenising ('fusing') a source image with a reference image.
+    """
 
     # default configuration dicts
     default_homo_config = dict(param_image=False, threads=multiprocessing.cpu_count(), max_block_mem=100)
@@ -196,13 +197,13 @@ class RasterFuse:
         # update out_profile with a flattened self._out_profile
         return nested_update(out_profile, self._out_profile)
 
-    def _create_out_profile(self):
+    def _create_out_profile(self) -> dict:
         """Create an output image rasterio profile from the source image profile and output configuration"""
         out_profile = self._combine_with_config(self._raster_pair.src_im.profile)
         out_profile['count'] = len(self._raster_pair.src_bands)
         return out_profile
 
-    def _create_param_profile(self):
+    def _create_param_profile(self) -> dict:
         """Create a debug image rasterio profile from the proc_crs image and configuration"""
         if self._raster_pair.proc_crs == ProcCrs.ref:
             init_profile = self._raster_pair.ref_im.profile
@@ -241,7 +242,7 @@ class RasterFuse:
 
     def _set_param_metadata(self, im):
         """
-        Copy useful metadata to a debug image (GeoTIFF) file.
+        Copy useful metadata to a parameter image (GeoTIFF) dataset.
 
         Parameters
         ----------
