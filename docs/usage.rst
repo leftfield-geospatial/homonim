@@ -5,20 +5,20 @@ Usage
 ----------
 Background
 ----------
-``homonim`` uses a *reference* surface reflectance image to adjust a *source* image.  Typically the *reference* image is a satellite image at a coarser resolution that the *source* image. The surface reflectance relationship between *source*  and *reference* images is approximated with localised linear models.  Models are estimated for each pixel location inside a small rectangular *kernel* (window), using a fast DFT approach.  The homogenised output is produced by applying the model parameters to the source image.  [Mention what offset and gain compensate for]
+``homonim`` uses a *reference* surface reflectance image to which a *source* image is homogenised.  Typically the *reference* image is a satellite image at a coarser resolution that the *source* image. The surface reflectance relationship between *source*  and *reference* images is approximated with localised linear models.  Models are estimated for each pixel location inside a small rectangular *kernel* (window), using a fast DFT approach.  The linear model offset compensates mainly for atmospheric scattering and haze, while the gain compensates mainly for atmospheric transmission and BRDF effects.  The homogenised output is produced by applying the model parameters to the source image.  
 
 -----------------
 Image preparation
 -----------------
 Before homogenising, a suitable *reference* image needs to be acquired.  For best results, the *reference* and *source* image(s) should be concurrent, co-located (accurately co-registered / orthorectified), and spectrally similar (with overlapping band spectral responses).
 
-The *reference* image bounds should encompass those of the *source* image(s), and *source* / *reference* band ordering should match (i.e. reference band 1 corresponds to source band 1, reference band 2 corresponds to source band 2 etc).  |rasterio|_ or |gdal|_ command line tools can be used to re-order bands etc. as necessary.  These packages are included in the ``homonim`` installation.  
+The *reference* image bounds need to encompass those of the *source* image(s), and *source* / *reference* band ordering should match (i.e. reference band 1 corresponds to source band 1, reference band 2 corresponds to source band 2 etc).  |rasterio|_ or |gdal|_ command line tools can be used to re-order bands etc. as necessary.  These packages are included in the ``homonim`` installation.  
 
-Examples of suitable surface reflectance image collections for the *reference* image are those produced by Landsat, Sentinel-2 and MODIS.  There are a number of platforms, and associated tools, for acquiring these images, including the `Google <https://developers.google.com/earth-engine/datasets>`_ and `Amazon <https://aws.amazon.com/earth/>`_ repositories.
+The `method formulation <https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data>`_ assumes *source* images are raw i.e. without colour-balancing, gamma-correction etc adjustments.  Where possible, this assumption should be adhered to.  Adjusted *source* images will still benefit from homogenisation, however.  
 
-|geedim|_ can be used as a companion tool to ``homonim``, and allows search, basic cloud/shadow-free compositing, and download of Google Earth Engine surface reflectance imagery.  More details `here <https://github.com/dugalh/geedim>`_.
+Examples of suitable surface reflectance image collections for the *reference* image are those produced by Landsat, Sentinel-2 and MODIS.  There are a number of platforms, providing these images, including the Google_ and `Amazon <https://aws.amazon.com/earth/>`_ repositories.  See other options `here <https://eos.com/blog/free-satellite-imagery-sources/>`_.
 
-Where possible, ``homonim`` should be applied to raw *source* imagery i.e. without colour-balancing or gamma-correction etc.  This will help satisfy the assumptions of the method, but is not strictly necessary, and adjusted *source* images will still benefit from homogenisation.  
+|geedim|_ can be used as a companion tool to ``homonim``.  It provides command line search, cloud/shadow-free compositing, and download of `Google Earth Engine`_ surface reflectance imagery.  
 
 ----------------------
 Command line interface
@@ -62,15 +62,19 @@ Standard options
     Report statistics describing the similarity of the *source* and *reference*, and homogenised and *reference* images.  These statitics give an indication of the improvement in surface reflectance homogeneity, and can be used for comparing performance of differerent options.   
 
 ``-nbo, --no-build-ovw``:
-    If specified, overview builidng is turned off.  The default is to build overviews for all output files.
+    If specified, overview building is turned off.  The default is to build overviews for all output files.
 
 .. _proc-crs:
 
 ``-pc, --proc-crs`` : '``auto``', '``src``' or '``ref``'
-    The image CRS in which to perform processing.  [default: auto]
+    The image CRS in which to perform model parameter estimation.
+    
+    * ``auto`` : Estimate parameters in the lowest resolution of the *source* and *reference* image CRSs. This is the default, and recommended setting.
+    * ``src`` : Estimate parameters in the *source* image CRS.  Suitable for cases where the *source* image resolution is lower than that of the *reference* image.
+    * ``ref`` : Estimate parameters in the *referemce* image CRS.  Suitable for cases where the *reference* image resolution is lower than that of the *source* image.
 
 ``-c, --conf`` : FILE
-    Path to an optional configuration file. 
+    Path to a yaml configuration file specifying the `advanced options`_.  Configuration file settings are overridden by any options passed on the command line.  The default is not to use a configuration file.  See `config.yaml`_ for an example.
 
 
 Advanced options
@@ -89,4 +93,7 @@ Advanced options
 .. _rasterio: https://rasterio.readthedocs.io/en/latest/cli.html
 .. _gdal: https://gdal.org/programs/index.html
 .. _geedim: https://github.com/dugalh/geedim
+.. _Google: https://developers.google.com/earth-engine/datasets
+.. _config.yaml: ../config.yaml
 .. _methods: method_
+.. _`Google Earth Engine`: Google_
