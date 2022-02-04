@@ -4,7 +4,7 @@
 
 There are three *methods* for fitting the linear models:
 
-| <div style="width:130px">Method</div>  | Description |
+| <div style="width:140px">Method</div>  | Description |
 | ----------------- |------------ |
 | `gain`            | A gain-only model, suitable for low haze *source* images, and *reference* images with zero offset. |  
 | `gain-blk-offset` | The gain-only model with per-block offset normalisation.  The default and most robust method, suitable for most image combinations. |
@@ -16,7 +16,7 @@ Model parameters are estimated in one of the *source* or *reference* images' gri
 ## Image preparation
 Before homogenising, a suitable *reference* image needs to be acquired.  For best results, the *reference* and *source* image(s) should be concurrent, co-located (accurately co-registered / orthorectified), and spectrally similar (with overlapping band spectral responses).
 
-The *reference* image bounds should encompass those of the *source* image(s), and *source* / *reference* band ordering should match (i.e. reference band 1 corresponds to source band 1, reference band 2 corresponds to source band 2 etc).  [`rasterio`](https://rasterio.readthedocs.io/en/latest/cli.html) or [`gdal`](https://gdal.org/programs/index.html) command line tools can be used to clip images, re-order bands etc. as necessary.  These packages are included in the `homonim` installation.  
+The *reference* image bounds should encompass those of the *source* image(s), and *source* / *reference* band ordering should match (i.e. reference band 1 corresponds to source band 1, reference band 2 corresponds to source band 2 etc).  [`rasterio`](https://rasterio.readthedocs.io/en/latest/cli.html) or [`gdal`](https://gdal.org/programs/index.html) command line tools can be used to re-order bands etc. as necessary.  These packages are included in the `homonim` installation.  
 
 Examples of suitable surface reflectance image collections for the *reference* image are those produced by Landsat, Sentinel-2 and MODIS.  There are a number of platforms, and associated tools, for acquiring these images, including the [Google](https://developers.google.com/earth-engine/datasets) and [Amazon](https://aws.amazon.com/earth/) repositories.  
 
@@ -43,7 +43,24 @@ Commands:
   stats    Print parameter image statistics.
 ```
 ## fuse
-The main `homonim` command for homogenising a *source* image with a *reference*.  There are numerous options, with all having sensible default values.  For most situations, the user only needs to specify  
+Radiometrically homogenise image(s) by fusion with a reference.
+
+`homonim fuse [OPTIONS] INPUTS... REFERENCE`
+
+### Required arguments
+* `INPUTS`  
+  * Path(s) to source image(s) to be homogenised.
+* `REFERENCE`
+  * Path to a surface reflectance reference image.   
+
+### Options
+> `-m, --method` 
+>> The homogenisation method:
+>> * `gain`: Gain only model, suitable for zero offset and haze-free source and reference images.
+* `gain-block-offset`:  
+
+[default: gain_blk_offset]
+https://github.com/OSGeo/gdal/master/doc/source/programs/raster_common_options.rst
 
 ```
 homonim fuse --help

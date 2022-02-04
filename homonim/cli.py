@@ -211,11 +211,11 @@ def cli(verbose, quiet):
 @src_file_arg
 @ref_file_arg
 @click.option("-m", "--method", type=click.Choice(Method, case_sensitive=False),
-              default=Method.gain_blk_offset.name, show_default=True, help="Homogenisation method.")
+              default=Method.gain_blk_offset.name, show_default=True,
+              help="Homogenisation method.")
 @click.option("-k", "--kernel-shape", type=click.Tuple([click.INT, click.INT]), nargs=2, default=(5, 5),
               show_default=True, metavar='<HEIGHT WIDTH>',
-              help="Kernel height and width in pixels (of the the lowest resolution of the source and reference "
-                   "images).")
+              help="Kernel height and width in pixels.")
 @click.option("-od", "--output-dir", type=click.Path(exists=True, file_okay=False, writable=True),
               help="Directory in which to create homogenised image(s). [default: use source image directory]")
 @click.option("-ovw", "--overwrite", "overwrite", is_flag=True, type=bool, default=False, show_default=True,

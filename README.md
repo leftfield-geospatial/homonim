@@ -34,10 +34,10 @@ $ homonim compare source.tif homogenised.tif reference.tif
 ## Example
 Mosaics of 0.5 m resolution aerial imagery before and after homogenisation.  A Landsat-7 surface reflectance image was used as reference, and is shown in the background.  Homogenisation was performed using the `im-blk-offset` method and a 5 x 5 pixel kernel.  
 
-<img src="data/readme_eg.jpg" data-canonical-src="data/readme_eg.jpg" alt="Before and after homogenisation" width="600"/>
+![example](data/readme_eg.jpg)
 
 ## Usage
-See the documentation [here](docs/usage.md).
+See the documentation [here](docs/usage.rst).
 
 ## Terminology
 While `homonim` implements a form of *spectral harmonisation*, we have used the term *homogenisation* to describe the method, in keeping with the [original formulation](https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data).
