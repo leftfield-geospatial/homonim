@@ -94,6 +94,6 @@ Advanced options
 .. _gdal: https://gdal.org/programs/index.html
 .. _geedim: https://github.com/dugalh/geedim
 .. _Google: https://developers.google.com/earth-engine/datasets
-.. _config.yaml: ../config.yaml
+.. _config.yaml: https://github.com/dugalh/homonim/config.yaml
 .. _methods: method_
 .. _`Google Earth Engine`: Google_
