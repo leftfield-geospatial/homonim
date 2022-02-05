@@ -415,7 +415,7 @@ cli.add_command(compare)
 @output_option
 def stats(param_file, output):
     """
-    Print parameter image statistics.
+    Report parameter image statistics.
 
     INPUTS      Path(s) to parameter image(s).
     """

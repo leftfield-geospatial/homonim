@@ -27,18 +27,46 @@ Examples of suitable surface reflectance image collections for the *reference* i
 ----------------------
 Command line interface
 ----------------------
-All functionality can be accessed via the command line.  There are three sub-commands: `compare`, `fuse` and `stats`.   
+All homogenisation functionality is accessed via the ``homonim`` command and its sub-commands.
 
-Fuse
+homonim
+========
+
+``homonim [OPTIONS] COMMAND [ARGS]...``
+
+Options
+-------
+``-v``, ``--verbose``:
+    Increase verbosity.
+``-q``, ``--quiet``:
+    Decrease verbosity.
+``--help``:
+    Show the command line help message and exit.
+
+Commands
+--------
+
+|fuse|_ :
+    Radiometrically homogenise image(s) by fusion with a reference.
+|compare|_ :
+    Compare image(s) with a reference.
+|stats|_ :
+    Report parameter image statistics.
+
+
+fuse
 ====
+
 ``homonim fuse [OPTIONS] INPUTS... REFERENCE``
+
+Radiometrically homogenise image(s) by fusion with a reference.
 
 Required arguments
 ------------------
 ``INPUTS`` : 
     Path(s) to *source* image(s) to be homogenised.
 ``REFERENCE`` : 
-    Path to a surface reflectance *reference* image.  
+    Path to a surface reflectance *reference* image.  The *reference* image bounds need to encompass those of the *source* image(s), and *source* / *reference* band ordering should match.
 
 Standard options
 ----------------
@@ -66,7 +94,7 @@ Standard options
 ``-ovw``, ``--overwrite``:
     If specified, existing output file(s) are overwritten.  The default is to raise an exception when the output file already exists.
 
-.. _compare:
+.. _compare_option:
 
 ``-cmp``, ``--compare``:
     Report statistics describing the similarity of the *source* and *reference*, and homogenised and *reference* image pairs.  Useful for comparing the effects of differerent ``method``, ``kernel-shape`` etc. options.
@@ -153,7 +181,77 @@ Advanced options
 
 ``-co``, ``--out-profile``: NAME=VALUE
     Driver specific image creation options for the output image(s).  For details of available options for a particular driver, see the `GDAL driver`_ documentation.  This option can be repeated e.g. ``-co COMPRESS=DEFLATE -co TILED=YES ...``.  The default ``GTiff`` creations options are: ``TILED=YES``, ``BLOCKXSIZE=512``, ``BLOCKYSIZE=512``, ``COMPRESS=DEFLATE`` and ``INTERLEAVE=BAND``.  Other format drivers have no defaults.  If out-driver_ matches the format of the *source* image, output creation options are copied from the *source* image, and overridden with any equivalent command line out-profile_ specifications or defaults.  
-  
+
+
+compare
+=======
+
+``homonim compare [OPTIONS] INPUTS... REFERENCE``
+
+Compare image(s) with a reference.
+
+Required arguments
+------------------
+``INPUTS`` :
+    Path(s) to image(s) to be compared.
+
+``REFERENCE`` :
+    Path to a surface reflectance *reference* image.  The *reference* image bounds need to encompass those of the *input* image(s), and *input* / *reference* band ordering should match.
+
+Options
+-------
+
+.. _proc_crs_compare:
+
+``-pc``, ``--proc-crs``: ``auto``, ``src`` or ``ref``
+    The image CRS in which to perform the comparison.
+    
+    * ``auto``: Compare images in the lowest resolution of the *source* and *reference* image CRS's. This is the default, and recommended setting.
+    * ``src``: Compare images in the *source* image CRS.
+    * ``ref``: Compare images in the *reference* image CRS.
+
+.. _threads_compare:
+
+``-t``, ``--threads``: INTEGER
+    The maximum number of image bands to compare concurrently (0 = compare as many bands as there are cpus).  Note that the amount of memory used by ``homonim compare`` increases with this number.  The default is 0.  
+
+.. _output_compare:
+
+``-o``, ``--output``: FILE
+    Write results to a json file.
+
+.. _help_compare:
+
+``--help``
+    Show the command line help message and exit.
+
+stats
+=====
+
+``homonim stats [OPTIONS] INPUTS...``
+
+Report parameter image statistics.
+
+Required arguments
+------------------
+
+``INPUTS``:
+    Path(s) to parameter image(s).  These are images produced by ``homonim`` |fuse|_ with the --|param-image|_ option.
+
+Options
+-------
+
+.. _output_stats:
+
+``-o``, ``--output``: FILE
+    Write results to a json file.
+
+.. _help_stats:
+
+``--help``
+    Show the command line help message and exit.
+
+
 
 .. |rasterio| replace:: ``rasterio``
 .. |gdal| replace:: ``gdal``
@@ -163,7 +261,11 @@ Advanced options
 .. |gain-offset| replace:: ``gain-offset``
 .. |kernel-shape| replace:: ``kernel-shape``
 .. |proc-crs| replace:: ``proc-crs``
+.. |param-image| replace:: ``param-image``
 .. |max-block-mem| replace:: ``max-block-mem``
+.. |compare| replace:: ``compare``
+.. |fuse| replace:: ``fuse``
+.. |stats| replace:: ``stats``
 .. _rasterio: https://rasterio.readthedocs.io/en/latest/cli.html
 .. _`rasterio docs`: <https://rasterio.readthedocs.io/en/latest/api/rasterio.enums.html#rasterio.enums.Resampling>
 .. _gdal: https://gdal.org/programs/index.html
