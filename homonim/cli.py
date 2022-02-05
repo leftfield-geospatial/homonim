@@ -232,10 +232,10 @@ def cli(verbose, quiet):
 @click.option("-pi", "--param-image", type=click.BOOL, is_flag=True,
               default=RasterFuse.default_homo_config['param_image'],
               help=f"Create a debug image, containing model parameters and R\N{SUPERSCRIPT TWO} values, for each "
-                   "source file.")
+                   "homogenised image.")
 @click.option("-mp", "--mask-partial", type=click.BOOL, is_flag=True,
               default=KernelModel.default_config['mask_partial'],
-              help=f"Mask homogenised pixels produced from partial kernel or image coverage.")
+              help=f"Mask homogenised pixels produced from partial kernel or source / reference image coverage.")
 @threads_option
 @click.option("-mbm", "--max-block-mem", type=click.FLOAT,
               default=RasterFuse.default_homo_config['max_block_mem'], show_default=True,

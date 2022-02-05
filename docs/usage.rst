@@ -5,14 +5,18 @@ Usage
 ----------
 Background
 ----------
-``homonim`` uses a *reference* surface reflectance image to which a *source* image is homogenised.  Typically the *reference* image is a satellite image at a coarser resolution that the *source* image. The surface reflectance relationship between *source*  and *reference* images is approximated with localised linear models.  Models are estimated for each pixel location inside a small rectangular *kernel* (window), using a fast DFT approach.  The linear model offset compensates mainly for atmospheric scattering and haze, while the gain compensates mainly for atmospheric transmission and BRDF effects.  The homogenised output is produced by applying the model parameters to the source image.  
+``homonim`` uses a *reference* surface reflectance image to which a *source* image is homogenised.  The *reference* image is usually a satellite image at a coarser resolution that the *source* image.  The surface reflectance relationship between *source*  and *reference* images is approximated with localised linear models.  Models are estimated for each pixel location inside a small rectangular *kernel* (window), using a fast DFT approach.  [*Roughly speaking, the linear model offset compensates for atmospheric scattering and haze, while the gain compensates for atmospheric absorption and BRDF effects*].  The homogenised output is produced by applying the model parameters to the source image.  
 
 -----------------
 Image preparation
 -----------------
-Before homogenising, a suitable *reference* image needs to be acquired.  For best results, the *reference* and *source* image(s) should be concurrent, co-located (accurately co-registered / orthorectified), and spectrally similar (with overlapping band spectral responses).
+Before homogenising, a suitable *reference* image needs to be acquired.  For best results, the *reference* and *source* image(s) should be:
 
-The *reference* image bounds need to encompass those of the *source* image(s), and *source* / *reference* band ordering should match (i.e. reference band 1 corresponds to source band 1, reference band 2 corresponds to source band 2 etc).  |rasterio|_ or |gdal|_ command line tools can be used to re-order bands etc. as necessary.  These packages are included in the ``homonim`` installation.  
+* **Concurrent**:  Capture dates are similar.
+* **Co-located**:  Accurately co-registered / orthorectified.
+* **Spectrally similar**:  Band spectral responses overlap.
+
+The *reference* image bounds need to encompass those of the *source* image(s), and *source* / *reference* band ordering should match i.e. reference band 1 corresponds to source band 1, reference band 2 corresponds to source band 2 etc.  |rasterio|_ or |gdal|_ command line tools can be used to re-order bands etc. as necessary.  These packages are included in the ``homonim`` installation.  
 
 The `method formulation <https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data>`_ assumes *source* images are raw i.e. without colour-balancing, gamma-correction etc adjustments.  Where possible, this assumption should be adhered to.  Adjusted *source* images will still benefit from homogenisation, however.  
 
@@ -34,52 +38,122 @@ Required arguments
 ``INPUTS`` : 
     Path(s) to *source* image(s) to be homogenised.
 ``REFERENCE`` : 
-    Path to a surface reflectance *reference* image.  The *reference* image bounds need to contain the *source* images(s), and *source* / *referennce* band ordering should match (i.e. reference band 1 corresponds to source band 1, reference band 2 corresponds to source band 2 etc).
+    Path to a surface reflectance *reference* image.  
 
 Standard options
 ----------------
 .. _method:
 
-``-m, --method`` :  '``gain``', '``gain-blk-offset``' or '``gain-offset``'
+``-m``, ``--method``:  ``gain``, ``gain-blk-offset`` or ``gain-offset``
     Homogenisation method:
     
-    * ``gain`` : A gain-only model, suitable for haze-free and 0 offset images (i.e. images where a surface reflectance of 0, corresponds to a pixel value of ~0).
-    * ``gain-blk-offset`` : A gain-only model applied to offset normalised image blocks.  The image block size is determined by max-block-mem_.  Effectively this applies a fine-scale gain and coarse-scale offset.  This is the default method - it is robust and suitable for most image combinations.
-    * ``gain-offset`` : A gain and offset model.  The most accurate method, but sensitive to differences between *source* and *reference*, such as shadowing and land cover changes.  ``gain-offset`` requires a larger |kernel-shape|_ than the other methods as it has i.e. a minimum of 5 x 5 pixels.  Suitable for well-matched *source*/*reference* combinations.
+    * ``gain``: A gain-only model, suitable for haze-free and zero offset images (i.e. images where a surface reflectance of zero, corresponds to a pixel value of ~zero).
+    * ``gain-blk-offset``: A gain-only model applied to offset normalised image blocks.  The image block size is determined by max-block-mem_.  ``gain-blk-offset`` can be thought of as a fine-scale gain and coarse-scale offset model.  It is the default method and is suitable for most image combinations.
+    * ``gain-offset``: A gain and offset model.  The most accurate method, but sensitive to differences between *source* and *reference*, such as shadowing and land cover changes.  Suitable for well-matched *source*/*reference* combinations.  (See also the associated r2-inpaint-thresh_ option.)  
 
 .. _kernel-shape:
 
-``-k, --kernel-shape``: <HEIGHT WIDTH> as odd *integers*
-    The kernel height and width in pixels (of the |proc-crs|_ image).  Larger kernels are less susceptible to over-fitting on noisy data, while smaller kernels provide higher spatial resolution homogenisation parameters. The minimum ``kernel-shape`` is 1 x 1 for the ``gain`` and ``gain-blk-offset`` methods_, and 5 x 5 for the ``gain-offset`` method_. The default is a 5 x 5 pixel kernel.
+``-k``, ``--kernel-shape``: <HEIGHT WIDTH> as odd *integers*
+    The kernel height and width in pixels of the |proc-crs|_ image.  Larger kernels are less susceptible to over-fitting on noisy data, while smaller kernels provide higher spatial resolution homogenisation parameters. The minimum ``kernel-shape`` is 1 x 1 for the ``gain`` and ``gain-blk-offset`` methods_, and 5 x 5 for the ``gain-offset`` method_. The default is a 5 x 5 pixel kernel.
 
-``-od, --output-dir``: DIRECTORY
-   The directory in which to create homogenised image(s).  Homogenised image(s) are named automatically based on the *source* file name and option values. The default ``output-dir`` is the source image directory.
+.. _output-dir:
 
-``-ovw, --overwrite``:
-    If specified, existing output file(s) will be overwritten.  The default is to raise an exception when the output file already exists.
+``-od``, ``--output-dir``: DIRECTORY
+   The directory in which to create homogenised image(s).  Homogenised image(s) are named automatically based on the *source* file name and option values. The default ``output-dir`` is the source image directory. 
 
-``-cmp, --compare``:
-    Report statistics describing the similarity of the *source* and *reference*, and homogenised and *reference* images.  These statitics give an indication of the improvement in surface reflectance homogeneity, and can be used for comparing performance of differerent options.   
+.. _overwrite:
 
-``-nbo, --no-build-ovw``:
+``-ovw``, ``--overwrite``:
+    If specified, existing output file(s) are overwritten.  The default is to raise an exception when the output file already exists.
+
+.. _compare:
+
+``-cmp``, ``--compare``:
+    Report statistics describing the similarity of the *source* and *reference*, and homogenised and *reference* image pairs.  Useful for comparing the effects of differerent ``method``, ``kernel-shape`` etc. options.
+
+.. _no-build-ovw:
+
+``-nbo``, ``--no-build-ovw``:
     If specified, overview building is turned off.  The default is to build overviews for all output files.
 
 .. _proc-crs:
 
-``-pc, --proc-crs`` : '``auto``', '``src``' or '``ref``'
+``-pc``, ``--proc-crs``: ``auto``, ``src`` or ``ref``
     The image CRS in which to perform model parameter estimation.
     
-    * ``auto`` : Estimate parameters in the lowest resolution of the *source* and *reference* image CRSs. This is the default, and recommended setting.
-    * ``src`` : Estimate parameters in the *source* image CRS.  Suitable for cases where the *source* image resolution is lower than that of the *reference* image.
-    * ``ref`` : Estimate parameters in the *referemce* image CRS.  Suitable for cases where the *reference* image resolution is lower than that of the *source* image.
+    * ``auto``: Estimate parameters in the lowest resolution of the *source* and *reference* image CRS's. This is the default, and recommended setting.
+    * ``src``: Estimate parameters in the *source* image CRS.
+    * ``ref``: Estimate parameters in the *referemce* image CRS.
 
-``-c, --conf`` : FILE
-    Path to a yaml configuration file specifying the `advanced options`_.  Configuration file settings are overridden by any options passed on the command line.  The default is not to use a configuration file.  See `config.yaml`_ for an example.
+.. _conf:
+
+``-c``, ``--conf`` : FILE
+    Path to a yaml configuration file specifying the `advanced options`_.  If passed, configuration file settings are overridden by equivalent options passed on the command line.  See `config.yaml`_ for an example.
+
+.. _help:
+
+``--help``
+    Show the command line help message and exit.
 
 
 Advanced options
 ----------------
 
+.. _param-image:
+
+``-pi``, ``--param-image``:
+    Create a debug image containing the model parameters and R² values for each homogenised image.
+
+.. _mask-partial:
+
+``-mp``, ``--mask-partial``:
+    Mask homogenised pixels produced from partial kernel or *source* / *reference* image coverage.  Surface reflectance estimates corresponding to these pixels are biased and can contribute to seamlines in mosaics of overlapping images.
+
+.. _threads:
+
+``-t``, ``--threads``: INTEGER
+    The number of image blocks to process concurrently (0 = process as many blocks as there are cpus).  Note that the amount of memory used by ``homonim`` increases with this number.  The default is 0.  
+
+.. _max-block-mem:
+
+``-mbm``, ``--max-block-mem``: FLOAT
+    The maximum image block size in megabytes (0 = block size is the band size).  ``homonim`` processes images in blocks to reduce memory usage, and allow concurrency.   The image block size is determined automatically, using this option as an upper limit.  The default is 100.  
+
+.. _downsampling:
+
+``-ds``, ``--downsampling``: ``nearest``, ``bilinear``, ``cubic``, ``cubic_spline``, ``lanczos``, ``average``, ``mode``, ``max``, ``min``, ``med``, ``q1``, ``q3``, ``sum`` or ``rms``
+    The resampling method for re-projecting from high to low resolution. See the `rasterio docs`_ for details on the available options.  ``average`` is the default (recommended).
+
+.. _upsampling:
+
+``-us``, ``--upsampling``: ``nearest``, ``bilinear``, ``cubic``, ``cubic_spline``, ``lanczos``, ``average``, ``mode``, ``max``, ``min``, ``med``, ``q1``, ``q3``, ``sum`` or ``rms``
+    The resampling method for re-projecting from low to high resolution. See the `rasterio docs`_ for details on the available options.  ``cubic_spline`` is the default (recommended).
+
+.. _r2-inpaint-thresh:
+
+``-rit``, ``--r2-inpaint-thresh``: FLOAT 0-1
+    The kernel model R² (coefficient of determination) threshold below which to inpaint the offset parameter from surrounding areas (0 = turn off inpainting). The gain parameter is re-fitted with the inpainted offsets.  This option applies only to ``gain-offset``, and can improve the stability of this method in noisy areas.  The default is 0.25.
+
+.. _out-driver:
+
+``--out-driver``: TEXT
+    The output image format driver.  See the `GDAL driver`_ documentation for options.  ``GTiff`` is the default (recommended).
+
+.. _out-dtype:
+
+``--out-dtype``: ``uint8``, ``uint16``, ``int16``, ``uint32``, ``int32``, ``float32`` or ``float64``
+    The output image data type.  ``float32`` is the default.
+
+.. _out-nodata:
+
+``--out-nodata``: NUMBER, ``null`` or ``nan``
+    The output image nodata value (``null`` = no nodata value).  ``nan`` is the default.
+
+.. _out-profile:
+
+``-co``, ``--out-profile``: NAME=VALUE
+    Driver specific image creation options for the output image(s).  For details of available options for a particular driver, see the `GDAL driver`_ documentation.  This option can be repeated e.g. ``-co COMPRESS=DEFLATE -co TILED=YES ...``.  The default ``GTiff`` creations options are: ``TILED=YES``, ``BLOCKXSIZE=512``, ``BLOCKYSIZE=512``, ``COMPRESS=DEFLATE`` and ``INTERLEAVE=BAND``.  Other format drivers have no defaults.  If out-driver_ matches the format of the *source* image, output creation options are copied from the *source* image, and overridden with any equivalent command line out-profile_ specifications or defaults.  
+  
 
 .. |rasterio| replace:: ``rasterio``
 .. |gdal| replace:: ``gdal``
@@ -91,9 +165,11 @@ Advanced options
 .. |proc-crs| replace:: ``proc-crs``
 .. |max-block-mem| replace:: ``max-block-mem``
 .. _rasterio: https://rasterio.readthedocs.io/en/latest/cli.html
+.. _`rasterio docs`: <https://rasterio.readthedocs.io/en/latest/api/rasterio.enums.html#rasterio.enums.Resampling>
 .. _gdal: https://gdal.org/programs/index.html
 .. _geedim: https://github.com/dugalh/geedim
 .. _Google: https://developers.google.com/earth-engine/datasets
-.. _config.yaml: https://github.com/dugalh/homonim/config.yaml
+.. _config.yaml: https://github.com/dugalh/homonim/blob/main/config.yaml
+.. _`gdal driver`: https://gdal.org/drivers/raster/index.html
 .. _methods: method_
 .. _`Google Earth Engine`: Google_

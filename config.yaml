@@ -1,41 +1,26 @@
+# See https://github.com/dugalh/homonim/blob/main/docs/usage.rst#advanced-options for detailed documentation
+
 # Homogenisation configuration
-# Produce debug outputs (0=None, 1=profiling, 2=parameter rasters)
 param_image: True
-# Mask output pixels that were derived from kernels, and or ref pixels, without full source coverage
 mask_partial: False
-# Use multi-threading (memory intensive)
 threads: 0
-# maximum memory for automatic block size in megabytes
 max_block_mem: 100
 
 # Model configuration
-# Interpolation type (average, bilinear, cubic, cubic_spline, gauss, lanczos) for resampling from source to reference
-#   CRS (cubic_spline recommended)
 downsampling: average
-# Interpolation type (average, bilinear, cubic, cubic_spline, gauss, lanczos) for resampling from reference to source
-#   CRS  (average recommended)
 upsampling: cubic_spline
-# For gain&offset model, refit pixels with model R2 values below this value, using interpolated offset
-# and fitted gain (None = no inpainting).
 r2_inpaint_thresh: 0.25
 
 # Format of output (homogenised) raster
-# Format of homogenised raster - see www.gdal.org/formats_list.html (None = same format as source image)
 driver: GTiff
-# Data type (be aware that homogenised reflectances may be negative in some instances)
 dtype: float32
-# NODATA value (None = same as source image)
 nodata: .nan
 
-# driver specific creation options
+# Driver specific creation options
 creation_options:
   tiled: True
-  # Tile/block [x, y] size in pixels ([512, 512] recommended) (None = same as source image)
   blockxsize: 512
   blockysize: 512
-  # GeoTIFF compress type (deflate, jpeg, jpeg2000, lzw, zstd, none) (None = same as source image)
   compress: deflate
-  # Interleave by 'pixel' or 'band' (pixel, band) (None = same as source image)
   interleave: band
-  # Photometric interpretation, see https://gdal.org/drivers/raster/gtiff.html for options (None = same as source image)
   photometric:
