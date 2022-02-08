@@ -28,12 +28,13 @@ import pandas as pd
 import rasterio as rio
 import yaml
 from click.core import ParameterSource
+from rasterio.warp import SUPPORTED_RESAMPLING
+
 from homonim import utils
 from homonim.compare import RasterCompare
 from homonim.enums import ProcCrs, Method
 from homonim.fuse import RasterFuse
 from homonim.kernel_model import KernelModel
-from rasterio.warp import SUPPORTED_RESAMPLING
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +138,25 @@ class _PlainInfoFormatter(logging.Formatter):
         return super().format(record)
 
 
-class _FuseCommand(click.Command):
+class _HomonimCommand(click.Command):
+    """
+    click Command class that formats single newlines in help strings as single newlines.
+    """
+
+    def get_help(self, ctx):
+        """Format help strings with single newlines as single newlines."""
+        # adapted from https://stackoverflow.com/questions/55585564/python-click-formatting-help-text
+        orig_wrap_test = click.formatting.wrap_text
+
+        def wrap_text(text, width, **kwargs):
+            text = text.replace('\n', '\n\n')
+            return orig_wrap_test(text, width, **kwargs).replace('\n\n', '\n')
+
+        click.formatting.wrap_text = wrap_text
+        return click.Command.get_help(self, ctx)
+
+
+class _FuseCommand(_HomonimCommand):
     """
     click Command class that combines config file and context parameters.
 
@@ -178,9 +197,7 @@ src_file_arg = click.argument("src-file", nargs=-1, metavar="INPUTS...",
                               type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path))
 ref_file_arg = click.argument("ref-file", nargs=1, metavar="REFERENCE",
                               type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path))
-proc_crs_option = click.option("-pc", "--proc-crs", type=click.Choice(ProcCrs, case_sensitive=False),
-                               default=ProcCrs.auto.name, show_default=True,
-                               help="The image CRS in which to perform processing.")
+
 threads_option = click.option("-t", "--threads", type=click.INT, default=RasterFuse.default_homo_config['threads'],
                               show_default=True, callback=_threads_cb,
                               help=f"Number of image blocks to process concurrently (0 = use all cpus).")
@@ -215,7 +232,7 @@ def cli(verbose, quiet):
               help="Homogenisation method.")
 @click.option("-k", "--kernel-shape", type=click.Tuple([click.INT, click.INT]), nargs=2, default=(5, 5),
               show_default=True, metavar='<HEIGHT WIDTH>',
-              help="Kernel height and width in pixels.")
+              help="Kernel height and width in pixels of the --param-crs image.")
 @click.option("-od", "--output-dir", type=click.Path(exists=True, file_okay=False, writable=True),
               help="Directory in which to create homogenised image(s). [default: use source image directory]")
 @click.option("-ovw", "--overwrite", "overwrite", is_flag=True, type=bool, default=False, show_default=True,
@@ -224,7 +241,11 @@ def cli(verbose, quiet):
               help="Statistically compare source and homogenised images with the reference.")
 @click.option("-nbo", "--no-build-ovw", "build_ovw", type=click.BOOL, is_flag=True, default=True,
               help="Turn off overview building for the homogenised image(s).")
-@proc_crs_option
+@click.option("-pc", "--param-crs", type=click.Choice(ProcCrs, case_sensitive=False),
+              default=ProcCrs.auto.name, show_default=True,
+              help="The image CRS in which to perform parameter estimation.\nauto: estimate in the lowest resolution "
+                   "of the source and reference image CRS's (recommended).\nsrc: estimate in the source image CRS."
+                   "\nref: estimate in the reference image CRS.")
 @click.option("-c", "--conf", type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path),
               required=False, default=None, show_default=True,
               help="Path to an optional yaml configuration file, that specifies the options that follow.")
@@ -263,7 +284,7 @@ def cli(verbose, quiet):
               default=(), callback=_creation_options_cb,
               help="Driver specific creation options.  See the rasterio documentation for more information.")
 @click.pass_context
-def fuse(ctx, src_file, ref_file, method, kernel_shape, output_dir, overwrite, do_cmp, build_ovw, proc_crs, conf,
+def fuse(ctx, src_file, ref_file, method, kernel_shape, output_dir, overwrite, do_cmp, build_ovw, param_crs, conf,
          **kwargs):
     """
     Radiometrically homogenise image(s) by fusion with a reference.
@@ -272,12 +293,10 @@ def fuse(ctx, src_file, ref_file, method, kernel_shape, output_dir, overwrite, d
 
     REFERENCE   Path to a surface reflectance reference image.
 
-    Reference image extents should encompass those of the source image(s), and source / reference band ordering should
-    match (i.e. reference band 1 corresponds to source band 1, reference band 2 corresponds to source band
-    2 etc).
+    The *reference* image bounds should contain those of the *source* image(s), and *source* / *reference* bands should
+    correspond i.e. reference band 1 corresponds to source band 1, reference band 2 corresponds to source band 2 etc.
 
-    For best results, the reference and source image(s) should be concurrent, co-located (accurately co-registered /
-    orthorectified), and spectrally similar (with overlapping band spectral responses).
+    For best results, the reference and source image(s) should be concurrent, co-located, and spectrally similar.
 
     \b
     Examples:
@@ -288,13 +307,14 @@ def fuse(ctx, src_file, ref_file, method, kernel_shape, output_dir, overwrite, d
     \b
         $ homonim fuse -m gain-blk-offset -k 5 5 input.tif reference.tif
 
+
     Homogenise files matching 'input*.tif' with 'reference.tif', using the 'gain-offset' method and a kernel of 15 x 15
     pixels. Place homogenised files in the './homog' directory, produce parameter images, and mask
     partially covered pixels in the homogenised images.
 
     \b
-        $ homonim fuse -m gain-offset -k 15 15 -od ./homog --param-image
-          --mask-partial input*.tif reference.tif
+        $ homonim fuse --method gain-offset --kernel-shape 15 15 -od ./homog
+          --param-image --mask-partial input*.tif reference.tif
 
     """
 
@@ -316,7 +336,7 @@ def fuse(ctx, src_file, ref_file, method, kernel_shape, output_dir, overwrite, d
 
             logger.info(f'\nHomogenising {src_filename.name}')
             with RasterFuse(src_filename, ref_file, homo_path, method=method, kernel_shape=kernel_shape,
-                            proc_crs=proc_crs, overwrite=overwrite, **config) as raster_fuse:
+                            proc_crs=param_crs, overwrite=overwrite, **config) as raster_fuse:
                 start_time = timer()
                 raster_fuse.process()
                 # build overviews
@@ -340,22 +360,26 @@ cli.add_command(fuse)
 
 
 # compare command
-@click.command()
+@click.command(cls=_HomonimCommand)
 @src_file_arg
 @ref_file_arg
-@proc_crs_option
+@click.option("-pc", "--proc-crs", type=click.Choice(ProcCrs, case_sensitive=False),
+              default=ProcCrs.auto.name, show_default=True,
+              help="The image CRS in which to perform processing.\nauto: process in the lowest"
+                   "resolution of the source and reference image CRS's (recommended).\nsrc: process in"
+                   "the source image CRS.\nref: process in the reference image CRS.")
 @threads_option
 @output_option
 def compare(src_file, ref_file, proc_crs, threads, output):
     """
-    Compare image(s) with a reference.
+    Report similarity statistics between image(s) with a reference.
 
     INPUTS      Path(s) to image(s) to be compared.
 
     REFERENCE   Path to a surface reflectance reference image.
 
-    Reference image extents should encompass those of the input image(s), and input / reference band ordering should
-    match (i.e. reference band 1 corresponds to input band 1, reference band 2 corresponds to input band
+    Reference image extents should encompass those of the input image(s), and input / reference bands should correspond
+    (i.e. reference band 1 corresponds to input band 1, reference band 2 corresponds to input band
     2 etc).
 
     \b
