@@ -229,10 +229,11 @@ def cli(verbose, quiet):
 @ref_file_arg
 @click.option("-m", "--method", type=click.Choice(Method, case_sensitive=False),
               default=Method.gain_blk_offset.name, show_default=True,
-              help="Homogenisation method.")
+              help="Homogenisation method.\ngain: Gain-only model. \ngain-blk-offset: Gain-only model applied to "
+                   "offset normalised image blocks. \ngain-offset: Full gain and offset model.")
 @click.option("-k", "--kernel-shape", type=click.Tuple([click.INT, click.INT]), nargs=2, default=(5, 5),
               show_default=True, metavar='<HEIGHT WIDTH>',
-              help="Kernel height and width in pixels of the --param-crs image.")
+              help="Kernel height and width in pixels of the --proc-crs / -pc image.")
 @click.option("-od", "--output-dir", type=click.Path(exists=True, file_okay=False, writable=True),
               help="Directory in which to create homogenised image(s). [default: use source image directory]")
 @click.option("-ovw", "--overwrite", "overwrite", is_flag=True, type=bool, default=False, show_default=True,
@@ -248,33 +249,33 @@ def cli(verbose, quiet):
                    "\nref: estimate in the reference image CRS.")
 @click.option("-c", "--conf", type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path),
               required=False, default=None, show_default=True,
-              help="Path to an optional yaml configuration file, that specifies the options that follow.")
+              help="Path to a yaml configuration file specifying the options below.")
 # advanced options
 @click.option("-pi", "--param-image", type=click.BOOL, is_flag=True,
               default=RasterFuse.default_homo_config['param_image'],
-              help=f"Create a debug image, containing model parameters and R\N{SUPERSCRIPT TWO} values, for each "
+              help=f"Create a debug image, containing model parameters and R\N{SUPERSCRIPT TWO} values for each "
                    "homogenised image.")
 @click.option("-mp", "--mask-partial", type=click.BOOL, is_flag=True,
               default=KernelModel.default_config['mask_partial'],
-              help=f"Mask homogenised pixels produced from partial kernel or source / reference image coverage.")
+              help=f"Mask biased homogenised pixels produced from partial kernel or source / reference image coverage.")
 @threads_option
 @click.option("-mbm", "--max-block-mem", type=click.FLOAT,
               default=RasterFuse.default_homo_config['max_block_mem'], show_default=True,
-              help="Maximum image block size for concurrent processing (MB)")
+              help="Maximum image block size in megabytes (0 = block size is the image size).")
 @click.option("-ds", "--downsampling", type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
               default=KernelModel.default_config['downsampling'], show_default=True,
-              help="Resampling method for downsampling.")
+              help="Resampling method for re-projecting from high to low resolution.")
 @click.option("-us", "--upsampling", type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
               default=KernelModel.default_config['upsampling'], show_default=True,
-              help="Resampling method for upsampling.")
+              help="Resampling method for re-projecting from low to high resolution.")
 @click.option("-rit", "--r2-inpaint-thresh", type=click.FloatRange(min=0, max=1),
               default=KernelModel.default_config['r2_inpaint_thresh'], show_default=True, metavar="FLOAT 0-1",
               help="R\N{SUPERSCRIPT TWO} threshold below which to inpaint model parameters from "
-                   "surrounding areas. For 'gain-offset' method only.")
+                   "surrounding areas (0 = turn off inpainting). For 'gain-offset' method only.")
 @click.option("--out-driver", "driver",
               type=click.Choice(list(rio.drivers.raster_driver_extensions().values()), case_sensitive=False),
               default=RasterFuse.default_out_profile['driver'], show_default=True, metavar="TEXT",
-              help="Output format driver.")
+              help="Output image format driver.  See the GDAL docs for options.")
 @click.option("--out-dtype", "dtype", type=click.Choice(list(rio.dtypes.dtype_fwd.values())[1:8], case_sensitive=False),
               default=RasterFuse.default_out_profile['dtype'], show_default=True, help="Output image data type.")
 @click.option("--out-nodata", "nodata", type=click.STRING, callback=_nodata_cb, metavar="[NUMBER|null|nan]",
@@ -282,7 +283,7 @@ def cli(verbose, quiet):
               help="Output image nodata value.")
 @click.option('-co', '--out-profile', 'creation_options', metavar='NAME=VALUE', multiple=True,
               default=(), callback=_creation_options_cb,
-              help="Driver specific creation options.  See the rasterio documentation for more information.")
+              help="Driver specific image creation options for the output image(s).  See the GDAL docs for details.")
 @click.pass_context
 def fuse(ctx, src_file, ref_file, method, kernel_shape, output_dir, overwrite, do_cmp, build_ovw, proc_crs, conf,
          **kwargs):
@@ -302,19 +303,19 @@ def fuse(ctx, src_file, ref_file, method, kernel_shape, output_dir, overwrite, d
     Examples:
     ---------
 
-    Homogenise 'input.tif' with 'reference.tif', using the 'gain-blk-offset' method, and a kernel of 5 x 5 pixels.
+    Homogenise 'source.tif' with 'reference.tif', using the 'gain-blk-offset' method, and a kernel of 5 x 5 pixels.
 
     \b
-        $ homonim fuse -m gain-blk-offset -k 5 5 input.tif reference.tif
+        $ homonim fuse -m gain-blk-offset -k 5 5 source.tif reference.tif
 
 
-    Homogenise files matching 'input*.tif' with 'reference.tif', using the 'gain-offset' method and a kernel of 15 x 15
+    Homogenise files matching 'source*.tif' with 'reference.tif', using the 'gain-offset' method and a kernel of 15 x 15
     pixels. Place homogenised files in the './homog' directory, produce parameter images, and mask
     partially covered pixels in the homogenised images.
 
     \b
         $ homonim fuse --method gain-offset --kernel-shape 15 15 -od ./homog
-          --param-image --mask-partial input*.tif reference.tif
+          --param-image --mask-partial source*.tif reference.tif
 
     """
 
@@ -368,9 +369,8 @@ cli.add_command(fuse)
               help="The image CRS in which to perform processing.\nauto: process in the lowest "
                    "resolution of the source and reference image CRS's (recommended).\nsrc: process in "
                    "the source image CRS.\nref: process in the reference image CRS.")
-@threads_option
 @output_option
-def compare(src_file, ref_file, proc_crs, threads, output):
+def compare(src_file, ref_file, proc_crs, output):
     """
     Report similarity statistics between image(s) with a reference.
 
@@ -386,10 +386,10 @@ def compare(src_file, ref_file, proc_crs, threads, output):
     Examples:
     ---------
 
-    Compare 'input.tif' and 'homogenised.tif with 'reference.tif'.
+    Compare 'source.tif' and 'homogenised.tif with 'reference.tif'.
 
     \b
-        $ homonim compare input.tif homogenised.tif reference.tif
+        $ homonim compare source.tif homogenised.tif reference.tif
     """
 
     try:
@@ -398,7 +398,7 @@ def compare(src_file, ref_file, proc_crs, threads, output):
         for src_filename in src_file:
             logger.info(f'\nComparing {src_filename.name}')
             start_time = timer()
-            cmp = RasterCompare(src_filename, ref_file, proc_crs=proc_crs, threads=threads)
+            cmp = RasterCompare(src_filename, ref_file, proc_crs=proc_crs)
             res_dict[str(src_filename)] = cmp.compare()
             logger.info(f'Completed in {timer() - start_time:.2f} secs')
 

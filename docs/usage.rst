@@ -5,29 +5,32 @@ Usage
 ----------
 Background
 ----------
-``homonim`` uses a *reference* surface reflectance image to which a *source* image is homogenised.  The *reference* image is usually a satellite image at a coarser resolution that the *source* image.  The surface reflectance relationship between *source*  and *reference* images is approximated with localised linear models.  Models are estimated for each pixel location inside a small rectangular *kernel* (window), using a fast DFT approach.  [*Roughly speaking, the linear model offset compensates for atmospheric scattering and haze, while the gain compensates for atmospheric absorption and BRDF effects*].  The homogenised output is produced by applying the model parameters to the source image.  
+``homonim`` uses a *reference* surface reflectance image to which a *source* image is homogenised.  The *reference* image is usually a satellite image at a coarser resolution that the *source* image.  The surface reflectance relationship between *source*  and *reference* images is approximated with localised linear models.  Models are estimated for each pixel location inside a small rectangular *kernel* (window), using a fast DFT approach.  The model parameters are applied to the *source* image to produce the homogenised output.  
+
+There is a theoretical basis for using local linear models, which is explained in the paper_.  Broadly speaking, the gain term compensates for atmospheric absorption and BRDF effects, while the offset compensates for atmospheric reflectance and haze.
 
 -----------------
 Image preparation
 -----------------
-Before homogenising, a suitable *reference* image needs to be acquired.  For best results, the *reference* and *source* image(s) should be:
+Before homogenising, a *reference* image needs to be acquired.  Examples of suitable surface reflectance image collections for the *reference* image are those produced by Landsat, Sentinel-2 and MODIS.  There are a number of platforms providing these images including the Google_ and `Amazon <https://aws.amazon.com/earth/>`_ repositories.  See other options `here <https://eos.com/blog/free-satellite-imagery-sources/>`_.
+
+|geedim|_ can be used as a companion tool to ``homonim`` for acquiring suitable *reference* images.  It provides command line search, cloud/shadow-free compositing, and download of `Google Earth Engine`_ surface reflectance imagery.
+
+For best results, the *reference* and *source* image(s) should be:
 
 * **Concurrent**:  Capture dates are similar.
 * **Co-located**:  Accurately co-registered / orthorectified.
 * **Spectrally similar**:  Band spectral responses overlap.
 
-The *reference* image bounds need to encompass those of the *source* image(s), and *source* / *reference* band ordering should match i.e. reference band 1 corresponds to source band 1, reference band 2 corresponds to source band 2 etc.  |rasterio|_ or |gdal|_ command line tools can be used to re-order bands etc. as necessary.  These packages are included in the ``homonim`` installation.  
+The *reference* image bounds should contain those of the *source* image(s), and *source* / *reference* bands should correspond i.e. *reference* band 1 corresponds to *source* band 1, *reference* band 2 corresponds to *source* band 2 etc.  |rasterio|_ and |gdal|_ provide command line tools for re-ordering bands etc. ``rasterio`` is included in the ``homonim`` installation.
 
 The `method formulation <https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data>`_ assumes *source* images are raw i.e. without colour-balancing, gamma-correction etc adjustments.  Where possible, this assumption should be adhered to.  Adjusted *source* images will still benefit from homogenisation, however.  
 
-Examples of suitable surface reflectance image collections for the *reference* image are those produced by Landsat, Sentinel-2 and MODIS.  There are a number of platforms, providing these images, including the Google_ and `Amazon <https://aws.amazon.com/earth/>`_ repositories.  See other options `here <https://eos.com/blog/free-satellite-imagery-sources/>`_.
-
-|geedim|_ can be used as a companion tool to ``homonim``.  It provides command line search, cloud/shadow-free compositing, and download of `Google Earth Engine`_ surface reflectance imagery.  
 
 ----------------------
 Command line interface
 ----------------------
-All homogenisation functionality is accessed via the ``homonim`` command and its sub-commands.
+All homogenisation functionality is accessed via the ``homonim`` command and its sub-commands.  Use ``homonim <command> --help`` for command line help.
 
 homonim
 ========
@@ -49,7 +52,7 @@ Commands
 |fuse|_ :
     Radiometrically homogenise image(s) by fusion with a reference.
 |compare|_ :
-    Compare image(s) with a reference.
+    Report similarity statistics between image(s) and a reference.
 |stats|_ :
     Report parameter image statistics.
 
@@ -59,14 +62,28 @@ fuse
 
 ``homonim fuse [OPTIONS] INPUTS... REFERENCE``
 
-Radiometrically homogenise image(s) by fusion with a reference.
+Radiometrically homogenise image(s) by fusion with a reference.  
+
+Examples 
+--------
+Homogenise *source.tif* with *reference.tif*, using the ``gain-blk-offset`` method_, and a kernel_ of 5 x 5 pixels.
+
+.. code-block:: console
+
+    $ homonim fuse -m gain-blk-offset -k 5 5 source.tif reference.tif
+
+Homogenise files matching *source\*.tif* with *reference.tif*, using the ``gain-offset`` method_ and a kernel_ of 15 x 15 pixels. Place homogenised files in the *./homog* directory, produce parameter images, and mask partially covered pixels in the homogenised images.
+
+.. code-block:: console
+
+    $ homonim fuse --method gain-offset --kernel-shape 15 15 -od ./homog --param-image --mask-partial source*.tif reference.tif
 
 Required arguments
 ------------------
 ``INPUTS`` : 
     Path(s) to *source* image(s) to be homogenised.
 ``REFERENCE`` : 
-    Path to a surface reflectance *reference* image.  The *reference* image bounds need to encompass those of the *source* image(s), and *source* / *reference* band ordering should match.
+    Path to a surface reflectance *reference* image.  
 
 Standard options
 ----------------
@@ -76,8 +93,8 @@ Standard options
     Homogenisation method:
     
     * ``gain``: A gain-only model, suitable for haze-free and zero offset images (i.e. images where a surface reflectance of zero, corresponds to a pixel value of ~zero).
-    * ``gain-blk-offset``: A gain-only model applied to offset normalised image blocks.  The image block size is determined by max-block-mem_.  ``gain-blk-offset`` can be thought of as a fine-scale gain and coarse-scale offset model.  It is the default method and is suitable for most image combinations.
-    * ``gain-offset``: A gain and offset model.  The most accurate method, but sensitive to differences between *source* and *reference*, such as shadowing and land cover changes.  Suitable for well-matched *source*/*reference* combinations.  (See also the associated r2-inpaint-thresh_ option.)  
+    * ``gain-blk-offset``: A gain-only model applied to offset normalised image blocks.  The image block size is determined by max-block-mem_.  It is the default method and is suitable for most image combinations.  
+    * ``gain-offset``: A gain and offset model.  The most accurate method, but sensitive to differences between *source* and *reference*, such as shadowing and land cover changes.  Suitable for well-matched *source* / *reference* combinations.  (See also the associated r2-inpaint-thresh_ option.)
 
 .. _kernel-shape:
 
@@ -107,7 +124,7 @@ Standard options
 .. _proc-crs:
 
 ``-pc``, ``--proc-crs``: ``auto``, ``src`` or ``ref``
-    The image CRS in which to perform model parameter estimation.
+    The image CRS in which to perform parameter estimation.
     
     * ``auto``: Estimate parameters in the lowest resolution of the *source* and *reference* image CRS's. This is the default, and recommended setting.
     * ``src``: Estimate parameters in the *source* image CRS.
@@ -116,7 +133,7 @@ Standard options
 .. _conf:
 
 ``-c``, ``--conf`` : FILE
-    Path to a yaml configuration file specifying the `advanced options`_.  If passed, configuration file settings are overridden by equivalent options passed on the command line.  See `config.yaml`_ for an example.
+    Path to a yaml configuration file specifying the `advanced options`_.  Any advanced options passed on the command line will override the corresponding configuration file settings.  See `config.yaml`_ for an example.
 
 .. _help:
 
@@ -135,7 +152,7 @@ Advanced options
 .. _mask-partial:
 
 ``-mp``, ``--mask-partial``:
-    Mask homogenised pixels produced from partial kernel or *source* / *reference* image coverage.  Surface reflectance estimates corresponding to these pixels are biased and can contribute to seamlines in mosaics of overlapping images.
+    Mask biased homogenised pixels produced from partial kernel or *source* / *reference* image coverage.  This option reduces seamlines in mosaics of overlapping images.
 
 .. _threads:
 
@@ -145,7 +162,7 @@ Advanced options
 .. _max-block-mem:
 
 ``-mbm``, ``--max-block-mem``: FLOAT
-    The maximum image block size in megabytes (0 = block size is the band size).  ``homonim`` processes images in blocks to reduce memory usage, and allow concurrency.   The image block size is determined automatically, using this option as an upper limit.  The default is 100.  
+    The maximum image block size in megabytes (0 = block size is the image size).  ``homonim`` processes images in blocks to reduce memory usage, and allow concurrency.   The image block size is determined automatically, using this option as an upper limit.  The default is 100.  
 
 .. _downsampling:
 
@@ -188,7 +205,16 @@ compare
 
 ``homonim compare [OPTIONS] INPUTS... REFERENCE``
 
-Compare image(s) with a reference.
+Report similarity statistics between image(s) and a reference.  
+
+Example
+-------
+Compare *source.tif* and *homogenised.tif* with *reference.tif*.
+
+.. code-block:: console
+
+    $ homonim compare source.tif homogenised.tif reference.tif
+
 
 Required arguments
 ------------------
@@ -196,7 +222,7 @@ Required arguments
     Path(s) to image(s) to be compared.
 
 ``REFERENCE`` :
-    Path to a surface reflectance *reference* image.  The *reference* image bounds need to encompass those of the *input* image(s), and *input* / *reference* band ordering should match.
+    Path to a surface reflectance *reference* image.  
 
 Options
 -------
@@ -209,11 +235,6 @@ Options
     * ``auto``: Compare images in the lowest resolution of the *source* and *reference* image CRS's. This is the default, and recommended setting.
     * ``src``: Compare images in the *source* image CRS.
     * ``ref``: Compare images in the *reference* image CRS.
-
-.. _threads_compare:
-
-``-t``, ``--threads``: INTEGER
-    The maximum number of image bands to compare concurrently (0 = compare as many bands as there are cpus).  Note that the amount of memory used by ``homonim compare`` increases with this number.  The default is 0.  
 
 .. _output_compare:
 
@@ -231,6 +252,15 @@ stats
 ``homonim stats [OPTIONS] INPUTS...``
 
 Report parameter image statistics.
+
+Example
+-------
+Report statistics for *param.tif*.
+
+.. code-block:: console
+
+    $ homonim stats param.tif
+
 
 Required arguments
 ------------------
@@ -273,5 +303,8 @@ Options
 .. _Google: https://developers.google.com/earth-engine/datasets
 .. _config.yaml: https://github.com/dugalh/homonim/blob/main/config.yaml
 .. _`gdal driver`: https://gdal.org/drivers/raster/index.html
-.. _methods: method_
+.. _`method formulation`: https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data
+.. _methods: `method formulation`_
+.. _kernel: `kernel-shape`_
 .. _`Google Earth Engine`: Google_
+.. _paper: `method formulation`_
