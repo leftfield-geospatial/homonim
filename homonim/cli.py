@@ -241,7 +241,7 @@ def cli(verbose, quiet):
               help="Statistically compare source and homogenised images with the reference.")
 @click.option("-nbo", "--no-build-ovw", "build_ovw", type=click.BOOL, is_flag=True, default=True,
               help="Turn off overview building for the homogenised image(s).")
-@click.option("-pc", "--param-crs", type=click.Choice(ProcCrs, case_sensitive=False),
+@click.option("-pc", "--proc-crs", type=click.Choice(ProcCrs, case_sensitive=False),
               default=ProcCrs.auto.name, show_default=True,
               help="The image CRS in which to perform parameter estimation.\nauto: estimate in the lowest resolution "
                    "of the source and reference image CRS's (recommended).\nsrc: estimate in the source image CRS."
@@ -284,7 +284,7 @@ def cli(verbose, quiet):
               default=(), callback=_creation_options_cb,
               help="Driver specific creation options.  See the rasterio documentation for more information.")
 @click.pass_context
-def fuse(ctx, src_file, ref_file, method, kernel_shape, output_dir, overwrite, do_cmp, build_ovw, param_crs, conf,
+def fuse(ctx, src_file, ref_file, method, kernel_shape, output_dir, overwrite, do_cmp, build_ovw, proc_crs, conf,
          **kwargs):
     """
     Radiometrically homogenise image(s) by fusion with a reference.
@@ -336,7 +336,7 @@ def fuse(ctx, src_file, ref_file, method, kernel_shape, output_dir, overwrite, d
 
             logger.info(f'\nHomogenising {src_filename.name}')
             with RasterFuse(src_filename, ref_file, homo_path, method=method, kernel_shape=kernel_shape,
-                            proc_crs=param_crs, overwrite=overwrite, **config) as raster_fuse:
+                            proc_crs=proc_crs, overwrite=overwrite, **config) as raster_fuse:
                 start_time = timer()
                 raster_fuse.process()
                 # build overviews
@@ -365,8 +365,8 @@ cli.add_command(fuse)
 @ref_file_arg
 @click.option("-pc", "--proc-crs", type=click.Choice(ProcCrs, case_sensitive=False),
               default=ProcCrs.auto.name, show_default=True,
-              help="The image CRS in which to perform processing.\nauto: process in the lowest"
-                   "resolution of the source and reference image CRS's (recommended).\nsrc: process in"
+              help="The image CRS in which to perform processing.\nauto: process in the lowest "
+                   "resolution of the source and reference image CRS's (recommended).\nsrc: process in "
                    "the source image CRS.\nref: process in the reference image CRS.")
 @threads_option
 @output_option

@@ -75,8 +75,8 @@ class RasterFuse:
             proc_crs=ProcCrs.auto).
         proc_crs: homonim.enums.ProcCrs, optional
             The initial proc_crs setting, specifying which of the source/reference image spaces should be used for
-            processing.  If proc_crs=ProcCrs.auto (recommended), the lowest resolution image space will be used.
-            [default: ProcCrs.auto]
+            parameter estimation .  If proc_crs=ProcCrs.auto (recommended), the lowest resolution image space will be
+            used. [default: ProcCrs.auto]
         overwrite: bool, optional
             Overwrite the output file(s) if they exist. [default: True]
         homo_config: dict, optional
