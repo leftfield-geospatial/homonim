@@ -58,6 +58,5 @@ While `homonim` implements a form of *spectral harmonisation*, we have used the 
 Please cite use of the code as: 
 - Harris, D., Van Niekerk, A., 2019. Radiometric homogenisation of aerial images by calibrating with satellite data. *Int. J. Remote Sens.* **40**, 2623–2647. [https://doi.org/10.1080/01431161.2018.1528404](https://doi.org/10.1080/01431161.2018.1528404). 
 
-
 ## Author
 **Dugal Harris** - [dugalh@gmail.com](mailto:dugalh@gmail.com)
