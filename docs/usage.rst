@@ -7,14 +7,14 @@ Background
 ----------
 ``homonim`` uses a *reference* surface reflectance image to which a *source* image is homogenised.  The *reference* image is usually a satellite image at a coarser resolution that the *source* image.  The surface reflectance relationship between *source*  and *reference* images is approximated with localised linear models.  Models are estimated for each pixel location inside a small rectangular *kernel* (window), using a fast DFT approach.  The model parameters are applied to the *source* image to produce the homogenised output.  
 
-There is a theoretical basis for using local linear models, which is explained in the paper_.  Broadly speaking, the gain term compensates for atmospheric absorption and BRDF effects, while the offset compensates for atmospheric reflectance and haze.
+The theoretical basis for using local linear models is explained in the paper_.  Broadly speaking, the gain term compensates for atmospheric absorption and BRDF effects, while the offset compensates for atmospheric reflectance and haze.
 
 -----------------
 Image preparation
 -----------------
 Before homogenising, a *reference* image needs to be acquired.  Examples of suitable surface reflectance image collections for the *reference* image are those produced by Landsat, Sentinel-2 and MODIS.  There are a number of platforms providing these images including the Google_ and `Amazon <https://aws.amazon.com/earth/>`_ repositories.  See other options `here <https://eos.com/blog/free-satellite-imagery-sources/>`_.
 
-|geedim|_ can be used as a companion tool to ``homonim`` for acquiring suitable *reference* images.  It provides command line search, cloud/shadow-free compositing, and download of `Google Earth Engine`_ surface reflectance imagery.
+|geedim|_ can be used as a companion tool to ``homonim`` for acquiring *reference* imagery.  It provides command line search, cloud/shadow-free compositing, and download of `Google Earth Engine`_ surface reflectance imagery.
 
 For best results, the *reference* and *source* image(s) should be:
 
@@ -30,7 +30,7 @@ The `method formulation <https://www.researchgate.net/publication/328317307_Radi
 ----------------------
 Command line interface
 ----------------------
-All homogenisation functionality is accessed via the ``homonim`` command and its sub-commands.  Use ``homonim <command> --help`` for command line help.
+All homogenisation functionality is accessed via the ``homonim`` command and its sub-commands.  Use ``$ homonim <command> --help`` for command line help.
 
 homonim
 ========
@@ -92,7 +92,7 @@ Standard options
 ``-m``, ``--method``:  ``gain``, ``gain-blk-offset`` or ``gain-offset``
     Homogenisation method:
     
-    * ``gain``: A gain-only model, suitable for haze-free and zero offset images (i.e. images where a surface reflectance of zero, corresponds to a pixel value of ~zero).
+    * ``gain``: A gain-only model, suitable for haze-free and zero offset images (i.e. images where a surface reflectance of zero corresponds to a pixel value of ~zero).
     * ``gain-blk-offset``: A gain-only model applied to offset normalised image blocks.  The image block size is determined by max-block-mem_.  It is the default method and is suitable for most image combinations.  
     * ``gain-offset``: A gain and offset model.  The most accurate method, but sensitive to differences between *source* and *reference*, such as shadowing and land cover changes.  Suitable for well-matched *source* / *reference* combinations.  (See also the associated r2-inpaint-thresh_ option.)
 

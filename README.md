@@ -21,6 +21,7 @@ $ conda install -c conda-forge homonim
 ```shell
 $ pip install homonim
 ```-->
+
 ## Quick Start
 Homogenise an image with a reference, using the `gain-blk-offset` method, a sliding kernel of 5x5 pixels:
 ```shell
@@ -42,12 +43,21 @@ See the documentation [here](docs/usage.rst).
 ## Terminology
 While `homonim` implements a form of *spectral harmonisation*, we have used the term *homogenisation* to describe the method, in keeping with the [original formulation](https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data).  *Homogenisation* is implemented using a form of image *fusion*.
 
+## Credits
+
+`homonim` depends on a number of [libraries](meta.yaml), making extensive use of the following excellent projects:
+
+* [rasterio](https://github.com/rasterio/rasterio)
+* [opencv](https://github.com/opencv/opencv) 
+* [numpy](https://github.com/numpy/numpy)
+
 ## License
 `homonim` is licensed under the terms of the [AGPLv3](https://www.gnu.org/licenses/agpl-3.0.en.html).  This project is developed in collaboration with [InnovUS](https://www.innovus.co.za/) at Stellenbosch University, alternative licenses can be arranged by [contacting](mailto:sjdewet@sun.ac.za) them.
 
 ## Citation
 Please cite use of the code as: 
 - Harris, D., Van Niekerk, A., 2019. Radiometric homogenisation of aerial images by calibrating with satellite data. *Int. J. Remote Sens.* **40**, 2623–2647. [https://doi.org/10.1080/01431161.2018.1528404](https://doi.org/10.1080/01431161.2018.1528404). 
+
 
 ## Author
 **Dugal Harris** - [dugalh@gmail.com](mailto:dugalh@gmail.com)
