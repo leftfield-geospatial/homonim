@@ -34,17 +34,12 @@ jobs:
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Test with unittest
-      timeout-minutes: 15
+      timeout-minutes: 5
       run: coverage run -m unittest discover -v -s tests/
     - name: Generate coverage report
       run: |
         coverage report --include "homonim/*.py"
         coverage xml --include "homonim/*.py"
-    - name: Display structure of downloaded files
-      if: ${{ always() }}
-      run: |
-          pwd
-          ls -R
     - name: Upload coverage
       uses: codecov/codecov-action@v2
       with:

@@ -29,31 +29,35 @@ from homonim.fuse import RasterFuse
 
 
 class TestBase(unittest.TestCase):
-    """Integrations tests for fuse API and CLI."""
-
-    def setUp(self):
+    """Base class for homonim integration tests."""
+    @classmethod
+    def setUpClass(cls) -> None:
         """Delete old test files and load common configuration."""
         warnings.filterwarnings("ignore", category=DeprecationWarning)
-        self.source_root = root_path.joinpath('data/test_example/source/')
-        self.ref_root = root_path.joinpath('data/test_example/reference/')
-        self.homo_root = root_path.joinpath('data/test_example/homogenised/')
-        self.aerial_filename = self.source_root.joinpath('3324c_2015_1004_05_0182_RGB.tif')
-        self.aerial_filenames = [str(fn) for fn in self.aerial_filename.parent.glob('3324c_2015_*_RGB.tif')]
-        self.landsat_filename = self.ref_root.joinpath('LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif')
-        self.landsat_vrt = self.ref_root.joinpath('LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.vrt')
-        self.s2_filename = self.ref_root.joinpath('COPERNICUS-S2-20151003T075826_20151003T082014_T35HKC_B432_Byte.tif')
+        cls.source_root = root_path.joinpath('data/test_example/source/')
+        cls.ref_root = root_path.joinpath('data/test_example/reference/')
+        cls.homo_root = root_path.joinpath('data/test_example/homogenised/')
+        cls.param_root = root_path.joinpath('data/test_example/param/')
+        cls.aerial_filename = cls.source_root.joinpath('3324c_2015_1004_05_0182_RGB.tif')
+        cls.aerial_filenames = [str(fn) for fn in cls.aerial_filename.parent.glob('3324c_2015_*_RGB.tif')]
+        cls.landsat_filename = cls.ref_root.joinpath('LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif')
+        cls.landsat_vrt = cls.ref_root.joinpath('LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.vrt')
+        cls.s2_filename = cls.ref_root.joinpath('COPERNICUS-S2-20151003T075826_20151003T082014_T35HKC_B432_Byte.tif')
+        cls.param_filename = cls.param_root.joinpath(
+            '3324c_2015_1004_05_0182_RGB_HOMO_cREF_mGAIN-OFFSET_k15_15_PARAM.tif')
 
         # delete old output files
-        if not self.homo_root.exists():
-            os.makedirs(self.homo_root)
-        file_list = glob.glob(str(self.homo_root.joinpath('*')))
+        if not cls.homo_root.exists():
+            os.makedirs(cls.homo_root)
+        file_list = glob.glob(str(cls.homo_root.joinpath('*')))
         for f in file_list:
             os.remove(f)
 
         # load config
-        self._conf_filename = root_path.joinpath('data/test_example/config.yaml')
-        with open(self._conf_filename, 'r') as f:
+        cls._conf_filename = root_path.joinpath('data/test_example/config.yaml')
+        with open(cls._conf_filename, 'r') as f:
             config = yaml.safe_load(f)
-        self._homo_config = cli._update_existing_keys(RasterFuse.default_homo_config, **config)
-        self._out_profile = cli._update_existing_keys(RasterFuse.default_out_profile, **config)
-        self._model_config = cli._update_existing_keys(RasterFuse.default_model_config, **config)
+        cls._homo_config = cli._update_existing_keys(RasterFuse.default_homo_config, **config)
+        cls._out_profile = cli._update_existing_keys(RasterFuse.default_out_profile, **config)
+        cls._model_config = cli._update_existing_keys(RasterFuse.default_model_config, **config)
+        return cls

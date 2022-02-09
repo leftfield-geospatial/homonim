@@ -154,28 +154,6 @@ def create_param_filename(filename: pathlib.Path):
     return filename.parent.joinpath(f'{filename.stem}_PARAM{filename.suffix}')
 
 
-def build_overviews(filename):
-    """
-    Build internal overviews for an existing image file.
-
-    Parameters
-    ----------
-    filename: str, pathlib.Path
-              Path to the image file to build overviews for.
-    """
-    filename = pathlib.Path(filename)
-
-    if not filename.exists():
-        raise FileNotFoundError(f'{filename} does not exist')
-    with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(filename, 'r+') as im:
-        # limit overviews so that the highest level has at least 2**8=256 pixels along the shortest dimension,
-        # and so there are no more than 8 levels.
-        max_ovw_levels = int(np.min(np.log2(im.shape)))
-        num_ovw_levels = np.min([8, max_ovw_levels - 8])
-        ovw_levels = [2 ** m for m in range(1, num_ovw_levels + 1)]
-        im.build_overviews(ovw_levels, Resampling.average)
-
-
 def param_stats(param_filename, method, r2_inpaint_thresh):
     """
     Find mean, standard deviation etc. statistics of homogenisation parameters and r2 values.
