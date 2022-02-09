@@ -35,11 +35,11 @@ jobs:
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Test with unittest
       timeout-minutes: 15
-      run: coverage run -m unittest discover -v
+      run: coverage run -m unittest discover -v -s tests/
     - name: Generate coverage report
       run: |
-        coverage report
-        coverage xml
+        coverage report --include "homonim/*.py"
+        coverage xml --include "homonim/*.py"
     - name: Display structure of downloaded files
       if: ${{ always() }}
       run: |
