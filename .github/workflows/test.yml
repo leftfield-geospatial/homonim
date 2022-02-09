@@ -45,9 +45,9 @@ jobs:
       run: |
           pwd
           ls -R
-#     - name: Upload coverage
-#       uses: codecov/codecov-action@v2
-#       with:
-#         fail_ci_if_error: true
-#         files: ./coverage.xml
-#         token: ${{ secrets.CODECOV_TOKEN }}
+     - name: Upload coverage
+       uses: codecov/codecov-action@v2
+       with:
+         fail_ci_if_error: true
+         files: ./coverage.xml
+         token: ${{ secrets.CODECOV_TOKEN }}
