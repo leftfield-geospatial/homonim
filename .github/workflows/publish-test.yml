@@ -37,7 +37,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ macos-latest, windows-latest, ubuntu-latest ]
+        os: [ macos-latest, ubuntu-latest ]
         python-version: [ 3.6, 3.7, 3.8, 3.9 ]
     steps:
       - uses: actions/checkout@v2
@@ -51,12 +51,10 @@ jobs:
           python -m pip install --extra-index-url https://test.pypi.org/simple/ homonim
       - name: Test homonim CLI
         timeout-minutes: 5
-        env:
-          EE_SERVICE_ACC_PRIVATE_KEY: ${{ secrets.EE_SERVICE_ACC_PRIVATE_KEY }}
         run: |
-          python -m unittest discover ./tests
-          rm ./data/test_example/homogenised/*
-          homonim fuse --help
-          homonim fuse -m gain-blk-offset -k 5 5 -od ./data/test_example/homogenised ./data/test_example/source/3324c_2015_1004_*.tif  ./data/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif
-          test -f ./data/test_example/homogenised/3324c_2015_1004_05_0182_RGB_HOMO_cREF_mGAIN-BLK-OFFSET_k5_5.tif && echo "OK"
+          pwd
           ll ./data/test_example/homogenised/*
+          homonim fuse --help
+          homonim fuse -m gain-blk-offset -k 5 5 -od ./data/test_example/homogenised -ovw ./data/test_example/source/3324c_2015_1004_05_0182_RGB.tif  ./data/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif
+          ll ./data/test_example/homogenised/*
+          test -f ./data/test_example/homogenised/3324c_2015_1004_05_0182_RGB_HOMO_cREF_mGAIN-BLK-OFFSET_k5_5.tif && echo "Test OK"
