@@ -26,7 +26,6 @@ jobs:
       - name: Test homonim CLI
         timeout-minutes: 5
         run: |
-          cd ..
           pwd
           ls -R
           mkdir ./data/test_example/homogenised/
