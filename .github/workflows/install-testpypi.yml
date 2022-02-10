@@ -27,9 +27,9 @@ jobs:
         timeout-minutes: 5
         run: |
           cd ..
-          mkdir ./data/test_example/homogenised
           pwd
           ls -R
+          mkdir ./data/test_example/homogenised/
           homonim fuse --help
           homonim fuse -m gain-blk-offset -k 5 5 -od ./data/test_example/homogenised -ovw ./data/test_example/source/3324c_2015_1004_05_0182_RGB.tif  ./data/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif
           ls ./data/test_example/homogenised/*
