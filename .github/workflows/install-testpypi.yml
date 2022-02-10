@@ -14,7 +14,7 @@ jobs:
         os: [ macos-latest, ubuntu-latest ]
         python-version: [ 3.6, 3.7, 3.8, 3.9 ]
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v2   # checkout repository with test data
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
@@ -26,9 +26,11 @@ jobs:
       - name: Test homonim CLI
         timeout-minutes: 5
         run: |
+          cd ..
+          mkdir ./data/test_example/homogenised
           pwd
-          ls -R ..
+          ls -R
           homonim fuse --help
-          homonim fuse -m gain-blk-offset -k 5 5 -od ../data/test_example/homogenised -ovw ../data/test_example/source/3324c_2015_1004_05_0182_RGB.tif  ../data/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif
-          ls ../data/test_example/homogenised/*
-          test -f ../data/test_example/homogenised/3324c_2015_1004_05_0182_RGB_HOMO_cREF_mGAIN-BLK-OFFSET_k5_5.tif && echo "Test OK"
+          homonim fuse -m gain-blk-offset -k 5 5 -od ./data/test_example/homogenised -ovw ./data/test_example/source/3324c_2015_1004_05_0182_RGB.tif  ./data/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif
+          ls ./data/test_example/homogenised/*
+          test -f ./data/test_example/homogenised/3324c_2015_1004_05_0182_RGB_HOMO_cREF_mGAIN-BLK-OFFSET_k5_5.tif && echo "Test OK"
