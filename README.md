@@ -28,7 +28,7 @@ $ pip install homonim
 ```-->
 
 ## Quick Start
-Homogenise an image with a reference, using the `gain-blk-offset` method, a sliding kernel of 5x5 pixels:
+Homogenise an image with a reference, using the `gain-blk-offset` method, and a sliding kernel of 5x5 pixels:
 ```shell
 $ homonim fuse --method gain-blk-offset --kernel-shape 5 5 source.tif reference.tif 
 ```
@@ -46,7 +46,7 @@ Mosaics of 0.5 m resolution aerial imagery before and after homogenisation.  A L
 See the documentation [here](docs/usage.rst).
 
 ## Terminology
-While `homonim` implements a form of *spectral harmonisation*, we have used the term *homogenisation* to describe the method, in keeping with the [original formulation](https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data).  *Homogenisation* is implemented using a form of image *fusion*.
+While `homonim` implements a form of *spectral harmonisation*, we have used the term *homogenisation* to describe the method, in keeping with the [original formulation](https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data).  *Homogenisation* is implemented using a type of image *fusion*.
 
 ## Credits
 

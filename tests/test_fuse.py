@@ -191,4 +191,35 @@ class TestFuse(TestBase):
                     self._test_homo_profile(src_filename, homo_filename)
                     self._test_homo_mask(src_filename, homo_filename, mask_partial=self._model_config['mask_partial'])
                     self._test_homo_correlation(src_filename, homo_filename, self.s2_filename)
+
+    def test_cli2(self):
+        """Test fuse CLI."""
+        param_list = [
+            dict(method=enums.Method.gain_blk_offset, kernel_shape=(5, 5), proc_crs=enums.ProcCrs.ref),
+        ]
+
+        co_str = ''
+        for co_key, co_val in self._out_profile['creation_options'].items():
+            co_str += f'-co {co_key.upper()}={co_val} '
+
+        for param_dict in param_list:
+            cli_str = (f'-v fuse {" ".join(self.aerial_filenames)} {self.landsat_filename} '
+                       f'-k {param_dict["kernel_shape"][0]} {param_dict["kernel_shape"][1]} -m {param_dict["method"]} '
+                       f'-od {self.homo_root} {co_str} -pc {param_dict["proc_crs"]} -ovw')
+
+            result = CliRunner().invoke(cli.cli, cli_str.split(), terminal_width=100, catch_exceptions=True)
+            self.assertTrue(result.exit_code == 0, result.output)
+
+            homo_post_fix = utils.create_homo_postfix(driver=self._out_profile['driver'], **param_dict)
+            for src_filename in self.aerial_filenames:
+                src_filename = pathlib.Path(src_filename)
+                homo_filename = self.homo_root.joinpath(src_filename.stem + homo_post_fix)
+                self.assertTrue(homo_filename.exists(), 'Homogenised file exists')
+                with self.subTest(ref_filename=self.landsat_filename.name, homo_filename=homo_filename.name,
+                                  param_dict=param_dict):
+                    self._test_homo_profile(src_filename, homo_filename)
+                    self._test_homo_mask(src_filename, homo_filename, mask_partial=self._model_config['mask_partial'])
+                    self._test_homo_correlation(src_filename, homo_filename, self.s2_filename)
+
 ##
+
