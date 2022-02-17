@@ -30,7 +30,7 @@ The `method formulation <https://www.researchgate.net/publication/328317307_Radi
 ----------------------
 Command line interface
 ----------------------
-All homogenisation functionality is accessed via the ``homonim`` command and its sub-commands.  Use ``$ homonim <command> --help`` for command line help.
+All homogenisation functionality is accessed via the ``homonim`` command and its sub-commands.  Use ``homonim <command> --help`` for command line help.
 
 homonim
 ========
@@ -70,13 +70,13 @@ Homogenise *source.tif* with *reference.tif*, using the ``gain-blk-offset`` meth
 
 .. code-block:: console
 
-    $ homonim fuse -m gain-blk-offset -k 5 5 source.tif reference.tif
+    homonim fuse -m gain-blk-offset -k 5 5 source.tif reference.tif
 
 Homogenise files matching *source\*.tif* with *reference.tif*, using the ``gain-offset`` method_ and a kernel_ of 15 x 15 pixels. Place homogenised files in the *./homog* directory, produce parameter images, and mask partially covered pixels in the homogenised images.
 
 .. code-block:: console
 
-    $ homonim fuse --method gain-offset --kernel-shape 15 15 -od ./homog --param-image --mask-partial source*.tif reference.tif
+    homonim fuse --method gain-offset --kernel-shape 15 15 -od ./homog --param-image --mask-partial source*.tif reference.tif
 
 Required arguments
 ------------------
@@ -133,7 +133,7 @@ Standard options
 .. _conf:
 
 ``-c``, ``--conf`` : FILE
-    Path to a yaml configuration file specifying the `advanced options`_.  Any advanced options passed on the command line will override the corresponding configuration file settings.  See `config.yaml`_ for an example.
+    Path to a yaml configuration file specifying the `advanced options`_.  Command line options take precedence over those from the config file, which take precedence over those derived from the defaults.  See `config.yaml`_ for an example.
 
 .. _help:
 
@@ -213,7 +213,7 @@ Compare *source.tif* and *homogenised.tif* with *reference.tif*.
 
 .. code-block:: console
 
-    $ homonim compare source.tif homogenised.tif reference.tif
+    homonim compare source.tif homogenised.tif reference.tif
 
 
 Required arguments
@@ -259,7 +259,7 @@ Report statistics for *param.tif*.
 
 .. code-block:: console
 
-    $ homonim stats param.tif
+    homonim stats param.tif
 
 
 Required arguments

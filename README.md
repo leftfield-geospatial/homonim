@@ -16,25 +16,24 @@ It is useful as a pre-processing step for quantitative mapping applications, suc
 `homonim` is based on the method described in [*Radiometric homogenisation of aerial images by calibrating with satellite data*](https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data).
 
 ## Installation
-TBD
-<!--`homonim` is available as a python 3 package, via `pip` and `conda`.  Under Windows, we recommend using `conda` to simplify the installation of binary dependencies.  The [Miniconda](https://docs.conda.io/en/latest/miniconda.html) installation provides a minimal `conda`.
+`homonim` is available as a python 3 package, via `pip` and `conda`.  Under Windows, we recommend using `conda` to simplify the installation of binary dependencies.  The [Miniconda](https://docs.conda.io/en/latest/miniconda.html) installation provides a minimal `conda`.
 ### conda
 ```shell
-$ conda install -c conda-forge homonim
+conda install -c conda-forge homonim
 ```
 ### pip
 ```shell
-$ pip install homonim
-```-->
+pip install homonim
+```
 
 ## Quick Start
 Homogenise an image with a reference, using the `gain-blk-offset` method, and a sliding kernel of 5x5 pixels:
 ```shell
-$ homonim fuse --method gain-blk-offset --kernel-shape 5 5 source.tif reference.tif 
+homonim fuse --method gain-blk-offset --kernel-shape 5 5 source.tif reference.tif 
 ```
 Statistically compare an image, pre- and post-homogenisation, with a reference image:
 ```shell
-$ homonim compare source.tif homogenised.tif reference.tif
+homonim compare source.tif homogenised.tif reference.tif
 ```
 
 ## Example
