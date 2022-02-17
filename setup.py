@@ -42,7 +42,8 @@ with open("homonim/version.py") as fp:
 setup(
     name="homonim",
     version=version['__version__'],
-    description="Radiometric homogenisation of aerial imagery",
+    description="Radiometric homogenisation of aerial and satellite imagery by fusion with satellite surface "
+                "reflectance data.",
     long_description=long_description,
     long_description_content_type='text/markdown',
     author="Dugal Harris",
@@ -50,8 +51,8 @@ setup(
     url="https://github.com/dugalh/homonim",
     license='AGPLv3',
     packages=find_packages(exclude=['tests', 'data'], include=['homonim']),
-    install_requires=["numpy>=1.19", "rasterio>=1.1", "click>=8", "tqdm>=4.6", "pyyaml>=5.4", "opencv-python>=4.5",
-                      "pandas>=1.1"],
+    install_requires=["numpy>=1.19", "rasterio>=1.1", "click>=8", "tqdm>=4.6", "pyyaml>=5.4",
+                      "opencv-python-headless>=4.5", "pandas>=1.1"],
     python_requires=">=3.6",
     classifiers=[
         "Programming Language :: Python :: 3",
