@@ -27,13 +27,19 @@ pip install homonim
 ```
 
 ## Quick Start
-Homogenise an image with a reference, using the `gain-blk-offset` method, and a sliding kernel of 5x5 pixels:
+Download the `homonim` github repository to get the test imagery.  If you have `git`, you can clone it with: 
 ```shell
-homonim fuse --method gain-blk-offset --kernel-shape 5 5 source.tif reference.tif 
+git clone https://github.com/dugalh/homonim.git
 ```
-Statistically compare an image, pre- and post-homogenisation, with a reference image:
+Alternatively, download it from [here](https://github.com/dugalh/homonim/archive/refs/heads/main.zip) and extract the zip archive.
+
+Using the `gain-blk-offset` method and a 5 x 5 pixel kernel, homogenise the aerial images with the Sentinel-2 reference.   
 ```shell
-homonim compare source.tif homogenised.tif reference.tif
+homonim fuse -m gain-blk-offset -k 5 5 -od . ./homonim/data/test_example/source/*_RGB.tif ./homonim/data/test_example/reference/COPERNICUS-S2-20151003T075826_20151003T082014_T35HKC_B432_Byte.tif
+```
+Statistically compare the raw and homogenised aerial images with the included Landsat-8 reference.
+```shell
+homonim compare ./homonim/data/test_example/source/*_RGB.tif ./*HOMO*.tif ./homonim/data/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif
 ```
 
 ## Example
