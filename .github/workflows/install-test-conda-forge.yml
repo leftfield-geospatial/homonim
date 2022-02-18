@@ -27,7 +27,7 @@ jobs:
       run: |
         echo $CONDA
         ls -l $CONDA/bin
-        $CONDA/bin/conda/conda install -c conda-forge homonim
+        $CONDA/bin/conda install -c conda-forge homonim
     - name: Test homonim CLI
       timeout-minutes: 5
       run: |
