@@ -15,19 +15,13 @@ jobs:
         python-version: [ 3.6, 3.7, 3.8, 3.9 ]
     steps:
     - uses: actions/checkout@v2
-    - name: Set up Python
-      uses: actions/setup-python@v2
+    - uses: conda-incubator/setup-miniconda@v2
       with:
-        python-version: ${{ matrix.python-version }}
-    - name: Add conda to system path
-      run: |
-        # $CONDA is an environment variable pointing to the root of the miniconda directory
-        echo $CONDA/bin >> $GITHUB_PATH
+        auto-update-conda: true
+        python-version: ${{ matrix.python-version }}      -
     - name: Install homonim from conda-forge
       run: |
-        echo $CONDA
-        ls -l $CONDA/bin
-        $CONDA/bin/conda install -c conda-forge homonim
+        conda install -c conda-forge homonim
     - name: Test homonim CLI
       timeout-minutes: 5
       run: |
