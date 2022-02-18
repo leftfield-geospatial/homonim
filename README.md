@@ -31,7 +31,7 @@ Download the `homonim` github repository to get the test imagery.  If you have `
 ```shell
 git clone https://github.com/dugalh/homonim.git
 ```
-Alternatively, download it from [here](https://github.com/dugalh/homonim/archive/refs/heads/main.zip) and extract the zip archive.
+Alternatively, download it from [here](https://github.com/dugalh/homonim/archive/refs/heads/main.zip), extract the zip archive and rename the *homonim-main* directory to *homonim*.
 
 Using the `gain-blk-offset` method and a 5 x 5 pixel kernel, homogenise the aerial images with the Sentinel-2 reference.   
 ```shell
