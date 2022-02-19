@@ -1,4 +1,4 @@
-[comment]: <> ([![Publish]&#40;https://github.com/dugalh/geedim/actions/workflows/publish.yml/badge.svg&#41;]&#40;https://github.com/dugalh/geedim/actions/workflows/publish.yml&#41;)
+[![Publish](https://github.com/dugalh/homonim/actions/workflows/publish-pypi.yml/badge.svg)](https://github.com/dugalh/homonim/actions/workflows/publish-pypi.yml)
 [![Tests](https://github.com/dugalh/homonim/actions/workflows/test.yml/badge.svg)](https://github.com/dugalh/homonim/actions/workflows/test.yml)
 [![codecov](https://codecov.io/gh/dugalh/homonim/branch/main/graph/badge.svg?token=A01698K96C)](https://codecov.io/gh/dugalh/homonim)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
