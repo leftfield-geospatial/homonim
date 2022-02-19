@@ -28,6 +28,7 @@ jobs:
         conda install -c conda-forge homonim
         conda list
     - name: Test homonim
+      run: |
         pwd
         ls -R
         mkdir ./data/test_example/homogenised/
