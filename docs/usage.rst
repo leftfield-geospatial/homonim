@@ -197,7 +197,7 @@ Advanced options
 .. _out-profile:
 
 ``-co``, ``--out-profile``: NAME=VALUE
-    Driver specific image creation options for the output image(s).  For details of available options for a particular driver, see the `GDAL driver`_ documentation.  This option can be repeated e.g. ``-co COMPRESS=DEFLATE -co TILED=YES ...``.  The default ``GTiff`` creations options are: ``TILED=YES``, ``BLOCKXSIZE=512``, ``BLOCKYSIZE=512``, ``COMPRESS=DEFLATE`` and ``INTERLEAVE=BAND``.  Other format drivers have no defaults.  If out-driver_ matches the format of the *source* image, output creation options are copied from the *source* image, and overridden with any equivalent command line out-profile_ specifications or defaults.  
+    Driver specific image creation options for the output image(s).  For details of available options for a particular driver, see the `GDAL driver`_ documentation.  This option can be repeated e.g. ``-co COMPRESS=DEFLATE -co TILED=YES ...``.  The default ``GTiff`` creations options are: ``TILED=YES``, ``BLOCKXSIZE=512``, ``BLOCKYSIZE=512``, ``COMPRESS=DEFLATE`` and ``INTERLEAVE=BAND``.  Other format drivers have no defaults.  If out-driver_ matches the format of the *source* image, output creation options are copied from the *source* image, and overridden with any equivalent command line out-profile specifications or defaults.
 
 
 compare

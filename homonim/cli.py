@@ -74,13 +74,19 @@ def _nodata_cb(ctx, param, value):
     # adapted from rasterio https://github.com/rasterio/rasterio
     if value is None or value.lower() in ["null", "nil", "none", "nada"]:
         return None
-    elif value.lower() == "nan":
-        return float("nan")
     else:
+        if value.lower() == "nan":
+            value = float("nan")
+
+        # check value can be cast to output dtype
         try:
-            return float(value)
+            if not rio.dtypes.can_cast_dtype(value, ctx.params['dtype']):
+                raise click.BadParameter(f"{value} cannot be cast to the output image data type {ctx.params['dtype']}",
+                                         param=param, param_hint="nodata")
         except (TypeError, ValueError):
-            raise click.BadParameter("{!r} is not a number".format(value), param=param, param_hint="nodata")
+            raise click.BadParameter(f"{value} is not a number", param=param, param_hint="nodata")
+
+        return value
 
 
 def _creation_options_cb(ctx, param, value):
@@ -228,9 +234,9 @@ def cli(verbose, quiet):
 @src_file_arg
 @ref_file_arg
 @click.option("-m", "--method", type=click.Choice(Method, case_sensitive=False),
-              default=Method.gain_blk_offset.name, show_default=True,
+              default=Method.gain_blk_offset,
               help="Homogenisation method.\ngain: Gain-only model. \ngain-blk-offset: Gain-only model applied to "
-                   "offset normalised image blocks. \ngain-offset: Full gain and offset model.")
+                   "offset normalised image blocks [default]. \ngain-offset: Full gain and offset model.")
 @click.option("-k", "--kernel-shape", type=click.Tuple([click.INT, click.INT]), nargs=2, default=(5, 5),
               show_default=True, metavar='<HEIGHT WIDTH>',
               help="Kernel height and width in pixels of the --proc-crs / -pc image.")
@@ -243,10 +249,10 @@ def cli(verbose, quiet):
 @click.option("-nbo", "--no-build-ovw", "build_ovw", type=click.BOOL, is_flag=True, default=True,
               help="Turn off overview building for the homogenised image(s).")
 @click.option("-pc", "--proc-crs", type=click.Choice(ProcCrs, case_sensitive=False),
-              default=ProcCrs.auto.name, show_default=True,
-              help="The image CRS in which to perform parameter estimation.\nauto: estimate in the lowest resolution "
-                   "of the source and reference image CRS's (recommended).\nsrc: estimate in the source image CRS."
-                   "\nref: estimate in the reference image CRS.")
+              default=ProcCrs.auto,
+              help="The image CRS in which to perform parameter estimation.\nauto: Estimate in the lowest resolution "
+                   "of the source and reference image CRS's [default - recommended].\nsrc: Estimate in the source image CRS."
+                   "\nref: Estimate in the reference image CRS.")
 @click.option("-c", "--conf", type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path),
               required=False, default=None, show_default=True,
               help="Path to a yaml configuration file specifying the options below.")
@@ -350,8 +356,7 @@ def fuse(ctx, src_file, ref_file, method, kernel_shape, output_dir, overwrite, d
 
         # compare source and homogenised files with reference (invokes compare command with relevant parameters)
         if do_cmp:
-            ctx.invoke(compare, src_file=compare_files, ref_file=ref_file, proc_crs=proc_crs,
-                       threads=kwargs['threads'])
+            ctx.invoke(compare, src_file=compare_files, ref_file=ref_file, proc_crs=proc_crs)
     except Exception:
         logger.exception("Exception caught during processing")
         raise click.Abort()

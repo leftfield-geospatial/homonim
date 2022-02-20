@@ -165,8 +165,8 @@ class RasterPairReader:
             # warn if the proc_crs value does not correspond to the lowest resolution of the source and
             # reference images
             rec_crs_str = ProcCrs.ref if src_pixel_smaller else ProcCrs.src
-            logger.warning(f"proc_crs='{rec_crs_str}' is recommended when "
-                           f"the source image pixel size is {cmp_str} than the reference.")
+            logger.warning(f"proc_crs={rec_crs_str} is recommended when "
+                           f"the source pixel size is {cmp_str} than the reference.")
         return proc_crs
 
     def _auto_block_shape(self, proc_win: Window = None):
