@@ -43,8 +43,10 @@ class TestFuse(TestBase):
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
             with rio.open(homo_filename, 'r') as homo_im, rio.open(src_filename, 'r') as src_im:
                 # read masks
-                src_mask = src_im.dataset_mask()
-                homo_mask = homo_im.dataset_mask()
+                # note that there is a bug / memory issue with cv2.connectedComponents, or perhaps datasset_mask(),
+                # which the copy() below works around
+                src_mask = src_im.dataset_mask().copy()
+                homo_mask = homo_im.dataset_mask().copy()
 
                 # check homogenised mask has similar area to source mask
                 if mask_partial:
