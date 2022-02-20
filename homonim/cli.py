@@ -75,11 +75,9 @@ def _nodata_cb(ctx, param, value):
     if value is None or value.lower() in ["null", "nil", "none", "nada"]:
         return None
     else:
-        if value.lower() == "nan":
-            value = float("nan")
-
-        # check value can be cast to output dtype
+        # check value is a number and can be cast to output dtype
         try:
+            value = float(value.lower())
             if not rio.dtypes.can_cast_dtype(value, ctx.params['dtype']):
                 raise click.BadParameter(f"{value} cannot be cast to the output image data type {ctx.params['dtype']}",
                                          param=param, param_hint="nodata")
