@@ -95,12 +95,16 @@ class TestFuse(TestBase):
         self.assertTrue(np.all(im_ref_r2_df.iloc[1, :] > im_ref_r2_df.iloc[0, :]),
                         'Homogenised vs reference r2 improvement')
 
-    def _test_block_pair(self, block: Window, prev_block: Window, overlap: Tuple[int, int] = (0, 0)):
+    def _test_block_pair(self, block: Window, prev_block: Window, overlap: Tuple[int, int] = (0, 0), in_block=True):
         """Helper function for _test_block_pairs, to validate a window against the previous one in the sequence."""
+        cmp = np.less_equal if in_block else np.equal
+
         if block.row_off == prev_block.row_off:
-            self.assertTrue(block.col_off == prev_block.col_off + prev_block.width - 2 * overlap[1], f'columns overlap')
+            self.assertTrue(cmp(block.col_off, prev_block.col_off + prev_block.width - 2 * overlap[1]),
+                            f'columns overlap')
         else:
-            self.assertTrue(block.row_off == prev_block.row_off + prev_block.height - 2 * overlap[0], f'rows overlap')
+            self.assertTrue(cmp(block.row_off, prev_block.row_off + prev_block.height - 2 * overlap[0]),
+                            f'rows overlap')
 
     def _test_block_pairs(self, raster_pair: RasterPairReader):
         """Validate block pairs from RasterPairReader."""
@@ -122,9 +126,9 @@ class TestFuse(TestBase):
         for ovl_block in ovl_blocks[1:]:
             if ovl_block.band_i == prev_ovl_block.band_i:
                 self._test_block_pair(ovl_block.src_in_block, prev_ovl_block.src_in_block, src_overlap)
-                self._test_block_pair(ovl_block.src_out_block, prev_ovl_block.src_out_block)
+                self._test_block_pair(ovl_block.src_out_block, prev_ovl_block.src_out_block, in_block=False)
                 self._test_block_pair(ovl_block.ref_in_block, prev_ovl_block.ref_in_block, ref_overlap)
-                self._test_block_pair(ovl_block.ref_out_block, prev_ovl_block.ref_out_block)
+                self._test_block_pair(ovl_block.ref_out_block, prev_ovl_block.ref_out_block, in_block=False)
             else:
                 self.assertTrue(ovl_block.band_i == prev_ovl_block.band_i + 1, f'bands are contiguous')
             prev_ovl_block = ovl_block

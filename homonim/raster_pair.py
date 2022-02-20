@@ -393,7 +393,7 @@ class RasterPairReader:
                 proc_out_block = Window(*out_ul[::-1], *np.subtract(out_br, out_ul)[::-1])
 
                 # create equivalent rasterio windows in 'other' space
-                other_in_block = utils.round_window_to_grid(other_im.window(*proc_im.window_bounds(proc_in_block)))
+                other_in_block = utils.expand_window_to_grid(other_im.window(*proc_im.window_bounds(proc_in_block)))
                 other_out_block = utils.round_window_to_grid(other_im.window(*proc_im.window_bounds(proc_out_block)))
 
                 # create the BlockPair named tuple, assigning 'proc' and 'other' back to 'src' and 'ref' for passing to
