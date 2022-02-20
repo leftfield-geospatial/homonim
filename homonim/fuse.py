@@ -210,6 +210,7 @@ class RasterFuse:
         else:
             init_profile = self._raster_pair.src_im.profile
         param_profile = self._combine_with_config(init_profile)
+        # force dtype and nodata to defaults
         param_profile.update(dtype=RasterArray.default_dtype, count=len(self._raster_pair.src_bands) * 3,
                              nodata=RasterArray.default_nodata)
         return param_profile

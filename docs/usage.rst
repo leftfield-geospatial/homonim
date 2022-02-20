@@ -187,12 +187,12 @@ Advanced options
 .. _out-dtype:
 
 ``--out-dtype``: ``uint8``, ``uint16``, ``int16``, ``uint32``, ``int32``, ``float32`` or ``float64``
-    The output image data type.  ``float32`` is the default.
+    The output image data type.  ``float32`` is the default (recommended).
 
 .. _out-nodata:
 
 ``--out-nodata``: NUMBER, ``null`` or ``nan``
-    The output image nodata value (``null`` = no nodata value).  ``nan`` is the default.
+    The output image nodata value (``null`` = no nodata value).  ``nan`` is the default (recommended).
 
 .. _out-profile:
 
