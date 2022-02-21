@@ -43,7 +43,7 @@ homonim compare ./homonim/data/test_example/source/*_RGB.tif ./*HOMO*.tif ./homo
 ```
 
 ## Example
-Mosaics of 0.5 m resolution aerial imagery before and after homogenisation.  A Landsat-7 surface reflectance image was used as reference, and is shown in the background.  Homogenisation was performed using the `im-blk-offset` method and a 5 x 5 pixel kernel.  
+Mosaics of 0.5 m resolution aerial imagery before and after homogenisation.  A Landsat-7 surface reflectance image was used as reference, and is shown in the background.  Homogenisation was performed using the `gain-blk-offset` method and a 5 x 5 pixel kernel.  
 
 ![example](data/readme_eg.jpg)
 
