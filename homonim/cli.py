@@ -30,7 +30,7 @@ import yaml
 from click.core import ParameterSource
 from rasterio.warp import SUPPORTED_RESAMPLING
 
-from homonim import utils
+from homonim import utils, version
 from homonim.compare import RasterCompare
 from homonim.enums import ProcCrs, Method
 from homonim.fuse import RasterFuse
@@ -218,6 +218,7 @@ output_option = click.option("-o", "--output",
     '--quiet', '-q',
     count=True,
     help="Decrease verbosity.")
+@click.version_option(version=version.__version__, message="%(version)s")
 def cli(verbose, quiet):
     verbosity = verbose - quiet
     _configure_logging(verbosity)
