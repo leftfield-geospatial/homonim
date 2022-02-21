@@ -24,7 +24,9 @@ jobs:
     - name: Install homonim
       run: |
         conda info
-        conda install -c conda-forge homonim
+        conda config --add channels conda-forge
+        conda config --set channel_priority strict
+        conda install homonim
         conda list
     - name: Test homonim
       run: |
