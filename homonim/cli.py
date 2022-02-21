@@ -375,7 +375,7 @@ cli.add_command(fuse)
 @output_option
 def compare(src_file, ref_file, proc_crs, output):
     """
-    Report similarity statistics between image(s) with a reference.
+    Report similarity statistics between image(s) and a reference.
 
     INPUTS      Path(s) to image(s) to be compared.
 
@@ -405,6 +405,9 @@ def compare(src_file, ref_file, proc_crs, output):
             res_dict[str(src_filename)] = cmp.compare()
             logger.info(f'Completed in {timer() - start_time:.2f} secs')
 
+        # print a key for the following tables
+        logger.info(f'\n\n{cmp.stats_key}')
+
         # print a results table per source file
         summary_dict = {}
         for src_file, _res_dict in res_dict.items():
@@ -421,7 +424,7 @@ def compare(src_file, ref_file, proc_crs, output):
             summ_df.insert(0, 'File', [pathlib.Path(fn).name for fn in summ_df.index])
             summ_str = summ_df.to_string(float_format="{:.2f}".format, index=False, justify="center",
                                          index_names=False)
-            logger.info(f'\n\nSummary:\n\n{summ_str}')
+            logger.info(f'\n\nSummary over bands:\n\n{summ_str}')
 
         if output is not None:
             res_dict['Reference'] = ref_file.stem

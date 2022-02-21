@@ -25,11 +25,12 @@ from multiprocessing import cpu_count
 
 import numpy as np
 import pandas as pd
+from rasterio.warp import Resampling
+from tqdm import tqdm
+
 from homonim import utils
 from homonim.enums import ProcCrs
 from homonim.raster_pair import RasterPairReader
-from rasterio.warp import Resampling
-from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +66,27 @@ class RasterCompare:
         self._raster_pair = RasterPairReader(self._src_filename, self._ref_filename, proc_crs=proc_crs)
         self._proc_crs = self._raster_pair.proc_crs
 
+    """dict specifying stats labels and functions"""
+    _stats = [
+        dict(ABBREV='r2',
+             DESCRIPTION='Pearson\'s correlation coefficient',
+             fn=lambda v1, v2: float(np.corrcoef(v1, v2)[0, 1])),
+        dict(ABBREV='RMSE',
+             DESCRIPTION='Root Mean Square Error',
+             fn=lambda v1, v2: float(np.sqrt(np.mean((v1 - v2) ** 2)))),
+        dict(ABBREV='rRMSE',
+             DESCRIPTION='Relative RMSE (RMSE/mean(ref))',
+             fn=lambda v1, v2: float(np.sqrt(np.mean((v1 - v2) ** 2)) / np.mean(v2))),
+        dict(ABBREV='N',
+             DESCRIPTION='Number of pixels',
+             fn=lambda v1, v2: len(v1))
+    ]
+
+    @property
+    def stats_key(self):
+        """Returns a string of abbreviations and corresponding descriptions for the statistics returned by compare()"""
+        return pd.DataFrame(self._stats)[['ABBREV', 'DESCRIPTION']].to_string(index=False, justify="right")
+
     def compare(self):
         """
         Statistically compare source and reference images and return results.
@@ -89,25 +111,21 @@ class RasterCompare:
                 else:
                     ref_ra = ref_ra.reproject(**src_ra.proj_profile, resampling=Resampling.average)
 
-                def get_stats(vec1, vec2):
-                    """Find comparison statistics between two vectors"""
-                    r = float(np.corrcoef(vec1, vec2)[0, 1])  # Pearson's correlation coefficient
-                    rmse = float(np.sqrt(np.mean((vec1 - vec2) ** 2)))  # Root mean square error
-                    rrmse = float(rmse / np.mean(vec2))  # Relative RMSE
-                    return OrderedDict(r2=r ** 2, RMSE=rmse, rRMSE=rrmse, N=len(vec1))
-
                 mask = src_ra.mask & ref_ra.mask  # combined src and ref mask
 
                 # find stats of valid data
                 src_vec = src_ra.array[mask]
                 ref_vec = ref_ra.array[mask]
-                stats_dict = get_stats(src_vec, ref_vec)
+
+                stats_dict = OrderedDict()
+                for _stat in self._stats:
+                    stats_dict[_stat['ABBREV']] = _stat['fn'](src_vec, ref_vec)
 
                 # form a string describing the band
-                desc = (raster_pair.ref_im.descriptions[raster_pair.ref_bands[block_pair.band_i] - 1] or
+                DESCRIPTION = (raster_pair.ref_im.descriptions[raster_pair.ref_bands[block_pair.band_i] - 1] or
                         raster_pair.src_im.descriptions[raster_pair.src_bands[block_pair.band_i] - 1] or
                         f'Band {block_pair.band_i + 1}')
-                return desc, stats_dict
+                return DESCRIPTION, stats_dict
 
             # process bands concurrently
             with concurrent.futures.ThreadPoolExecutor(max_workers=self._threads) as executor:
