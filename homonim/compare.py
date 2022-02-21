@@ -122,10 +122,10 @@ class RasterCompare:
                     stats_dict[_stat['ABBREV']] = _stat['fn'](src_vec, ref_vec)
 
                 # form a string describing the band
-                DESCRIPTION = (raster_pair.ref_im.descriptions[raster_pair.ref_bands[block_pair.band_i] - 1] or
+                description = (raster_pair.ref_im.descriptions[raster_pair.ref_bands[block_pair.band_i] - 1] or
                         raster_pair.src_im.descriptions[raster_pair.src_bands[block_pair.band_i] - 1] or
                         f'Band {block_pair.band_i + 1}')
-                return DESCRIPTION, stats_dict
+                return description, stats_dict
 
             # process bands concurrently
             with concurrent.futures.ThreadPoolExecutor(max_workers=self._threads) as executor:

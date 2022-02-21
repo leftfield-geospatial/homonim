@@ -154,66 +154,6 @@ def create_param_filename(filename: pathlib.Path):
     return filename.parent.joinpath(f'{filename.stem}_PARAM{filename.suffix}')
 
 
-def param_stats(param_filename, method, r2_inpaint_thresh):
-    """
-    Find mean, standard deviation etc. statistics of homogenisation parameters and r2 values.
-
-    Parameters
-    ----------
-    param_filename: pathlib.Path, str
-        Path to the parameter image.
-    method: homonim.enums.Method
-        Homogenisation method used to produce 'param_filename'.
-    r2_inpaint_thresh: float
-        The R2 inpaint threshold used to produce 'param_filename'.
-
-    Returns
-    -------
-    param_dict: dict
-        A dictionary of parameter statistics.
-    param_str: str
-        A string table of parameter statistics.
-    """
-    param_filename = pathlib.Path(param_filename)
-    if not param_filename.exists():
-        raise FileNotFoundError(f'{param_filename} does not exist')
-
-    with rio.open(param_filename, 'r') as im:
-        param_dict = {}
-        # get parameter descriptions
-        param_desc = im.descriptions
-        if len(np.unique(param_desc)) != im.count:
-            param_desc = [f'Band {i + 1}' for i in range(im.count)]
-        _mask = im.dataset_mask()
-        # get window of valid pixels and read mask
-        win = get_data_window(_mask, nodata=0)
-        mask = im.dataset_mask(window=win).astype('bool', copy=False)
-
-        # loop over bands (i.e. parameters), finding statistics
-        for band_i in range(im.count):
-            param_array = im.read(indexes=band_i + 1, window=win, out_dtype='float32')
-            param_vec = param_array[mask]  # vector of valid parameter values
-            param_vec = np.ma.masked_invalid(param_vec).astype('float')  # mask out nan and inf values
-
-            def stats(v):
-                """Find mean, std, min & max statistics for a vector."""
-                return OrderedDict(Mean=v.mean(), Std=v.std(), Min=v.min(), Max=v.max())
-
-            stats_dict = stats(param_vec)
-            if (method == Method.gain_offset) and (band_i >= im.count * 2 / 3):
-                # Find the r2 inpaint portion if these parameters are from Method.gain_offset
-                inpaint_portion = np.sum(param_vec < r2_inpaint_thresh) / len(param_vec)
-                stats_dict['Inpaint (%)'] = inpaint_portion * 100
-
-            param_dict[param_desc[band_i]] = stats_dict
-
-        # format the statistics as a table to get printable string
-        param_df = pd.DataFrame.from_dict(param_dict, orient='index')
-        param_str = param_df.to_string(float_format="{:.2f}".format, index=True, justify="center",
-                                       index_names=False)
-        return param_dict, param_str
-
-
 def covers_bounds(im1, im2, expand_pixels=(0, 0)):
     """
     Determines if the spatial extents of one image cover another image

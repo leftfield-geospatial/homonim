@@ -35,6 +35,8 @@ from homonim.compare import RasterCompare
 from homonim.enums import ProcCrs, Method
 from homonim.fuse import RasterFuse
 from homonim.kernel_model import KernelModel
+from homonim.stats import ParamStats
+from homonim.errors import ImageFormatError
 
 logger = logging.getLogger(__name__)
 
@@ -119,15 +121,10 @@ def _param_file_cb(ctx, param, value):
     """click callback to validate parameter image file(s)"""
     for filename in value:
         filename = pathlib.Path(filename)
-
-        if not filename.exists():
-            raise click.BadParameter(f'{filename} does not exist')
-
-        with rio.open(filename) as param_im:
-            tags = param_im.tags()
-            if (divmod(param_im.count, 3)[1] != 0 or
-                    not {'HOMO_METHOD', 'HOMO_MODEL_CONF', 'HOMO_PROC_CRS'} <= set(tags)):
-                raise click.BadParameter(f'{filename.name} is not a valid homonim parameter image.', param=param)
+        try:
+            ParamStats._validate_image(filename)
+        except (FileNotFoundError, ImageFormatError):
+            raise click.BadParameter(f'{filename.name} is not a valid parameter image.', param=param)
     return value
 
 
@@ -451,28 +448,31 @@ def stats(param_file, output):
     """
 
     try:
-        cmb_dict = {}
-        # iterate over source files, comparing with reference
+        stats_dict = {}
+        meta_dict = {}
+
+        # process parameter file(s), storing results
         for param_filename in param_file:
-            with rio.open(param_filename, 'r') as param_im:
-                tags = param_im.tags()
-                method = tags['HOMO_METHOD'].replace('_', '-')
-                r2_inpaint_thresh = yaml.safe_load(tags['HOMO_MODEL_CONF'])['r2_inpaint_thresh']
+            logger.info(f'\nProcessing {param_filename.name}')
+            param_stats = ParamStats(param_filename)
+            stats_dict[str(param_filename)] = param_stats.stats()
+            meta_dict[str(param_filename)] = param_stats.metadata
 
-                logger.info(f'\n\n{param_filename.name}:\n')
-                logger.info(f'Method: {method}')
-                logger.info(f'Kernel shape: {tags["HOMO_KERNEL_SHAPE"]}')
-                logger.info(f'Processing CRS: {tags["HOMO_PROC_CRS"]}')
-                if method == 'gain-offset':
-                    logger.info(f'R\N{SUPERSCRIPT TWO} inpaint threshold: {r2_inpaint_thresh}')
+        # iterate over stored result(s) and print
+        for param_filename, param_dict in stats_dict.items():
+            param_meta = meta_dict[param_filename]
 
-            cmb_dict[str(param_filename)], stats_str = utils.param_stats(param_filename, method=Method(method),
-                                                                         r2_inpaint_thresh=r2_inpaint_thresh)
-            logger.info(f'Stats:\n\n{stats_str}')
+            logger.info(f'\n{pathlib.Path(param_filename).name}:\n')
+            logger.info(param_meta)
+            # format the statistics as a dataframe to get printable string
+            param_df = pd.DataFrame.from_dict(param_dict, orient='index')
+            param_str = param_df.to_string(float_format="{:.2f}".format, index=True, justify="center",
+                                           index_names=False)
+            logger.info(f'Stats:\n{param_str}')
 
         if output is not None:
             with open(output, 'w') as file:
-                json.dump(cmb_dict, file)
+                json.dump(stats_dict, file, allow_nan=True)
 
     except Exception:
         logger.exception("Exception caught during processing")
