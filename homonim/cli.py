@@ -229,8 +229,8 @@ def cli(verbose, quiet):
 # standard options
 @src_file_arg
 @ref_file_arg
-@click.option("-m", "--method", type=click.Choice(Method, case_sensitive=False),
-              default=Method.gain_blk_offset,
+@click.option("-m", "--method", type=click.Choice([m.value for m in Method], case_sensitive=False),
+              default=Method.gain_blk_offset.value,
               help="Homogenisation method.\ngain: Gain-only model. \ngain-blk-offset: Gain-only model applied to "
                    "offset normalised image blocks [default]. \ngain-offset: Full gain and offset model.")
 @click.option("-k", "--kernel-shape", type=click.Tuple([click.INT, click.INT]), nargs=2, default=(5, 5),
@@ -244,8 +244,8 @@ def cli(verbose, quiet):
               help="Statistically compare source and homogenised images with the reference.")
 @click.option("-nbo", "--no-build-ovw", "build_ovw", type=click.BOOL, is_flag=True, default=True,
               help="Turn off overview building for the homogenised image(s).")
-@click.option("-pc", "--proc-crs", type=click.Choice(ProcCrs, case_sensitive=False),
-              default=ProcCrs.auto,
+@click.option("-pc", "--proc-crs", type=click.Choice([pc.value for pc in ProcCrs], case_sensitive=False),
+              default=ProcCrs.auto.value,
               help="The image CRS in which to perform parameter estimation.\nauto: Estimate in the lowest resolution "
                    "of the source and reference image CRS's [default - recommended].\nsrc: Estimate in the source image CRS."
                    "\nref: Estimate in the reference image CRS.")
@@ -338,8 +338,8 @@ def fuse(ctx, src_file, ref_file, method, kernel_shape, output_dir, overwrite, d
             homo_path = pathlib.Path(output_dir) if output_dir is not None else src_filename.parent
 
             logger.info(f'\nHomogenising {src_filename.name}')
-            with RasterFuse(src_filename, ref_file, homo_path, method=method, kernel_shape=kernel_shape,
-                            proc_crs=proc_crs, overwrite=overwrite, **config) as raster_fuse:
+            with RasterFuse(src_filename, ref_file, homo_path, method=Method(method), kernel_shape=kernel_shape,
+                            proc_crs=ProcCrs(proc_crs), overwrite=overwrite, **config) as raster_fuse:
                 start_time = timer()
                 raster_fuse.process()
                 # build overviews
@@ -365,8 +365,8 @@ cli.add_command(fuse)
 @click.command(cls=_HomonimCommand)
 @src_file_arg
 @ref_file_arg
-@click.option("-pc", "--proc-crs", type=click.Choice(ProcCrs, case_sensitive=False),
-              default=ProcCrs.auto.name, show_default=True,
+@click.option("-pc", "--proc-crs", type=click.Choice([pc.value for pc in ProcCrs], case_sensitive=False),
+              default=ProcCrs.auto.value, show_default=True,
               help="The image CRS in which to perform processing.\nauto: process in the lowest "
                    "resolution of the source and reference image CRS's (recommended).\nsrc: process in "
                    "the source image CRS.\nref: process in the reference image CRS.")
@@ -399,7 +399,7 @@ def compare(src_file, ref_file, proc_crs, output):
         for src_filename in src_file:
             logger.info(f'\nComparing {src_filename.name}')
             start_time = timer()
-            cmp = RasterCompare(src_filename, ref_file, proc_crs=proc_crs)
+            cmp = RasterCompare(src_filename, ref_file, proc_crs=ProcCrs(proc_crs))
             res_dict[str(src_filename)] = cmp.compare()
             logger.info(f'Completed in {timer() - start_time:.2f} secs')
 
