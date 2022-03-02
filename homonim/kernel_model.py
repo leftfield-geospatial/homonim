@@ -19,7 +19,6 @@
 
 from typing import Tuple
 
-import cv2
 import cv2 as cv
 import numpy as np
 from homonim import utils
@@ -138,7 +137,7 @@ class KernelModel:
 
         # R2 is found using: R2 = 1 - (residual sum of squares)/(total sum of squares) = 1 - RSS/TSS
 
-        # TSS = sum((ref - mean(ref))**2), which can be expanded and expressed in terms of cv2.boxFilter kernel sums as:
+        # TSS = sum((ref - mean(ref))**2), which can be expanded and expressed in terms of cv.boxFilter kernel sums as:
         ss_tot_array = (mask_sum * ref2_sum) - (ref_sum ** 2)
 
         if param_array.shape[0] > 1:
@@ -148,7 +147,7 @@ class KernelModel:
 
             # RSS = sum((ref - ref_hat)**2)
             #     = sum((ref - (m*src + c))**2), where m and c are the first 2 bands of param_array
-            # The above can be expanded and expressed in terms of cv2.boxFilter kernel sums as:
+            # The above can be expanded and expressed in terms of cv.boxFilter kernel sums as:
 
             ss_res_array = (((param_array[0] ** 2) * src2_sum) +
                             (2 * np.product(param_array[:2], axis=0) * src_sum) -
@@ -158,7 +157,7 @@ class KernelModel:
         else:
             # find RSS for method == Method.gain or Method.gain_blk_offset
             # RSS = sum((ref - m*src)**2), where m is the first band of param_array
-            # The above can be expanded and expressed in terms of cv2.boxFilter kernel sums as:
+            # The above can be expanded and expressed in terms of cv.boxFilter kernel sums as:
             ss_res_array = (((param_array[0] ** 2) * src2_sum) - (2 * param_array[0] * src_ref_sum) + ref2_sum)
 
         ss_res_array *= mask_sum
@@ -397,8 +396,8 @@ class KernelModel:
         # Similar to the block overlap amount, this removes ceil(kernel_shape/2) pixels from the nodata edge.  Note,
         # that this is the strict approach for proc_crs == ref, it could be floor(kernel_shape/2) for proc_crs == src,
         # which avoids the additional upsampling step.
-        se = cv2.getStructuringElement(cv2.MORPH_RECT, tuple(self._kernel_shape + 2))
-        mask_ra.array = cv2.erode(mask, se, borderType=cv2.BORDER_CONSTANT, borderValue=0)
+        se = cv.getStructuringElement(cv.MORPH_RECT, tuple(self._kernel_shape + 2))
+        mask_ra.array = cv.erode(mask, se, borderType=cv.BORDER_CONSTANT, borderValue=0)
         return mask_ra
 
     def fit(self, ref_ra, src_ra, kernel_shape=None):
