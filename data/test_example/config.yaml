@@ -11,7 +11,7 @@ downsampling: average
 upsampling: cubic_spline
 r2_inpaint_thresh: 0.25
 
-# Format of output (homogenised) raster
+# Format of output (homogenised) image
 driver: GTiff
 dtype: float32
 nodata: .nan

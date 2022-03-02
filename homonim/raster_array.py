@@ -418,7 +418,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         filename: str, pathlib.Path
                   The name of the file to create.
         driver: str, optional
-                A valid raster short format driver name - see http://www.gdal.org/formats_list.html.
+                A valid rasterio short format driver name - see http://www.gdal.org/formats_list.html.
         kwargs: dict, optional
                 Driver specific creation options e.g. compression='deflate' for a geotiff.
                 See the rasterio documentation for more details:

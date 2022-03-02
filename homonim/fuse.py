@@ -267,7 +267,7 @@ class RasterFuse:
     def _assert_open(self):
         """Raise an IoError if the source, reference or homogenised image(s) are not open."""
         if self.closed:
-            raise IoError(f'The raster file(s) have not been opened.')
+            raise IoError(f'The image file(s) have not been opened.')
 
     def open(self):
         """Open the source and reference images for reading, and output image(s) for writing."""
