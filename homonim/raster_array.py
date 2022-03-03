@@ -110,11 +110,11 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         ra: RasterArray
             The constructed RasterArray.
         """
-        if not {'crs' and 'transform' and 'nodata'} <= set(profile):
+        if not {'crs', 'transform', 'nodata'} <= set(profile):
             raise ImageProfileError("'profile' should include 'crs', 'transform' and 'nodata' keys")
 
         if array is None:  # create array filled with nodata
-            if not {'width' and 'height' and 'count' and 'dtype'} <= set(profile):
+            if not {'width', 'height', 'count', 'dtype'} <= set(profile):
                 raise ImageProfileError("'profile' should include 'width', 'height', 'count' and 'dtype' keys")
             array_shape = (profile['count'], profile['height'], profile['width'])
             array = np.full(array_shape, fill_value=profile['nodata'], dtype=profile['dtype'])
@@ -168,24 +168,29 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         if len(index_list) > 1:
             array = np.full((len(index_list), window.height, window.width), fill_value=nodata, dtype=cls.default_dtype)
             bounded_array = array[(slice(array.shape[0]), *bounded_slices)]  # a bounded view into array
+            rio_dataset.read(out=bounded_array, indexes=index_list, window=bounded_window,
+                             out_dtype=cls.default_dtype, **kwargs)
         else:
             array = np.full((window.height, window.width), fill_value=nodata, dtype=cls.default_dtype)
             bounded_array = array[bounded_slices]  # a bounded view into array
+            rio_dataset.read(out=bounded_array, indexes=index_list[0], window=bounded_window,
+                             out_dtype=cls.default_dtype, **kwargs)
 
         # read into the bounded section of the array
-        rio_dataset.read(out=bounded_array, indexes=indexes, window=bounded_window, out_dtype=cls.default_dtype,
-                         **kwargs)
 
         if is_masked:
             # read the mask from dataset and apply it to the array
             bounded_mask = rio_dataset.dataset_mask(window=bounded_window).astype('bool', copy=False)
-            bounded_array[~bounded_mask] = nodata
+            if bounded_array.ndim == 2:
+                bounded_array[~bounded_mask] = nodata
+            else:
+                bounded_array[:, ~bounded_mask] = nodata
 
         return cls(array, rio_dataset.crs, rio_dataset.transform, nodata=nodata, window=window)
 
     @staticmethod
     def bounded_window_slices(rio_dataset, window):
-        """ Bounded array slices and dataset window from boundless dataset and window """
+        """ Bounded array slices and dataset window from dataset and boundless window """
 
         # find window UL and BR corners and crop to rio_dataset bounds
         win_ul = np.array((window.row_off, window.col_off))
@@ -262,7 +267,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
     def profile(self) -> dict:
         """The RasterArray properties formatted as a dictionary, compatible with rasterio."""
         return dict(crs=self._crs, transform=self._transform, nodata=self._nodata, count=self.count,
-                    width=self.width, height=self.height, bounds=self.bounds, dtype=self.dtype)
+                    width=self.width, height=self.height, dtype=self.dtype)
 
     @property
     def proj_profile(self) -> dict:
