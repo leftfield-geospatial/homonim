@@ -383,18 +383,23 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         kwargs: optional
                 Arguments to passed through the dataset's write() method.
         """
-        # TODO: include a CRS comparison below i.e. one that is faster that rasterio's current implementation
-        if not np.all(self.res == rio_dataset.res):
+        if not np.all(self.res == np.abs(rio_dataset.res)):
             raise ImageFormatError(f"The dataset resolution does not match that of the RasterArray. "
                                    f"Dataset res: {rio_dataset.res}, RasterArray res: {self.res}")
+        # TODO: raise an issue with rasterio about the speed of crs comparison.  comparing the _crs attr is faster.
+        if self.crs._crs != rio_dataset.crs._crs:
+            raise ImageFormatError(f"The dataset CRS does not match that of the RasterArray. "
+                                   f"Dataset CRS: {rio_dataset.crs.to_proj4()}, RasterArray CRS: {self.crs.to_proj4()}")
+
         if indexes is None:
             indexes = utils.get_nonalpha_bands(rio_dataset)
+            indexes = indexes if len(indexes) > 1 else indexes[0]
 
-        if np.any(np.array(indexes) > rio_dataset.count):
+        if np.any((np.array(indexes) < 1) | (np.array(indexes) > rio_dataset.count)):
             error_indexes = np.array(indexes)[np.array(indexes) > rio_dataset.count]
-            raise ValueError(f'Band index(es) ({error_indexes}) exceed the dataset band count ({rio_dataset.count})')
+            raise ValueError(f'Band index(es) {error_indexes} are out of the valid range (1..{rio_dataset.count})')
 
-        if isinstance(indexes, list) and (len(indexes) > self.count):
+        if (not np.isscalar(indexes)) and (len(indexes) > self.count):
             raise ValueError(f'The length of indexes ({len(indexes)}) exceeds the number of bands in the '
                              f'RasterArray ({self.count})')
 
@@ -443,7 +448,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
              The CRS to project into.  [default: use the CRS of the this RasterArray]
         transform: rasterio.transform.Affine, optional
                     The geo-transform to project into.  If 'transform' is specified, 'shape' is also required.
-                    [default: use the transform of the this RasterArray]
+                    [default: use the transform of this RasterArray]
         shape: tuple, optional
                The (rows, columns) size of the destination array. [default: use the shape of this RasterArray]
         nodata: float, int, optional
@@ -461,15 +466,15 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
             The reprojected RasterArray.
         """
 
-        if transform and not shape:
+        if transform is not None and shape is None:
             raise ValueError('If "transform" is specified, "shape" must also be specified')
 
         if isinstance(resampling, str):
             resampling = Resampling[resampling]
 
-        crs = crs or self._crs
-        shape = shape or self._array.shape
-        dtype = dtype or self._array.dtype
+        crs = crs or self.crs
+        shape = shape or self.shape
+        dtype = dtype or self.dtype
 
         if self.array.ndim > 2:
             _dst_array = np.zeros((self._array.shape[0], *shape), dtype=dtype)
