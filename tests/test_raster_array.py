@@ -97,9 +97,10 @@ def byte_ra(byte_array, byte_profile):
     return RasterArray(byte_array, byte_profile['crs'], byte_profile['transform'],
                        nodata=byte_profile['nodata'])
 
+
 @pytest.fixture
 def rgb_byte_ra(byte_array, byte_profile):
-    return RasterArray(np.stack((byte_array,)*3, axis=0), byte_profile['crs'], byte_profile['transform'],
+    return RasterArray(np.stack((byte_array,) * 3, axis=0), byte_profile['crs'], byte_profile['transform'],
                        nodata=byte_profile['nodata'])
 
 
@@ -198,7 +199,7 @@ def test_nodata_mask(byte_ra):
     assert (byte_ra.mask == mask).all()
 
     byte_ra.nodata = None
-    assert (byte_ra.mask).all()
+    assert byte_ra.mask.all()
 
 
 def test_array_set_shape(byte_ra):
@@ -272,7 +273,7 @@ def test_bounded_window_slices(byte_file, pad):
 
 
 def test_slice_to_bounds(byte_ra: RasterArray):
-    window = Window(1, 1, byte_ra.width-2, byte_ra.height-2)
+    window = Window(1, 1, byte_ra.width - 2, byte_ra.height - 2)
     bounds = byte_ra.window_bounds(window)
     slice_ra = byte_ra.slice_to_bounds(*bounds)
     assert slice_ra.bounds == pytest.approx(bounds)
@@ -280,6 +281,7 @@ def test_slice_to_bounds(byte_ra: RasterArray):
 
     with pytest.raises(ValueError):
         byte_ra.slice_to_bounds(*byte_ra.window_bounds(Window(-1, -1, byte_ra.width, byte_ra.height)))
+
 
 def test_to_rio_dataset(byte_ra: RasterArray, tmpdir):
     ds_filename = pathlib.Path(str(tmpdir)).joinpath('temp.tif')
@@ -289,9 +291,10 @@ def test_to_rio_dataset(byte_ra: RasterArray, tmpdir):
         test_ra = RasterArray.from_rio_dataset(ds)
     assert (test_ra.array == byte_ra.array).all()
 
+
 def test_to_rio_dataset_crop(rgb_byte_ra: RasterArray, tmpdir):
     ds_filename = pathlib.Path(str(tmpdir)).joinpath('temp.tif')
-    indexes = np.array([1, 2, 3])
+    indexes = [1, 2, 3]
     # crop the raster array and write to full dataset
     crop_window = Window(1, 1, rgb_byte_ra.width - 2, rgb_byte_ra.height - 2)
     crop_ra = rgb_byte_ra.slice_to_bounds(*rgb_byte_ra.window_bounds(crop_window))
@@ -299,14 +302,15 @@ def test_to_rio_dataset_crop(rgb_byte_ra: RasterArray, tmpdir):
         crop_ra.to_rio_dataset(ds, indexes=indexes, window=crop_window)
     with rio.open(ds_filename, 'r') as ds:
         test_ra = RasterArray.from_rio_dataset(ds)
-    assert (test_ra.array[(indexes-1, *crop_window.toslices())] == crop_ra.array).all()
+    assert (test_ra.array[(np.array(indexes) - 1, *crop_window.toslices())] == crop_ra.array).all()
 
     # crop the dataset and write in the full raster array
     with rio.open(ds_filename, 'w', driver='GTiff', **crop_ra.profile) as ds:
         rgb_byte_ra.to_rio_dataset(ds, indexes=indexes)
     with rio.open(ds_filename, 'r') as ds:
         test_ra = RasterArray.from_rio_dataset(ds)
-    assert (test_ra.array == rgb_byte_ra.array[(indexes-1, *crop_window.toslices())]).all()
+    assert (test_ra.array == rgb_byte_ra.array[(np.array(indexes) - 1, *crop_window.toslices())]).all()
+
 
 def test_to_rio_dataset_exceptions(rgb_byte_ra: RasterArray, tmpdir):
     ds_filename = pathlib.Path(str(tmpdir)).joinpath('temp.tif')
@@ -319,7 +323,7 @@ def test_to_rio_dataset_exceptions(rgb_byte_ra: RasterArray, tmpdir):
             crop_ra.to_rio_dataset(ds, indexes=[1, 2, 3], window=boundless_window)
         with pytest.raises(ValueError):
             # len(indexes) > number of dataset bands
-            rgb_byte_ra.to_rio_dataset(ds, indexes=[1] * (ds.count+1))
+            rgb_byte_ra.to_rio_dataset(ds, indexes=[1] * (ds.count + 1))
         with pytest.raises(ValueError):
             # indexes outside of valid range
             rgb_byte_ra.to_rio_dataset(ds, indexes=ds.count + 1)
@@ -338,6 +342,7 @@ def test_to_rio_dataset_exceptions(rgb_byte_ra: RasterArray, tmpdir):
         with pytest.raises(ImageFormatError):
             rgb_byte_ra.to_rio_dataset(ds, indexes=[1, 2, 3])
 
+
 def test_reprojection(rgb_byte_ra: RasterArray):
     # reproject to WGS84 with default parameters
     to_crs = CRS.from_epsg(4326)
@@ -348,11 +353,9 @@ def test_reprojection(rgb_byte_ra: RasterArray):
 
     # reproject with rescaling to WGS84 using a specified transform & shape
     to_transform = Affine.identity() * Affine.scale(.5e-5)
-    reproj_ra = rgb_byte_ra.reproject(crs=to_crs, transform=to_transform, shape=tuple(np.array(rgb_byte_ra.shape)*2),
+    reproj_ra = rgb_byte_ra.reproject(crs=to_crs, transform=to_transform, shape=tuple(np.array(rgb_byte_ra.shape) * 2),
                                       resampling=Resampling.bilinear)
     assert (reproj_ra.crs == to_crs)
     assert (reproj_ra.transform == to_transform)
     assert (reproj_ra.array[:, reproj_ra.mask].mean() ==
             pytest.approx(rgb_byte_ra.array[:, rgb_byte_ra.mask].mean(), rel=.01))
-
-
