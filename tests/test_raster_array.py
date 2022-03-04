@@ -31,127 +31,6 @@ from homonim.errors import ImageProfileError, ImageFormatError
 from homonim.raster_array import RasterArray
 
 
-@pytest.fixture
-def landsat_filename():
-    return root_path.joinpath('data/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif')
-
-
-@pytest.fixture
-def modis_filename():
-    return root_path.joinpath('data/test_example/reference/MODIS-006-MCD43A4-2015_09_15_B143.tif')
-
-
-@pytest.fixture
-def modis_ds(modis_filename):
-    return rio.open(modis_filename, 'r')
-
-
-@pytest.fixture
-def byte_array():
-    array = np.array(range(1, 101), dtype='uint8').reshape(20, 5)
-    array[:, [0, -1]] = 255
-    array[[0, -1], :] = 255
-    return array
-
-
-@pytest.fixture
-def byte_profile(byte_array):
-    profile = {
-        'crs': CRS({'init': 'epsg:3857'}),
-        'transform': Affine.identity() * Affine.translation(1e-10, 1e-10),
-        'count': 1 if byte_array.ndim < 3 else byte_array.shape[0],
-        'dtype': rio.uint8,
-        'driver': 'GTiff',
-        'width': byte_array.shape[-1],
-        'height': byte_array.shape[-2],
-        'nodata': 255
-    }
-    return profile
-
-
-@pytest.fixture
-def float_array():
-    array = np.array(range(1, 101), dtype='float32').reshape(20, 5)
-    array[:, [0, -1]] = float('nan')
-    array[[0, -1], :] = float('nan')
-    return array
-
-
-@pytest.fixture
-def float_profile(float_array):
-    profile = {
-        'crs': CRS({'init': 'epsg:3857'}),
-        'transform': Affine.identity() * Affine.translation(1e-10, 1e-10),
-        'count': 1 if float_array.ndim < 3 else float_array.shape[0],
-        'dtype': rio.float32,
-        'driver': 'GTiff',
-        'width': float_array.shape[-1],
-        'height': float_array.shape[-2],
-        'nodata': float('nan')
-    }
-    return profile
-
-
-@pytest.fixture
-def byte_ra(byte_array, byte_profile):
-    return RasterArray(byte_array, byte_profile['crs'], byte_profile['transform'],
-                       nodata=byte_profile['nodata'])
-
-
-@pytest.fixture
-def rgb_byte_ra(byte_array, byte_profile):
-    return RasterArray(np.stack((byte_array,) * 3, axis=0), byte_profile['crs'], byte_profile['transform'],
-                       nodata=byte_profile['nodata'])
-
-
-@pytest.fixture
-def byte_file(tmpdir, byte_array, byte_profile):
-    byte_filename = pathlib.Path(str(tmpdir)).joinpath('uint8.tif')
-    with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
-        with rio.open(byte_filename, 'w', **byte_profile) as ds:
-            ds.write(byte_array, indexes=1)
-    return byte_filename
-
-
-@pytest.fixture
-def float_file(tmpdir, float_array, float_profile):
-    float_filename = pathlib.Path(str(tmpdir)).joinpath('float32.tif')
-    with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
-        with rio.open(float_filename, 'w', **float_profile) as ds:
-            ds.write(float_array, indexes=1)
-    return float_filename
-
-
-@pytest.fixture
-def rgba_file(tmpdir, byte_array, byte_profile):
-    rgba_array = np.stack((byte_array,) * 4, axis=0)
-    rgba_array[3] = (rgba_array[0] != byte_profile['nodata']) * 255
-    rgba_filename = pathlib.Path(str(tmpdir)).joinpath('rgba.tif')
-    rgba_profile = byte_profile.copy()
-    rgba_profile.update(count=4, nodata=None,
-                        colorinterp=[ColorInterp.red, ColorInterp.green, ColorInterp.blue, ColorInterp.alpha])
-    with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
-        with rio.open(rgba_filename, 'w', **rgba_profile) as ds:
-            ds.write(rgba_array, indexes=range(1, 5))
-    return rgba_filename
-
-
-@pytest.fixture
-def masked_file(tmpdir, byte_array, byte_profile):
-    masked_filename = pathlib.Path(str(tmpdir)).joinpath('masked.tif')
-    with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
-        with rio.open(masked_filename, 'w', **byte_profile) as ds:
-            ds.write(byte_array, indexes=1)
-            ds.write_mask(byte_array != byte_profile['nodata'])
-    return masked_filename
-
-
-@pytest.fixture
-def float_ra(float_array, float_profile):
-    return RasterArray(float_array, float_profile['crs'], float_profile['transform'],
-                       nodata=float_profile['nodata'])
-
-
 def test_read_only_properties(byte_array, byte_profile):
     """Test read only properties"""
     basic_ra = RasterArray(byte_array, byte_profile['crs'], byte_profile['transform'],
@@ -349,7 +228,7 @@ def test_reprojection(rgb_byte_ra: RasterArray):
     reproj_ra = rgb_byte_ra.reproject(crs=to_crs, resampling=Resampling.bilinear)
     assert (reproj_ra.crs == to_crs)
     assert (reproj_ra.array[:, reproj_ra.mask].mean() ==
-            pytest.approx(rgb_byte_ra.array[:, rgb_byte_ra.mask].mean(), rel=.01))
+            pytest.approx(rgb_byte_ra.array[:, rgb_byte_ra.mask].mean(), abs=.01))
 
     # reproject with rescaling to WGS84 using a specified transform & shape
     to_transform = Affine.identity() * Affine.scale(.5e-5)
@@ -358,4 +237,4 @@ def test_reprojection(rgb_byte_ra: RasterArray):
     assert (reproj_ra.crs == to_crs)
     assert (reproj_ra.transform == to_transform)
     assert (reproj_ra.array[:, reproj_ra.mask].mean() ==
-            pytest.approx(rgb_byte_ra.array[:, rgb_byte_ra.mask].mean(), rel=.01))
+            pytest.approx(rgb_byte_ra.array[:, rgb_byte_ra.mask].mean(), abs=.01))
