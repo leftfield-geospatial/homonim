@@ -125,15 +125,15 @@ class KernelModel:
             ref_array[~mask] = 0
             src_array[~mask] = 0
         if mask_sum is None:
-            mask_sum = cv.boxFilter(mask.astype(RasterArray.default_dtype), -1, kernel_shape, **filter_args)
+            mask_sum = cv.boxFilter(mask.astype(RasterArray.default_dtype), -1, kernel_shape[::-1], **filter_args)
         if ref_sum is None:
-            ref_sum = cv.boxFilter(ref_array, -1, kernel_shape, **filter_args)
+            ref_sum = cv.boxFilter(ref_array, -1, kernel_shape[::-1], **filter_args)
         if ref2_sum is None:
-            ref2_sum = cv.sqrBoxFilter(ref_array, -1, kernel_shape, **filter_args)
+            ref2_sum = cv.sqrBoxFilter(ref_array, -1, kernel_shape[::-1], **filter_args)
         if src2_sum is None:
-            src2_sum = cv.sqrBoxFilter(src_array, -1, kernel_shape, **filter_args)
+            src2_sum = cv.sqrBoxFilter(src_array, -1, kernel_shape[::-1], **filter_args)
         if src_ref_sum is None:
-            src_ref_sum = cv.boxFilter(src_array * ref_array, -1, kernel_shape, **filter_args)
+            src_ref_sum = cv.boxFilter(src_array * ref_array, -1, kernel_shape[::-1], **filter_args)
 
         # R2 is found using: R2 = 1 - (residual sum of squares)/(total sum of squares) = 1 - RSS/TSS
 
@@ -143,7 +143,7 @@ class KernelModel:
         if param_array.shape[0] > 1:
             # find RSS for method == Method.gain_offset
             if src_sum is None:
-                src_sum = cv.boxFilter(src_array, -1, kernel_shape, **filter_args)
+                src_sum = cv.boxFilter(src_array, -1, kernel_shape[::-1], **filter_args)
 
             # RSS = sum((ref - ref_hat)**2)
             #     = sum((ref - (m*src + c))**2), where m and c are the first 2 bands of param_array
@@ -236,8 +236,8 @@ class KernelModel:
 
         # convolve the kernel with src and ref to get kernel sums (uses DFT for large kernels)
         filter_args = dict(normalize=False, borderType=cv.BORDER_CONSTANT)  # common opencv arguments
-        src_sum = cv.boxFilter(src_array, -1, kernel_shape, **filter_args)
-        ref_sum = cv.boxFilter(ref_array, -1, kernel_shape, **filter_args)
+        src_sum = cv.boxFilter(src_array, -1, kernel_shape[::-1], **filter_args)
+        ref_sum = cv.boxFilter(ref_array, -1, kernel_shape[::-1], **filter_args)
 
         # create parameter RasterArray filled with nodata
         param_ra = RasterArray.from_profile(None, param_profile)
@@ -328,14 +328,14 @@ class KernelModel:
 
         # find the numerator for the gain i.e N*cov(ref, src)
         filter_args = dict(normalize=False, borderType=cv.BORDER_CONSTANT)  # common opencv arguments
-        src_sum = cv.boxFilter(src_array, -1, kernel_shape, **filter_args)
-        ref_sum = cv.boxFilter(ref_array, -1, kernel_shape, **filter_args)
-        src_ref_sum = cv.boxFilter(src_array * ref_array, -1, kernel_shape, **filter_args)
-        mask_sum = cv.boxFilter(mask.astype(RasterArray.default_dtype, copy=False), -1, kernel_shape, **filter_args)
+        src_sum = cv.boxFilter(src_array, -1, kernel_shape[::-1], **filter_args)
+        ref_sum = cv.boxFilter(ref_array, -1, kernel_shape[::-1], **filter_args)
+        src_ref_sum = cv.boxFilter(src_array * ref_array, -1, kernel_shape[::-1], **filter_args)
+        mask_sum = cv.boxFilter(mask.astype(RasterArray.default_dtype, copy=False), -1, kernel_shape[::-1], **filter_args)
         m_num_array = (mask_sum * src_ref_sum) - (src_sum * ref_sum)
 
         # find the denominator for the gain i.e. N*var(src)
-        src2_sum = cv.sqrBoxFilter(src_array, -1, kernel_shape, **filter_args)
+        src2_sum = cv.sqrBoxFilter(src_array, -1, kernel_shape[::-1], **filter_args)
         m_den_array = (mask_sum * src2_sum) - (src_sum ** 2)
 
         # create parameter RasterArray filled with nodata
@@ -396,7 +396,7 @@ class KernelModel:
         # Similar to the block overlap amount, this removes ceil(kernel_shape/2) pixels from the nodata edge.  Note,
         # that this is the strict approach for proc_crs == ref, it could be floor(kernel_shape/2) for proc_crs == src,
         # which avoids the additional upsampling step.
-        se = cv.getStructuringElement(cv.MORPH_RECT, tuple(self._kernel_shape + 2))
+        se = cv.getStructuringElement(cv.MORPH_RECT, tuple(self._kernel_shape[::-1] + 2))
         mask_ra.array = cv.erode(mask, se, borderType=cv.BORDER_CONSTANT, borderValue=0)
         return mask_ra
 
