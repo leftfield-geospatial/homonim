@@ -27,7 +27,7 @@ from rasterio.enums import Resampling
 from rasterio.windows import Window
 import pytest
 import cv2
-
+from typing import Tuple
 
 @pytest.fixture()
 def high_res_float_ra(float_ra):
@@ -52,7 +52,7 @@ def high_res_offset_float_ra(float_ra):
     (Method.gain_offset, (5, 5)),
 ])
 def test_ref_basic_fit(float_ra: RasterArray, high_res_float_ra: RasterArray, method: Method,
-                       kernel_shape: tuple[int, int]):
+                       kernel_shape: Tuple[int, int]):
     """Test that models are fitted correctly using known parameters"""
 
     # mask_partial is only applied in RefSpaceModel.apply(), so we just set it False here
@@ -76,7 +76,7 @@ def test_ref_basic_fit(float_ra: RasterArray, high_res_float_ra: RasterArray, me
     (Method.gain_offset, (5, 5)),
 ])
 def test_src_basic_fit(float_ra: RasterArray, high_res_float_ra: RasterArray, method: Method,
-                              kernel_shape: tuple[int, int]):
+                              kernel_shape: Tuple[int, int]):
     """Test models are fitted correctly in src space with known parameters"""
     kernel_model = SrcSpaceModel(method, kernel_shape, mask_partial=False, r2_inpaint_thresh=0.25)
     src_ra = float_ra
@@ -134,7 +134,7 @@ def test_src_basic_apply(float_ra: RasterArray):
     ((3, 7), True),
     ((5, 5), True),
 ])
-def test_ref_masking(float_ra, high_res_float_ra, high_res_offset_float_ra, kernel_shape: tuple[int, int],
+def test_ref_masking(float_ra, high_res_float_ra, high_res_offset_float_ra, kernel_shape: Tuple[int, int],
                           mask_partial: bool):
     kernel_model = RefSpaceModel(Method.gain_blk_offset, kernel_shape, mask_partial=mask_partial)
     src_ra = high_res_float_ra
@@ -164,7 +164,7 @@ def test_ref_masking(float_ra, high_res_float_ra, high_res_offset_float_ra, kern
     ((3, 7), True),
     ((5, 5), True),
 ])
-def test_src_masking(float_ra, high_res_float_ra, high_res_offset_float_ra, kernel_shape: tuple[int, int],
+def test_src_masking(float_ra, high_res_float_ra, high_res_offset_float_ra, kernel_shape: Tuple[int, int],
                           mask_partial: bool):
     kernel_model = SrcSpaceModel(Method.gain_blk_offset, kernel_shape, mask_partial=mask_partial)
     src_ra = float_ra.copy()
