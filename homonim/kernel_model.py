@@ -421,7 +421,7 @@ class KernelModel:
         """
         # TODO: include a CRS comparison below i.e. one that is faster that rasterio's current implementation
         if ((ref_ra.transform != src_ra.transform) or (ref_ra.shape != src_ra.shape)):
-            raise ValueError("'ref_ra' and 'src_ra' must have the same transform and shape")
+            raise ValueError("'ref_ra' and 'src_ra' must have the same CRS, transform and shape")
 
         if kernel_shape is None:
             kernel_shape = self._kernel_shape
@@ -453,6 +453,8 @@ class KernelModel:
         out_ra :RasterArray
             Homogenised block in a RasterArray.
         """
+        if ((param_ra.transform != src_ra.transform) or (param_ra.shape != src_ra.shape)):
+            raise ValueError("'param_ra' and 'src_ra' must have the same CRS, transform and shape")
         out_array = (param_ra.array[0] * src_ra.array) + param_ra.array[1]
         out_ra = RasterArray.from_profile(out_array, param_ra.profile)
         return out_ra
@@ -469,6 +471,23 @@ class RefSpaceModel(KernelModel):
     """
 
     def fit(self, ref_ra, src_ra, **kwargs):
+        """
+        Fit sliding kernel models to reference and source blocks.
+
+        Parameters
+        ----------
+        ref_ra : RasterArray
+            Reference data block in a RasterArray.
+        src_ra : RasterArray
+            Source data block in a RasterArray.  The src_ra bounds should that contain those of ref_ra.
+            Note that in the interests of speed, this is assumed and not checked for.
+
+        Returns
+        -------
+        param_ra :RasterArray
+            RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second, and optionally
+            R2 for each kernel model in the third band when param_image==True.
+        """
         # choose resampling method based on whether we are up- or downsampling
         resampling = self._downsampling if np.prod(src_ra.res) < np.prod(ref_ra.res) else self._upsampling
         # downsample src_ra to reference CRS and grid
@@ -477,6 +496,23 @@ class RefSpaceModel(KernelModel):
         return KernelModel.fit(self, ref_ra, src_ds_ra, kernel_shape=self._kernel_shape)
 
     def apply(self, src_ra, param_ra):
+        """
+        Apply kernel models to a source block.
+
+        Parameters
+        ----------
+        src_ra : RasterArray
+            Source data block in a RasterArray.
+        param_ra :RasterArray
+            RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second.  The bounds
+            of param_ra should contain those of src_ra.  Note that in the interests of speed, this is assumed and not
+            checked for.
+
+        Returns
+        -------
+        out_ra :RasterArray
+            Homogenised block in a RasterArray.
+        """
         # create a parameter RasterArray containing only the first two bands of param_ra
         # (to speed up the re-projection below)
         _param_ra = RasterArray.from_profile(param_ra.array[:2], param_ra.profile)
@@ -509,6 +545,23 @@ class SrcSpaceModel(KernelModel):
     """
 
     def fit(self, ref_ra, src_ra, **kwargs):
+        """
+        Fit sliding kernel models to reference and source blocks.
+
+        Parameters
+        ----------
+        ref_ra : RasterArray
+            Reference data block in a RasterArray.
+        src_ra : RasterArray
+            Source data block in a RasterArray.  The ref_ra bounds should contain those of src_ra.
+            Note that in the interests of speed, this is assumed and not checked for.
+
+        Returns
+        -------
+        param_ra :RasterArray
+            RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second, and optionally
+            R2 for each kernel model in the third band when param_image==True.
+        """
         # choose resampling method based on whether we are up- or downsampling
         resampling = self._upsampling if np.prod(src_ra.res) < np.prod(ref_ra.res) else self._downsampling
         # upsample ref_ra to the source CRS and grid
