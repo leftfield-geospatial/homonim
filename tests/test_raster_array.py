@@ -237,4 +237,4 @@ def test_reprojection(rgb_byte_ra: RasterArray):
     assert (reproj_ra.crs == to_crs)
     assert (reproj_ra.transform == to_transform)
     assert (reproj_ra.array[:, reproj_ra.mask].mean() ==
-            pytest.approx(rgb_byte_ra.array[:, rgb_byte_ra.mask].mean(), abs=.01))
+            pytest.approx(rgb_byte_ra.array[:, rgb_byte_ra.mask].mean(), abs=.1))
