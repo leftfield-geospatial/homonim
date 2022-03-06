@@ -489,7 +489,7 @@ class RefSpaceModel(KernelModel):
             R2 for each kernel model in the third band when param_image==True.
         """
         # choose resampling method based on whether we are up- or downsampling
-        resampling = self._downsampling if np.prod(src_ra.res) < np.prod(ref_ra.res) else self._upsampling
+        resampling = self._downsampling if np.prod(src_ra.res) <= np.prod(ref_ra.res) else self._upsampling
         # downsample src_ra to reference CRS and grid
         src_ds_ra = src_ra.reproject(**ref_ra.proj_profile, resampling=resampling)
         # call base class fit with reference and source RasterArrays in the reference CRS & grid
