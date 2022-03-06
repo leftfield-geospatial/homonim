@@ -16,7 +16,6 @@
     You should have received a copy of the GNU Affero General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
-import pathlib
 
 import numpy as np
 import pytest
@@ -24,10 +23,8 @@ import rasterio as rio
 from rasterio.crs import CRS
 from rasterio.enums import ColorInterp, Resampling
 from rasterio.transform import Affine
-from rasterio.windows import Window
 
 from homonim import root_path
-from homonim.errors import ImageProfileError, ImageFormatError
 from homonim.raster_array import RasterArray
 
 
@@ -72,8 +69,8 @@ def byte_profile(byte_array):
 @pytest.fixture
 def float_array():
     array = np.array(range(1, 201), dtype='float32').reshape(20, 10)
-    array[:, [0, 1, -2, -1]] = float('nan')
-    array[[0, 1, -2, -1], :] = float('nan')
+    array[:, [0, -1]] = float('nan')
+    array[[0, -1], :] = float('nan')
     return array
 
 
@@ -151,3 +148,28 @@ def float_ra(float_array, float_profile):
     return RasterArray(float_array, float_profile['crs'], float_profile['transform'],
                        nodata=float_profile['nodata'])
 
+
+@pytest.fixture
+def high_res_align_float_ra(float_ra):
+    """
+    A high resolution version of float_ra.
+    Aligned with the float_ra pixel grid, so that re-projection back to float_ra space will give the float_ra
+    mask, and ~data (resampling method dependent).
+    """
+    scale = 1 / 2  # resolution scaling
+    # pad scaled image with a border of 1 float_ra pixel
+    shape = tuple(np.ceil(np.array(float_ra.shape) / scale + (2 / scale)).astype('int'))
+    transform = float_ra.transform * Affine.translation(-1, -1) * Affine.scale(scale)
+    return float_ra.reproject(transform=transform, shape=shape, resampling=Resampling.nearest)
+
+
+@pytest.fixture
+def high_res_unalign_float_ra(float_ra):
+    """
+    A high resolution version of float_ra, but on a different pixel grid.
+    """
+    scale = 0.45  # resolution scaling
+    # pad scaled image with a border of ~1 float_ra pixel
+    shape = tuple(np.ceil(np.array(float_ra.shape) / scale + (2 / scale)).astype('int'))
+    transform = float_ra.transform * Affine.translation(-1, -1) * Affine.scale(scale)
+    return float_ra.reproject(transform=transform, shape=shape, resampling=Resampling.bilinear)

@@ -30,32 +30,6 @@ from homonim.kernel_model import SrcSpaceModel, RefSpaceModel
 from homonim.raster_array import RasterArray
 
 
-@pytest.fixture
-def high_res_align_float_ra(float_ra):
-    """
-    A higher resolution version of float_ra.
-    Aligned with the float_ra pixel grid, so that re-projection back to float_ra space will give the float_ra
-    mask, and ~data (resampling method dependent).
-    """
-    scale = 1 / 2  # resolution scaling
-    # pad scaled image with a border of 1 float_ra pixel
-    shape = tuple(np.ceil(np.array(float_ra.shape) / scale  + (2 / scale)).astype('int'))
-    transform = float_ra.transform * Affine.translation(-1, -1) * Affine.scale(scale)
-    return float_ra.reproject(transform=transform, shape=shape, resampling=Resampling.nearest)
-
-
-@pytest.fixture
-def high_res_unalign_float_ra(float_ra):
-    """
-    A higher resolution version of float_ra, but on a different pixel grid.
-    """
-    scale = 0.45  # resolution scaling
-    # pad scaled image with a border of ~1 float_ra pixel
-    shape = tuple(np.ceil(np.array(float_ra.shape) / scale + (2 / scale)).astype('int'))
-    transform = float_ra.transform * Affine.translation(-1, -1) * Affine.scale(scale)
-    return float_ra.reproject(transform=transform, shape=shape, resampling=Resampling.bilinear)
-
-
 @pytest.mark.parametrize('method, kernel_shape', [
     (Method.gain, (1, 1)),
     (Method.gain, (3, 3)),
@@ -142,11 +116,89 @@ def test_src_basic_apply(float_ra: RasterArray):
     assert (out_ra.array[out_ra.mask] == pytest.approx(src_ra.array[out_ra.mask] + 1, abs=1e-2))
 
 
+@pytest.mark.parametrize('method, param_image', [
+    (Method.gain, True),
+    (Method.gain, False),
+    (Method.gain_offset, True),
+    (Method.gain_offset, False),
+    (Method.gain_blk_offset, True),
+    (Method.gain_blk_offset, False),
+])
+def test_ref_param_image(float_ra, high_res_align_float_ra, method, param_image):
+    """ Test R2 band is added correctly with param_image=True """
+    kernel_model = RefSpaceModel(method, (5, 5), param_image=param_image, r2_inpaint_thresh=None)
+    src_ra = high_res_align_float_ra
+    ref_ra = float_ra
+    param_ra = kernel_model.fit(ref_ra, src_ra)
+    if param_image:
+        assert (param_ra.count == 3)
+        assert np.nanmax(param_ra.array[2]) <= 1
+    else:
+        assert (param_ra.count == 2)
+
+
+@pytest.mark.parametrize('method, param_image', [
+    (Method.gain, True),
+    (Method.gain, False),
+    (Method.gain_offset, True),
+    (Method.gain_offset, False),
+    (Method.gain_blk_offset, True),
+    (Method.gain_blk_offset, False),
+])
+def test_src_param_image(float_ra, high_res_align_float_ra, method, param_image):
+    """ Test R2 band is added correctly with param_image=True """
+    kernel_model = SrcSpaceModel(method, (5, 5), param_image=param_image, r2_inpaint_thresh=None)
+    src_ra = float_ra
+    ref_ra = high_res_align_float_ra
+    param_ra = kernel_model.fit(ref_ra, src_ra)
+    if param_image:
+        assert (param_ra.count == 3)
+        assert np.nanmax(param_ra.array[2]) <= 1
+    else:
+        assert (param_ra.count == 2)
+
+
+@pytest.mark.parametrize('kernel_shape', [((5, 5)), ((5, 7)), ((9, 9))])
+def test_r2_inpainting(high_res_align_float_ra, kernel_shape):
+    """ Test R2 values and in-painting """
+
+    # make src and ref the same so we have known parameters
+    src_ra = high_res_align_float_ra
+    ref_ra = high_res_align_float_ra.copy()
+
+    # find indices and masks to set a ref pixel to -100, so that r2 values are low for all kernels covering that pixel
+    low_r2_loc = np.floor(np.array(ref_ra.shape) / 2).astype('int')
+    low_r2_ul = (low_r2_loc - np.floor((np.array(kernel_shape) / 2))).astype('int')
+    low_r2_mask = np.zeros_like(ref_ra.mask).astype('bool')
+    low_r2_mask[low_r2_ul[0]: low_r2_ul[0] + kernel_shape[0], low_r2_ul[1]: low_r2_ul[1] + kernel_shape[1]] = True
+    ref_ra.array[low_r2_loc[0], low_r2_loc[1]] = -100
+
+    # fit models with and without inpainting
+    no_inpaint_kernel_model = RefSpaceModel(Method.gain_offset, kernel_shape=kernel_shape, r2_inpaint_thresh=-np.inf,
+                                            mask_partial=False)
+    no_inpaint_param_ra = no_inpaint_kernel_model.fit(ref_ra.copy(), src_ra)
+
+    inpaint_kernel_model = RefSpaceModel(Method.gain_offset, kernel_shape=kernel_shape, r2_inpaint_thresh=0.5,
+                                         mask_partial=False)
+    inpaint_param_ra = inpaint_kernel_model.fit(ref_ra.copy(), src_ra)
+
+    # test r2 values
+    for param_ra in [no_inpaint_param_ra, inpaint_param_ra]:
+        assert (param_ra.array[2, ~low_r2_mask & ref_ra.mask] == pytest.approx(1, abs=1.e-3))
+        assert (param_ra.array[2, low_r2_mask] < .5).all()
+
+    # test r2 inpainting has improved parameters
+    assert (no_inpaint_param_ra.array[1, no_inpaint_param_ra.mask] != pytest.approx(0, abs=1.e-1))
+    assert (inpaint_param_ra.array[1, inpaint_param_ra.mask] == pytest.approx(0, abs=1.e-1))
+    assert (inpaint_param_ra.array[0, inpaint_param_ra.mask].var() <
+            no_inpaint_param_ra.array[0, no_inpaint_param_ra.mask].var())
+
+
 @pytest.mark.parametrize('kernel_shape, mask_partial', [
     ((1, 1), False),
     ((1, 1), True),
     ((3, 3), True),
-    ((3, 7), True),
+    ((3, 5), True),
     ((5, 5), True),
 ])
 def test_ref_masking(float_ra, high_res_align_float_ra, kernel_shape: Tuple[int, int],
@@ -179,7 +231,7 @@ def test_ref_masking(float_ra, high_res_align_float_ra, kernel_shape: Tuple[int,
     ((1, 1), False),
     ((1, 1), True),
     ((3, 3), True),
-    ((3, 7), True),
+    ((3, 5), True),
     ((5, 5), True),
 ])
 def test_src_masking(float_ra, high_res_align_float_ra, high_res_unalign_float_ra, kernel_shape: Tuple[int, int],
@@ -199,12 +251,22 @@ def test_src_masking(float_ra, high_res_align_float_ra, high_res_unalign_float_r
         test_mask = cv2.erode(src_ra.mask.astype('uint8'), np.ones(np.array(kernel_shape) + 2))
         assert (test_mask == param_ra.mask).all()
 
-# TODO:
-# - different src and ref masks (check param mask is as expected)
-# - src and ref not aligned on same grid (check we don't lose data, and that params are close to expected similar to above)
-#    actually this is not really KernelModel's problem, more relevant to RasterPair
-# - r2 inpainting (above e.g. has r2~1 so does not do inpainting, not sure really how to test this... make artifical bad r2 area)
-# - mask-partial works as expected for src and ref space (if possible check explicity with synthetic data)
-# - separate fit and apply tests if possible.  apply does mask_partial in for ref-space model.  fit does it for src space model.
-# - make fixtures for what make sense to make fixtures of, the way we make ref and src above is redundant, make one high res and one low res
-# - test proc_crs being forced to opp of its auto val
+
+def test_ref_force_proc_crs(float_ra, high_res_unalign_float_ra):
+    """ Test fitting models in ref space with low res src """
+    kernel_model = RefSpaceModel(Method.gain_blk_offset, (5, 5), mask_partial=False)
+    src_ra = float_ra
+    ref_ra = high_res_unalign_float_ra
+    param_ra = kernel_model.fit(ref_ra.copy(), src_ra)
+    out_ra = kernel_model.apply(src_ra, param_ra)
+    assert (src_ra.array[src_ra.mask] == pytest.approx(out_ra.array[out_ra.mask], abs=1))
+
+
+def test_src_force_proc_crs(float_ra, high_res_unalign_float_ra):
+    """ Test fitting models in src space with low res ref """
+    kernel_model = SrcSpaceModel(Method.gain_blk_offset, (5, 5), mask_partial=False)
+    src_ra = high_res_unalign_float_ra
+    ref_ra = float_ra
+    param_ra = kernel_model.fit(ref_ra, src_ra)
+    out_ra = kernel_model.apply(src_ra, param_ra)
+    assert (src_ra.array[src_ra.mask] == pytest.approx(out_ra.array[out_ra.mask], abs=2))
