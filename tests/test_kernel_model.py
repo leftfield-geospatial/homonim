@@ -23,7 +23,6 @@ import cv2
 import numpy as np
 import pytest
 from rasterio.enums import Resampling
-from rasterio.transform import Affine
 
 from homonim.enums import Method
 from homonim.kernel_model import SrcSpaceModel, RefSpaceModel
@@ -158,8 +157,8 @@ def test_src_param_image(float_ra, high_res_align_float_ra, method, param_image)
         assert (param_ra.count == 2)
 
 
-@pytest.mark.parametrize('kernel_shape', [((5, 5)), ((5, 7)), ((9, 9))])
-def test_r2_inpainting(high_res_align_float_ra, kernel_shape):
+@pytest.mark.parametrize('kernel_shape', [(5, 5), (5, 7), (9, 9)])
+def test_r2_inpainting(high_res_align_float_ra: RasterArray, kernel_shape: Tuple[int, int]):
     """ Test R2 values and in-painting """
 
     # make src and ref the same so we have known parameters
@@ -234,7 +233,7 @@ def test_ref_masking(float_ra, high_res_align_float_ra, kernel_shape: Tuple[int,
     ((3, 5), True),
     ((5, 5), True),
 ])
-def test_src_masking(float_ra, high_res_align_float_ra, high_res_unalign_float_ra, kernel_shape: Tuple[int, int],
+def test_src_masking(float_ra, high_res_align_float_ra, kernel_shape: Tuple[int, int],
                      mask_partial: bool):
     kernel_model = SrcSpaceModel(Method.gain_blk_offset, kernel_shape, mask_partial=mask_partial)
     src_ra = float_ra

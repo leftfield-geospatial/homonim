@@ -16,17 +16,15 @@
     You should have received a copy of the GNU Affero General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
-import pathlib
 
 import numpy as np
 import pytest
 import rasterio as rio
 from rasterio.crs import CRS
-from rasterio.enums import ColorInterp, Resampling
+from rasterio.enums import Resampling
 from rasterio.transform import Affine
 from rasterio.windows import Window
 
-from homonim import root_path
 from homonim.errors import ImageProfileError, ImageFormatError
 from homonim.raster_array import RasterArray
 
