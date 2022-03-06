@@ -17,31 +17,44 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
-from homonim.kernel_model import SrcSpaceModel, RefSpaceModel, KernelModel
-from homonim.raster_array import RasterArray
-from homonim.enums import Method, ProcCrs
-import numpy as np
-import rasterio as rio
-from rasterio.transform import Affine
-from rasterio.enums import Resampling
-from rasterio.windows import Window
-import pytest
-import cv2
 from typing import Tuple
 
-@pytest.fixture()
-def high_res_float_ra(float_ra):
-    scale = 1/3          # resolution scaling
-    shape = tuple(np.round(np.array(float_ra.shape)/scale).astype('int') + 2)
-    transform = float_ra.transform  * Affine.scale(scale) * Affine.translation(-1, -1)
+import cv2
+import numpy as np
+import pytest
+from rasterio.enums import Resampling
+from rasterio.transform import Affine
+
+from homonim.enums import Method
+from homonim.kernel_model import SrcSpaceModel, RefSpaceModel
+from homonim.raster_array import RasterArray
+
+
+@pytest.fixture
+def high_res_align_float_ra(float_ra):
+    """
+    A higher resolution version of float_ra.
+    Aligned with the float_ra pixel grid, so that re-projection back to float_ra space will give the float_ra
+    mask, and ~data (resampling method dependent).
+    """
+    scale = 1 / 2  # resolution scaling
+    # pad scaled image with a border of 1 float_ra pixel
+    shape = tuple(np.ceil(np.array(float_ra.shape) / scale  + (2 / scale)).astype('int'))
+    transform = float_ra.transform * Affine.translation(-1, -1) * Affine.scale(scale)
     return float_ra.reproject(transform=transform, shape=shape, resampling=Resampling.nearest)
 
-@pytest.fixture()
-def high_res_offset_float_ra(float_ra):
-    scale = np.pi/10          # resolution scaling
-    shape = tuple(np.round(np.array(float_ra.shape)/scale).astype('int') + 2)  # pad scaled image with 2/scale pixels
-    transform = float_ra.transform  * Affine.scale(scale) * Affine.translation(-1, -1)
+
+@pytest.fixture
+def high_res_unalign_float_ra(float_ra):
+    """
+    A higher resolution version of float_ra, but on a different pixel grid.
+    """
+    scale = 0.45  # resolution scaling
+    # pad scaled image with a border of ~1 float_ra pixel
+    shape = tuple(np.ceil(np.array(float_ra.shape) / scale + (2 / scale)).astype('int'))
+    transform = float_ra.transform * Affine.translation(-1, -1) * Affine.scale(scale)
     return float_ra.reproject(transform=transform, shape=shape, resampling=Resampling.bilinear)
+
 
 @pytest.mark.parametrize('method, kernel_shape', [
     (Method.gain, (1, 1)),
@@ -51,13 +64,13 @@ def high_res_offset_float_ra(float_ra):
     (Method.gain_offset, (5, 5)),
     (Method.gain_offset, (5, 5)),
 ])
-def test_ref_basic_fit(float_ra: RasterArray, high_res_float_ra: RasterArray, method: Method,
+def test_ref_basic_fit(float_ra: RasterArray, high_res_align_float_ra: RasterArray, method: Method,
                        kernel_shape: Tuple[int, int]):
     """Test that models are fitted correctly using known parameters"""
 
     # mask_partial is only applied in RefSpaceModel.apply(), so we just set it False here
     kernel_model = RefSpaceModel(method, kernel_shape, mask_partial=False, r2_inpaint_thresh=0.25)
-    src_ra = high_res_float_ra
+    src_ra = high_res_align_float_ra
     ref_ra = float_ra
 
     param_ra = kernel_model.fit(ref_ra.copy(), src_ra)
@@ -67,6 +80,7 @@ def test_ref_basic_fit(float_ra: RasterArray, high_res_float_ra: RasterArray, me
     assert param_ra.array[0, param_ra.mask] == pytest.approx(1, abs=1.e-2)
     assert param_ra.array[1, param_ra.mask] == pytest.approx(0, abs=1.e-2)
 
+
 @pytest.mark.parametrize('method, kernel_shape', [
     (Method.gain, (1, 1)),
     (Method.gain, (3, 3)),
@@ -75,12 +89,12 @@ def test_ref_basic_fit(float_ra: RasterArray, high_res_float_ra: RasterArray, me
     (Method.gain_offset, (5, 5)),
     (Method.gain_offset, (5, 5)),
 ])
-def test_src_basic_fit(float_ra: RasterArray, high_res_float_ra: RasterArray, method: Method,
-                              kernel_shape: Tuple[int, int]):
+def test_src_basic_fit(float_ra: RasterArray, high_res_align_float_ra: RasterArray, method: Method,
+                       kernel_shape: Tuple[int, int]):
     """Test models are fitted correctly in src space with known parameters"""
     kernel_model = SrcSpaceModel(method, kernel_shape, mask_partial=False, r2_inpaint_thresh=0.25)
     src_ra = float_ra
-    ref_ra = high_res_float_ra
+    ref_ra = high_res_align_float_ra
 
     param_ra = kernel_model.fit(ref_ra, src_ra)
     assert (param_ra.shape == src_ra.shape)
@@ -90,11 +104,11 @@ def test_src_basic_fit(float_ra: RasterArray, high_res_float_ra: RasterArray, me
     assert param_ra.array[1, param_ra.mask] == pytest.approx(0, abs=1e-2)
 
 
-def test_ref_basic_apply(float_ra: RasterArray, high_res_float_ra: RasterArray):
+def test_ref_basic_apply(float_ra: RasterArray, high_res_align_float_ra: RasterArray):
     """Test application of known ref space parameters"""
 
     kernel_model = RefSpaceModel(Method.gain_blk_offset, (5, 5), mask_partial=False)
-    src_ra = high_res_float_ra
+    src_ra = high_res_align_float_ra
 
     # create test parameters
     param_ra = float_ra.copy()
@@ -107,6 +121,7 @@ def test_ref_basic_apply(float_ra: RasterArray, high_res_float_ra: RasterArray):
     assert (out_ra.shape == src_ra.shape)
     assert (src_ra.mask == out_ra.mask).all()
     assert (out_ra.array[out_ra.mask] == pytest.approx(src_ra.array[out_ra.mask] + 1, abs=1e-2))
+
 
 def test_src_basic_apply(float_ra: RasterArray):
     """Test application of known src space parameters"""
@@ -134,10 +149,10 @@ def test_src_basic_apply(float_ra: RasterArray):
     ((3, 7), True),
     ((5, 5), True),
 ])
-def test_ref_masking(float_ra, high_res_float_ra, high_res_offset_float_ra, kernel_shape: Tuple[int, int],
-                          mask_partial: bool):
+def test_ref_masking(float_ra, high_res_align_float_ra, kernel_shape: Tuple[int, int],
+                     mask_partial: bool):
     kernel_model = RefSpaceModel(Method.gain_blk_offset, kernel_shape, mask_partial=mask_partial)
-    src_ra = high_res_float_ra
+    src_ra = high_res_align_float_ra.copy()
 
     # create test parameters
     param_ra = float_ra.copy()
@@ -149,12 +164,15 @@ def test_ref_masking(float_ra, high_res_float_ra, high_res_offset_float_ra, kern
     if not mask_partial:
         assert (src_ra.mask == out_ra.mask).all()
     else:
-        scale = np.round(np.divide(param_ra.res, src_ra.res))
-        se = np.ones((scale * (np.array(kernel_shape) + 1) + 1).astype(int))
-        test_mask = cv2.erode(src_ra.mask.astype('uint8'), se)
         assert (src_ra.mask.sum() > out_ra.mask.sum())
         assert src_ra.mask[out_ra.mask].all()
-        assert (test_mask == out_ra.mask).all()
+
+        # find and test against the expected mask
+        mask_ra = src_ra.mask_ra.reproject(**param_ra.proj_profile, nodata=None, resampling=Resampling.average)
+        mask = (mask_ra.array >= 1).astype('uint8', copy=False)  # ref pixels fully covered by src
+        mask_ra.array = cv2.erode(mask, np.ones(np.add(kernel_shape, 2)))
+        test_mask_ra = mask_ra.reproject(**src_ra.proj_profile, nodata=0, resampling=Resampling.nearest)
+        assert (test_mask_ra.array == out_ra.mask).all()
 
 
 @pytest.mark.parametrize('kernel_shape, mask_partial', [
@@ -164,11 +182,11 @@ def test_ref_masking(float_ra, high_res_float_ra, high_res_offset_float_ra, kern
     ((3, 7), True),
     ((5, 5), True),
 ])
-def test_src_masking(float_ra, high_res_float_ra, high_res_offset_float_ra, kernel_shape: Tuple[int, int],
-                          mask_partial: bool):
+def test_src_masking(float_ra, high_res_align_float_ra, high_res_unalign_float_ra, kernel_shape: Tuple[int, int],
+                     mask_partial: bool):
     kernel_model = SrcSpaceModel(Method.gain_blk_offset, kernel_shape, mask_partial=mask_partial)
-    src_ra = float_ra.copy()
-    ref_ra = high_res_float_ra
+    src_ra = float_ra
+    ref_ra = high_res_align_float_ra
 
     # create test parameters
     param_ra = kernel_model.fit(ref_ra, src_ra)
@@ -176,10 +194,9 @@ def test_src_masking(float_ra, high_res_float_ra, high_res_offset_float_ra, kern
     if not mask_partial:
         assert (src_ra.mask == param_ra.mask).all()
     else:
-        se = np.ones(np.array(kernel_shape) + 2).astype(int)
-        test_mask = cv2.erode(src_ra.mask.astype('uint8'), se)
         assert (src_ra.mask.sum() > param_ra.mask.sum())
         assert src_ra.mask[param_ra.mask].all()
+        test_mask = cv2.erode(src_ra.mask.astype('uint8'), np.ones(np.array(kernel_shape) + 2))
         assert (test_mask == param_ra.mask).all()
 
 # TODO:

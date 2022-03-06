@@ -72,8 +72,8 @@ def byte_profile(byte_array):
 @pytest.fixture
 def float_array():
     array = np.array(range(1, 201), dtype='float32').reshape(20, 10)
-    array[:, [0, -1]] = float('nan')
-    array[[0, -1], :] = float('nan')
+    array[:, [0, 1, -2, -1]] = float('nan')
+    array[[0, 1, -2, -1], :] = float('nan')
     return array
 
 
@@ -81,7 +81,7 @@ def float_array():
 def float_profile(float_array):
     profile = {
         'crs': CRS({'init': 'epsg:3857'}),
-        'transform': Affine.identity() * Affine.translation(1e-10, 1e-10),
+        'transform': Affine.identity(),
         'count': 1 if float_array.ndim < 3 else float_array.shape[0],
         'dtype': rio.float32,
         'driver': 'GTiff',
@@ -105,8 +105,8 @@ def rgb_byte_ra(byte_array, byte_profile):
 
 
 @pytest.fixture
-def byte_file(tmpdir, byte_array, byte_profile):
-    byte_filename = pathlib.Path(str(tmpdir)).joinpath('uint8.tif')
+def byte_file(tmp_path, byte_array, byte_profile):
+    byte_filename = tmp_path.joinpath('uint8.tif')
     with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
         with rio.open(byte_filename, 'w', **byte_profile) as ds:
             ds.write(byte_array, indexes=1)
@@ -114,8 +114,8 @@ def byte_file(tmpdir, byte_array, byte_profile):
 
 
 @pytest.fixture
-def float_file(tmpdir, float_array, float_profile):
-    float_filename = pathlib.Path(str(tmpdir)).joinpath('float32.tif')
+def float_file(tmp_path, float_array, float_profile):
+    float_filename = tmp_path.joinpath('float32.tif')
     with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
         with rio.open(float_filename, 'w', **float_profile) as ds:
             ds.write(float_array, indexes=1)
@@ -123,10 +123,10 @@ def float_file(tmpdir, float_array, float_profile):
 
 
 @pytest.fixture
-def rgba_file(tmpdir, byte_array, byte_profile):
+def rgba_file(tmp_path, byte_array, byte_profile):
     rgba_array = np.stack((byte_array,) * 4, axis=0)
     rgba_array[3] = (rgba_array[0] != byte_profile['nodata']) * 255
-    rgba_filename = pathlib.Path(str(tmpdir)).joinpath('rgba.tif')
+    rgba_filename = tmp_path.joinpath('rgba.tif')
     rgba_profile = byte_profile.copy()
     rgba_profile.update(count=4, nodata=None,
                         colorinterp=[ColorInterp.red, ColorInterp.green, ColorInterp.blue, ColorInterp.alpha])
@@ -137,8 +137,8 @@ def rgba_file(tmpdir, byte_array, byte_profile):
 
 
 @pytest.fixture
-def masked_file(tmpdir, byte_array, byte_profile):
-    masked_filename = pathlib.Path(str(tmpdir)).joinpath('masked.tif')
+def masked_file(tmp_path, byte_array, byte_profile):
+    masked_filename = tmp_path.joinpath('masked.tif')
     with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
         with rio.open(masked_filename, 'w', **byte_profile) as ds:
             ds.write(byte_array, indexes=1)

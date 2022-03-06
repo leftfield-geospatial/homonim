@@ -99,7 +99,7 @@ def test_from_profile_noarray(byte_profile):
 
 @pytest.mark.parametrize('missing_key', ['crs', 'transform', 'nodata', 'width', 'height', 'count', 'dtype'])
 def test_from_profile_missingkey(byte_profile, missing_key):
-    profile = byte_profile.copy()
+    profile = byte_profile
     profile.pop(missing_key)
     with pytest.raises(ImageProfileError):
         RasterArray.from_profile(None, profile)
@@ -162,8 +162,8 @@ def test_slice_to_bounds(byte_ra: RasterArray):
         byte_ra.slice_to_bounds(*byte_ra.window_bounds(Window(-1, -1, byte_ra.width, byte_ra.height)))
 
 
-def test_to_rio_dataset(byte_ra: RasterArray, tmpdir):
-    ds_filename = pathlib.Path(str(tmpdir)).joinpath('temp.tif')
+def test_to_rio_dataset(byte_ra: RasterArray, tmp_path):
+    ds_filename = tmp_path.joinpath('temp.tif')
     with rio.open(ds_filename, 'w', driver='GTiff', **byte_ra.profile) as ds:
         byte_ra.to_rio_dataset(ds)
     with rio.open(ds_filename, 'r') as ds:
@@ -171,8 +171,8 @@ def test_to_rio_dataset(byte_ra: RasterArray, tmpdir):
     assert (test_ra.array == byte_ra.array).all()
 
 
-def test_to_rio_dataset_crop(rgb_byte_ra: RasterArray, tmpdir):
-    ds_filename = pathlib.Path(str(tmpdir)).joinpath('temp.tif')
+def test_to_rio_dataset_crop(rgb_byte_ra: RasterArray, tmp_path):
+    ds_filename = tmp_path.joinpath('temp.tif')
     indexes = [1, 2, 3]
     # crop the raster array and write to full dataset
     crop_window = Window(1, 1, rgb_byte_ra.width - 2, rgb_byte_ra.height - 2)
@@ -191,8 +191,8 @@ def test_to_rio_dataset_crop(rgb_byte_ra: RasterArray, tmpdir):
     assert (test_ra.array == rgb_byte_ra.array[(np.array(indexes) - 1, *crop_window.toslices())]).all()
 
 
-def test_to_rio_dataset_exceptions(rgb_byte_ra: RasterArray, tmpdir):
-    ds_filename = pathlib.Path(str(tmpdir)).joinpath('temp.tif')
+def test_to_rio_dataset_exceptions(rgb_byte_ra: RasterArray, tmp_path):
+    ds_filename = tmp_path.joinpath('temp.tif')
     with rio.open(ds_filename, 'w', driver='GTiff', **rgb_byte_ra.profile) as ds:
         with pytest.raises(ValueError):
             # window lies outside the bounds of raster array
