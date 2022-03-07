@@ -152,7 +152,7 @@ class RasterPairReader:
         """
 
         # compare source and reference resolutions
-        src_pixel_smaller = np.prod(src_im.res) < np.prod(ref_im.res)
+        src_pixel_smaller = np.prod(np.abs(src_im.res)) < np.prod(np.abs(ref_im.res))
         cmp_str = "smaller" if src_pixel_smaller else "larger"
         if proc_crs == ProcCrs.auto:
             # set proc_crs to the lowest resolution of the source and reference images
@@ -174,8 +174,8 @@ class RasterPairReader:
 
         # adjust max_block_mem to represent the size of a block in the highest resolution image, but scaled to the
         # equivalent in proc_crs.
-        src_pix_area = np.product(self._src_im.res)
-        ref_pix_area = np.product(self._ref_im.res)
+        src_pix_area = np.product(np.abs(self._src_im.res))
+        ref_pix_area = np.product(np.abs(self._ref_im.res))
         if self._proc_crs == ProcCrs.ref:
             mem_scale = src_pix_area / ref_pix_area if ref_pix_area > src_pix_area else 1.
         elif self._proc_crs == ProcCrs.src:
