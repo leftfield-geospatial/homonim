@@ -40,7 +40,7 @@ def test_read_only_properties(byte_array, byte_profile):
     assert basic_ra.nodata == byte_profile['nodata']
     assert basic_ra.transform == byte_profile['transform']
     assert basic_ra.dtype == byte_array.dtype
-    assert basic_ra.res == (byte_profile['transform'].a, byte_profile['transform'].e)
+    assert basic_ra.res == (byte_profile['transform'].a, -byte_profile['transform'].e)
     assert basic_ra.crs == byte_profile['crs']
 
 
