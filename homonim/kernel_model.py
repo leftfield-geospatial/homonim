@@ -106,6 +106,10 @@ class KernelModel:
         return dict(r2_inpaint_thresh=self._r2_inpaint_thresh, downsampling=self._downsampling,
                     upsampling=self._upsampling)
 
+    def _get_resampling(self, from_res, to_res):
+        """Get the resampling method for re-projecting from resolution `from_res` to resolution `to_res`"""
+        return self._downsampling if np.prod(np.abs(from_res)) <= np.prod(np.abs(to_res)) else self._upsampling
+
     def _r2_array(self, ref_array, src_array, param_array, mask=None, mask_sum=None, ref_sum=None, src_sum=None,
                   ref2_sum=None, src2_sum=None, src_ref_sum=None, dest_array=None, kernel_shape=None):
         """
@@ -489,7 +493,7 @@ class RefSpaceModel(KernelModel):
             R2 for each kernel model in the third band when param_image==True.
         """
         # choose resampling method based on whether we are up- or downsampling
-        resampling = self._downsampling if np.prod(src_ra.res) <= np.prod(ref_ra.res) else self._upsampling
+        resampling = self._get_resampling(src_ra.res, ref_ra.res)
         # downsample src_ra to reference CRS and grid
         src_ds_ra = src_ra.reproject(**ref_ra.proj_profile, resampling=resampling)
         # call base class fit with reference and source RasterArrays in the reference CRS & grid
@@ -517,7 +521,7 @@ class RefSpaceModel(KernelModel):
         # (to speed up the re-projection below)
         _param_ra = RasterArray.from_profile(param_ra.array[:2], param_ra.profile)
         # choose resampling method based on whether we are up- or downsampling
-        resampling = self._upsampling if np.prod(src_ra.res) < np.prod(param_ra.res) else self._downsampling
+        resampling = self._get_resampling(param_ra.res, src_ra.res)
         # re-project param_ra to source CRS and grid
         param_us_ra = _param_ra.reproject(**src_ra.proj_profile, resampling=resampling)
 
@@ -563,7 +567,7 @@ class SrcSpaceModel(KernelModel):
             R2 for each kernel model in the third band when param_image==True.
         """
         # choose resampling method based on whether we are up- or downsampling
-        resampling = self._upsampling if np.prod(src_ra.res) < np.prod(ref_ra.res) else self._downsampling
+        resampling = self._get_resampling(ref_ra.res, src_ra.res)
         # upsample ref_ra to the source CRS and grid
         ref_us_ra = ref_ra.reproject(**src_ra.proj_profile, resampling=resampling)
 
