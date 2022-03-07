@@ -256,7 +256,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
     @property
     def res(self) -> Tuple[float, float]:
         """Array (x, y) resolution (m)."""
-        return tuple(np.abs((self._transform.a, self._transform.e)))
+        return (self._transform.a, -self._transform.e)
 
     @property
     def bounds(self) -> Tuple[float,]:
@@ -383,7 +383,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         kwargs: optional
                 Arguments to passed through the dataset's write() method.
         """
-        if not np.all(self.res == np.abs(rio_dataset.res)):
+        if not np.all(self.res == rio_dataset.res):
             raise ImageFormatError(f"The dataset resolution does not match that of the RasterArray. "
                                    f"Dataset res: {rio_dataset.res}, RasterArray res: {self.res}")
         # TODO: raise an issue with rasterio about the speed of crs comparison.  comparing the _crs attr is faster.
