@@ -202,6 +202,10 @@ class RasterPairReader:
         if np.any(block_shape < (1, 1)):
             raise errors.BlockSizeError(f"The auto block shape is smaller than a pixel.  Increase 'max_block_mem'.")
 
+        if np.any(block_shape <= self._overlap):
+            raise errors.BlockSizeError(f"The auto block shape is <= to the overlap.  Increase 'max_block_mem' or "
+                                          "decrease 'overlap'.")
+
         block_shape = np.ceil(block_shape).astype('int')
         # warn if the block shape in the highest res image is less than a typical tile
         if np.any(block_shape / mem_scale < (256, 256)):
@@ -306,20 +310,20 @@ class RasterPairReader:
     @property
     def block_shape(self) -> Tuple[int, int]:
         """The image block shape (rows, columns) in pixels of the 'proc_crs' image."""
-        return self._block_shape
+        return tuple(self._block_shape)
 
     @property
     def closed(self) -> bool:
         """True when the RasterPair is closed, otherwise False."""
         return not self._src_im or not self._ref_im or self._src_im.closed or self._ref_im.closed
 
-    def read(self, block):
+    def read(self, block_pair):
         """
         Read a matching pair of source and reference image blocks.
 
         Parameters
         ----------
-        block: BlockPair
+        block_pair: BlockPair
             The BlockPair named tuple (as returned by block_pairs()) specifying the source and reference blocks to be
             read.
 
@@ -333,11 +337,11 @@ class RasterPairReader:
         self._assert_open()
 
         with self._src_lock:
-            src_ra = RasterArray.from_rio_dataset(self._src_im, indexes=self._src_bands[block.band_i],
-                                                  window=block.src_in_block)
+            src_ra = RasterArray.from_rio_dataset(self._src_im, indexes=self._src_bands[block_pair.band_i],
+                                                  window=block_pair.src_in_block)
         with self._ref_lock:
-            ref_ra = RasterArray.from_rio_dataset(self._ref_im, indexes=self._ref_bands[block.band_i],
-                                                  window=block.ref_in_block)
+            ref_ra = RasterArray.from_rio_dataset(self._ref_im, indexes=self._ref_bands[block_pair.band_i],
+                                                  window=block_pair.ref_in_block)
         return src_ra, ref_ra
 
     def block_pairs(self):
