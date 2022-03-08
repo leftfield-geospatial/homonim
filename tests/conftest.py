@@ -117,8 +117,11 @@ def float_50cm_ra(float_100cm_ra):
     """
     scale = 1 / 2  # resolution scaling
     # pad scaled image with a border of 1 float_100cm_ra pixel
-    shape = tuple(np.ceil(np.array(float_100cm_ra.shape) / scale + (2 / scale)).astype('int'))
-    transform = float_100cm_ra.transform * Affine.translation(-1, -1) * Affine.scale(scale)
+    # shape = tuple(np.ceil(np.array(float_100cm_ra.shape) / scale + (2 / scale)).astype('int'))
+    # transform = float_100cm_ra.transform * Affine.translation(-1, -1) * Affine.scale(scale)
+    shape = tuple(np.ceil(np.array(float_100cm_ra.shape) / scale).astype('int'))
+    transform = float_100cm_ra.transform * Affine.scale(scale)
+
     return float_100cm_ra.reproject(transform=transform, shape=shape, resampling=Resampling.nearest)
 
 
@@ -129,8 +132,10 @@ def float_45cm_ra(float_100cm_ra):
     """
     scale = 0.45  # resolution scaling
     # pad scaled image with a border of ~1 float_100cm_ra pixel
-    shape = tuple(np.ceil(np.array(float_100cm_ra.shape) / scale + (2 / scale)).astype('int'))
-    transform = float_100cm_ra.transform * Affine.translation(-1, -1) * Affine.scale(scale)
+    # shape = tuple(np.ceil(np.array(float_100cm_ra.shape) / scale + (2 / scale)).astype('int'))
+    # transform = float_100cm_ra.transform * Affine.translation(-1, -1) * Affine.scale(scale)
+    shape = tuple(np.round(np.array(float_100cm_ra.shape) / scale + 1).astype('int'))
+    transform = float_100cm_ra.transform * Affine.scale(scale) * Affine.translation(-.5, -.5)
     return float_100cm_ra.reproject(transform=transform, shape=shape, resampling=Resampling.bilinear)
 
 
@@ -191,21 +196,42 @@ def float_100cm_ref_file(tmp_path, float_100cm_ra):
 
 @pytest.fixture
 def float_50cm_src_file(tmp_path, float_50cm_ra):
-    shape = (np.array(float_50cm_ra.shape) - 2).astype('int')
-    transform = float_50cm_ra.transform * Affine.translation(1, 1)
-    profile = float_50cm_ra.profile
-    profile.update(transform=transform, width=shape[1], height=shape[0])
     filename = tmp_path.joinpath('float_50cm_src.tif')
     with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
         with rio.open(filename, 'w', **float_50cm_ra.profile) as ds:
-            ds.write(float_50cm_ra.array[1:-1, 1:-1], indexes=1)
+            ds.write(float_50cm_ra.array, indexes=1)
     return filename
 
 
 @pytest.fixture
 def float_50cm_ref_file(tmp_path, float_50cm_ra):
+    shape = (np.array(float_50cm_ra.shape) + 2).astype('int')
+    transform = float_50cm_ra.transform * Affine.translation(-1, -1)
+    profile = float_50cm_ra.profile
+    profile.update(transform=transform, width=shape[1], height=shape[0])
     filename = tmp_path.joinpath('float_50cm_ref.tif')
     with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
-        with rio.open(filename, 'w', **float_50cm_ra.profile) as ds:
+        with rio.open(filename, 'w', **profile) as ds:
             ds.write(float_50cm_ra.array, indexes=1, window=Window(1, 1, float_50cm_ra.width, float_50cm_ra.height))
+    return filename
+
+@pytest.fixture
+def float_45cm_src_file(tmp_path, float_45cm_ra):
+    filename = tmp_path.joinpath('float_45cm_src.tif')
+    with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
+        with rio.open(filename, 'w', **float_45cm_ra.profile) as ds:
+            ds.write(float_45cm_ra.array, indexes=1)
+    return filename
+
+
+@pytest.fixture
+def float_45cm_ref_file(tmp_path, float_45cm_ra):
+    shape = (np.array(float_45cm_ra.shape) + 2).astype('int')
+    transform = float_45cm_ra.transform * Affine.translation(-1, -1)
+    profile = float_45cm_ra.profile
+    profile.update(transform=transform, width=shape[1], height=shape[0])
+    filename = tmp_path.joinpath('float_45cm_ref.tif')
+    with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
+        with rio.open(filename, 'w', **profile) as ds:
+            ds.write(float_45cm_ra.array, indexes=1, window=Window(1, 1, float_45cm_ra.width, float_45cm_ra.height))
     return filename
