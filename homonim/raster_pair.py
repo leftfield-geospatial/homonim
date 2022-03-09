@@ -203,6 +203,10 @@ class RasterPairReader:
             raise errors.BlockSizeError(f"The auto block shape is smaller than a pixel.  Increase 'max_block_mem'.")
 
         block_shape = np.ceil(block_shape).astype('int')
+
+        if np.any(block_shape <= self._overlap):
+            raise errors.BlockSizeError(f"The auto block shape is smaller than the overlap.  Increase 'max_block_mem'.")
+
         # warn if the block shape in the highest res image is less than a typical tile
         if np.any(block_shape / mem_scale < (256, 256)):
             logger.warning(f"The auto block shape is small: {block_shape}.  Increase 'max_block_mem' to improve "
