@@ -165,8 +165,8 @@ def test_to_rio_dataset(byte_ra: RasterArray, tmp_path):
     with rio.open(ds_filename, 'w', driver='GTiff', **byte_ra.profile) as ds:
         byte_ra.to_rio_dataset(ds)
     with rio.open(ds_filename, 'r') as ds:
-        test_ra = RasterArray.from_rio_dataset(ds)
-    assert (test_ra.array == byte_ra.array).all()
+        test_array = ds.read(indexes=1)
+    assert (test_array == byte_ra.array).all()
 
 
 def test_to_rio_dataset_crop(rgb_byte_ra: RasterArray, tmp_path):
@@ -178,15 +178,15 @@ def test_to_rio_dataset_crop(rgb_byte_ra: RasterArray, tmp_path):
     with rio.open(ds_filename, 'w', driver='GTiff', **rgb_byte_ra.profile) as ds:
         crop_ra.to_rio_dataset(ds, indexes=indexes, window=crop_window)
     with rio.open(ds_filename, 'r') as ds:
-        test_ra = RasterArray.from_rio_dataset(ds)
-    assert (test_ra.array[(np.array(indexes) - 1, *crop_window.toslices())] == crop_ra.array).all()
+        test_array = ds.read(indexes=indexes)
+    assert (test_array[(np.array(indexes) - 1, *crop_window.toslices())] == crop_ra.array).all()
 
     # crop the dataset and write in the full raster array
     with rio.open(ds_filename, 'w', driver='GTiff', **crop_ra.profile) as ds:
         rgb_byte_ra.to_rio_dataset(ds, indexes=indexes)
     with rio.open(ds_filename, 'r') as ds:
-        test_ra = RasterArray.from_rio_dataset(ds)
-    assert (test_ra.array == rgb_byte_ra.array[(np.array(indexes) - 1, *crop_window.toslices())]).all()
+        test_array = ds.read(indexes=indexes)
+    assert (test_array == rgb_byte_ra.array[(np.array(indexes) - 1, *crop_window.toslices())]).all()
 
 
 def test_to_rio_dataset_exceptions(rgb_byte_ra: RasterArray, tmp_path):
