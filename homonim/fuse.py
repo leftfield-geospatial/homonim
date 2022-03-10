@@ -53,7 +53,7 @@ class RasterFuse:
     default_model_config = KernelModel.default_config
 
     def __init__(self, src_filename, ref_filename, homo_path, method, kernel_shape, proc_crs=ProcCrs.auto,
-                 overwrite=True, homo_config=None, model_config=None, out_profile=None):
+                 overwrite=False, homo_config=None, model_config=None, out_profile=None):
         """
         Create a RasterFuse class.
 
@@ -119,13 +119,14 @@ class RasterFuse:
         self._method = method
 
         self._kernel_shape = utils.validate_kernel_shape(kernel_shape, method=method)
-        homo_config['threads'] = utils.validate_threads(homo_config['threads'])
 
         self._src_filename = pathlib.Path(src_filename)
         self._ref_filename = pathlib.Path(ref_filename)
         self._config = homo_config if homo_config else self.default_homo_config
         self._model_config = model_config if model_config else self.default_model_config
         self._out_profile = out_profile if out_profile else self.default_out_profile
+
+        self._config['threads'] = utils.validate_threads(self._config['threads'])
 
         # get the block overlap for kernel_shape
         overlap = utils.overlap_for_kernel(self._kernel_shape)
@@ -140,10 +141,10 @@ class RasterFuse:
         # create the KernelModel according to proc_crs
         if self._proc_crs == ProcCrs.ref:
             self._model = RefSpaceModel(method=method, kernel_shape=kernel_shape,
-                                        param_image=self._config['param_image'], **model_config)
+                                        param_image=self._config['param_image'], **self._model_config)
         elif self._proc_crs == ProcCrs.src:
             self._model = SrcSpaceModel(method=method, kernel_shape=kernel_shape,
-                                        param_image=self._config['param_image'], **model_config)
+                                        param_image=self._config['param_image'], **self._model_config)
         else:
             raise ValueError(f'Invalid proc_crs: {proc_crs}, should be resolved to ProcCrs.ref or ProcCrs.src')
 
