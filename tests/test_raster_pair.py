@@ -18,11 +18,15 @@
 """
 
 import pytest
+import rasterio as rio
 from rasterio.windows import Window, union
+from rasterio.enums import Resampling
+from rasterio import MemoryFile
 
 from homonim.enums import ProcCrs
 from homonim.errors import ImageContentError, BlockSizeError, IoError
 from homonim.raster_pair import RasterPairReader
+from homonim.raster_array import RasterArray
 
 
 @pytest.mark.parametrize('src_file, ref_file, expected_proc_crs', [
@@ -96,7 +100,7 @@ def test_block_pair_continuity(src_file, ref_file, proc_crs, overlap, max_block_
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
     raster_pair = RasterPairReader(src_file, ref_file, proc_crs=proc_crs, overlap=overlap, max_block_mem=max_block_mem)
-    with raster_pair as rp:
+    with raster_pair:
         block_pairs = list(raster_pair.block_pairs())
         prev_block_pair = block_pairs[0]
         for block_pair in block_pairs[1:]:
@@ -127,7 +131,7 @@ def test_block_pair_coverage(src_file, ref_file, proc_crs, overlap, max_block_me
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
     raster_pair = RasterPairReader(src_file, ref_file, proc_crs=proc_crs, overlap=overlap, max_block_mem=max_block_mem)
-    with raster_pair as rp:
+    with raster_pair:
         block_pairs = list(raster_pair.block_pairs())
         accum_block_pair = block_pairs[0]._asdict()
 
@@ -147,18 +151,48 @@ def test_block_pair_coverage(src_file, ref_file, proc_crs, overlap, max_block_me
             assert (accum_block_pair['ref_in_block'].intersection(raster_pair._ref_win) == raster_pair._ref_win)
             assert (accum_block_pair['ref_out_block'].intersection(raster_pair._ref_win) == raster_pair._ref_win)
 
-# TO DO:
-# - test exceptions in init for band mismatch, non-coverage
-# - test block contigiousness for different overlaps
-# - test reading blocks and that ref<->src block reprojections don't lose mask pixels for different overlaps.  use the non-aligned file(s) for this.
-# - test resolution of proc-crs, and forcing.  and check the above two tests for all cases of proc-crs??
-# - in the case of non-aligned image, check that src gets boundless window ?
-# - test closed property working
-# - test src and ref in different CRSs
 
-# Exceptions
-# - test 12 bit exception with synthetic file... except we won't be able to create one.
-# - ref doesn't cover src
-# - ref doesn't have enough bands
-# - auto block shape < 1
-# - IoError if using without opening
+@pytest.mark.parametrize('src_file, ref_file, proc_crs, overlap, max_block_mem', [
+    ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (0, 0), 1.e-3),
+    ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (2, 2), 1.e-3),
+    ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (0, 0), 2.e-4),
+    ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (2, 2), 2.e-4),
+    ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (0, 0), 1.e-3),
+    ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 1.e-3),
+    ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (0, 0), 2.e-4),
+    ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 2.e-4),
+])
+def test_block_pair_io(src_file, ref_file, proc_crs, overlap, max_block_mem, request):
+    """
+    An RasterPairReader-RasterArray integration test for checking that blocks provided by RasterPairReader reprojected
+    and written with RasterArray without loss of data.
+    """
+    src_file = request.getfixturevalue(src_file)
+    ref_file = request.getfixturevalue(ref_file)
+    raster_pair = RasterPairReader(src_file, ref_file, proc_crs=proc_crs, overlap=overlap, max_block_mem=max_block_mem)
+    with MemoryFile() as src_mf, MemoryFile() as ref_mf, raster_pair:
+        with src_mf.open(**raster_pair.src_im.profile) as src_ds, ref_mf.open(**raster_pair.ref_im.profile) as ref_ds:
+            block_pairs = list(raster_pair.block_pairs())
+            for block_pair in block_pairs:
+                src_ra, ref_ra = raster_pair.read(block_pair)
+                if raster_pair.proc_crs == ProcCrs.ref:
+                    _src_ra = src_ra.reproject(**ref_ra.proj_profile, resampling=Resampling.average)
+                    __src_ra = _src_ra.reproject(**src_ra.proj_profile, resampling=Resampling.cubic_spline)
+                    _src_ra.to_rio_dataset(ref_ds, indexes=1, window=block_pair.ref_out_block)
+                    __src_ra.to_rio_dataset(src_ds, indexes=1, window=block_pair.src_out_block)
+                else:
+                    _ref_ra = ref_ra.reproject(**src_ra.proj_profile, resampling=Resampling.average)
+                    __ref_ra = _ref_ra.reproject(**ref_ra.proj_profile, resampling=Resampling.cubic_spline)
+                    __ref_ra.to_rio_dataset(ref_ds, indexes=1, window=block_pair.ref_out_block)
+                    _ref_ra.to_rio_dataset(src_ds, indexes=1, window=block_pair.src_out_block)
+
+        with rio.open(src_file, 'r') as src_ds, src_mf.open() as test_src_ds:
+            src_mask = src_ds.dataset_mask().astype('bool', copy=False)
+            test_mask = test_src_ds.dataset_mask().astype('bool', copy=False)
+            assert (test_mask[src_mask]).all()
+
+        with rio.open(ref_file, 'r') as ref_ds, ref_mf.open() as test_ref_ds:
+            ref_mask = ref_ds.dataset_mask().astype('bool', copy=False)
+            test_mask = test_ref_ds.dataset_mask().astype('bool', copy=False)
+            assert (test_mask[ref_mask]).all()
+
