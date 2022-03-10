@@ -16,24 +16,159 @@
     You should have received a copy of the GNU Affero General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
+import os
 import pathlib
 from typing import Tuple
 
 import cv2
 import numpy as np
 import pandas as pd
+import pytest
 import rasterio as rio
 from click.testing import CliRunner
 from rasterio.windows import Window
 from tqdm import tqdm
 
 from homonim import cli
-from homonim import utils, enums
+from homonim import utils
 from homonim.compare import RasterCompare
+from homonim.enums import ProcCrs, Method
 from homonim.fuse import RasterFuse
+from homonim.kernel_model import KernelModel
 from homonim.raster_pair import RasterPairReader
 from tests.common import TestBase
 
+
+@pytest.mark.parametrize('src_file, ref_file, method', [
+    ('float_50cm_src_file', 'float_100cm_ref_file', Method.gain),
+    ('float_50cm_src_file', 'float_100cm_ref_file', Method.gain_blk_offset),
+    ('float_50cm_src_file', 'float_100cm_ref_file', Method.gain_offset),
+    ('float_100cm_src_file', 'float_50cm_ref_file', Method.gain),
+    ('float_100cm_src_file', 'float_50cm_ref_file', Method.gain_blk_offset),
+    ('float_100cm_src_file', 'float_50cm_ref_file', Method.gain_offset),
+])
+def test_creation(src_file, ref_file, method, tmp_path, request):
+    """Test creation of RasterFuse"""
+    src_file = request.getfixturevalue(src_file)
+    ref_file = request.getfixturevalue(ref_file)
+    model_config = KernelModel.default_config.copy()
+    model_config.update(mask_partial=True)
+    homo_config = RasterFuse.default_homo_config.copy()
+    homo_config.update(param_image=True)
+    out_profile = RasterFuse.default_out_profile.copy()
+    out_profile.update(driver='HFA', creation_options={})
+
+    raster_fuse = RasterFuse(src_file, ref_file, tmp_path, method, (5, 5), homo_config=homo_config,
+                             model_config=model_config, out_profile=out_profile)
+    with raster_fuse:
+        assert (raster_fuse.method == method)
+        assert (raster_fuse.kernel_shape == (5, 5))
+        assert (raster_fuse.proc_crs != ProcCrs.auto)
+        assert (raster_fuse.homo_filename is not None)
+        assert (raster_fuse.param_filename is not None)
+        assert (not raster_fuse.closed)
+
+        assert (raster_fuse._config == homo_config)
+        assert (raster_fuse._model_config == model_config)
+        for k, v in model_config.items():
+            assert (raster_fuse._model.__getattribute__(f'_{k}') == v)
+        assert (raster_fuse._out_profile == out_profile)
+
+    assert (raster_fuse.closed)
+
+
+@pytest.mark.parametrize('overwrite', [False, True])
+def test_set_overwrite(tmp_path, float_50cm_src_file, float_100cm_ref_file, overwrite):
+    homo_config = RasterFuse.default_homo_config.copy()
+    homo_config.update(param_image=True)
+    params = dict(src_filename=float_50cm_src_file, ref_filename=float_100cm_ref_file, homo_path=tmp_path,
+                  method=Method.gain_blk_offset, kernel_shape=(5, 5), homo_config=homo_config, overwrite=overwrite)
+
+    raster_fuse = RasterFuse(**params)
+    raster_fuse.homo_filename.touch()
+    if not overwrite:
+        with pytest.raises(FileExistsError):
+            _ = RasterFuse(**params)
+    else:
+        _ = RasterFuse(**params)
+
+    os.remove(raster_fuse.homo_filename)
+    raster_fuse.param_filename.touch()
+    if not overwrite:
+        with pytest.raises(FileExistsError):
+            _ = RasterFuse(**params)
+    else:
+        _ = RasterFuse(**params)
+
+@pytest.mark.parametrize('src_file, ref_file, method, kernel_shape, max_block_mem', [
+    ('float_45cm_src_file', 'float_100cm_ref_file', Method.gain, (1, 1), 2.e-4),
+    ('float_45cm_src_file', 'float_100cm_ref_file', Method.gain_blk_offset, (1, 1), 1.e-3),
+    ('float_45cm_src_file', 'float_100cm_ref_file', Method.gain_offset, (5, 5), 1.e-3),
+    ('float_100cm_src_file', 'float_45cm_ref_file', Method.gain, (1, 1), 2.e-4),
+    ('float_100cm_src_file', 'float_45cm_ref_file', Method.gain_blk_offset, (1, 1), 1.e-3),
+    ('float_100cm_src_file', 'float_45cm_ref_file', Method.gain_offset, (5, 5), 1.e-3),
+])
+def test_homo_file(src_file, ref_file, method, kernel_shape, max_block_mem, tmp_path, request):
+    """"""
+    src_file = request.getfixturevalue(src_file)
+    ref_file = request.getfixturevalue(ref_file)
+    homo_config = RasterFuse.default_homo_config
+    homo_config.update(max_block_mem=max_block_mem)
+    raster_fuse = RasterFuse(src_file, ref_file, tmp_path, method, kernel_shape, homo_config=homo_config)
+    with raster_fuse:
+        raster_fuse.process()
+    assert(raster_fuse.homo_filename.exists())
+    with rio.open(src_file, 'r') as src_ds, rio.open(raster_fuse.homo_filename, 'r') as out_ds:
+        src_array = src_ds.read(indexes=1)
+        src_mask = src_ds.dataset_mask().astype('bool', copy=False)
+        out_array = src_ds.read(indexes=1)
+        out_mask = out_ds.dataset_mask().astype('bool', copy=False)
+        assert(out_mask == src_mask).all()
+        assert(out_array[out_mask] == pytest.approx(src_array[src_mask], abs=1.e-3))
+
+@pytest.mark.parametrize('out_profile', [
+    dict(driver='GTiff', dtype='float32', nodata=float('nan'),
+         creation_options=dict(tiled=True, blockxsize=512, blockysize=512, compress='deflate', interleave='band',
+                               photometric=None)),
+    dict(driver='GTiff', dtype='uint8', nodata=0,
+         creation_options=dict(tiled=True, blockxsize=64, blockysize=64, compress='jpeg', interleave='pixel',
+                               photometric='ycbcr')),
+    dict(driver='PNG', dtype='uint16', nodata=0,
+         creation_options=dict()),
+])
+def test_out_profile(float_100cm_rgb_file, tmp_path, out_profile):
+    """"""
+    raster_fuse = RasterFuse(float_100cm_rgb_file, float_100cm_rgb_file, tmp_path, Method.gain_blk_offset, (3,3),
+                             out_profile=out_profile)
+    with raster_fuse:
+        raster_fuse.process()
+    assert(raster_fuse.homo_filename.exists())
+    out_profile.update(**out_profile['creation_options'])
+    out_profile.pop('creation_options')
+    with rio.open(float_100cm_rgb_file, 'r') as src_ds, rio.open(raster_fuse.homo_filename, 'r') as out_ds:
+        # test output image has been set with out_profile properties
+        for k, v in out_profile.items():
+            assert ((v is None and k not in out_ds.profile) or (out_ds.profile[k] == v) or
+                    (str(out_ds.profile[k]) == str(v)))
+
+        if src_ds.profile['driver'].lower() == out_profile['driver'].lower():
+            # source image keys including driver specific creation options, not present in out_profile
+            src_keys = set(src_ds.profile.keys()).difference(out_profile.keys())
+        else:
+            # source image keys excluding driver specific creation options, not present in out_profile
+            src_keys = {'width', 'height', 'count', 'dtype', 'crs', 'transform'}.difference(out_profile.keys())
+        # test output image has been set with src image properties not in out_profile
+        for k in src_keys:
+            v = src_ds.profile[k]
+            assert ((v is None and k not in out_ds.profile) or (out_ds.profile[k] == v) or
+                    (str(out_ds.profile[k]) == str(v)))
+
+
+# TO DO:
+# - Test config:
+#   - param_image, max_block_mem
+#   - mask_partial?  has been tested via KernelModel, perhaps test that KernelModel has been set correctly
+#   - out_profile: e.g. non-geotiff
 
 class TestFuse(TestBase):
     """Integrations tests for fuse API and CLI."""
@@ -113,13 +248,13 @@ class TestFuse(TestBase):
         # find the overlap in source and reference pixels
         proc_overlap = np.array(raster_pair.overlap)
         res_ratio = np.divide(raster_pair.ref_im.res, raster_pair.src_im.res)
-        if raster_pair._proc_crs == enums.ProcCrs.ref:
+        if raster_pair._proc_crs == ProcCrs.ref:
             other_overlap = proc_overlap * res_ratio
         else:
             other_overlap = proc_overlap / res_ratio
         other_overlap = np.round(other_overlap).astype('int')
-        src_overlap = other_overlap if raster_pair._proc_crs == enums.ProcCrs.ref else proc_overlap
-        ref_overlap = proc_overlap if raster_pair._proc_crs == enums.ProcCrs.ref else other_overlap
+        src_overlap = other_overlap if raster_pair._proc_crs == ProcCrs.ref else proc_overlap
+        ref_overlap = proc_overlap if raster_pair._proc_crs == ProcCrs.ref else other_overlap
 
         # validate the BlockPairs are contiguous and overlapping
         prev_ovl_block = ovl_blocks[0]
@@ -157,9 +292,9 @@ class TestFuse(TestBase):
     def test_api_ref_space(self):
         """Test fuse API with proc-crs==ref."""
         param_list = [
-            dict(method=enums.Method.gain, kernel_shape=(3, 3), proc_crs=enums.ProcCrs.ref),
-            dict(method=enums.Method.gain_blk_offset, kernel_shape=(5, 5), proc_crs=enums.ProcCrs.ref),
-            dict(method=enums.Method.gain_offset, kernel_shape=(9, 9), proc_crs=enums.ProcCrs.ref),
+            dict(method=Method.gain, kernel_shape=(3, 3), proc_crs=ProcCrs.ref),
+            dict(method=Method.gain_blk_offset, kernel_shape=(5, 5), proc_crs=ProcCrs.ref),
+            dict(method=Method.gain_offset, kernel_shape=(9, 9), proc_crs=ProcCrs.ref),
         ]
         for param_dict in param_list:
             with self.subTest(src_filename=self.aerial_filename.name, ref_filename=self.landsat_filename.name,
@@ -168,15 +303,15 @@ class TestFuse(TestBase):
 
     def test_api_src_space(self):
         """Test fuse API with proc-crs=src."""
-        param_dict = dict(method=enums.Method.gain, kernel_shape=(5, 5), proc_crs=enums.ProcCrs.src)
+        param_dict = dict(method=Method.gain, kernel_shape=(5, 5), proc_crs=ProcCrs.src)
         self._test_api(self.landsat_vrt, self.s2_filename, self.s2_filename, **param_dict)
 
     def test_cli(self):
         """Test fuse CLI."""
         param_list = [
-            dict(method=enums.Method.gain, kernel_shape=(1, 1), proc_crs=enums.ProcCrs.ref),
-            dict(method=enums.Method.gain_blk_offset, kernel_shape=(3, 3), proc_crs=enums.ProcCrs.ref),
-            dict(method=enums.Method.gain_offset, kernel_shape=(15, 15), proc_crs=enums.ProcCrs.ref),
+            dict(method=Method.gain, kernel_shape=(1, 1), proc_crs=ProcCrs.ref),
+            dict(method=Method.gain_blk_offset, kernel_shape=(3, 3), proc_crs=ProcCrs.ref),
+            dict(method=Method.gain_offset, kernel_shape=(15, 15), proc_crs=ProcCrs.ref),
         ]
 
         for param_dict in param_list:
@@ -201,7 +336,7 @@ class TestFuse(TestBase):
     def test_cli2(self):
         """Test fuse CLI."""
         param_list = [
-            dict(method=enums.Method.gain_blk_offset, kernel_shape=(5, 5), proc_crs=enums.ProcCrs.ref),
+            dict(method=Method.gain_blk_offset, kernel_shape=(5, 5), proc_crs=ProcCrs.ref),
         ]
 
         co_str = ''
@@ -228,4 +363,3 @@ class TestFuse(TestBase):
                     self._test_homo_correlation(src_filename, homo_filename, self.s2_filename)
 
 ##
-
