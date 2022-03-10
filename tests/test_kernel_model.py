@@ -29,6 +29,7 @@ from homonim.kernel_model import SrcSpaceModel, RefSpaceModel
 from homonim.raster_array import RasterArray
 
 
+
 @pytest.mark.parametrize('method, kernel_shape', [
     (Method.gain, (1, 1)),
     (Method.gain, (3, 3)),
@@ -39,7 +40,7 @@ from homonim.raster_array import RasterArray
 ])
 def test_ref_basic_fit(float_100cm_ra: RasterArray, float_50cm_ra: RasterArray, method: Method,
                        kernel_shape: Tuple[int, int]):
-    """Test that models are fitted correctly using known parameters"""
+    """Test that ref-space models are fitted correctly against known parameters"""
 
     # mask_partial is only applied in RefSpaceModel.apply(), so we just set it False here
     kernel_model = RefSpaceModel(method, kernel_shape, mask_partial=False, r2_inpaint_thresh=0.25)
@@ -64,7 +65,7 @@ def test_ref_basic_fit(float_100cm_ra: RasterArray, float_50cm_ra: RasterArray, 
 ])
 def test_src_basic_fit(float_100cm_ra: RasterArray, float_50cm_ra: RasterArray, method: Method,
                        kernel_shape: Tuple[int, int]):
-    """Test models are fitted correctly in src space with known parameters"""
+    """Test that src-space models are fitted correctly against known parameters"""
     kernel_model = SrcSpaceModel(method, kernel_shape, mask_partial=False, r2_inpaint_thresh=0.25)
     src_ra = float_100cm_ra
     ref_ra = float_50cm_ra
@@ -78,7 +79,7 @@ def test_src_basic_fit(float_100cm_ra: RasterArray, float_50cm_ra: RasterArray, 
 
 
 def test_ref_basic_apply(float_100cm_ra: RasterArray, float_50cm_ra: RasterArray):
-    """Test application of known ref space parameters"""
+    """Test application of known ref-space parameters"""
 
     kernel_model = RefSpaceModel(Method.gain_blk_offset, (5, 5), mask_partial=False)
     src_ra = float_50cm_ra
@@ -97,7 +98,7 @@ def test_ref_basic_apply(float_100cm_ra: RasterArray, float_50cm_ra: RasterArray
 
 
 def test_src_basic_apply(float_100cm_ra: RasterArray):
-    """Test application of known src space parameters"""
+    """Test application of known src-space parameters"""
 
     kernel_model = SrcSpaceModel(Method.gain_blk_offset, (5, 5), mask_partial=False)
     src_ra = float_100cm_ra
@@ -219,6 +220,7 @@ def test_ref_masking(float_100cm_ra, float_50cm_ra, kernel_shape: Tuple[int, int
         assert src_ra.mask[out_ra.mask].all()
 
         # find and test against the expected mask
+        # this test depends on RasterArray.reproject which is a compromise to allow thorough testing here
         mask_ra = src_ra.mask_ra.reproject(**param_ra.proj_profile, nodata=None, resampling=Resampling.average)
         mask = (mask_ra.array >= 1).astype('uint8', copy=False)  # ref pixels fully covered by src
         mask_ra.array = cv2.erode(mask, np.ones(np.add(kernel_shape, 2)))
@@ -269,3 +271,13 @@ def test_src_force_proc_crs(float_100cm_ra, float_50cm_ra):
     param_ra = kernel_model.fit(ref_ra, src_ra)
     out_ra = kernel_model.apply(src_ra, param_ra)
     assert (src_ra.array[src_ra.mask] == pytest.approx(out_ra.array[out_ra.mask], abs=2))
+
+
+@pytest.mark.parametrize('method, kernel_shape', [
+    (Method.gain, (0, 0)),
+    (Method.gain_blk_offset, (0, 0)),
+    (Method.gain_offset, (4, 5)),
+])
+def test_kernel_shape_exception(method, kernel_shape):
+    with pytest.raises(ValueError):
+        _ = RefSpaceModel(method=method, kernel_shape=kernel_shape)
