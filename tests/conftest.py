@@ -283,3 +283,14 @@ def float_45cm_ref_file(tmp_path, float_45cm_array, float_45cm_profile):
         with rio.open(filename, 'w', **profile) as ds:
             ds.write(float_45cm_array, indexes=1, window=window)
     return filename
+
+@pytest.fixture
+def float_100cm_rgb_file(tmp_path, float_100cm_array, float_100cm_profile):
+    array = np.stack((float_100cm_array, ) * 3, axis=0)
+    profile = float_100cm_profile.copy()
+    profile.update(count=3)
+    filename = tmp_path.joinpath('float_100cm_rgb.tif')
+    with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
+        with rio.open(filename, 'w', **profile) as ds:
+            ds.write(array, indexes=[1, 2, 3])
+    return filename
