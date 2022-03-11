@@ -36,7 +36,6 @@ from homonim.raster_array import RasterArray
     (Method.gain_blk_offset, (1, 1)),
     (Method.gain_blk_offset, (5, 5)),
     (Method.gain_offset, (5, 5)),
-    (Method.gain_offset, (5, 5)),
 ])
 def test_ref_basic_fit(float_100cm_ra: RasterArray, float_50cm_ra: RasterArray, method: Method,
                        kernel_shape: Tuple[int, int]):
@@ -60,7 +59,6 @@ def test_ref_basic_fit(float_100cm_ra: RasterArray, float_50cm_ra: RasterArray, 
     (Method.gain, (3, 3)),
     (Method.gain_blk_offset, (1, 1)),
     (Method.gain_blk_offset, (5, 5)),
-    (Method.gain_offset, (5, 5)),
     (Method.gain_offset, (5, 5)),
 ])
 def test_src_basic_fit(float_100cm_ra: RasterArray, float_50cm_ra: RasterArray, method: Method,
