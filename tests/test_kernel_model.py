@@ -29,7 +29,6 @@ from homonim.kernel_model import SrcSpaceModel, RefSpaceModel
 from homonim.raster_array import RasterArray
 
 
-
 @pytest.mark.parametrize('method, kernel_shape', [
     (Method.gain, (1, 1)),
     (Method.gain, (3, 3)),
@@ -279,3 +278,13 @@ def test_src_force_proc_crs(float_100cm_ra, float_50cm_ra):
 def test_kernel_shape_exception(method, kernel_shape):
     with pytest.raises(ValueError):
         _ = RefSpaceModel(method=method, kernel_shape=kernel_shape)
+
+
+def test_r2_array_defaults(float_100cm_ra):
+    kernel_model = RefSpaceModel(Method.gain_offset, (5, 5), mask_partial=False, r2_inpaint_thresh=None,
+                                 param_image=False)
+    src_ra = float_100cm_ra
+    ref_ra = float_100cm_ra
+    param_ra = kernel_model.fit(ref_ra.copy(), src_ra)
+    r2_array = kernel_model._r2_array(ref_ra.array, ref_ra.array, param_ra.array)
+    assert (r2_array[~np.isnan(r2_array)] == pytest.approx(1, abs=1.e-3))
