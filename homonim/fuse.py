@@ -328,32 +328,42 @@ class RasterFuse:
         """Path to the parameter image file."""
         return self._param_filename if self._config['param_image'] else None
 
-    def _build_overviews(self, im):
+    def _build_overviews(self, im, max_num_levels=8, min_level_pixels=256):
         """
-        Build internal overviews for a rasterio dataset.
+        Build internal overviews, downsampled by successive powers of 2, for a rasterio dataset.
 
         Parameters
         ----------
         im: rasterio.io.DatasetWriter
             An open rasterio dataset to write the metadata to.
+        max_num_levels: int, optional
+            Maximum number of overview levels to build.
+        min_level_pixels: int, pixel
+            Minimum width/height (in pixels) of any overview level.
         """
 
         # limit overviews so that the highest level has at least 2**8=256 pixels along the shortest dimension,
         # and so there are no more than 8 levels.
         max_ovw_levels = int(np.min(np.log2(im.shape)))
-        num_ovw_levels = np.min([8, max_ovw_levels - 8])
+        min_level_shape_pow2 = int(np.log2(min_level_pixels))
+        num_ovw_levels = np.min([max_num_levels, max_ovw_levels - min_level_shape_pow2])
         ovw_levels = [2 ** m for m in range(1, num_ovw_levels + 1)]
         im.build_overviews(ovw_levels, Resampling.average)
 
-    def build_overviews(self):
+    def build_overviews(self, max_num_levels=8, min_level_pixels=256):
         """
-        Build overviews for the homogenised and parameter image files.
+        Build internal overviews, downsampled by successive powers of 2, for the homogenised and parameter image files.
         Should be called after homogenise().
+
+        max_num_levels: int, optional
+            Maximum number of overview levels to build.
+        min_level_pixels: int, pixel
+            Minimum width/height (in pixels) of any overview level.
         """
         self._assert_open()
-        self._build_overviews(self._out_im)
+        self._build_overviews(self._out_im, max_num_levels=max_num_levels, min_level_pixels=min_level_pixels)
         if self._config['param_image']:
-            self._build_overviews(self._param_im)
+            self._build_overviews(self._param_im, max_num_levels=max_num_levels, min_level_pixels=min_level_pixels)
 
     def _process_block(self, block_pair: BlockPair):
         """Thread-safe function to homogenise a source image block"""
