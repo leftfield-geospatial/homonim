@@ -83,6 +83,11 @@ class RasterCompare:
     ]
 
     @property
+    def proc_crs(self) -> ProcCrs:
+        """The 'processing CRS' i.e. which of the source/reference image spaces is selected for processing."""
+        return self._proc_crs
+
+    @property
     def stats_key(self):
         """Returns a string of abbreviations and corresponding descriptions for the statistics returned by compare()"""
         return pd.DataFrame(self._stats)[['ABBREV', 'DESCRIPTION']].to_string(index=False, justify="right")
