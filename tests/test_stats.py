@@ -16,46 +16,24 @@
     You should have received a copy of the GNU Affero General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
-import json
-import pathlib
 
-import pandas as pd
-import rasterio as rio
-from click.testing import CliRunner
+import numpy as np
 
-from homonim import root_path, cli
-from homonim.compare import RasterCompare
-from homonim.enums import ProcCrs
-from tests.common import TestBase
+from homonim import root_path
+from homonim.stats import ParamStats
 
 
-class TestStats(TestBase):
-    """Integrations tests for stats CLI."""
-
-    def _test_stats_dict(self, param_filename: pathlib.Path, band_dict: dict):
-        """Validate the band stats dictionary returned by RasterCompare.compare()."""
-        band_df = pd.DataFrame.from_dict(band_dict, orient='index')
-        self.assertTrue({'Mean', 'Std', 'Min', 'Max', 'Inpaint (%)'} <= set(band_df.columns),
-                        'Stats contains required columns')
-        self.assertTrue('Mean' in band_df, 'Stats contains mean column')
-        with rio.open(param_filename, 'r') as param_im:
-            self.assertEqual(band_df.shape[0], param_im.count, 'Stats contains correct number of bands')
-
-        r2_df = band_df.iloc[-int(band_df.shape[0] / 3):][['Mean', 'Std', 'Min', 'Max']]
-        self.assertTrue(all(r2_df >= 0) and all(r2_df <= 1), 'r2 in range')
-
-    def test_cli(self):
-        """Test compare CLI"""
-        stats_filename = root_path.joinpath('data/test_example/stats.json')
-
-        cli_str = f'stats {self.param_filename} --output {stats_filename}'
-        result = CliRunner().invoke(cli.cli, cli_str.split(), terminal_width=100, catch_exceptions=True)
-        self.assertTrue(result.exit_code == 0, result.output)
-        self.assertTrue(stats_filename.exists(), 'Comparison results file exists')
-        with open(stats_filename) as f:
-            stats_dict = json.load(f)
-
-        param_filename = str(self.param_filename)
-        self.assertTrue(param_filename in stats_dict, 'Stats results file contain param file key')
-        band_dict = stats_dict[param_filename]
-        self._test_stats_dict(self.param_filename, band_dict)
+def test_stats():
+    param_file = root_path.joinpath(
+        'data/test_example/param/3324c_2015_1004_05_0182_RGB_HOMO_cREF_mGAIN-OFFSET_k15_15_PARAM.tif')
+    stats = ParamStats(param_file)
+    param_stats = stats.stats()
+    assert len(param_stats) == 9
+    for band_name, band_stats in param_stats.items():
+        assert ({'Mean', 'Std', 'Min', 'Max'} <= set(band_stats.keys()))
+    for r2_stats in list(param_stats.values())[-3:]:
+        assert ('Inpaint (%)' in r2_stats)
+        assert (r2_stats['Inpaint (%)'] >= 0 and r2_stats['Inpaint (%)'] <= 100)
+        r2_stats.pop('Inpaint (%)')
+        r2_stat_vals = np.array(list(r2_stats.values()))
+        assert ((r2_stat_vals >= 0) & (r2_stat_vals <= 1)).all()
