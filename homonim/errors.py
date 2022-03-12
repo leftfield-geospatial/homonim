@@ -43,7 +43,7 @@ class ImageFormatError(HomonimError):
 
 
 class IoError(HomonimError):
-    """Raised when reading or writing from/to a closed dataset"""
+    """Raised when accessing unopened file(s)"""
 
 
 class BandCountMismatchWarning(UserWarning):

@@ -145,8 +145,6 @@ class RasterFuse:
         elif self._proc_crs == ProcCrs.src:
             self._model = SrcSpaceModel(method=method, kernel_shape=kernel_shape,
                                         param_image=self._config['param_image'], **self._model_config)
-        else:
-            raise ValueError(f'Invalid proc_crs: {proc_crs}, should be resolved to ProcCrs.ref or ProcCrs.src')
 
         # initialise other variables
         self._write_lock = threading.Lock()
@@ -175,32 +173,11 @@ class RasterFuse:
             raise FileExistsError(f"Parameter image file exists and won't be overwritten without the "
                                   f"'overwrite' option: {self._param_filename}")
 
-    def _combine_with_config(self, in_profile):
-        """Update an input rasterio profile with the configuration profile."""
-
-        if in_profile['driver'].lower() != self._out_profile['driver'].lower():
-            # copy only non driver specific keys from input profile when the driver is different to the configured val
-            copy_keys = ['driver', 'width', 'height', 'count', 'dtype', 'crs', 'transform']
-            out_profile = {copy_key: in_profile[copy_key] for copy_key in copy_keys}
-        else:
-            out_profile = in_profile.copy()  # copy the whole input profile
-
-        def nested_update(self_dict, other_dict):
-            """Update self_dict with a flattened version of other_dict"""
-            for other_key, other_value in other_dict.items():
-                if isinstance(other_value, dict):
-                    # flatten the driver specific nested dict into the root dict
-                    nested_update(self_dict, other_value)
-                else:
-                    self_dict[other_key] = other_value
-            return self_dict
-
-        # update out_profile with a flattened self._out_profile
-        return nested_update(out_profile, self._out_profile)
 
     def _create_out_profile(self) -> dict:
         """Create an output image rasterio profile from the source image profile and output configuration"""
-        out_profile = self._combine_with_config(self._raster_pair.src_im.profile)
+        # out_profile = self._combine_with_config(self._raster_pair.src_im.profile)
+        out_profile = utils.combine_profiles(self._raster_pair.src_im.profile, self._out_profile)
         out_profile['count'] = len(self._raster_pair.src_bands)
         return out_profile
 
@@ -210,7 +187,8 @@ class RasterFuse:
             init_profile = self._raster_pair.ref_im.profile
         else:
             init_profile = self._raster_pair.src_im.profile
-        param_profile = self._combine_with_config(init_profile)
+        # param_profile = self._combine_with_config(init_profile)
+        param_profile = utils.combine_profiles(init_profile, self._out_profile)
         # force dtype and nodata to defaults
         param_profile.update(dtype=RasterArray.default_dtype, count=len(self._raster_pair.src_bands) * 3,
                              nodata=RasterArray.default_nodata)
