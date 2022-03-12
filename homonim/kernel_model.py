@@ -124,8 +124,8 @@ class KernelModel:
         # find the keyword arguments that were not provided
         if mask is None:
             # if mask is passed, assume that it has been applied ref_array and src_array, otherwise do that here
-            mask = (utils.nan_equals(src_array, RasterArray.default_nodata) &
-                    utils.nan_equals(ref_array, RasterArray.default_nodata))
+            mask = (~utils.nan_equals(src_array, RasterArray.default_nodata) &
+                    ~utils.nan_equals(ref_array, RasterArray.default_nodata))
             ref_array[~mask] = 0
             src_array[~mask] = 0
         if mask_sum is None:
