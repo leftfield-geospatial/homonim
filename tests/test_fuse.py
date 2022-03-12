@@ -23,6 +23,7 @@ import rasterio as rio
 from rasterio.features import shapes
 
 from homonim.enums import ProcCrs, Method
+from homonim.errors import IoError
 from homonim.fuse import RasterFuse
 from homonim.kernel_model import KernelModel
 
@@ -231,3 +232,28 @@ def test_build_overviews(float_50cm_ref_file, tmp_path):
     with rio.open(raster_fuse.param_filename, 'r') as param_ds:
         for band_i in param_ds.indexes:
             assert (len(param_ds.overviews(band_i)) > 0)
+
+
+def test_io_error(tmp_path, float_50cm_ref_file):
+    raster_fuse = RasterFuse(float_50cm_ref_file, float_50cm_ref_file, tmp_path, Method.gain_blk_offset, (3, 3))
+    with pytest.raises(IoError):
+        raster_fuse.process()
+
+
+def test_homo_filename(tmp_path, float_50cm_ref_file):
+    homo_filename = tmp_path.joinpath('out.tif')
+    raster_fuse = RasterFuse(float_50cm_ref_file, float_50cm_ref_file, homo_filename, Method.gain_blk_offset, (3, 3))
+    with raster_fuse:
+        raster_fuse.process()
+
+    assert (raster_fuse.homo_filename.exists())
+
+def test_single_thread(tmp_path, float_50cm_ref_file):
+    homo_config = RasterFuse.default_homo_config.copy()
+    homo_config.update(threads=1)
+    raster_fuse = RasterFuse(float_50cm_ref_file, float_50cm_ref_file, tmp_path, Method.gain_blk_offset, (3, 3),
+                             homo_config=homo_config)
+    with raster_fuse:
+        raster_fuse.process()
+
+    assert (raster_fuse.homo_filename.exists())

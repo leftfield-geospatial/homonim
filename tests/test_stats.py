@@ -18,15 +18,18 @@
 """
 
 import numpy as np
+import pytest
 
 from homonim import root_path
 from homonim.stats import ParamStats
+from homonim.errors import ImageFormatError
 
 
 def test_stats():
     param_file = root_path.joinpath(
         'data/test_example/param/3324c_2015_1004_05_0182_RGB_HOMO_cREF_mGAIN-OFFSET_k15_15_PARAM.tif')
     stats = ParamStats(param_file)
+    assert  (len(stats.metadata) > 0)
     param_stats = stats.stats()
     assert len(param_stats) == 9
     for band_name, band_stats in param_stats.items():
@@ -37,3 +40,7 @@ def test_stats():
         r2_stats.pop('Inpaint (%)')
         r2_stat_vals = np.array(list(r2_stats.values()))
         assert ((r2_stat_vals >= 0) & (r2_stat_vals <= 1)).all()
+
+def test_file_format_error(float_100cm_rgb_file):
+    with pytest.raises(ImageFormatError):
+        _ = ParamStats(float_100cm_rgb_file)
