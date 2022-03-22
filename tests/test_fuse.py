@@ -248,6 +248,7 @@ def test_homo_filename(tmp_path, float_50cm_ref_file):
 
     assert (raster_fuse.homo_filename.exists())
 
+
 def test_single_thread(tmp_path, float_50cm_ref_file):
     homo_config = RasterFuse.default_homo_config.copy()
     homo_config.update(threads=1)
@@ -256,4 +257,20 @@ def test_single_thread(tmp_path, float_50cm_ref_file):
     with raster_fuse:
         raster_fuse.process()
 
+    assert (raster_fuse.homo_filename.exists())
+
+
+@pytest.mark.parametrize('src_file, ref_file, proc_crs, exp_proc_crs', [
+    ('float_50cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, ProcCrs.ref),
+    ('float_50cm_src_file', 'float_100cm_ref_file', ProcCrs.src, ProcCrs.src),
+    ('float_100cm_src_file', 'float_50cm_ref_file', ProcCrs.auto, ProcCrs.src),
+    ('float_100cm_src_file', 'float_50cm_ref_file', ProcCrs.ref, ProcCrs.ref),
+])
+def test_proc_crs(tmp_path, src_file, ref_file, proc_crs, exp_proc_crs, request):
+    src_file = request.getfixturevalue(src_file)
+    ref_file = request.getfixturevalue(ref_file)
+    raster_fuse = RasterFuse(src_file, ref_file, tmp_path, Method.gain_blk_offset, (5, 5), proc_crs=proc_crs)
+    assert (raster_fuse.proc_crs == exp_proc_crs)
+    with raster_fuse:
+        raster_fuse.process()
     assert (raster_fuse.homo_filename.exists())
