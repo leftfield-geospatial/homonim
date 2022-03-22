@@ -102,9 +102,15 @@ class RasterCompare:
                   A dictionary representing the results.
         """
         res_dict = OrderedDict()
+
         bar_format = '{l_bar}{bar}|{n_fmt}/{total_fmt} bands [{elapsed}<{remaining}]'
 
         with self._raster_pair as raster_pair:
+
+            def get_res_key(band_i):
+                return (raster_pair.ref_im.descriptions[raster_pair.ref_bands[band_i] - 1] or
+                               raster_pair.src_im.descriptions[raster_pair.src_bands[band_i] - 1] or
+                               f'Band {band_i + 1}')
 
             def process_band(block_pair):
                 """Thread-safe function to process a block (that encompasses the full band)"""
@@ -127,10 +133,13 @@ class RasterCompare:
                     stats_dict[_stat['ABBREV']] = _stat['fn'](src_vec, ref_vec)
 
                 # form a string describing the band
-                description = (raster_pair.ref_im.descriptions[raster_pair.ref_bands[block_pair.band_i] - 1] or
-                        raster_pair.src_im.descriptions[raster_pair.src_bands[block_pair.band_i] - 1] or
-                        f'Band {block_pair.band_i + 1}')
+                description = get_res_key(block_pair.band_i)
                 return description, stats_dict
+
+            # populate res_dict with band-ordered keys
+            for band_i in range(len(raster_pair.src_bands)):
+                description = get_res_key(band_i)
+                res_dict[description] = None
 
             # process bands concurrently
             with concurrent.futures.ThreadPoolExecutor(max_workers=self._threads) as executor:
