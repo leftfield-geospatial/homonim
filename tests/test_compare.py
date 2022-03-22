@@ -16,22 +16,17 @@
     You should have received a copy of the GNU Affero General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
+import json
+
 import numpy as np
 import pytest
 
+from homonim.cli import cli
 from homonim.compare import RasterCompare
 from homonim.enums import ProcCrs
 
 
-@pytest.mark.parametrize('src_file, ref_file', [
-    ('float_50cm_rgb_file', 'float_100cm_rgb_file'),
-    ('float_100cm_rgb_file', 'float_50cm_rgb_file'),
-])
-def test_compare(src_file, ref_file, request):
-    src_file = request.getfixturevalue(src_file)
-    ref_file = request.getfixturevalue(ref_file)
-    compare = RasterCompare(src_file, ref_file)
-    res_dict = compare.compare()
+def _test_res_dict(res_dict):
     assert (len(res_dict) == 4)
     assert ('Mean' in res_dict)
     band_dict = res_dict.copy()
@@ -49,12 +44,102 @@ def test_compare(src_file, ref_file, request):
     assert (res_dict['Mean']['rRMSE'] == pytest.approx(0))
 
 
-@pytest.mark.parametrize('src_file, ref_file, exp_proc_crs', [
-    ('float_50cm_src_file', 'float_100cm_ref_file', ProcCrs.ref),
-    ('float_100cm_src_file', 'float_50cm_ref_file', ProcCrs.src),
+@pytest.mark.parametrize('src_file, ref_file', [
+    ('float_50cm_rgb_file', 'float_100cm_rgb_file'),
+    ('float_100cm_rgb_file', 'float_50cm_rgb_file'),
 ])
-def test_proc_crs(src_file, ref_file, exp_proc_crs, request):
+def test_compare(src_file, ref_file, request):
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
     compare = RasterCompare(src_file, ref_file)
+    res_dict = compare.compare()
+    _test_res_dict(res_dict)
+
+
+@pytest.mark.parametrize('src_file, ref_file, proc_crs, exp_proc_crs', [
+    ('float_50cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, ProcCrs.ref),
+    ('float_50cm_src_file', 'float_100cm_ref_file', ProcCrs.src, ProcCrs.src),
+    ('float_100cm_src_file', 'float_50cm_ref_file', ProcCrs.auto, ProcCrs.src),
+    ('float_100cm_src_file', 'float_50cm_ref_file', ProcCrs.ref, ProcCrs.ref),
+])
+def test_proc_crs(src_file, ref_file, proc_crs, exp_proc_crs, request):
+    src_file = request.getfixturevalue(src_file)
+    ref_file = request.getfixturevalue(ref_file)
+    compare = RasterCompare(src_file, ref_file, proc_crs=proc_crs)
     assert (compare.proc_crs == exp_proc_crs)
+    res_dict = compare.compare()
+    assert (len(res_dict) == 2)
+
+
+def test_single_thread(float_100cm_src_file, float_100cm_ref_file):
+    compare = RasterCompare(float_100cm_src_file, float_100cm_ref_file, threads=1)
+    res_dict = compare.compare()
+    assert (len(res_dict) == 2)
+
+
+def test_cli(runner, float_50cm_rgb_file, float_100cm_rgb_file):
+    ref_file = float_100cm_rgb_file
+    src_file = float_50cm_rgb_file
+
+    cli_str = f'compare {src_file} {ref_file}'
+    result = runner.invoke(cli, cli_str.split())
+    assert (result.exit_code == 0)
+    res_str = """Band 1 1.00  0.00  0.00   144
+Band 2 1.00  0.00  0.00   144
+Band 3 1.00  0.00  0.00   144
+Mean   1.00  0.00  0.00   144"""
+    assert (res_str in result.output)
+
+
+def test_cli_output_file(tmp_path, runner, float_50cm_rgb_file, float_100cm_rgb_file):
+    ref_file = float_100cm_rgb_file
+    src_file = float_50cm_rgb_file
+
+    output_file = tmp_path.joinpath('compare.json')
+    cli_str = f'compare {src_file} {ref_file} --output {output_file}'
+    result = runner.invoke(cli, cli_str.split())
+    assert (result.exit_code == 0)
+    assert (output_file.exists())
+
+    with open(output_file) as f:
+        stats_dict = json.load(f)
+
+    src_file = str(src_file)
+    assert (src_file in stats_dict)
+    _test_res_dict(stats_dict[src_file])
+
+
+def test_cli_mult_inputs(tmp_path, runner, float_50cm_rgb_file, float_100cm_rgb_file):
+    ref_file = float_100cm_rgb_file
+    src_file = float_50cm_rgb_file
+
+    output_file = tmp_path.joinpath('compare.json')
+    cli_str = f'compare {src_file} {src_file} {ref_file} --output {output_file}'
+    result = runner.invoke(cli, cli_str.split())
+    assert (result.exit_code == 0)
+    assert (output_file.exists())
+
+    with open(output_file) as f:
+        stats_dict = json.load(f)
+
+    src_file = str(src_file)
+    assert (src_file in stats_dict)
+
+
+@pytest.mark.parametrize('proc_crs', ['auto', 'src', 'ref'])
+def test_cli_proc_crs(tmp_path, runner, float_50cm_rgb_file, float_100cm_rgb_file, proc_crs):
+    ref_file = float_50cm_rgb_file
+    src_file = float_100cm_rgb_file
+
+    output_file = tmp_path.joinpath('compare.json')
+    cli_str = f'compare {src_file} {ref_file} --proc-crs {proc_crs} --output {output_file}'
+    result = runner.invoke(cli, cli_str.split())
+    assert (result.exit_code == 0)
+    assert (output_file.exists())
+
+    with open(output_file) as f:
+        stats_dict = json.load(f)
+
+    src_file = str(src_file)
+    assert (src_file in stats_dict)
+    _test_res_dict(stats_dict[src_file])
