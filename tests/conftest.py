@@ -20,6 +20,7 @@
 import numpy as np
 import pytest
 import rasterio as rio
+from click.testing import CliRunner
 from rasterio.crs import CRS
 from rasterio.enums import ColorInterp, Resampling
 from rasterio.transform import Affine
@@ -38,6 +39,11 @@ def landsat_filename():
 @pytest.fixture
 def modis_filename():
     return root_path.joinpath('data/test_example/reference/MODIS-006-MCD43A4-2015_09_15_B143.tif')
+
+@pytest.fixture()
+def param_file():
+    return root_path.joinpath(
+        'data/test_example/param/float_100cm_rgb_HOMO_cREF_mGAIN-OFFSET_k5_5_PARAM.tif')
 
 
 @pytest.fixture
@@ -284,9 +290,10 @@ def float_45cm_ref_file(tmp_path, float_45cm_array, float_45cm_profile):
             ds.write(float_45cm_array, indexes=1, window=window)
     return filename
 
+
 @pytest.fixture
 def float_100cm_rgb_file(tmp_path, float_100cm_array, float_100cm_profile):
-    array = np.stack((float_100cm_array, ) * 3, axis=0)
+    array = np.stack((float_100cm_array,) * 3, axis=0)
     profile = float_100cm_profile.copy()
     profile.update(count=3)
     filename = tmp_path.joinpath('float_100cm_rgb.tif')
@@ -295,9 +302,10 @@ def float_100cm_rgb_file(tmp_path, float_100cm_array, float_100cm_profile):
             ds.write(array, indexes=[1, 2, 3])
     return filename
 
+
 @pytest.fixture
 def float_50cm_rgb_file(tmp_path, float_50cm_array, float_50cm_profile):
-    array = np.stack((float_50cm_array, ) * 3, axis=0)
+    array = np.stack((float_50cm_array,) * 3, axis=0)
     profile = float_50cm_profile.copy()
     profile.update(count=3)
     filename = tmp_path.joinpath('float_50cm_rgb.tif')
@@ -305,3 +313,8 @@ def float_50cm_rgb_file(tmp_path, float_50cm_array, float_50cm_profile):
         with rio.open(filename, 'w', **profile) as ds:
             ds.write(array, indexes=[1, 2, 3])
     return filename
+
+
+@pytest.fixture(scope='function')
+def runner():
+    return CliRunner()
