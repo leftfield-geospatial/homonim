@@ -122,7 +122,7 @@ def _param_file_cb(ctx, param, value):
     for filename in value:
         filename = pathlib.Path(filename)
         try:
-            ParamStats._validate_image(filename)
+            utils.validate_param_image(filename)
         except (FileNotFoundError, ImageFormatError):
             raise click.BadParameter(f'{filename.name} is not a valid parameter image.', param=param)
     return value
@@ -380,8 +380,7 @@ def compare(src_file, ref_file, proc_crs, output):
     REFERENCE   Path to a surface reflectance reference image.
 
     Reference image extents should encompass those of the input image(s), and input / reference bands should correspond
-    (i.e. reference band 1 corresponds to input band 1, reference band 2 corresponds to input band
-    2 etc).
+    (i.e. reference band 1 corresponds to input band 1, reference band 2 corresponds to input band 2 etc).
 
     \b
     Examples:

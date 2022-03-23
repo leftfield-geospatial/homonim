@@ -55,32 +55,13 @@ class ParamStats:
         self._param_filename = pathlib.Path(param_filename)
         self._threads = utils.validate_threads(threads)
 
-        self._validate_image(self._param_filename)
+        utils.validate_param_image(self._param_filename)
 
         # read some parameters from the metadata
         with rio.open(self._param_filename, 'r') as param_im:
             self._tags = param_im.tags()
             self._method = self._tags['HOMO_METHOD'].replace('_', '-')
             self._r2_inpaint_thresh = yaml.safe_load(self._tags['HOMO_MODEL_CONF'])['r2_inpaint_thresh']
-
-    @staticmethod
-    def _validate_image(param_filename):
-        """Check file is a valid parameter image"""
-        if not param_filename.exists():
-            raise FileNotFoundError(f'{param_filename} does not exist')
-
-        with rio.open(param_filename) as param_im:
-            tags = param_im.tags()
-            # check band count is a multiple of 3 and that expected metadata tags exist
-            if (param_im.count == 0 or divmod(param_im.count, 3)[1] != 0 or
-                    not {'HOMO_METHOD', 'HOMO_MODEL_CONF', 'HOMO_PROC_CRS'} <= set(tags)):
-                raise ImageFormatError(f'{param_filename.name} is not a valid parameter image.')
-
-            # check band descriptions end with the expected suffixes
-            n_refl_bands = int(param_im.count / 3)
-            suffixes = ['gain'] * n_refl_bands + ['offset'] * n_refl_bands + ['r2'] * n_refl_bands
-            if not all([desc.lower().endswith(suffix) for suffix, desc in zip(suffixes, param_im.descriptions)]):
-                raise ImageFormatError(f'{param_filename.name} is not a valid parameter image.')
 
     @property
     def metadata(self):

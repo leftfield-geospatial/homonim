@@ -26,6 +26,7 @@ import numpy as np
 import pandas as pd
 import rasterio as rio
 from homonim.enums import Method
+from homonim.errors import ImageFormatError
 from rasterio.enums import Resampling, ColorInterp
 from rasterio.vrt import WarpedVRT
 from rasterio.windows import Window, get_data_window
@@ -237,3 +238,21 @@ def combine_profiles(in_profile, config_profile):
 
     # update out_profile with a flattened config_profile
     return nested_update(out_profile, config_profile)
+
+def validate_param_image(param_filename):
+    """Check file is a valid parameter image"""
+    if not param_filename.exists():
+        raise FileNotFoundError(f'{param_filename} does not exist')
+
+    with rio.open(param_filename) as param_im:
+        tags = param_im.tags()
+        # check band count is a multiple of 3 and that expected metadata tags exist
+        if (param_im.count == 0 or divmod(param_im.count, 3)[1] != 0 or
+                not {'HOMO_METHOD', 'HOMO_MODEL_CONF', 'HOMO_PROC_CRS'} <= set(tags)):
+            raise ImageFormatError(f'{param_filename.name} is not a valid parameter image.')
+
+        # check band descriptions end with the expected suffixes
+        n_refl_bands = int(param_im.count / 3)
+        suffixes = ['gain'] * n_refl_bands + ['offset'] * n_refl_bands + ['r2'] * n_refl_bands
+        if not all([desc.lower().endswith(suffix) for suffix, desc in zip(suffixes, param_im.descriptions)]):
+            raise ImageFormatError(f'{param_filename.name} is not a valid parameter image.')
