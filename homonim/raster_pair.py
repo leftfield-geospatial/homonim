@@ -152,7 +152,7 @@ class RasterPairReader:
         """
 
         # compare source and reference resolutions
-        src_pixel_smaller = np.prod(np.abs(src_im.res)) < np.prod(np.abs(ref_im.res))
+        src_pixel_smaller = np.prod(np.abs(src_im.res)) <= np.prod(np.abs(ref_im.res))
         cmp_str = "smaller" if src_pixel_smaller else "larger"
         if proc_crs == ProcCrs.auto:
             # set proc_crs to the lowest resolution of the source and reference images
@@ -208,7 +208,7 @@ class RasterPairReader:
             raise errors.BlockSizeError(f"The auto block shape is smaller than the overlap.  Increase 'max_block_mem'.")
 
         # warn if the block shape in the highest res image is less than a typical tile
-        if np.any(block_shape / mem_scale < (256, 256)):
+        if np.any(block_shape / mem_scale < (256, 256)) and np.any(block_shape < (proc_win.height, proc_win.width)):
             logger.warning(f"The auto block shape is small: {block_shape}.  Increase 'max_block_mem' to improve "
                            f"processing times.")
 
