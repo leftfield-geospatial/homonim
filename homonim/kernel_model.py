@@ -104,7 +104,7 @@ class KernelModel:
     def config(self) -> dict:
         """A dict containing the KernelModel configuration."""
         return dict(r2_inpaint_thresh=self._r2_inpaint_thresh, downsampling=self._downsampling,
-                    upsampling=self._upsampling)
+                    upsampling=self._upsampling, mask_partial=self._mask_partial)
 
     def _get_resampling(self, from_res, to_res):
         """Get the resampling method for re-projecting from resolution `from_res` to resolution `to_res`"""
