@@ -20,8 +20,10 @@ import os
 
 import pytest
 import rasterio as rio
+import yaml
 from rasterio.features import shapes
 
+from homonim import utils
 from homonim.enums import ProcCrs, Method
 from homonim.errors import IoError
 from homonim.fuse import RasterFuse
@@ -274,3 +276,31 @@ def test_proc_crs(tmp_path, src_file, ref_file, proc_crs, exp_proc_crs, request)
     with raster_fuse:
         raster_fuse.process()
     assert (raster_fuse.homo_filename.exists())
+
+
+def test_tags(tmp_path, float_50cm_ref_file):
+    homo_config = RasterFuse.default_homo_config.copy()
+    homo_config.update(param_image=True)
+    method = Method.gain_blk_offset
+    kernel_shape = (3, 3)
+    proc_crs = ProcCrs.ref
+    raster_fuse = RasterFuse(float_50cm_ref_file, float_50cm_ref_file, tmp_path, method, kernel_shape,
+                             proc_crs=proc_crs, homo_config=homo_config)
+    with raster_fuse:
+        raster_fuse.process()
+
+    assert (raster_fuse.homo_filename.exists())
+    assert (raster_fuse.param_filename.exists())
+    utils.validate_param_image(raster_fuse.param_filename)
+
+    with rio.open(raster_fuse.homo_filename, 'r') as out_ds:
+        tags = out_ds.tags()
+        assert ({'HOMO_SRC_FILE', 'HOMO_REF_FILE', 'HOMO_METHOD', 'HOMO_KERNEL_SHAPE', 'HOMO_PROC_CRS',
+                 'HOMO_MODEL_CONF', 'HOMO_CONF'} <= set(tags))
+        assert (tags['HOMO_SRC_FILE'] == float_50cm_ref_file.name)
+        assert (tags['HOMO_REF_FILE'] == float_50cm_ref_file.name)
+        assert (tags['HOMO_METHOD'].lower() == method.name)
+        assert (tags['HOMO_PROC_CRS'].lower() == proc_crs.name)
+        assert (tags['HOMO_KERNEL_SHAPE'] == f'[{kernel_shape[0]} {kernel_shape[1]}]')
+        assert (yaml.safe_load(tags['HOMO_MODEL_CONF']) == RasterFuse.default_model_config)
+        assert (yaml.safe_load(tags['HOMO_CONF']) == homo_config)
