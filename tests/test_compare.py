@@ -26,7 +26,7 @@ from homonim.compare import RasterCompare
 from homonim.enums import ProcCrs
 
 
-def _test_res_dict(res_dict):
+def _test_compare_dict(res_dict):
     assert (len(res_dict) == 4)
     assert ('Mean' in res_dict)
     band_dict = res_dict.copy()
@@ -48,12 +48,12 @@ def _test_res_dict(res_dict):
     ('float_50cm_rgb_file', 'float_100cm_rgb_file'),
     ('float_100cm_rgb_file', 'float_50cm_rgb_file'),
 ])
-def test_compare(src_file, ref_file, request):
+def test_api(src_file, ref_file, request):
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
     compare = RasterCompare(src_file, ref_file)
     res_dict = compare.compare()
-    _test_res_dict(res_dict)
+    _test_compare_dict(res_dict)
 
 
 @pytest.mark.parametrize('src_file, ref_file, proc_crs, exp_proc_crs', [
@@ -62,7 +62,7 @@ def test_compare(src_file, ref_file, request):
     ('float_100cm_src_file', 'float_50cm_ref_file', ProcCrs.auto, ProcCrs.src),
     ('float_100cm_src_file', 'float_50cm_ref_file', ProcCrs.ref, ProcCrs.ref),
 ])
-def test_proc_crs(src_file, ref_file, proc_crs, exp_proc_crs, request):
+def test_api__proc_crs(src_file, ref_file, proc_crs, exp_proc_crs, request):
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
     compare = RasterCompare(src_file, ref_file, proc_crs=proc_crs)
@@ -71,7 +71,7 @@ def test_proc_crs(src_file, ref_file, proc_crs, exp_proc_crs, request):
     assert (len(res_dict) == 2)
 
 
-def test_single_thread(float_100cm_src_file, float_100cm_ref_file):
+def test_api__single_thread(float_100cm_src_file, float_100cm_ref_file):
     compare = RasterCompare(float_100cm_src_file, float_100cm_ref_file, threads=1)
     res_dict = compare.compare()
     assert (len(res_dict) == 2)
@@ -91,7 +91,7 @@ Mean   1.00  0.00  0.00   144"""
     assert (res_str in result.output)
 
 
-def test_cli_output_file(tmp_path, runner, float_50cm_rgb_file, float_100cm_rgb_file):
+def test_cli__output_file(tmp_path, runner, float_50cm_rgb_file, float_100cm_rgb_file):
     ref_file = float_100cm_rgb_file
     src_file = float_50cm_rgb_file
 
@@ -106,10 +106,10 @@ def test_cli_output_file(tmp_path, runner, float_50cm_rgb_file, float_100cm_rgb_
 
     src_file = str(src_file)
     assert (src_file in stats_dict)
-    _test_res_dict(stats_dict[src_file])
+    _test_compare_dict(stats_dict[src_file])
 
 
-def test_cli_mult_inputs(tmp_path, runner, float_50cm_rgb_file, float_100cm_rgb_file):
+def test_cli__mult_inputs(tmp_path, runner, float_50cm_rgb_file, float_100cm_rgb_file):
     ref_file = float_100cm_rgb_file
     src_file = float_50cm_rgb_file
 
@@ -127,9 +127,9 @@ def test_cli_mult_inputs(tmp_path, runner, float_50cm_rgb_file, float_100cm_rgb_
 
 
 @pytest.mark.parametrize('proc_crs', ['auto', 'src', 'ref'])
-def test_cli_proc_crs(tmp_path, runner, float_50cm_rgb_file, float_100cm_rgb_file, proc_crs):
-    ref_file = float_50cm_rgb_file
-    src_file = float_100cm_rgb_file
+def test_cli__proc_crs(tmp_path, runner, float_50cm_rgb_file, float_100cm_rgb_file, proc_crs):
+    ref_file = float_100cm_rgb_file
+    src_file = float_50cm_rgb_file
 
     output_file = tmp_path.joinpath('compare.json')
     cli_str = f'compare {src_file} {ref_file} --proc-crs {proc_crs} --output {output_file}'
@@ -142,4 +142,4 @@ def test_cli_proc_crs(tmp_path, runner, float_50cm_rgb_file, float_100cm_rgb_fil
 
     src_file = str(src_file)
     assert (src_file in stats_dict)
-    _test_res_dict(stats_dict[src_file])
+    _test_compare_dict(stats_dict[src_file])
