@@ -47,7 +47,7 @@ def test_api(param_file):
     _test_vals(param_stats)
 
 
-def test_file_format_error(float_100cm_rgb_file):
+def test_api__file_format_error(float_100cm_rgb_file):
     with pytest.raises(ImageFormatError):
         _ = ParamStats(float_100cm_rgb_file)
 
@@ -71,7 +71,7 @@ B3_R2      1.00 0.00  1.00 1.00     0.00 """
     assert (res_str in result.output)
 
 
-def test_cli_out_file(tmp_path, runner, param_file):
+def test_cli__out_file(tmp_path, runner, param_file):
     output_file = tmp_path.joinpath('stats.json')
     cli_str = f'stats {param_file} --output {output_file}'
     result = runner.invoke(cli, cli_str.split())
@@ -87,7 +87,7 @@ def test_cli_out_file(tmp_path, runner, param_file):
     _test_vals(param_stats)
 
 
-def test_cli_mult_inputs(tmp_path, runner, param_file):
+def test_cli__mult_inputs(tmp_path, runner, param_file):
     output_file = tmp_path.joinpath('stats.json')
     cli_str = f'stats {param_file} {param_file} --output {output_file}'
     result = runner.invoke(cli, cli_str.split())

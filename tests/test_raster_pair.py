@@ -19,14 +19,13 @@
 
 import pytest
 import rasterio as rio
-from rasterio.windows import Window, union
-from rasterio.enums import Resampling
 from rasterio import MemoryFile
+from rasterio.enums import Resampling
+from rasterio.windows import Window, union
 
 from homonim.enums import ProcCrs
 from homonim.errors import ImageContentError, BlockSizeError, IoError
 from homonim.raster_pair import RasterPairReader
-from homonim.raster_array import RasterArray
 
 
 @pytest.mark.parametrize('src_file, ref_file, expected_proc_crs', [
@@ -195,4 +194,3 @@ def test_block_pair_io(src_file, ref_file, proc_crs, overlap, max_block_mem, req
             ref_mask = ref_ds.dataset_mask().astype('bool', copy=False)
             test_mask = test_ref_ds.dataset_mask().astype('bool', copy=False)
             assert (test_mask[ref_mask]).all()
-
