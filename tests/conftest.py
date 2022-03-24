@@ -17,6 +17,8 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
+from collections import namedtuple
+
 import numpy as np
 import pytest
 import rasterio as rio
@@ -28,7 +30,13 @@ from rasterio.warp import reproject
 from rasterio.windows import Window
 
 from homonim import root_path
+from homonim import utils
+from homonim.enums import ProcCrs, Method
+from homonim.fuse import RasterFuse
 from homonim.raster_array import RasterArray
+
+FuseCliParams = namedtuple('FuseCliParams', ['src_file', 'ref_file', 'method', 'kernel_shape', 'proc_crs', 'homo_file',
+                                             'param_file', 'cli_str'])
 
 
 @pytest.fixture
@@ -40,10 +48,15 @@ def landsat_filename():
 def modis_filename():
     return root_path.joinpath('data/test_example/reference/MODIS-006-MCD43A4-2015_09_15_B143.tif')
 
+
 @pytest.fixture()
 def param_file():
-    return root_path.joinpath(
-        'data/test_example/param/float_100cm_rgb_HOMO_cREF_mGAIN-OFFSET_k5_5_PARAM.tif')
+    return root_path.joinpath('data/test_example/param/float_100cm_rgb_HOMO_cREF_mGAIN-OFFSET_k5_5_PARAM.tif')
+
+
+@pytest.fixture()
+def conf_file():
+    return root_path.joinpath('data/test_example/config.yaml')
 
 
 @pytest.fixture
@@ -315,6 +328,37 @@ def float_50cm_rgb_file(tmp_path, float_50cm_array, float_50cm_profile):
     return filename
 
 
-@pytest.fixture(scope='function')
+@pytest.fixture
 def runner():
     return CliRunner()
+
+
+@pytest.fixture
+def default_fuse_cli_params(tmp_path, float_100cm_ref_file, float_50cm_src_file):
+    ref_file = float_100cm_ref_file
+    src_file = float_50cm_src_file
+    method = Method.gain_blk_offset
+    kernel_shape = (5, 5)
+    proc_crs = ProcCrs.ref
+    post_fix = utils.create_homo_postfix(proc_crs, method, kernel_shape, RasterFuse.default_out_profile['driver'])
+    homo_file = tmp_path.joinpath(src_file.stem + post_fix)
+    param_file = utils.create_param_filename(homo_file)
+
+    cli_str = (f'fuse -od {tmp_path} {src_file} {ref_file}')
+    return FuseCliParams(src_file, ref_file, method, kernel_shape, proc_crs, homo_file, param_file, cli_str)
+
+
+@pytest.fixture
+def basic_fuse_cli_params(tmp_path, float_100cm_ref_file, float_100cm_src_file):
+    ref_file = float_100cm_ref_file
+    src_file = float_100cm_src_file
+    method = Method.gain_blk_offset
+    kernel_shape = (3, 3)
+    proc_crs = ProcCrs.ref
+    post_fix = utils.create_homo_postfix(proc_crs, method, kernel_shape, RasterFuse.default_out_profile['driver'])
+    homo_file = tmp_path.joinpath(src_file.stem + post_fix)
+    param_file = utils.create_param_filename(homo_file)
+
+    cli_str = (f'fuse -m {method.value} -k {kernel_shape[0]} {kernel_shape[1]} -od {tmp_path} -pc {proc_crs.value} '
+               f'{src_file} {ref_file}')
+    return FuseCliParams(src_file, ref_file, method, kernel_shape, proc_crs, homo_file, param_file, cli_str)
