@@ -99,3 +99,10 @@ def test_cli__mult_inputs(tmp_path, runner, param_file):
 
     param_file = str(param_file)
     assert (param_file in stats_dict)
+
+
+def test_cli__file_format_error(runner, float_100cm_rgb_file):
+    cli_str = f'stats {float_100cm_rgb_file}'
+    result = runner.invoke(cli, cli_str.split())
+    assert (result.exit_code != 0)
+    assert ('Invalid value' in result.output)
