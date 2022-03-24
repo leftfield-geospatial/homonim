@@ -18,6 +18,7 @@
 """
 
 from collections import namedtuple
+import re
 
 import numpy as np
 import pytest
@@ -38,6 +39,11 @@ from homonim.raster_array import RasterArray
 FuseCliParams = namedtuple('FuseCliParams', ['src_file', 'ref_file', 'method', 'kernel_shape', 'proc_crs', 'homo_file',
                                              'param_file', 'cli_str'])
 
+def str_contain_nos(str1, str2):
+    """Does str2 contain str1, ignoring case and whitespace?"""
+    str1 = re.sub(r'\s+', '', str1.lower())
+    str2 = re.sub(r'\s+', '', str2.lower())
+    return str1 in str2
 
 @pytest.fixture
 def landsat_filename():

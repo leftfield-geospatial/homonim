@@ -27,6 +27,7 @@ from homonim import utils
 from homonim.cli import cli
 from homonim.enums import ProcCrs, Method
 from homonim.fuse import RasterFuse
+from tests.conftest import str_contain_nos
 
 
 @pytest.mark.parametrize('method, kernel_shape', [
@@ -109,25 +110,24 @@ def test_compare(runner, float_100cm_ref_file, float_100cm_src_file):
     cli_str = (f'fuse --compare {src_file} {ref_file}')
     result = runner.invoke(cli, cli_str.split())
     assert (result.exit_code == 0)
-    output = result.output.strip().lower()
     src_cmp_str = """float_100cm_src.tif:
 
         r2   RMSE  rRMSE   N 
 Band 1 1.00  0.00  0.00   144
 Mean   1.00  0.00  0.00   144"""
-    assert (src_cmp_str.strip().lower() in output)
+    assert (str_contain_nos(src_cmp_str, result.output))
 
     homo_cmp_str = """float_100cm_src_HOMO_cREF_mGAIN-BLK-OFFSET_k5_5.tif:
 
         r2   RMSE  rRMSE   N 
 Band 1 1.00  0.00  0.00   144
 Mean   1.00  0.00  0.00   144"""
-    assert (homo_cmp_str.strip().lower() in output)
+    assert (str_contain_nos(homo_cmp_str, result.output))
 
     sum_cmp_str = """File                         Mean r2  Mean RMSE  Mean rRMSE  Mean N
                                 float_100cm_src.tif   1.00      0.00        0.00      144  
 float_100cm_src_HOMO_cREF_mGAIN-BLK-OFFSET_k5_5.tif   1.00      0.00        0.00      144"""
-    assert (sum_cmp_str.strip().lower() in output)
+    assert (str_contain_nos(sum_cmp_str, result.output))
 
 
 @pytest.mark.parametrize('proc_crs', [ProcCrs.auto, ProcCrs.ref, ProcCrs.src])
@@ -331,4 +331,3 @@ def test_creation_options(runner, basic_fuse_cli_params):
     with rio.open(basic_fuse_cli_params.homo_file, 'r') as out_ds:
         assert (out_ds.profile['compress'] == 'lzw')
         assert (not out_ds.profile['tiled'])
-

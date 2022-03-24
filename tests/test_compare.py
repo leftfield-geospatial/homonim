@@ -24,6 +24,7 @@ import pytest
 from homonim.cli import cli
 from homonim.compare import RasterCompare
 from homonim.enums import ProcCrs
+from tests.conftest import str_contain_nos
 
 
 def _test_compare_dict(res_dict):
@@ -88,7 +89,7 @@ def test_cli(runner, float_50cm_rgb_file, float_100cm_rgb_file):
 Band 2 1.00  0.00  0.00   144
 Band 3 1.00  0.00  0.00   144
 Mean   1.00  0.00  0.00   144"""
-    assert (res_str.strip().lower() in result.output.strip().lower())
+    assert (str_contain_nos(res_str, result.output))
 
 
 def test_cli__output_file(tmp_path, runner, float_50cm_rgb_file, float_100cm_rgb_file):
