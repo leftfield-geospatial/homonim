@@ -109,24 +109,25 @@ def test_compare(runner, float_100cm_ref_file, float_100cm_src_file):
     cli_str = (f'fuse --compare {src_file} {ref_file}')
     result = runner.invoke(cli, cli_str.split())
     assert (result.exit_code == 0)
+    output = result.output.strip().lower()
     src_cmp_str = """float_100cm_src.tif:
 
         r2   RMSE  rRMSE   N 
 Band 1 1.00  0.00  0.00   144
 Mean   1.00  0.00  0.00   144"""
-    assert (src_cmp_str in result.output)
+    assert (src_cmp_str.strip().lower() in output)
 
     homo_cmp_str = """float_100cm_src_HOMO_cREF_mGAIN-BLK-OFFSET_k5_5.tif:
 
         r2   RMSE  rRMSE   N 
 Band 1 1.00  0.00  0.00   144
 Mean   1.00  0.00  0.00   144"""
-    assert (homo_cmp_str in result.output)
+    assert (homo_cmp_str.strip().lower() in output)
 
     sum_cmp_str = """File                         Mean r2  Mean RMSE  Mean rRMSE  Mean N
                                 float_100cm_src.tif   1.00      0.00        0.00      144  
 float_100cm_src_HOMO_cREF_mGAIN-BLK-OFFSET_k5_5.tif   1.00      0.00        0.00      144"""
-    assert (sum_cmp_str in result.output)
+    assert (sum_cmp_str.strip().lower() in output)
 
 
 @pytest.mark.parametrize('proc_crs', [ProcCrs.auto, ProcCrs.ref, ProcCrs.src])

@@ -88,7 +88,7 @@ def test_cli(runner, float_50cm_rgb_file, float_100cm_rgb_file):
 Band 2 1.00  0.00  0.00   144
 Band 3 1.00  0.00  0.00   144
 Mean   1.00  0.00  0.00   144"""
-    assert (res_str in result.output)
+    assert (res_str.strip().lower() in result.output.strip().lower())
 
 
 def test_cli__output_file(tmp_path, runner, float_50cm_rgb_file, float_100cm_rgb_file):

@@ -67,8 +67,8 @@ B2_OFFSET -0.00 0.00 -0.00 0.00      NaN
 B3_OFFSET -0.00 0.00 -0.00 0.00      NaN    
 B1_R2      1.00 0.00  1.00 1.00     0.00    
 B2_R2      1.00 0.00  1.00 1.00     0.00    
-B3_R2      1.00 0.00  1.00 1.00     0.00 """
-    assert (res_str in result.output)
+B3_R2      1.00 0.00  1.00 1.00     0.00"""
+    assert (res_str.strip().lower() in result.output.strip().lower())
 
 
 def test_cli__out_file(tmp_path, runner, param_file):
