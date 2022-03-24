@@ -25,8 +25,8 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        python -m pip install flake8 pytest
-        python -m pip install rasterio opencv-python numpy pandas click tqdm pyyaml coverage
+        python -m pip install flake8 pytest pytest-cov
+        python -m pip install rasterio opencv-python numpy pandas click tqdm pyyaml
     - name: Lint with flake8
       run: |
         # stop the build if there are Python syntax errors or undefined names
@@ -35,7 +35,10 @@ jobs:
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Test with pytest
       timeout-minutes: 5
-      run: python -m pytest .\tests --cov=homonim --cov-report=term-missing --cov-report=xml:coverage.xml
+      run: |
+        pwd
+        ls -lR
+        python -m pytest --cov=homonim --cov-report=term-missing --cov-report=xml:coverage.xml ./tests
     - name: Upload coverage
       uses: codecov/codecov-action@v2
       with:
