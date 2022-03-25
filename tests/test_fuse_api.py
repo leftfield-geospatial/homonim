@@ -30,18 +30,16 @@ from homonim.fuse import RasterFuse
 from homonim.kernel_model import KernelModel
 
 
-@pytest.mark.parametrize('src_file, ref_file, method', [
-    ('float_50cm_src_file', 'float_100cm_ref_file', Method.gain),
-    ('float_50cm_src_file', 'float_100cm_ref_file', Method.gain_blk_offset),
-    ('float_50cm_src_file', 'float_100cm_ref_file', Method.gain_offset),
-    ('float_100cm_src_file', 'float_50cm_ref_file', Method.gain),
-    ('float_100cm_src_file', 'float_50cm_ref_file', Method.gain_blk_offset),
-    ('float_100cm_src_file', 'float_50cm_ref_file', Method.gain_offset),
+@pytest.mark.parametrize('src_file, ref_file', [
+    ('float_50cm_src_file', 'float_100cm_ref_file'),
+    ('float_100cm_src_file', 'float_50cm_ref_file'),
 ])
-def test_creation(src_file, ref_file, method, tmp_path, request):
-    """Test creation of RasterFuse"""
+def test_creation(src_file, ref_file, tmp_path, request):
+    """Test creation and configuration of RasterFuse"""
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
+    method = Method.gain
+    kernel_shape = (3, 3)
     model_config = KernelModel.default_config.copy()
     model_config.update(mask_partial=True)
     homo_config = RasterFuse.default_homo_config.copy()
@@ -49,11 +47,11 @@ def test_creation(src_file, ref_file, method, tmp_path, request):
     out_profile = RasterFuse.default_out_profile.copy()
     out_profile.update(driver='HFA', creation_options={})
 
-    raster_fuse = RasterFuse(src_file, ref_file, tmp_path, method, (5, 5), homo_config=homo_config,
+    raster_fuse = RasterFuse(src_file, ref_file, tmp_path, method, kernel_shape, homo_config=homo_config,
                              model_config=model_config, out_profile=out_profile)
     with raster_fuse:
         assert (raster_fuse.method == method)
-        assert (raster_fuse.kernel_shape == (5, 5))
+        assert (raster_fuse.kernel_shape == kernel_shape)
         assert (raster_fuse.proc_crs != ProcCrs.auto)
         assert (raster_fuse.homo_filename is not None)
         assert (raster_fuse.param_filename is not None)
@@ -65,11 +63,12 @@ def test_creation(src_file, ref_file, method, tmp_path, request):
             assert (raster_fuse._model.__getattribute__(f'_{k}') == v)
         assert (raster_fuse._out_profile == out_profile)
 
-    assert (raster_fuse.closed)
+    assert raster_fuse.closed
 
 
 @pytest.mark.parametrize('overwrite', [False, True])
 def test_overwrite(tmp_path, float_50cm_src_file, float_100cm_ref_file, overwrite):
+    """Test overwrite behaviour"""
     homo_config = RasterFuse.default_homo_config.copy()
     homo_config.update(param_image=True)
     params = dict(src_filename=float_50cm_src_file, ref_filename=float_100cm_ref_file, homo_path=tmp_path,
@@ -101,7 +100,7 @@ def test_overwrite(tmp_path, float_50cm_src_file, float_100cm_ref_file, overwrit
     ('float_100cm_src_file', 'float_45cm_ref_file', Method.gain_offset, (5, 5), 1.e-3),
 ])
 def test_basic_fusion(src_file, ref_file, method, kernel_shape, max_block_mem, tmp_path, request):
-    """"""
+    """Test fusion output with different src/ref images, and method etc combinations"""
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
     homo_config = RasterFuse.default_homo_config.copy()
@@ -126,11 +125,10 @@ def test_basic_fusion(src_file, ref_file, method, kernel_shape, max_block_mem, t
     dict(driver='GTiff', dtype='uint8', nodata=0,
          creation_options=dict(tiled=True, blockxsize=64, blockysize=64, compress='jpeg', interleave='pixel',
                                photometric='ycbcr')),
-    dict(driver='PNG', dtype='uint16', nodata=0,
-         creation_options=dict()),
+    dict(driver='PNG', dtype='uint16', nodata=0, creation_options=dict()),
 ])
 def test_out_profile(float_100cm_rgb_file, tmp_path, out_profile):
-    """"""
+    """Test fusion output image format (profile) with different out_profile configurations"""
     raster_fuse = RasterFuse(float_100cm_rgb_file, float_100cm_rgb_file, tmp_path, Method.gain_blk_offset, (3, 3),
                              out_profile=out_profile)
     with raster_fuse:
@@ -144,13 +142,13 @@ def test_out_profile(float_100cm_rgb_file, tmp_path, out_profile):
             assert ((v is None and k not in out_ds.profile) or (out_ds.profile[k] == v) or
                     (str(out_ds.profile[k]) == str(v)))
 
+        # test output image has been set with src image properties not in out_profile
         if src_ds.profile['driver'].lower() == out_profile['driver'].lower():
             # source image keys including driver specific creation options, not present in out_profile
             src_keys = set(src_ds.profile.keys()).difference(out_profile.keys())
         else:
             # source image keys excluding driver specific creation options, not present in out_profile
             src_keys = {'width', 'height', 'count', 'dtype', 'crs', 'transform'}.difference(out_profile.keys())
-        # test output image has been set with src image properties not in out_profile
         for k in src_keys:
             v = src_ds.profile[k]
             assert ((v is None and k not in out_ds.profile) or (out_ds.profile[k] == v) or
@@ -166,6 +164,7 @@ def test_out_profile(float_100cm_rgb_file, tmp_path, out_profile):
     (Method.gain_offset, ProcCrs.src),
 ])
 def test_param_image(float_100cm_rgb_file, tmp_path, method, proc_crs):
+    """Test creation and masking of parameter image for different method and proc_crs combinations"""
     homo_config = RasterFuse.default_homo_config.copy()
     homo_config.update(param_image=True)
     raster_fuse = RasterFuse(float_100cm_rgb_file, float_100cm_rgb_file, tmp_path, method, (5, 5), proc_crs=proc_crs,
@@ -191,6 +190,7 @@ def test_param_image(float_100cm_rgb_file, tmp_path, method, proc_crs):
     ('float_100cm_src_file', 'float_45cm_ref_file', (3, 3), ProcCrs.auto, True),
 ])
 def test_mask_partial(src_file, ref_file, tmp_path, kernel_shape, proc_crs, mask_partial, request):
+    """Test partial masking with multiple image blocks"""
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
     model_config = RasterFuse.default_model_config.copy()
@@ -212,11 +212,13 @@ def test_mask_partial(src_file, ref_file, tmp_path, kernel_shape, proc_crs, mask
             assert (out_mask.sum() < src_mask.sum())
             assert (out_mask.sum() > 0)
             assert (src_mask[out_mask]).all()
+            # check that the output mask consists of 1 blob
             out_mask_shapes = [shape for shape in shapes(out_mask.astype('uint8', copy=False), mask=out_mask)]
             assert (len(out_mask_shapes) == 1)
 
 
 def test_build_overviews(float_50cm_ref_file, tmp_path):
+    """Test that overviews are built for homogenised and parameter files"""
     homo_config = RasterFuse.default_homo_config.copy()
     homo_config.update(param_image=True)
     raster_fuse = RasterFuse(float_50cm_ref_file, float_50cm_ref_file, tmp_path, Method.gain_blk_offset, (3, 3),
@@ -237,12 +239,14 @@ def test_build_overviews(float_50cm_ref_file, tmp_path):
 
 
 def test_io_error(tmp_path, float_50cm_ref_file):
+    """Test we get an IoError if processing without opening/entering the context"""
     raster_fuse = RasterFuse(float_50cm_ref_file, float_50cm_ref_file, tmp_path, Method.gain_blk_offset, (3, 3))
     with pytest.raises(IoError):
         raster_fuse.process()
 
 
 def test_homo_filename(tmp_path, float_50cm_ref_file):
+    """Test homogenised file is created"""
     homo_filename = tmp_path.joinpath('out.tif')
     raster_fuse = RasterFuse(float_50cm_ref_file, float_50cm_ref_file, homo_filename, Method.gain_blk_offset, (3, 3))
     with raster_fuse:
@@ -252,6 +256,7 @@ def test_homo_filename(tmp_path, float_50cm_ref_file):
 
 
 def test_single_thread(tmp_path, float_50cm_ref_file):
+    """Test single-threaded processing creates a homogenised file"""
     homo_config = RasterFuse.default_homo_config.copy()
     homo_config.update(threads=1)
     raster_fuse = RasterFuse(float_50cm_ref_file, float_50cm_ref_file, tmp_path, Method.gain_blk_offset, (3, 3),
@@ -269,6 +274,7 @@ def test_single_thread(tmp_path, float_50cm_ref_file):
     ('float_100cm_src_file', 'float_50cm_ref_file', ProcCrs.ref, ProcCrs.ref),
 ])
 def test_proc_crs(tmp_path, src_file, ref_file, proc_crs, exp_proc_crs, request):
+    """Test homogenised file creation for forced and auto proc_crs with different src/ref combinations"""
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
     raster_fuse = RasterFuse(src_file, ref_file, tmp_path, Method.gain_blk_offset, (5, 5), proc_crs=proc_crs)
@@ -279,6 +285,7 @@ def test_proc_crs(tmp_path, src_file, ref_file, proc_crs, exp_proc_crs, request)
 
 
 def test_tags(tmp_path, float_50cm_ref_file):
+    """Test homogenised file metadata"""
     homo_config = RasterFuse.default_homo_config.copy()
     homo_config.update(param_image=True)
     method = Method.gain_blk_offset

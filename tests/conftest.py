@@ -36,42 +36,26 @@ from homonim.enums import ProcCrs, Method
 from homonim.fuse import RasterFuse
 from homonim.raster_array import RasterArray
 
+"""Named tuple to contain fuse cli parameters and string"""
 FuseCliParams = namedtuple('FuseCliParams', ['src_file', 'ref_file', 'method', 'kernel_shape', 'proc_crs', 'homo_file',
                                              'param_file', 'cli_str'])
 
 def str_contain_nos(str1, str2):
-    """Does str2 contain str1, ignoring case and whitespace?"""
+    """Test if str2 contain str1, ignoring case and whitespace"""
     str1 = re.sub(r'\s+', '', str1.lower())
     str2 = re.sub(r'\s+', '', str2.lower())
     return str1 in str2
 
-@pytest.fixture
-def landsat_filename():
-    return root_path.joinpath('data/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif')
-
-
-@pytest.fixture
-def modis_filename():
-    return root_path.joinpath('data/test_example/reference/MODIS-006-MCD43A4-2015_09_15_B143.tif')
-
 
 @pytest.fixture()
 def param_file():
+    """Basic parameter image"""
     return root_path.joinpath('data/test_example/param/float_100cm_rgb_HOMO_cREF_mGAIN-OFFSET_k5_5_PARAM.tif')
-
-
-@pytest.fixture()
-def conf_file():
-    return root_path.joinpath('data/test_example/config.yaml')
-
-
-@pytest.fixture
-def modis_ds(modis_filename):
-    return rio.open(modis_filename, 'r')
 
 
 @pytest.fixture
 def byte_array():
+    """2D byte gradient image with single pixel nodata=255 border"""
     array = np.array(range(1, 101), dtype='uint8').reshape(20, 5)
     array[:, [0, -1]] = 255
     array[[0, -1], :] = 255
@@ -80,6 +64,7 @@ def byte_array():
 
 @pytest.fixture
 def float_100cm_array():
+    """2D float32 gradient image with single pixel nodata=nan border"""
     array = np.array(range(1, 201), dtype='float32').reshape(20, 10)
     array[:, [0, -1]] = float('nan')
     array[[0, -1], :] = float('nan')
@@ -88,6 +73,7 @@ def float_100cm_array():
 
 @pytest.fixture
 def float_50cm_array(float_100cm_array):
+    """2x upsampled float_100cm_array with double pixel nodata=nan border"""
     array = np.kron(float_100cm_array, np.ones((2, 2)))
     array[:, [0, 1, -2, -1]] = float('nan')
     array[[0, 1, -2, -1], :] = float('nan')
@@ -96,6 +82,7 @@ def float_50cm_array(float_100cm_array):
 
 @pytest.fixture
 def byte_profile(byte_array):
+    """rasterio profile dict for byte_array"""
     profile = {
         'crs': CRS({'init': 'epsg:3857'}),
         'transform': Affine.identity() * Affine.translation(1e-10, 1e-10),
@@ -111,6 +98,7 @@ def byte_profile(byte_array):
 
 @pytest.fixture
 def float_100cm_profile(float_100cm_array):
+    """rasterio profile dict for float_100cm_array"""
     profile = {
         'crs': CRS({'init': 'epsg:3857'}),
         'transform': Affine.identity(),
@@ -126,6 +114,7 @@ def float_100cm_profile(float_100cm_array):
 
 @pytest.fixture
 def float_50cm_profile(float_50cm_array):
+    """rasterio profile dict for float_50cm_array"""
     profile = {
         'crs': CRS({'init': 'epsg:3857'}),
         'transform': Affine.identity() * Affine.scale(0.5),
@@ -141,40 +130,41 @@ def float_50cm_profile(float_50cm_array):
 
 @pytest.fixture
 def byte_ra(byte_array, byte_profile):
+    """Raster array with single band of byte"""
     return RasterArray(byte_array, byte_profile['crs'], byte_profile['transform'],
                        nodata=byte_profile['nodata'])
 
 
 @pytest.fixture
 def rgb_byte_ra(byte_array, byte_profile):
+    """Raster array with three bands of byte"""
     return RasterArray(np.stack((byte_array,) * 3, axis=0), byte_profile['crs'], byte_profile['transform'],
                        nodata=byte_profile['nodata'])
 
 
 @pytest.fixture
 def float_100cm_ra(float_100cm_array, float_100cm_profile):
+    """Raster array with single band of float32 at 100cm pixel resolution"""
     return RasterArray(float_100cm_array, float_100cm_profile['crs'], float_100cm_profile['transform'],
                        nodata=float_100cm_profile['nodata'])
 
 
 @pytest.fixture
 def float_50cm_ra(float_50cm_array, float_50cm_profile):
-    """
-    A high resolution version of float_100cm_ra.
-    Aligned with the float_100cm_ra pixel grid, so that re-projection back to float_100cm_ra space will give the float_100cm_ra
-    mask, and ~data (resampling method dependent).
-    """
+    """Raster array with single band of float32 at 50cm pixel resolution. 2x upsampled version of float_100cm_ra"""
     return RasterArray(float_50cm_array, float_50cm_profile['crs'], float_50cm_profile['transform'],
                        nodata=float_50cm_profile['nodata'])
 
 
 @pytest.fixture
 def float_45cm_profile(float_100cm_array, float_100cm_profile):
+    """
+    rasterio profile dict for float_45cm_array, shifted by half 45cm pixel from float_100cm_ra, and padded with
+    one pixel.
+    """
     scale = 0.45  # resolution scaling
-    # pad scaled image with a border of ~1 float_100cm_ra pixel
-    # shape = tuple(np.ceil(np.array(float_100cm_ra.shape) / scale + (2 / scale)).astype('int'))
-    # transform = float_100cm_ra.transform * Affine.translation(-1, -1) * Affine.scale(scale)
     shape = tuple(np.round(np.array(float_100cm_array.shape) / scale + 1).astype('int'))
+    # scale and shift the float_100cm_profile['transform']
     transform = float_100cm_profile['transform'] * Affine.scale(scale) * Affine.translation(-.5, -.5)
     profile = float_100cm_profile.copy()
     profile.update(width=shape[1], height=shape[0], transform=transform)
@@ -183,9 +173,7 @@ def float_45cm_profile(float_100cm_array, float_100cm_profile):
 
 @pytest.fixture
 def float_45cm_array(float_100cm_array, float_100cm_profile, float_45cm_profile):
-    """
-    A high resolution version of float_100cm_ra, but on a different pixel grid.
-    """
+    """1/.45 upsampled float_100cm_array"""
     float_45cm_array = np.full((float_45cm_profile['height'], float_45cm_profile['width']),
                                float_45cm_profile['nodata'])
     _ = reproject(
@@ -204,12 +192,15 @@ def float_45cm_array(float_100cm_array, float_100cm_profile, float_45cm_profile)
 
 @pytest.fixture
 def float_45cm_ra(float_45cm_array, float_45cm_profile):
+    """Raster array with single band of float32 at 45cm pixel resolution. upsampled version of float_100cm_ra, but
+    on a different pixel grid"""
     return RasterArray(float_45cm_array, float_45cm_profile['crs'], float_45cm_profile['transform'],
                        nodata=float_45cm_profile['nodata'])
 
 
 @pytest.fixture
 def byte_file(tmp_path, byte_array, byte_profile):
+    """Single band byte geotiff"""
     filename = tmp_path.joinpath('uint8.tif')
     with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
         with rio.open(filename, 'w', **byte_profile) as ds:
@@ -219,6 +210,7 @@ def byte_file(tmp_path, byte_array, byte_profile):
 
 @pytest.fixture
 def rgba_file(tmp_path, byte_array, byte_profile):
+    """RGB + alpha band byte geotiff"""
     array = np.stack((byte_array,) * 4, axis=0)
     array[3] = (array[0] != byte_profile['nodata']) * 255
     filename = tmp_path.joinpath('rgba.tif')
@@ -233,6 +225,7 @@ def rgba_file(tmp_path, byte_array, byte_profile):
 
 @pytest.fixture
 def masked_file(tmp_path, byte_array, byte_profile):
+    """Single band byte geotiff with internal mask (i.e. w/o nodata)"""
     filename = tmp_path.joinpath('masked.tif')
     with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
         with rio.open(filename, 'w', **byte_profile) as ds:
@@ -243,6 +236,7 @@ def masked_file(tmp_path, byte_array, byte_profile):
 
 @pytest.fixture
 def float_100cm_src_file(tmp_path, float_100cm_array, float_100cm_profile):
+    """Single band float32 geotiff with 100cm pixel resolution"""
     filename = tmp_path.joinpath('float_100cm_src.tif')
     with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
         with rio.open(filename, 'w', **float_100cm_profile) as ds:
@@ -252,6 +246,8 @@ def float_100cm_src_file(tmp_path, float_100cm_array, float_100cm_profile):
 
 @pytest.fixture
 def float_100cm_ref_file(tmp_path, float_100cm_array, float_100cm_profile):
+    """Single band float32 geotiff with 100cm pixel resolution, the same as float_100cm_src_file, but padded with an
+    extra pixel"""
     shape = (np.array(float_100cm_array.shape) + 2).astype('int')
     transform = float_100cm_profile['transform'] * Affine.translation(-1, -1)
     profile = float_100cm_profile.copy()
@@ -266,6 +262,7 @@ def float_100cm_ref_file(tmp_path, float_100cm_array, float_100cm_profile):
 
 @pytest.fixture
 def float_50cm_src_file(tmp_path, float_50cm_array, float_50cm_profile):
+    """Single band float32 geotiff with 50cm pixel resolution"""
     filename = tmp_path.joinpath('float_50cm_src.tif')
     with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
         with rio.open(filename, 'w', **float_50cm_profile) as ds:
@@ -275,6 +272,8 @@ def float_50cm_src_file(tmp_path, float_50cm_array, float_50cm_profile):
 
 @pytest.fixture
 def float_50cm_ref_file(tmp_path, float_50cm_array, float_50cm_profile):
+    """Single band float32 geotiff with 50cm pixel resolution, the same as float_50cm_src_file, but padded with an
+    extra pixel"""
     shape = (np.array(float_50cm_array.shape) + 2).astype('int')
     transform = float_50cm_profile['transform'] * Affine.translation(-1, -1)
     profile = float_50cm_profile.copy()
@@ -289,6 +288,7 @@ def float_50cm_ref_file(tmp_path, float_50cm_array, float_50cm_profile):
 
 @pytest.fixture
 def float_45cm_src_file(tmp_path, float_45cm_array, float_45cm_profile):
+    """Single band float32 geotiff with 45cm pixel resolution"""
     filename = tmp_path.joinpath('float_45cm_src.tif')
     with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
         with rio.open(filename, 'w', **float_45cm_profile) as ds:
@@ -298,6 +298,8 @@ def float_45cm_src_file(tmp_path, float_45cm_array, float_45cm_profile):
 
 @pytest.fixture
 def float_45cm_ref_file(tmp_path, float_45cm_array, float_45cm_profile):
+    """Single band float32 geotiff with 45cm pixel resolution, the same as float_45cm_src_file, but padded with an
+    extra pixel"""
     shape = (np.array(float_45cm_array.shape) + 2).astype('int')
     transform = float_45cm_profile['transform'] * Affine.translation(-1, -1)
     profile = float_45cm_profile.copy()
@@ -312,6 +314,7 @@ def float_45cm_ref_file(tmp_path, float_45cm_array, float_45cm_profile):
 
 @pytest.fixture
 def float_100cm_rgb_file(tmp_path, float_100cm_array, float_100cm_profile):
+    """3 band float32 geotiff with 100cm pixel resolution"""
     array = np.stack((float_100cm_array,) * 3, axis=0)
     profile = float_100cm_profile.copy()
     profile.update(count=3)
@@ -324,6 +327,7 @@ def float_100cm_rgb_file(tmp_path, float_100cm_array, float_100cm_profile):
 
 @pytest.fixture
 def float_50cm_rgb_file(tmp_path, float_50cm_array, float_50cm_profile):
+    """3 band float32 geotiff with 50cm pixel resolution, same extent as float_100cm_rgb_file"""
     array = np.stack((float_50cm_array,) * 3, axis=0)
     profile = float_50cm_profile.copy()
     profile.update(count=3)
@@ -336,11 +340,13 @@ def float_50cm_rgb_file(tmp_path, float_50cm_array, float_50cm_profile):
 
 @pytest.fixture
 def runner():
+    """click runner for command line execution"""
     return CliRunner()
 
 
 @pytest.fixture
 def default_fuse_cli_params(tmp_path, float_100cm_ref_file, float_50cm_src_file):
+    """FuseCliParams with default parameter values"""
     ref_file = float_100cm_ref_file
     src_file = float_50cm_src_file
     method = Method.gain_blk_offset
@@ -356,6 +362,7 @@ def default_fuse_cli_params(tmp_path, float_100cm_ref_file, float_50cm_src_file)
 
 @pytest.fixture
 def basic_fuse_cli_params(tmp_path, float_100cm_ref_file, float_100cm_src_file):
+    """FuseCliParams with basic parameter values"""
     ref_file = float_100cm_ref_file
     src_file = float_100cm_src_file
     method = Method.gain_blk_offset
