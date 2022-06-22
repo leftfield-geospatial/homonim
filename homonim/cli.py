@@ -147,6 +147,7 @@ class _HomonimCommand(click.Command):
     def get_help(self, ctx):
         """Format help strings with single newlines as single newlines."""
         # adapted from https://stackoverflow.com/questions/55585564/python-click-formatting-help-text
+        # TODO : this breaks the wrapping of single newlines e.g. in long strings, that we don't want
         orig_wrap_test = click.formatting.wrap_text
 
         def wrap_text(text, width, **kwargs):

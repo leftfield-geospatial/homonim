@@ -386,7 +386,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         if not np.all(self.res == rio_dataset.res):
             raise ImageFormatError(f"The dataset resolution does not match that of the RasterArray. "
                                    f"Dataset res: {rio_dataset.res}, RasterArray res: {self.res}")
-        # TODO: raise an issue with rasterio about the speed of crs comparison.  comparing the _crs attr is faster.
+        # TODO : raise an issue with rasterio about the speed of crs comparison.  comparing the _crs attr is faster.
         if self.crs._crs != rio_dataset.crs._crs:
             raise ImageFormatError(f"The dataset CRS does not match that of the RasterArray. "
                                    f"Dataset CRS: {rio_dataset.crs.to_proj4()}, RasterArray CRS: {self.crs.to_proj4()}")
