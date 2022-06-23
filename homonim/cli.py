@@ -89,6 +89,13 @@ def _nodata_cb(ctx, param, value):
         return value
 
 
+def _compare_cb(ctx, param, value):
+    if value and str(value) != 'ref':
+        if not pathlib.Path(value).exists():
+            raise click.BadParameter(f'Comparison image does not exist: {value}')
+    return value
+
+
 def _creation_options_cb(ctx, param, value):
     """
     click callback to validate `--opt KEY1=VAL1 --opt KEY2=VAL2` and collect
@@ -241,8 +248,10 @@ def cli(verbose, quiet):
               help="Directory in which to create homogenised image(s). [default: use source image directory]")
 @click.option("-ovw", "--overwrite", "overwrite", is_flag=True, type=bool, default=False, show_default=True,
               help="Overwrite existing output file(s).")
-@click.option("-cmp", "--compare", "do_cmp", type=click.BOOL, is_flag=True, default=False,
-              help="Statistically compare source and homogenised images with the reference.")
+@click.option("-cmp", "--compare", "comp_file", type=click.Path(dir_okay=False, path_type=pathlib.Path),
+              is_flag=False, flag_value="ref", default=None, callback=_compare_cb,
+              help="Statistically compare source and homogenised images with this image.  If specified without an "
+                   "image file, source and homogenised images will be compared with the reference.")
 @click.option("-nbo", "--no-build-ovw", "build_ovw", type=click.BOOL, is_flag=True, default=True,
               help="Turn off overview building for the homogenised image(s).")
 @click.option("-pc", "--proc-crs", type=click.Choice([pc.value for pc in ProcCrs], case_sensitive=False),
@@ -288,7 +297,7 @@ def cli(verbose, quiet):
               default=(), callback=_creation_options_cb,
               help="Driver specific image creation options for the output image(s).  See the GDAL docs for details.")
 @click.pass_context
-def fuse(ctx, src_file, ref_file, method, kernel_shape, output_dir, overwrite, do_cmp, build_ovw, proc_crs, conf,
+def fuse(ctx, src_file, ref_file, method, kernel_shape, output_dir, overwrite, comp_file, build_ovw, proc_crs, conf,
          **kwargs):
     """
     Radiometrically homogenise image(s) by fusion with a reference.
@@ -349,15 +358,15 @@ def fuse(ctx, src_file, ref_file, method, kernel_shape, output_dir, overwrite, d
                     raster_fuse.build_overviews()
 
             logger.info(f'Completed in {timer() - start_time:.2f} secs')
-            compare_files += (src_filename, raster_fuse.homo_filename)  # build a list of files to pass to compare
+            compare_files += [src_filename, raster_fuse.homo_filename]  # build a list of files to pass to compare
 
-        # compare source and homogenised files with reference (invokes compare command with relevant parameters)
-        if do_cmp:
-            ctx.invoke(compare, src_file=compare_files, ref_file=ref_file, proc_crs=proc_crs)
+            # compare source and homogenised files with reference (invokes compare command with relevant parameters)
+            if comp_file:
+                comp_file = ref_file if str(comp_file)=='ref' else comp_file
+                ctx.invoke(compare, src_file=compare_files, ref_file=comp_file, proc_crs=proc_crs)
     except Exception:
-        logger.exception("Exception caught during processing")
+        logger.exception("Exception caught during processing.") # log exception info
         raise click.Abort()
-
 
 cli.add_command(fuse)
 

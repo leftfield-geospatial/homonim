@@ -111,30 +111,45 @@ def test_overwrite(runner, basic_fuse_cli_params):
 
 
 def test_compare(runner, float_100cm_ref_file, float_100cm_src_file):
-    """Test --compare against expected output"""
+    """ Test --compare, in flag and value configurations, against expected output. """
     ref_file = float_100cm_ref_file
     src_file = float_100cm_src_file
-    cli_str = f'fuse --compare {src_file} {ref_file}'
+    # test --compare in flag (no value), and value configurayion
+    cli_strs = [
+        f'fuse  {src_file} {ref_file} --compare', f'fuse {src_file} {ref_file} --compare {float_100cm_ref_file} -ovw'
+    ]
+    for cli_str in cli_strs:
+        result = runner.invoke(cli, cli_str.split())
+        assert (result.exit_code == 0)
+        src_cmp_str = """float_100cm_src.tif:
+    
+            r2   RMSE  rRMSE   N 
+    Band 1 1.00  0.00  0.00   144
+    Mean   1.00  0.00  0.00   144"""
+        assert (str_contain_nos(src_cmp_str, result.output))
+
+        homo_cmp_str = """float_100cm_src_HOMO_cREF_mGAIN-BLK-OFFSET_k5_5.tif:
+    
+            r2   RMSE  rRMSE   N 
+    Band 1 1.00  0.00  0.00   144
+    Mean   1.00  0.00  0.00   144"""
+        assert (str_contain_nos(homo_cmp_str, result.output))
+
+        sum_cmp_str = """File                         Mean r2  Mean RMSE  Mean rRMSE  Mean N
+                                    float_100cm_src.tif   1.00      0.00        0.00      144  
+    float_100cm_src_HOMO_cREF_mGAIN-BLK-OFFSET_k5_5.tif   1.00      0.00        0.00      144"""
+        assert (str_contain_nos(sum_cmp_str, result.output))
+
+
+def test_compare_file_exists_error(runner, float_100cm_ref_file, float_100cm_src_file):
+    """ Test --compare raises an exception when the specified file does not exist. """
+    ref_file = float_100cm_ref_file
+    src_file = float_100cm_src_file
+    # test --compare in flag (no value), and value configurayion
+    cli_str = f'fuse  {src_file} {ref_file} --compare unknown.tif'
     result = runner.invoke(cli, cli_str.split())
-    assert (result.exit_code == 0)
-    src_cmp_str = """float_100cm_src.tif:
-
-        r2   RMSE  rRMSE   N 
-Band 1 1.00  0.00  0.00   144
-Mean   1.00  0.00  0.00   144"""
-    assert (str_contain_nos(src_cmp_str, result.output))
-
-    homo_cmp_str = """float_100cm_src_HOMO_cREF_mGAIN-BLK-OFFSET_k5_5.tif:
-
-        r2   RMSE  rRMSE   N 
-Band 1 1.00  0.00  0.00   144
-Mean   1.00  0.00  0.00   144"""
-    assert (str_contain_nos(homo_cmp_str, result.output))
-
-    sum_cmp_str = """File                         Mean r2  Mean RMSE  Mean rRMSE  Mean N
-                                float_100cm_src.tif   1.00      0.00        0.00      144  
-float_100cm_src_HOMO_cREF_mGAIN-BLK-OFFSET_k5_5.tif   1.00      0.00        0.00      144"""
-    assert (str_contain_nos(sum_cmp_str, result.output))
+    assert (result.exit_code != 0)
+    assert ('does not exist' in result.output)
 
 
 @pytest.mark.parametrize('proc_crs', [ProcCrs.auto, ProcCrs.ref, ProcCrs.src])
