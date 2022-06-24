@@ -34,30 +34,36 @@ from setuptools import setup, find_packages
 """
 
 this_directory = Path(__file__).parent
-long_description = (this_directory / "README.md").read_text()
+long_description = (this_directory / 'README.rst').read_text()
 version = {}
-with open("homonim/version.py") as fp:
+with open('homonim/version.py') as fp:
     exec(fp.read(), version)
 
 setup(
-    name="homonim",
+    name='homonim',
     version=version['__version__'],
-    description="Radiometric homogenisation of aerial and satellite imagery by fusion with satellite surface "
-                "reflectance data.",
+    description='Correct aerial and satellite imagery to approximate surface reflectance.',
     long_description=long_description,
     long_description_content_type='text/markdown',
-    author="Dugal Harris",
-    author_email="dugalh@gmail.com",
-    url="https://github.com/dugalh/homonim",
+    author='Dugal Harris',
+    author_email='dugalh@gmail.com',
+    url='https://github.com/dugalh/homonim',
     license='AGPLv3',
     packages=find_packages(exclude=['tests', 'data'], include=['homonim']),
-    install_requires=["numpy>=1.19", "rasterio>=1.1", "click>=8", "tqdm>=4.6", "pyyaml>=5.4",
-                      "opencv-python-headless>=4.5", "pandas>=1.1"],
-    python_requires=">=3.6",
-    classifiers=[
-        "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: GNU Affero General Public License v3",
-        "Operating System :: OS Independent",
+    install_requires=[
+        'numpy>=1.19',
+        'rasterio>=1.1',
+        'opencv-python-headless>=4.5',
+        'pandas>=1.1',
+        'click>=8',
+        'tqdm>=4.6',
+        'pyyaml>=5.4',
     ],
-    entry_points={"console_scripts": ["homonim=homonim.cli:cli"]},
+    python_requires='>=3.6',
+    classifiers=[
+        'Programming Language :: Python :: 3',
+        'License :: OSI Approved :: GNU Affero General Public License v3',
+        'Operating System :: OS Independent',
+    ],
+    entry_points={'console_scripts': ['homonim=homonim.cli:cli']},
 )
