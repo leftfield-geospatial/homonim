@@ -5,7 +5,7 @@ homonim
 
 .. short_descr_start
 
-Correct drone, aerial and satellite imagery to approximate surface reflectance.
+Correct aerial and satellite imagery to approximate surface reflectance.
 
 .. short_descr_end
 
@@ -14,13 +14,14 @@ Correct drone, aerial and satellite imagery to approximate surface reflectance.
 Description
 -----------
 
-``homonim`` corrects remotely sensed imagery to approximate surface reflectance, by fusion with satellite surface
-reflectance data.  It is a form of *spectral harmonisation* that adjusts for spatially varying atmospheric and
-anisotropic (BRDF) effects, without the need manual reflectance measurements, or target placements.
+``homonim`` provides a command line interface and API for correcting remotely sensed imagery to surface
+reflectance.  It is a form of *spectral harmonisation*, that adjusts for spatially varying atmospheric and anisotropic
+(BRDF) effects, by fusion with satellite surface reflectance data.  Manual reflectance measurements and target
+placements are not required.
 
-It is useful as a pre-processing step for quantitative mapping applications, such as biomass estimation, precision
-agriculture etc., or for reducing seamlines and other artefacts in image mosaics.  It can be applied to multi-spectral
-drone, aerial and satellite imagery.
+It is useful as a pre-processing step for quantitative mapping applications such as biomass estimation or
+precision agriculture, and for reducing seamlines and other visual artefacts in image mosaics.  It can be applied to
+multi-spectral drone, aerial and satellite imagery.
 
 ``homonim`` is based on the method described in `Radiometric homogenisation of aerial images by calibrating with
 satellite data <https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data>`__.
