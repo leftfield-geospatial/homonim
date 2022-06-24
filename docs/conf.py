@@ -1,3 +1,22 @@
+"""
+    Homonim: Radiometric homogenisation of aerial and satellite imagery
+    Copyright (C) 2021 Dugal Harris
+    Email: dugalh@gmail.com
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as
+    published by the Free Software Foundation, either version 3 of the
+    License, or any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Affero General Public License for more details.
+
+    You should have received a copy of the GNU Affero General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+"""
+
 # Configuration file for the Sphinx documentation builder.
 #
 # This file only contains a selection of the most common options. For a full
@@ -6,13 +25,10 @@
 
 # -- Path setup --------------------------------------------------------------
 
-# If extensions (or modules to document with autodoc) are in another directory,
-# add these directories to sys.path here. If the directory is relative to the
-# documentation root, use os.path.abspath to make it absolute, like shown here.
-#
-# import os
-# import sys
-# sys.path.insert(0, os.path.abspath('.'))
+import os
+import sys
+sys.path.insert(0, os.path.abspath('..'))
+from homonim.version import __version__
 
 
 # -- Project information -----------------------------------------------------
@@ -22,7 +38,7 @@ copyright = '2022, Dugal Harris'
 author = 'Dugal Harris'
 
 # The full version, including alpha/beta/rc tags
-release = '0.1.6'
+release = __version__
 
 
 # -- General configuration ---------------------------------------------------

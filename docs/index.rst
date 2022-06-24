@@ -9,6 +9,7 @@ homonim
 
 .. include:: installation.rst
 
+.. include:: usage.rst
 
 Contents
 --------
@@ -19,6 +20,8 @@ Contents
    description
    installation
    usage
+   cli
+   api
 
 * :ref:`genindex`
 

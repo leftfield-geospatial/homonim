@@ -18,6 +18,9 @@
 """
 import os
 import pathlib
+from homonim.fuse import RasterFuse
+from homonim.compare import RasterCompare
+from homonim.stats import ParamStats
 
 if '__file__' in globals():
     root_path = pathlib.Path(__file__).absolute().parents[1]
