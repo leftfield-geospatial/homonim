@@ -5,7 +5,7 @@ homonim
 
 .. short_descr_start
 
-Radiometric homogenisation of aerial and satellite imagery by fusion with satellite surface reflectance data.
+Correct drone, aerial and satellite imagery to approximate surface reflectance.
 
 .. short_descr_end
 
@@ -14,17 +14,16 @@ Radiometric homogenisation of aerial and satellite imagery by fusion with satell
 Description
 -----------
 
-``homonim`` corrects multi-spectral aerial and satellite imagery to approximate surface reflectance, by fusion with
-concurrent and collocated satellite surface reflectance data. It is a form of *spectral harmonisation*, that adjusts for
-spatially varying atmospheric and anisotropic (BRDF) effects, without the need for manual reflectance measurements, or
-target placements.
+``homonim`` corrects remotely sensed imagery to approximate surface reflectance, by fusion with satellite surface
+reflectance data.  It is a form of *spectral harmonisation* that adjusts for spatially varying atmospheric and
+anisotropic (BRDF) effects, without the need manual reflectance measurements, or target placements.
 
-It is useful as a pre-processing step for quantitative mapping applications, such as biomass estimation or precision
-agriculture, and can be applied to drone, aerial or satellite imagery.
+It is useful as a pre-processing step for quantitative mapping applications, such as biomass estimation, precision
+agriculture etc., or for reducing seamlines and other artefacts in image mosaics.  It can be applied to multi-spectral
+drone, aerial and satellite imagery.
 
 ``homonim`` is based on the method described in `Radiometric homogenisation of aerial images by calibrating with
-satellite
-data <https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data>`__.
+satellite data <https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data>`__.
 
 .. description_end
 
@@ -35,12 +34,13 @@ See the documentation site for more detail: https://homonim.readthedocs.io/.
 Installation
 ------------
 
-``homonim`` is available as a python 3 package, via ``pip`` and ``conda``. Under Windows, we recommend using ``conda``
-to simplify the installation of binary dependencies. The `Miniconda <https://docs.conda.io/en/latest/miniconda.html>`__
-installation provides a minimal ``conda``.
+``homonim`` is available as a python 3 package, via ``pip`` and ``conda``.
 
 conda
 ~~~~~
+
+Under Windows, using ``conda`` is the easiest way to resolve binary dependencies. The
+`Miniconda <https://docs.conda.io/en/latest/miniconda.html>`__ installation provides a minimal ``conda``.
 
 .. code:: shell
 
