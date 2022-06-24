@@ -76,19 +76,19 @@ class RasterCompare:
         dict(
             ABBREV='RMSE',
             DESCRIPTION='Root Mean Square Error',
-            fn=lambda v1, v2: float(np.sqrt(np.mean((v1 - v2) ** 2)))
+            fn=lambda v1, v2: float(np.sqrt(np.mean((v1 - v2)**2)))
         ),
         dict(
             ABBREV='rRMSE',
             DESCRIPTION='Relative RMSE (RMSE/mean(ref))',
-            fn=lambda v1, v2: float(np.sqrt(np.mean((v1 - v2) ** 2)) / np.mean(v2))
+            fn=lambda v1, v2: float(np.sqrt(np.mean((v1 - v2)**2)) / np.mean(v2))
         ),
         dict(
             ABBREV='N',
             DESCRIPTION='Number of pixels',
             fn=lambda v1, v2: len(v1)
         )
-    ]
+    ] # yapf: disable
 
     @property
     def proc_crs(self) -> ProcCrs:
@@ -116,9 +116,11 @@ class RasterCompare:
         with self._raster_pair as raster_pair:
 
             def get_res_key(band_i):
-                return (raster_pair.ref_im.descriptions[raster_pair.ref_bands[band_i] - 1] or
-                        raster_pair.src_im.descriptions[raster_pair.src_bands[band_i] - 1] or
-                        f'Band {band_i + 1}')
+                return (
+                    raster_pair.ref_im.descriptions[raster_pair.ref_bands[band_i] - 1] or
+                    raster_pair.src_im.descriptions[raster_pair.src_bands[band_i] - 1] or
+                    f'Band {band_i + 1}'
+                ) # yapf: disable
 
             def process_band(block_pair):
                 """Thread-safe function to process a block (that encompasses the full band)"""

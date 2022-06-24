@@ -31,9 +31,7 @@ from homonim.raster_array import RasterArray
 
 def test_read_only_properties(byte_array, byte_profile):
     """Test RasterArray read-only properties"""
-    basic_ra = RasterArray(
-        byte_array, byte_profile['crs'], byte_profile['transform'], nodata=byte_profile['nodata']
-    )
+    basic_ra = RasterArray(byte_array, byte_profile['crs'], byte_profile['transform'], nodata=byte_profile['nodata'])
     assert basic_ra.shape == byte_array.shape
     assert basic_ra.width == byte_array.shape[-1]
     assert basic_ra.height == byte_array.shape[-2]
@@ -47,9 +45,7 @@ def test_read_only_properties(byte_array, byte_profile):
 
 def test_array_property(byte_array, byte_profile):
     """Test array get/set"""
-    byte_ra = RasterArray(
-        byte_array, byte_profile['crs'], byte_profile['transform'], nodata=byte_profile['nodata']
-    )
+    byte_ra = RasterArray(byte_array, byte_profile['crs'], byte_profile['transform'], nodata=byte_profile['nodata'])
     assert (byte_ra.array == byte_array).all()  # test get
 
     array = byte_array / 2
@@ -135,8 +131,10 @@ def test_from_rio_dataset(byte_file):
         bounded_win = Window(pad[1], pad[0], ds_ra.width, ds_ra.height)
         assert (ds_ra_boundless.array[bounded_win.toslices()] == ds_ra.array).all()
         test_transform = ds_ra.transform * Affine.translation(-pad[1], -pad[0])
-        assert (ds_ra_boundless.transform.xoff == test_transform.xoff and
-                ds_ra_boundless.transform.yoff == test_transform.yoff)
+        assert (
+            ds_ra_boundless.transform.xoff == test_transform.xoff and
+            ds_ra_boundless.transform.yoff == test_transform.yoff
+        )
 
 
 @pytest.mark.parametrize('file, count', [('masked_file', 1), ('rgba_file', 3)])
@@ -159,8 +157,10 @@ def test_bounded_window_slices(byte_file, pad):
         bounded_win, bounded_slices = RasterArray.bounded_window_slices(ds, window)
         # test that the returned window is bounded by the dataset
         assert (bounded_win.col_off == max(0, -pad[1]) and bounded_win.row_off == max(0, -pad[0]))
-        assert (bounded_win.width == min(ds.width, ds.width + 2 * pad[1]) and
-                bounded_win.height == min(ds.height, ds.height + 2 * pad[0]))
+        assert (
+            bounded_win.width == min(ds.width, ds.width + 2 * pad[1]) and
+            bounded_win.height == min(ds.height, ds.height + 2 * pad[0])
+        )
 
 
 def test_slice_to_bounds(byte_ra: RasterArray):
@@ -244,17 +244,19 @@ def test_reprojection(rgb_byte_ra: RasterArray):
     """Test raster array re-projection"""
     # reproject to WGS84 with default parameters
     to_crs = CRS.from_epsg(4326)
-    reproj_ra = rgb_byte_ra.reproject(crs=to_crs, resampling=Resampling.bilinear)
-    assert (reproj_ra.crs == to_crs)
-    assert (reproj_ra.array[:, reproj_ra.mask].mean() ==
-            pytest.approx(rgb_byte_ra.array[:, rgb_byte_ra.mask].mean(), abs=.01))
+    reprj_ra = rgb_byte_ra.reproject(crs=to_crs, resampling=Resampling.bilinear)
+    assert (reprj_ra.crs == to_crs)
+    assert (
+        reprj_ra.array[:, reprj_ra.mask].mean() == pytest.approx(rgb_byte_ra.array[:, rgb_byte_ra.mask].mean(), abs=.01)
+    )
 
     # reproject with rescaling to WGS84 using a specified transform & shape
     to_transform = Affine.identity() * Affine.scale(.5e-5)
-    reproj_ra = rgb_byte_ra.reproject(
+    reprj_ra = rgb_byte_ra.reproject(
         crs=to_crs, transform=to_transform, shape=tuple(np.array(rgb_byte_ra.shape) * 2), resampling=Resampling.bilinear
     )
-    assert (reproj_ra.crs == to_crs)
-    assert (reproj_ra.transform == to_transform)
-    assert (reproj_ra.array[:, reproj_ra.mask].mean() ==
-            pytest.approx(rgb_byte_ra.array[:, rgb_byte_ra.mask].mean(), abs=.1))
+    assert (reprj_ra.crs == to_crs)
+    assert (reprj_ra.transform == to_transform)
+    assert (
+        reprj_ra.array[:, reprj_ra.mask].mean() == pytest.approx(rgb_byte_ra.array[:, rgb_byte_ra.mask].mean(), abs=.1)
+    )

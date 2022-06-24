@@ -40,8 +40,8 @@ def test_creation(src_file, ref_file, expected_proc_crs, request):
     ref_file = request.getfixturevalue(ref_file)
     raster_pair = RasterPairReader(src_file, ref_file)
     assert (raster_pair.proc_crs == expected_proc_crs)
-    assert (raster_pair.src_bands == (1,))
-    assert (raster_pair.ref_bands == (1,))
+    assert (raster_pair.src_bands == (1, ))
+    assert (raster_pair.ref_bands == (1, ))
 
     # enter the raster pair context and test block(s) correspond to bands
     with raster_pair as rp:

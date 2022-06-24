@@ -36,16 +36,16 @@ from homonim.enums import ProcCrs
 from homonim.raster_array import RasterArray
 
 logger = logging.getLogger(__name__)
-
 """Named tuple to contain a set of matching block windows for a source-reference image pair"""
 BlockPair = namedtuple(
-    'BlockPair',
-    ['band_i',  # band index (0 based)
-     'src_in_block',  # overlapping source window
-     'ref_in_block',  # overlapping reference window
-     'src_out_block',  # non-overlapping source window
-     'ref_out_block',  # non-overlapping reference window
-     'outer']
+    'BlockPair', [
+        'band_i',  # band index (0 based)
+        'src_in_block',  # overlapping source window
+        'ref_in_block',  # overlapping reference window
+        'src_out_block',  # non-overlapping source window
+        'ref_out_block',  # non-overlapping reference window
+        'outer'
+    ]
 )  # True if src_*_block touches the boundary of the source image
 
 
@@ -146,9 +146,7 @@ class RasterPairReader:
 
         # warn if the source and reference are not in the same CRS
         if src_im.crs.to_proj4() != ref_im.crs.to_proj4():
-            logger.warning(
-                f'Source and reference image pair are not in the same CRS: {src_im.name} and {ref_im.name}'
-            )
+            logger.warning(f'Source and reference image pair are not in the same CRS: {src_im.name} and {ref_im.name}')
 
     @staticmethod
     def _resolve_proc_crs(
@@ -169,8 +167,10 @@ class RasterPairReader:
                 f"Source pixel size {np.round(src_im.res, decimals=3)} is {cmp_str} than the reference "
                 f"{np.round(ref_im.res, decimals=3)}. Using proc_crs='{proc_crs}'."
             )
-        elif ((proc_crs == ProcCrs.src and src_pixel_smaller) or
-              (proc_crs == ProcCrs.ref and not src_pixel_smaller)):
+        elif (
+            (proc_crs == ProcCrs.src and src_pixel_smaller) or
+            (proc_crs == ProcCrs.ref and not src_pixel_smaller)
+        ): # yapf: disable
             # warn if the proc_crs value does not correspond to the lowest resolution of the source and
             # reference images
             rec_crs_str = ProcCrs.ref if src_pixel_smaller else ProcCrs.src
@@ -302,12 +302,12 @@ class RasterPairReader:
         return self._ref_im
 
     @property
-    def src_bands(self) -> Tuple[int,]:
+    def src_bands(self) -> Tuple[int, ]:
         """The source non-alpha band indices (1-based)."""
         return self._src_bands
 
     @property
-    def ref_bands(self) -> Tuple[int,]:
+    def ref_bands(self) -> Tuple[int, ]:
         """The reference non-alpha band indices (1-based)."""
         return self._ref_bands
 

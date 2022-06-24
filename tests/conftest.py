@@ -34,7 +34,6 @@ from homonim import root_path, utils
 from homonim.enums import ProcCrs, Method
 from homonim.fuse import RasterFuse
 from homonim.raster_array import RasterArray
-
 """Named tuple to contain fuse cli parameters and string"""
 FuseCliParams = namedtuple('FuseCliParams',
     ['src_file', 'ref_file', 'method', 'kernel_shape', 'proc_crs', 'homo_file', 'param_file', 'cli_str']
@@ -132,16 +131,14 @@ def float_50cm_profile(float_50cm_array):
 @pytest.fixture
 def byte_ra(byte_array, byte_profile):
     """Raster array with single band of byte"""
-    return RasterArray(
-        byte_array, byte_profile['crs'], byte_profile['transform'], nodata=byte_profile['nodata']
-    )
+    return RasterArray(byte_array, byte_profile['crs'], byte_profile['transform'], nodata=byte_profile['nodata'])
 
 
 @pytest.fixture
 def rgb_byte_ra(byte_array, byte_profile):
     """Raster array with three bands of byte"""
     return RasterArray(
-        np.stack((byte_array,) * 3, axis=0), byte_profile['crs'], byte_profile['transform'],
+        np.stack((byte_array, ) * 3, axis=0), byte_profile['crs'], byte_profile['transform'],
         nodata=byte_profile['nodata']
     )
 
@@ -194,7 +191,7 @@ def float_45cm_array(float_100cm_array, float_100cm_profile, float_45cm_profile)
         dst_transform=float_45cm_profile['transform'],
         src_nodata=float_100cm_profile['nodata'],
         resampling=Resampling.bilinear,
-    )
+    ) # yapf: disable
 
     return float_45cm_array
 
@@ -222,13 +219,12 @@ def byte_file(tmp_path, byte_array, byte_profile):
 @pytest.fixture
 def rgba_file(tmp_path, byte_array, byte_profile):
     """RGB + alpha band byte geotiff"""
-    array = np.stack((byte_array,) * 4, axis=0)
+    array = np.stack((byte_array, ) * 4, axis=0)
     array[3] = (array[0] != byte_profile['nodata']) * 255
     filename = tmp_path.joinpath('rgba.tif')
     profile = byte_profile.copy()
     profile.update(
-        count=4, nodata=None,
-        colorinterp=[ColorInterp.red, ColorInterp.green, ColorInterp.blue, ColorInterp.alpha]
+        count=4, nodata=None, colorinterp=[ColorInterp.red, ColorInterp.green, ColorInterp.blue, ColorInterp.alpha]
     )
     with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
         with rio.open(filename, 'w', **profile) as ds:
@@ -328,7 +324,7 @@ def float_45cm_ref_file(tmp_path, float_45cm_array, float_45cm_profile):
 @pytest.fixture
 def float_100cm_rgb_file(tmp_path, float_100cm_array, float_100cm_profile):
     """3 band float32 geotiff with 100cm pixel resolution"""
-    array = np.stack((float_100cm_array,) * 3, axis=0)
+    array = np.stack((float_100cm_array, ) * 3, axis=0)
     profile = float_100cm_profile.copy()
     profile.update(count=3)
     filename = tmp_path.joinpath('float_100cm_rgb.tif')
@@ -341,7 +337,7 @@ def float_100cm_rgb_file(tmp_path, float_100cm_array, float_100cm_profile):
 @pytest.fixture
 def float_50cm_rgb_file(tmp_path, float_50cm_array, float_50cm_profile):
     """3 band float32 geotiff with 50cm pixel resolution, same extent as float_100cm_rgb_file"""
-    array = np.stack((float_50cm_array,) * 3, axis=0)
+    array = np.stack((float_50cm_array, ) * 3, axis=0)
     profile = float_50cm_profile.copy()
     profile.update(count=3)
     filename = tmp_path.joinpath('float_50cm_rgb.tif')
@@ -385,6 +381,8 @@ def basic_fuse_cli_params(tmp_path, float_100cm_ref_file, float_100cm_src_file):
     homo_file = tmp_path.joinpath(src_file.stem + post_fix)
     param_file = utils.create_param_filename(homo_file)
 
-    cli_str = (f'fuse -m {method.value} -k {kernel_shape[0]} {kernel_shape[1]} -od {tmp_path} -pc {proc_crs.value} '
-               f'{src_file} {ref_file}')
+    cli_str = (
+        f'fuse -m {method.value} -k {kernel_shape[0]} {kernel_shape[1]} -od {tmp_path} -pc {proc_crs.value} '
+        f'{src_file} {ref_file}'
+    )
     return FuseCliParams(src_file, ref_file, method, kernel_shape, proc_crs, homo_file, param_file, cli_str)

@@ -41,9 +41,7 @@ def test_fuse(tmp_path, runner, float_100cm_rgb_file, float_50cm_rgb_file, metho
     """Test fuse cli output with different methods and kernel shapes"""
     ref_file = float_100cm_rgb_file
     src_file = float_50cm_rgb_file
-    post_fix = utils.create_homo_postfix(
-        ProcCrs.ref, method, kernel_shape, RasterFuse.default_out_profile['driver']
-    )
+    post_fix = utils.create_homo_postfix(ProcCrs.ref, method, kernel_shape, RasterFuse.default_out_profile['driver'])
     homo_file = tmp_path.joinpath(src_file.stem + post_fix)
     cli_str = f'fuse -m {method.value} -k {kernel_shape[0]} {kernel_shape[1]} -od {tmp_path} {src_file} {ref_file}'
     result = runner.invoke(cli, cli_str.split())
@@ -165,8 +163,10 @@ def test_proc_crs(tmp_path, runner, float_100cm_ref_file, float_100cm_src_file, 
     _res_proc_crs = ProcCrs.ref if proc_crs == ProcCrs.auto else proc_crs
     post_fix = utils.create_homo_postfix(_res_proc_crs, method, kernel_shape, RasterFuse.default_out_profile['driver'])
     homo_file = tmp_path.joinpath(src_file.stem + post_fix)
-    cli_str = (f'fuse -m {method.value} -k {kernel_shape[0]} {kernel_shape[1]} -od {tmp_path} -pc {proc_crs.value} '
-               f'{src_file} {ref_file}')
+    cli_str = (
+        f'fuse -m {method.value} -k {kernel_shape[0]} {kernel_shape[1]} -od {tmp_path} -pc {proc_crs.value} '
+        f'{src_file} {ref_file}'
+    )
     result = runner.invoke(cli, cli_str.split())
     assert (result.exit_code == 0)
     assert (homo_file.exists())

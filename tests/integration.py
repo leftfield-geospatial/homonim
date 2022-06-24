@@ -69,7 +69,6 @@ def ngi_src_file():
         ('landsat_src_file', 's2_ref_file', Method.gain_blk_offset, (5, 5), ProcCrs.auto, False, ProcCrs.src),
         ('landsat_src_file', 's2_ref_file', Method.gain_blk_offset, (31, 31), ProcCrs.ref, False, ProcCrs.ref),
         ('ngi_src_files', 's2_ref_file', Method.gain_offset, (31, 31), ProcCrs.src, False, ProcCrs.src),
-
         ('ngi_src_files', 'modis_ref_file', Method.gain, (1, 1), ProcCrs.auto, True, ProcCrs.ref),
         ('ngi_src_files', 'landsat_ref_file', Method.gain_blk_offset, (5, 5), ProcCrs.auto, True, ProcCrs.ref),
         ('ngi_src_files', 's2_ref_file', Method.gain_offset, (15, 15), ProcCrs.auto, True, ProcCrs.ref),
@@ -79,8 +78,7 @@ def ngi_src_file():
     ]
 )
 def test_fuse(
-    tmp_path, runner, src_files, ref_file, method, kernel_shape, proc_crs, mask_partial, exp_proc_crs,
-    request
+    tmp_path, runner, src_files, ref_file, method, kernel_shape, proc_crs, mask_partial, exp_proc_crs, request
 ):
     """Additional integration tests using 'real' aerial and satellite imagery"""
 
@@ -91,8 +89,10 @@ def test_fuse(
     post_fix = utils.create_homo_postfix(exp_proc_crs, method, kernel_shape, RasterFuse.default_out_profile['driver'])
     homo_files = [tmp_path.joinpath(src_file.stem + post_fix) for src_file in src_files]
 
-    cli_str = (f'fuse -m {method.value} -k {kernel_shape[0]} {kernel_shape[1]} -od {tmp_path} -pc {proc_crs.value}'
-               f' -mbm 1 {src_file_str} {ref_file}')
+    cli_str = (
+        f'fuse -m {method.value} -k {kernel_shape[0]} {kernel_shape[1]} -od {tmp_path} -pc {proc_crs.value}'
+        f' -mbm 1 {src_file_str} {ref_file}'
+    )
     if mask_partial:
         cli_str += ' --mask-partial'
     result = runner.invoke(cli, cli_str.split())
@@ -126,5 +126,6 @@ def test_fuse(
                 # test homo mask consists of one blob
                 homo_mask_shapes = list(shapes(homo_mask.astype('uint8', copy=False), mask=homo_mask, connectivity=8))
                 assert (len(homo_mask_shapes) == 1)
+
 
 ##

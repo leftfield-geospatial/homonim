@@ -33,9 +33,11 @@ def _test_vals(param_stats):
     for band_name, band_stats in param_stats.items():
         assert ({'Mean', 'Std', 'Min', 'Max'} <= set(band_stats.keys()))
 
-    exp_param_stats_list = (3 * [{'Mean': 1, 'Std': 0, 'Min': 1, 'Max': 1}] +  # gains
-                            3 * [{'Mean': 0, 'Std': 0, 'Min': 0, 'Max': 0}] +  # offsets
-                            3 * [{'Mean': 1, 'Std': 0, 'Min': 1, 'Max': 1, 'Inpaint (%)': 0}])  # r2 vals
+    exp_param_stats_list = (
+        3 * [{'Mean': 1, 'Std': 0, 'Min': 1, 'Max': 1}] +  # gains
+        3 * [{'Mean': 0, 'Std': 0, 'Min': 0, 'Max': 0}] +  # offsets
+        3 * [{'Mean': 1, 'Std': 0, 'Min': 1, 'Max': 1, 'Inpaint (%)': 0}]   # r2
+    )  # yapf: disable
 
     for param_band_stats, exp_param_band_stats in zip(param_stats.values(), exp_param_stats_list):
         for k, v in exp_param_band_stats.items():

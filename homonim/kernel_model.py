@@ -44,9 +44,7 @@ class KernelModel:
     /328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data
     """
 
-    default_config = dict(
-        downsampling='average', upsampling='cubic_spline', r2_inpaint_thresh=0.25, mask_partial=False
-    )
+    default_config = dict(downsampling='average', upsampling='cubic_spline', r2_inpaint_thresh=0.25, mask_partial=False)
 
     def __init__(
         self, method, kernel_shape, param_image=False, r2_inpaint_thresh=default_config['r2_inpaint_thresh'],
@@ -133,8 +131,10 @@ class KernelModel:
         # find the keyword arguments that were not provided
         if mask is None:
             # if mask is passed, assume that it has been applied ref_array and src_array, otherwise do that here
-            mask = (~utils.nan_equals(src_array, RasterArray.default_nodata) &
-                    ~utils.nan_equals(ref_array, RasterArray.default_nodata))
+            mask = (
+                ~utils.nan_equals(src_array, RasterArray.default_nodata) &
+                ~utils.nan_equals(ref_array, RasterArray.default_nodata)
+            )
             ref_array[~mask] = 0
             src_array[~mask] = 0
         if mask_sum is None:
@@ -162,11 +162,13 @@ class KernelModel:
             #     = sum((ref - (m*src + c))**2), where m and c are the first 2 bands of param_array
             # The above can be expanded and expressed in terms of cv.boxFilter kernel sums as:
 
-            ss_res_array = (((param_array[0] ** 2) * src2_sum) +
-                            (2 * np.product(param_array[:2], axis=0) * src_sum) -
-                            (2 * param_array[0] * src_ref_sum) -
-                            (2 * param_array[1] * ref_sum) +
-                            ref2_sum + (mask_sum * (param_array[1] ** 2)))
+            ss_res_array = (
+                ((param_array[0] ** 2) * src2_sum) +
+                (2 * np.product(param_array[:2], axis=0) * src_sum) -
+                (2 * param_array[0] * src_ref_sum) -
+                (2 * param_array[1] * ref_sum) +
+                ref2_sum + (mask_sum * (param_array[1] ** 2))
+            ) # yapf: disable
         else:
             # find RSS for method == Method.gain or Method.gain_blk_offset
             # RSS = sum((ref - m*src)**2), where m is the first band of param_array

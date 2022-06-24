@@ -248,7 +248,7 @@ def validate_param_image(param_filename):
         tags = param_im.tags()
         # check band count is a multiple of 3 and that expected metadata tags exist
         if (param_im.count == 0 or divmod(param_im.count, 3)[1] != 0 or
-            not {'HOMO_METHOD', 'HOMO_MODEL_CONF', 'HOMO_PROC_CRS'} <= set(tags)):
+                not {'HOMO_METHOD', 'HOMO_MODEL_CONF', 'HOMO_PROC_CRS'} <= set(tags)):
             raise ImageFormatError(f'{param_filename.name} is not a valid parameter image.')
 
         # check band descriptions end with the expected suffixes

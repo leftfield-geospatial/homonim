@@ -65,9 +65,11 @@ class ParamStats:
     @property
     def metadata(self):
         """Return a printable string of parameter metadata"""
-        res_str = (f'Method: {self._method}\n'
-                   f'Kernel shape: {self._tags["HOMO_KERNEL_SHAPE"]}\n'
-                   f'Processing CRS: {self._tags["HOMO_PROC_CRS"]}')
+        res_str = (
+            f'Method: {self._method}\n'
+            f'Kernel shape: {self._tags["HOMO_KERNEL_SHAPE"]}\n'
+            f'Processing CRS: {self._tags["HOMO_PROC_CRS"]}'
+        )
         if self._method == 'gain-offset':
             res_str += f'\nR\N{SUPERSCRIPT TWO} inpaint threshold: {self._r2_inpaint_thresh}'
         return res_str

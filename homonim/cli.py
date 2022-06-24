@@ -82,8 +82,8 @@ def _nodata_cb(ctx, param, value):
             value = float(value.lower())
             if not rio.dtypes.can_cast_dtype(value, ctx.params['dtype']):
                 raise click.BadParameter(
-                    f"{value} cannot be cast to the output image data type {ctx.params['dtype']}",
-                    param=param, param_hint="nodata"
+                    f"{value} cannot be cast to the output image data type {ctx.params['dtype']}", param=param,
+                    param_hint="nodata"
                 )
         except (TypeError, ValueError):
             raise click.BadParameter(f"{value} is not a number", param=param, param_hint="nodata")
@@ -197,7 +197,7 @@ class _FuseCommand(_HomonimCommand):
         # set the default creation_options if no other driver or creation_options have been specified
         # (this can't be done in a callback as it depends on 'driver')
         if (ctx.get_parameter_source('driver') == ParameterSource.DEFAULT and
-            ctx.get_parameter_source('creation_options') == ParameterSource.DEFAULT):
+                ctx.get_parameter_source('creation_options') == ParameterSource.DEFAULT):
             ctx.params['creation_options'] = RasterFuse.default_out_profile['creation_options']
 
         return click.Command.invoke(self, ctx)
@@ -241,12 +241,11 @@ def cli(verbose, quiet):
     "-m", "--method", type=click.Choice([m.value for m in Method], case_sensitive=False),
     default=Method.gain_blk_offset.value,
     help="Homogenisation method.\ngain: Gain-only model. \ngain-blk-offset: Gain-only model applied to "
-         "offset normalised image blocks [default]. \ngain-offset: Full gain and offset model."
+    "offset normalised image blocks [default]. \ngain-offset: Full gain and offset model."
 )
 @click.option(
-    "-k", "--kernel-shape", type=click.Tuple([click.INT, click.INT]), nargs=2, default=(5, 5),
-    show_default=True, metavar='<HEIGHT WIDTH>',
-    help="Kernel height and width in pixels of the --proc-crs / -pc image."
+    "-k", "--kernel-shape", type=click.Tuple([click.INT, click.INT]), nargs=2, default=(5, 5), show_default=True,
+    metavar='<HEIGHT WIDTH>', help="Kernel height and width in pixels of the --proc-crs / -pc image."
 )
 @click.option(
     "-od", "--output-dir", type=click.Path(exists=True, file_okay=False, writable=True),
@@ -257,10 +256,10 @@ def cli(verbose, quiet):
     help="Overwrite existing output file(s)."
 )
 @click.option(
-    "-cmp", "--compare", "comp_file", type=click.Path(dir_okay=False, path_type=pathlib.Path),
-    is_flag=False, flag_value="ref", default=None, callback=_compare_cb,
+    "-cmp", "--compare", "comp_file", type=click.Path(dir_okay=False, path_type=pathlib.Path), is_flag=False,
+    flag_value="ref", default=None, callback=_compare_cb,
     help="Statistically compare source and homogenised images with this image.  If specified without an "
-         "image file, source and homogenised images will be compared with the reference."
+    "image file, source and homogenised images will be compared with the reference."
 )
 @click.option(
     "-nbo", "--no-build-ovw", "build_ovw", type=click.BOOL, is_flag=True, default=True,
@@ -270,31 +269,27 @@ def cli(verbose, quiet):
     "-pc", "--proc-crs", type=click.Choice([pc.value for pc in ProcCrs], case_sensitive=False),
     default=ProcCrs.auto.value,
     help="The image CRS in which to perform parameter estimation.\nauto: Estimate in the lowest resolution "
-         "of the source and reference image CRS's [default - recommended].\nsrc: Estimate in the source image CRS."
-         "\nref: Estimate in the reference image CRS."
+    "of the source and reference image CRS's [default - recommended].\nsrc: Estimate in the source image CRS."
+    "\nref: Estimate in the reference image CRS."
 )
 @click.option(
-    "-c", "--conf", type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path),
-    required=False, default=None, show_default=True,
-    help="Path to a yaml configuration file specifying the options below."
+    "-c", "--conf", type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path), required=False,
+    default=None, show_default=True, help="Path to a yaml configuration file specifying the options below."
 )
 # advanced options
 @click.option(
-    "-pi", "--param-image", type=click.BOOL, is_flag=True,
-    default=RasterFuse.default_homo_config['param_image'],
+    "-pi", "--param-image", type=click.BOOL, is_flag=True, default=RasterFuse.default_homo_config['param_image'],
     help=f"Create a debug image, containing model parameters and R\N{SUPERSCRIPT TWO} values for each "
-         "homogenised image."
+    "homogenised image."
 )
 @click.option(
-    "-mp", "--mask-partial", type=click.BOOL, is_flag=True,
-    default=KernelModel.default_config['mask_partial'],
+    "-mp", "--mask-partial", type=click.BOOL, is_flag=True, default=KernelModel.default_config['mask_partial'],
     help=f"Mask biased homogenised pixels produced from partial kernel or source / reference image coverage."
 )
 @threads_option
 @click.option(
-    "-mbm", "--max-block-mem", type=click.FLOAT,
-    default=RasterFuse.default_homo_config['max_block_mem'], show_default=True,
-    help="Maximum image block size in megabytes (0 = block size is the image size)."
+    "-mbm", "--max-block-mem", type=click.FLOAT, default=RasterFuse.default_homo_config['max_block_mem'],
+    show_default=True, help="Maximum image block size in megabytes (0 = block size is the image size)."
 )
 @click.option(
     "-ds", "--downsampling", type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
@@ -310,7 +305,7 @@ def cli(verbose, quiet):
     "-rit", "--r2-inpaint-thresh", type=click.FloatRange(min=0, max=1),
     default=KernelModel.default_config['r2_inpaint_thresh'], show_default=True, metavar="FLOAT 0-1",
     help="R\N{SUPERSCRIPT TWO} threshold below which to inpaint model parameters from "
-         "surrounding areas (0 = turn off inpainting). For 'gain-offset' method only."
+    "surrounding areas (0 = turn off inpainting). For 'gain-offset' method only."
 )
 @click.option(
     "--out-driver", "driver",
@@ -324,18 +319,16 @@ def cli(verbose, quiet):
 )
 @click.option(
     "--out-nodata", "nodata", type=click.STRING, callback=_nodata_cb, metavar="[NUMBER|null|nan]",
-    default=RasterFuse.default_out_profile['nodata'], show_default=True,
-    help="Output image nodata value."
+    default=RasterFuse.default_out_profile['nodata'], show_default=True, help="Output image nodata value."
 )
 @click.option(
-    '-co', '--out-profile', 'creation_options', metavar='NAME=VALUE', multiple=True,
-    default=(), callback=_creation_options_cb,
+    '-co', '--out-profile', 'creation_options', metavar='NAME=VALUE', multiple=True, default=(),
+    callback=_creation_options_cb,
     help="Driver specific image creation options for the output image(s).  See the GDAL docs for details."
 )
 @click.pass_context
 def fuse(
-    ctx, src_file, ref_file, method, kernel_shape, output_dir, overwrite, comp_file, build_ovw, proc_crs, conf,
-    **kwargs
+    ctx, src_file, ref_file, method, kernel_shape, output_dir, overwrite, comp_file, build_ovw, proc_crs, conf, **kwargs
 ):
     """
     Radiometrically homogenise image(s) by fusion with a reference.
@@ -391,7 +384,7 @@ def fuse(
             with RasterFuse(
                 src_filename, ref_file, homo_path, method=Method(method), kernel_shape=kernel_shape,
                 proc_crs=ProcCrs(proc_crs), overwrite=overwrite, **config
-            ) as raster_fuse:
+            ) as raster_fuse: # yapf: disable
                 start_time = timer()
                 raster_fuse.process()
                 # build overviews
@@ -422,8 +415,8 @@ cli.add_command(fuse)
     "-pc", "--proc-crs", type=click.Choice([pc.value for pc in ProcCrs], case_sensitive=False),
     default=ProcCrs.auto.value, show_default=True,
     help="The image CRS in which to perform processing.\nauto: process in the lowest "
-         "resolution of the source and reference image CRS's (recommended).\nsrc: process in "
-         "the source image CRS.\nref: process in the reference image CRS."
+    "resolution of the source and reference image CRS's (recommended).\nsrc: process in "
+    "the source image CRS.\nref: process in the reference image CRS."
 )
 @output_option
 def compare(src_file, ref_file, proc_crs, output):
@@ -464,10 +457,7 @@ def compare(src_file, ref_file, proc_crs, output):
         summary_dict = {}
         for src_file, _res_dict in res_dict.items():
             res_df = pd.DataFrame.from_dict(_res_dict, orient='index')
-            res_str = res_df.to_string(
-                float_format="{:.2f}".format, index=True, justify="center",
-                index_names=False
-            )
+            res_str = res_df.to_string(float_format="{:.2f}".format, index=True, justify="center", index_names=False)
             logger.info(f'\n\n{src_file}:\n\n{res_str}')
             summary_dict[src_file] = _res_dict['Mean']
 
@@ -476,10 +466,7 @@ def compare(src_file, ref_file, proc_crs, output):
             summ_df = pd.DataFrame.from_dict(summary_dict, orient='index')
             summ_df = summ_df.rename(columns=dict(zip(summ_df.columns, ('Mean ' + summ_df.columns))))
             summ_df.insert(0, 'File', [pathlib.Path(fn).name for fn in summ_df.index])
-            summ_str = summ_df.to_string(
-                float_format="{:.2f}".format, index=False, justify="center",
-                index_names=False
-            )
+            summ_str = summ_df.to_string(float_format="{:.2f}".format, index=False, justify="center", index_names=False)
             logger.info(f'\n\nSummary over bands:\n\n{summ_str}')
 
         if output is not None:
@@ -497,8 +484,8 @@ cli.add_command(compare)
 
 @click.command()
 @click.argument(
-    "param-file", nargs=-1, metavar="INPUTS...",
-    type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path), callback=_param_file_cb
+    "param-file", nargs=-1, metavar="INPUTS...", type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
+    callback=_param_file_cb
 )
 @output_option
 def stats(param_file, output):
@@ -528,8 +515,7 @@ def stats(param_file, output):
             # format the statistics as a dataframe to get printable string
             param_df = pd.DataFrame.from_dict(param_dict, orient='index')
             param_str = param_df.to_string(
-                float_format="{:.2f}".format, index=True, justify="center",
-                index_names=False
+                float_format="{:.2f}".format, index=True, justify="center", index_names=False
             )
             logger.info(f'Stats:\n{param_str}')
 

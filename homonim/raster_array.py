@@ -203,8 +203,10 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         bounded_window = Window.from_slices((bounded_ul[0], bounded_br[0]), (bounded_ul[1], bounded_br[1]))
         bounded_start = bounded_ul - win_ul
         bounded_stop = bounded_start + (bounded_br - bounded_ul)
-        bounded_slices = (slice(bounded_start[0], bounded_stop[0], None),
-                          slice(bounded_start[1], bounded_stop[1], None))
+        bounded_slices = (
+            slice(bounded_start[0], bounded_stop[0], None),
+            slice(bounded_start[1], bounded_stop[1], None)
+        ) # yapf: disable
         return bounded_window, bounded_slices
 
     @property
@@ -260,7 +262,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         return (self._transform.a, -self._transform.e)
 
     @property
-    def bounds(self) -> Tuple[float,]:
+    def bounds(self) -> Tuple[float, ]:
         """The (left, bottom, right, top) co-ordinates of the array extent."""
         return windows.bounds(windows.Window(0, 0, self.width, self.height), self._transform)
 
@@ -495,18 +497,11 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
             _dst_array = np.zeros(shape, dtype=dtype)
 
         _, _dst_transform = reproject(
-            self._array,
-            destination=_dst_array,
-            src_crs=self._crs,
-            src_transform=self._transform,
-            src_nodata=self._nodata,
-            dst_crs=crs,
-            dst_transform=transform,
-            dst_nodata=nodata,
-            num_threads=multiprocessing.cpu_count(),
-            resampling=resampling,
-            **kwargs
+            self._array, destination=_dst_array, src_crs=self._crs, src_transform=self._transform,
+            src_nodata=self._nodata, dst_crs=crs, dst_transform=transform, dst_nodata=nodata,
+            num_threads=multiprocessing.cpu_count(), resampling=resampling, **kwargs
         )
         return RasterArray(_dst_array, crs=crs, transform=_dst_transform, nodata=nodata)
+
 
 ##

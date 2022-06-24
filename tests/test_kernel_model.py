@@ -66,8 +66,7 @@ def test_ref_basic_fit(
     ]
 ) # yapf: disable
 def test_src_basic_fit(
-    float_100cm_ra: RasterArray, float_50cm_ra: RasterArray, method: Method,
-    kernel_shape: Tuple[int, int]
+    float_100cm_ra: RasterArray, float_50cm_ra: RasterArray, method: Method, kernel_shape: Tuple[int, int]
 ):
     """Test that src-space models are fitted correctly against known parameters"""
     kernel_model = SrcSpaceModel(method, kernel_shape, mask_partial=False, r2_inpaint_thresh=0.25)
@@ -176,7 +175,7 @@ def test_r2_inpainting(float_50cm_ra: RasterArray, kernel_shape: Tuple[int, int]
     low_r2_loc = np.floor(np.array(ref_ra.shape) / 2).astype('int')
     low_r2_ul = (low_r2_loc - np.floor((np.array(kernel_shape) / 2))).astype('int')
     low_r2_mask = np.zeros_like(ref_ra.mask).astype('bool')
-    low_r2_mask[low_r2_ul[0]: low_r2_ul[0] + kernel_shape[0], low_r2_ul[1]: low_r2_ul[1] + kernel_shape[1]] = True
+    low_r2_mask[low_r2_ul[0]:low_r2_ul[0] + kernel_shape[0], low_r2_ul[1]:low_r2_ul[1] + kernel_shape[1]] = True
     ref_ra.array[low_r2_loc[0], low_r2_loc[1]] = -100
 
     # fit models with and without inpainting
@@ -198,8 +197,10 @@ def test_r2_inpainting(float_50cm_ra: RasterArray, kernel_shape: Tuple[int, int]
     # test r2 inpainting has improved parameters
     assert (no_inpaint_param_ra.array[1, no_inpaint_param_ra.mask] != pytest.approx(0, abs=1.e-1))
     assert (inpaint_param_ra.array[1, inpaint_param_ra.mask] == pytest.approx(0, abs=1.e-1))
-    assert (inpaint_param_ra.array[0, inpaint_param_ra.mask].var() <
-            no_inpaint_param_ra.array[0, no_inpaint_param_ra.mask].var())
+    assert (
+        inpaint_param_ra.array[0, inpaint_param_ra.mask].var() <
+        no_inpaint_param_ra.array[0, no_inpaint_param_ra.mask].var()
+    )
 
 
 @pytest.mark.parametrize(
@@ -211,9 +212,7 @@ def test_r2_inpainting(float_50cm_ra: RasterArray, kernel_shape: Tuple[int, int]
         ((5, 5), True),
     ]
 ) # yapf: disable
-def test_ref_masking(
-    float_100cm_ra, float_50cm_ra, kernel_shape: Tuple[int, int], mask_partial: bool
-):
+def test_ref_masking(float_100cm_ra, float_50cm_ra, kernel_shape: Tuple[int, int], mask_partial: bool):
     """Test ref-space partial masking"""
     kernel_model = RefSpaceModel(Method.gain_blk_offset, kernel_shape, mask_partial=mask_partial)
     src_ra = float_50cm_ra.copy()
@@ -250,9 +249,7 @@ def test_ref_masking(
         ((5, 5), True),
     ]
 ) # yapf: disable
-def test_src_masking(
-    float_100cm_ra, float_50cm_ra, kernel_shape: Tuple[int, int], mask_partial: bool
-):
+def test_src_masking(float_100cm_ra, float_50cm_ra, kernel_shape: Tuple[int, int], mask_partial: bool):
     """Test src-space partial masking"""
     kernel_model = SrcSpaceModel(Method.gain_blk_offset, kernel_shape, mask_partial=mask_partial)
     src_ra = float_100cm_ra

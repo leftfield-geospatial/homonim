@@ -124,6 +124,7 @@ def test_basic_fusion(src_file, ref_file, method, kernel_shape, max_block_mem, t
         assert (out_mask == src_mask).all()
         assert (out_array[out_mask] == pytest.approx(src_array[src_mask], abs=2))
 
+
 # formatter: off
 @pytest.mark.parametrize('out_profile', [
     dict(driver='GTiff', dtype='float32', nodata=float('nan'),
@@ -149,8 +150,11 @@ def test_out_profile(float_100cm_rgb_file, tmp_path, out_profile):
     with rio.open(float_100cm_rgb_file, 'r') as src_ds, rio.open(raster_fuse.homo_filename, 'r') as out_ds:
         # test output image has been set with out_profile properties
         for k, v in out_profile.items():
-            assert ((v is None and k not in out_ds.profile) or (out_ds.profile[k] == v) or
-                    (str(out_ds.profile[k]) == str(v)))
+            assert (
+                (v is None and k not in out_ds.profile) or
+                (out_ds.profile[k] == v) or
+                (str(out_ds.profile[k]) == str(v))
+            ) # yapf: disable
 
         # test output image has been set with src image properties not in out_profile
         if src_ds.profile['driver'].lower() == out_profile['driver'].lower():
@@ -161,8 +165,11 @@ def test_out_profile(float_100cm_rgb_file, tmp_path, out_profile):
             src_keys = {'width', 'height', 'count', 'dtype', 'crs', 'transform'}.difference(out_profile.keys())
         for k in src_keys:
             v = src_ds.profile[k]
-            assert ((v is None and k not in out_ds.profile) or (out_ds.profile[k] == v) or
-                    (str(out_ds.profile[k]) == str(v)))
+            assert (
+                (v is None and k not in out_ds.profile) or
+                (out_ds.profile[k] == v) or
+                (str(out_ds.profile[k]) == str(v))
+            ) # yapf: disable
 
 
 @pytest.mark.parametrize(
@@ -325,8 +332,12 @@ def test_tags(tmp_path, float_50cm_ref_file):
 
     with rio.open(raster_fuse.homo_filename, 'r') as out_ds:
         tags = out_ds.tags()
-        assert ({'HOMO_SRC_FILE', 'HOMO_REF_FILE', 'HOMO_METHOD', 'HOMO_KERNEL_SHAPE', 'HOMO_PROC_CRS',
-                 'HOMO_MODEL_CONF', 'HOMO_CONF'} <= set(tags))
+        assert (
+            {
+                'HOMO_SRC_FILE', 'HOMO_REF_FILE', 'HOMO_METHOD', 'HOMO_KERNEL_SHAPE', 'HOMO_PROC_CRS',
+                'HOMO_MODEL_CONF', 'HOMO_CONF'
+            } <= set(tags)
+        )
         assert (tags['HOMO_SRC_FILE'] == float_50cm_ref_file.name)
         assert (tags['HOMO_REF_FILE'] == float_50cm_ref_file.name)
         assert (tags['HOMO_METHOD'].lower() == method.name)

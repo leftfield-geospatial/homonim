@@ -16,11 +16,11 @@
     You should have received a copy of the GNU Affero General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
-import concurrent.futures
 import logging
 import multiprocessing
 import pathlib
 import threading
+from concurrent import futures
 from contextlib import ExitStack
 from typing import Tuple
 
@@ -57,8 +57,8 @@ class RasterFuse:
     default_model_config = KernelModel.default_config
 
     def __init__(
-        self, src_filename, ref_filename, homo_path, method, kernel_shape, proc_crs=ProcCrs.auto,
-        overwrite=False, homo_config=None, model_config=None, out_profile=None
+        self, src_filename, ref_filename, homo_path, method, kernel_shape, proc_crs=ProcCrs.auto, overwrite=False,
+        homo_config=None, model_config=None, out_profile=None
     ):
         """
         Create a RasterFuse class.
@@ -254,8 +254,9 @@ class RasterFuse:
             ref_meta_dict = self._raster_pair.ref_im.tags(ref_bi)
             for param_i, param_name in zip(range(bi, im.count, num_src_bands), ['GAIN', 'OFFSET', 'R2']):
                 im.set_band_description(param_i + 1, f'{ref_descr}_{param_name}')
-                param_meta_dict = {k: f'{v.upper()} {param_name}' for k, v in ref_meta_dict.items() if
-                                   k in ['ABBREV', 'ID', 'NAME']}
+                param_meta_dict = {
+                    k: f'{v.upper()} {param_name}' for k, v in ref_meta_dict.items() if k in ['ABBREV', 'ID', 'NAME']
+                }
                 im.update_tags(param_i + 1, **param_meta_dict)
 
     def _assert_open(self):
@@ -395,13 +396,14 @@ class RasterFuse:
                 self._process_block(block_pair)
         else:
             # process blocks concurrently
-            with concurrent.futures.ThreadPoolExecutor(max_workers=self._config['threads']) as executor:
+            with futures.ThreadPoolExecutor(max_workers=self._config['threads']) as executor:
                 # submit blocks for processing
-                futures = [executor.submit(self._process_block, block_pair)
-                           for block_pair in self._raster_pair.block_pairs()]
+                proc_futures = [
+                    executor.submit(self._process_block, block_pair) for block_pair in self._raster_pair.block_pairs()
+                ]
 
                 # wait for threads in order of completion, and raise any thread generated exceptions
                 for future in tqdm(
-                    concurrent.futures.as_completed(futures), bar_format=bar_format, total=len(futures)
-                ):
+                    futures.as_completed(proc_futures), bar_format=bar_format, total=len(proc_futures)
+                ): # yapf: disable
                     future.result()

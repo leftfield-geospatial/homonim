@@ -24,7 +24,6 @@ import pathlib
 import numpy as np
 import rasterio as rio
 from rasterio.warp import Resampling
-
 """
 Downsample an image by an integer factor, keeping the grid alignment and bounds.  
 Scale to uint8 and compress with DEFLATE.
@@ -39,14 +38,13 @@ np.set_printoptions(suppress=True)
 def parse_arguments():
     parser = argparse.ArgumentParser(
         description='Downsample an image by an integer factor, keeping the grid alignment and bounds. '
-                    'Intended for NGI unrectified imagery.'
+        'Intended for NGI unrectified imagery.'
     )
     parser.add_argument(
         "src_im_wildcard", help="source image wildcard pattern or directory (e.g. '.' or '*_CMP.TIF')", type=str
     )
     parser.add_argument(
-        "-s", "--scale", help="scale factor to downsample by (default=10)", default=10, choices=range(1, 1000),
-        type=int
+        "-s", "--scale", help="scale factor to downsample by (default=10)", default=10, choices=range(1, 1000), type=int
     )
     return parser.parse_args()
 
@@ -91,9 +89,7 @@ def main(args):
                     )
 
                     # read and downsample
-                    src_array = src_im.read(
-                        out_shape=(4, ds_shape[0], ds_shape[1]), resampling=Resampling.average
-                    )
+                    src_array = src_im.read(out_shape=(4, ds_shape[0], ds_shape[1]), resampling=Resampling.average)
 
                     # scale, clip and cast to uint8
                     ds_array = np.clip(src_array[bands, :, :] * (255 / 3000), 0, 255).astype('uint8')
