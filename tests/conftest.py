@@ -17,8 +17,8 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
-from collections import namedtuple
 import re
+from collections import namedtuple
 
 import numpy as np
 import pytest
@@ -30,15 +30,16 @@ from rasterio.transform import Affine
 from rasterio.warp import reproject
 from rasterio.windows import Window
 
-from homonim import root_path
-from homonim import utils
+from homonim import root_path, utils
 from homonim.enums import ProcCrs, Method
 from homonim.fuse import RasterFuse
 from homonim.raster_array import RasterArray
 
 """Named tuple to contain fuse cli parameters and string"""
-FuseCliParams = namedtuple('FuseCliParams', ['src_file', 'ref_file', 'method', 'kernel_shape', 'proc_crs', 'homo_file',
-                                             'param_file', 'cli_str'])
+FuseCliParams = namedtuple('FuseCliParams',
+    ['src_file', 'ref_file', 'method', 'kernel_shape', 'proc_crs', 'homo_file', 'param_file', 'cli_str']
+) # yapf: disable
+
 
 def str_contain_nos(str1, str2):
     """Test if str2 contain str1, ignoring case and whitespace"""
@@ -131,29 +132,36 @@ def float_50cm_profile(float_50cm_array):
 @pytest.fixture
 def byte_ra(byte_array, byte_profile):
     """Raster array with single band of byte"""
-    return RasterArray(byte_array, byte_profile['crs'], byte_profile['transform'],
-                       nodata=byte_profile['nodata'])
+    return RasterArray(
+        byte_array, byte_profile['crs'], byte_profile['transform'], nodata=byte_profile['nodata']
+    )
 
 
 @pytest.fixture
 def rgb_byte_ra(byte_array, byte_profile):
     """Raster array with three bands of byte"""
-    return RasterArray(np.stack((byte_array,) * 3, axis=0), byte_profile['crs'], byte_profile['transform'],
-                       nodata=byte_profile['nodata'])
+    return RasterArray(
+        np.stack((byte_array,) * 3, axis=0), byte_profile['crs'], byte_profile['transform'],
+        nodata=byte_profile['nodata']
+    )
 
 
 @pytest.fixture
 def float_100cm_ra(float_100cm_array, float_100cm_profile):
     """Raster array with single band of float32 at 100cm pixel resolution"""
-    return RasterArray(float_100cm_array, float_100cm_profile['crs'], float_100cm_profile['transform'],
-                       nodata=float_100cm_profile['nodata'])
+    return RasterArray(
+        float_100cm_array, float_100cm_profile['crs'], float_100cm_profile['transform'],
+        nodata=float_100cm_profile['nodata']
+    )
 
 
 @pytest.fixture
 def float_50cm_ra(float_50cm_array, float_50cm_profile):
     """Raster array with single band of float32 at 50cm pixel resolution. 2x upsampled version of float_100cm_ra"""
-    return RasterArray(float_50cm_array, float_50cm_profile['crs'], float_50cm_profile['transform'],
-                       nodata=float_50cm_profile['nodata'])
+    return RasterArray(
+        float_50cm_array, float_50cm_profile['crs'], float_50cm_profile['transform'],
+        nodata=float_50cm_profile['nodata']
+    )
 
 
 @pytest.fixture
@@ -174,8 +182,9 @@ def float_45cm_profile(float_100cm_array, float_100cm_profile):
 @pytest.fixture
 def float_45cm_array(float_100cm_array, float_100cm_profile, float_45cm_profile):
     """1/.45 upsampled float_100cm_array"""
-    float_45cm_array = np.full((float_45cm_profile['height'], float_45cm_profile['width']),
-                               float_45cm_profile['nodata'])
+    float_45cm_array = np.full(
+        (float_45cm_profile['height'], float_45cm_profile['width']), float_45cm_profile['nodata']
+    )
     _ = reproject(
         float_100cm_array,
         destination=float_45cm_array,
@@ -194,8 +203,10 @@ def float_45cm_array(float_100cm_array, float_100cm_profile, float_45cm_profile)
 def float_45cm_ra(float_45cm_array, float_45cm_profile):
     """Raster array with single band of float32 at 45cm pixel resolution. upsampled version of float_100cm_ra, but
     on a different pixel grid"""
-    return RasterArray(float_45cm_array, float_45cm_profile['crs'], float_45cm_profile['transform'],
-                       nodata=float_45cm_profile['nodata'])
+    return RasterArray(
+        float_45cm_array, float_45cm_profile['crs'], float_45cm_profile['transform'],
+        nodata=float_45cm_profile['nodata']
+    )
 
 
 @pytest.fixture
@@ -215,8 +226,10 @@ def rgba_file(tmp_path, byte_array, byte_profile):
     array[3] = (array[0] != byte_profile['nodata']) * 255
     filename = tmp_path.joinpath('rgba.tif')
     profile = byte_profile.copy()
-    profile.update(count=4, nodata=None,
-                   colorinterp=[ColorInterp.red, ColorInterp.green, ColorInterp.blue, ColorInterp.alpha])
+    profile.update(
+        count=4, nodata=None,
+        colorinterp=[ColorInterp.red, ColorInterp.green, ColorInterp.blue, ColorInterp.alpha]
+    )
     with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
         with rio.open(filename, 'w', **profile) as ds:
             ds.write(array, indexes=range(1, 5))

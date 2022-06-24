@@ -68,18 +68,26 @@ class RasterCompare:
 
     """dict specifying stats labels and functions"""
     _stats = [
-        dict(ABBREV='r2',
-             DESCRIPTION='Pearson\'s correlation coefficient',
-             fn=lambda v1, v2: float(np.corrcoef(v1, v2)[0, 1])),
-        dict(ABBREV='RMSE',
-             DESCRIPTION='Root Mean Square Error',
-             fn=lambda v1, v2: float(np.sqrt(np.mean((v1 - v2) ** 2)))),
-        dict(ABBREV='rRMSE',
-             DESCRIPTION='Relative RMSE (RMSE/mean(ref))',
-             fn=lambda v1, v2: float(np.sqrt(np.mean((v1 - v2) ** 2)) / np.mean(v2))),
-        dict(ABBREV='N',
-             DESCRIPTION='Number of pixels',
-             fn=lambda v1, v2: len(v1))
+        dict(
+            ABBREV='r2',
+            DESCRIPTION='Pearson\'s correlation coefficient',
+            fn=lambda v1, v2: float(np.corrcoef(v1, v2)[0, 1])
+        ),
+        dict(
+            ABBREV='RMSE',
+            DESCRIPTION='Root Mean Square Error',
+            fn=lambda v1, v2: float(np.sqrt(np.mean((v1 - v2) ** 2)))
+        ),
+        dict(
+            ABBREV='rRMSE',
+            DESCRIPTION='Relative RMSE (RMSE/mean(ref))',
+            fn=lambda v1, v2: float(np.sqrt(np.mean((v1 - v2) ** 2)) / np.mean(v2))
+        ),
+        dict(
+            ABBREV='N',
+            DESCRIPTION='Number of pixels',
+            fn=lambda v1, v2: len(v1)
+        )
     ]
 
     @property
@@ -109,8 +117,8 @@ class RasterCompare:
 
             def get_res_key(band_i):
                 return (raster_pair.ref_im.descriptions[raster_pair.ref_bands[band_i] - 1] or
-                               raster_pair.src_im.descriptions[raster_pair.src_bands[band_i] - 1] or
-                               f'Band {band_i + 1}')
+                        raster_pair.src_im.descriptions[raster_pair.src_bands[band_i] - 1] or
+                        f'Band {band_i + 1}')
 
             def process_band(block_pair):
                 """Thread-safe function to process a block (that encompasses the full band)"""

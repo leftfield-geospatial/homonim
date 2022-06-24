@@ -28,10 +28,12 @@ from homonim.errors import ImageContentError, BlockSizeError, IoError
 from homonim.raster_pair import RasterPairReader
 
 
-@pytest.mark.parametrize('src_file, ref_file, expected_proc_crs', [
-    ('float_50cm_src_file', 'float_100cm_ref_file', ProcCrs.ref),
-    ('float_100cm_src_file', 'float_50cm_ref_file', ProcCrs.src)
-])
+@pytest.mark.parametrize(
+    'src_file, ref_file, expected_proc_crs', [
+        ('float_50cm_src_file', 'float_100cm_ref_file', ProcCrs.ref),
+        ('float_100cm_src_file', 'float_50cm_ref_file', ProcCrs.src)
+    ]
+) # yapf: disable
 def test_creation(src_file, ref_file, expected_proc_crs, request):
     """Test RasterPair creation and proc_crs resolution"""
     src_file = request.getfixturevalue(src_file)
@@ -49,12 +51,14 @@ def test_creation(src_file, ref_file, expected_proc_crs, request):
     assert rp.closed
 
 
-@pytest.mark.parametrize('src_file, ref_file', [
-    ('float_50cm_ref_file', 'float_100cm_src_file'),
-    ('float_50cm_ref_file', 'float_50cm_src_file'),
-    ('float_100cm_ref_file', 'float_50cm_src_file'),
-    ('float_100cm_ref_file', 'float_100cm_src_file')
-])
+@pytest.mark.parametrize(
+    'src_file, ref_file', [
+        ('float_50cm_ref_file', 'float_100cm_src_file'),
+        ('float_50cm_ref_file', 'float_50cm_src_file'),
+        ('float_100cm_ref_file', 'float_50cm_src_file'),
+        ('float_100cm_ref_file', 'float_100cm_src_file')
+    ]
+) # yapf: disable
 def test_coverage_exception(src_file, ref_file, request):
     """Test that ref not covering the extent of src raises an error"""
     src_file = request.getfixturevalue(src_file)
@@ -93,16 +97,18 @@ def test_not_open_exception(float_50cm_src_file, float_100cm_ref_file):
         _ = raster_pair.read(None)
 
 
-@pytest.mark.parametrize('src_file, ref_file, proc_crs, overlap, max_block_mem', [
-    ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (0, 0), 1.e-3),
-    ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (2, 2), 1.e-3),
-    ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (0, 0), 2.e-4),
-    ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (2, 2), 2.e-4),
-    ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (0, 0), 1.e-3),
-    ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 1.e-3),
-    ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (0, 0), 2.e-4),
-    ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 2.e-4),
-])
+@pytest.mark.parametrize(
+    'src_file, ref_file, proc_crs, overlap, max_block_mem', [
+        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (0, 0), 1.e-3),
+        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (2, 2), 1.e-3),
+        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (0, 0), 2.e-4),
+        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (2, 2), 2.e-4),
+        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (0, 0), 1.e-3),
+        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 1.e-3),
+        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (0, 0), 2.e-4),
+        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 2.e-4),
+    ]
+) # yapf: disable
 def test_block_pair_continuity(src_file, ref_file, proc_crs, overlap, max_block_mem, request):
     """Test the continuity of block pairs for different src/ref etc combinations"""
     src_file = request.getfixturevalue(src_file)
@@ -125,16 +131,18 @@ def test_block_pair_continuity(src_file, ref_file, proc_crs, overlap, max_block_
             prev_block_pair = block_pair
 
 
-@pytest.mark.parametrize('src_file, ref_file, proc_crs, overlap, max_block_mem', [
-    ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (0, 0), 1.e-3),
-    ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (2, 2), 1.e-3),
-    ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (0, 0), 2.e-4),
-    ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (2, 2), 2.e-4),
-    ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (0, 0), 1.e-3),
-    ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 1.e-3),
-    ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (0, 0), 2.e-4),
-    ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 2.e-4),
-])
+@pytest.mark.parametrize(
+    'src_file, ref_file, proc_crs, overlap, max_block_mem', [
+        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (0, 0), 1.e-3),
+        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (2, 2), 1.e-3),
+        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (0, 0), 2.e-4),
+        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (2, 2), 2.e-4),
+        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (0, 0), 1.e-3),
+        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 1.e-3),
+        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (0, 0), 2.e-4),
+        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 2.e-4),
+    ]
+) # yapf: disable
 def test_block_pair_coverage(src_file, ref_file, proc_crs, overlap, max_block_mem, request):
     """Test that combined block pairs cover the processing window for different src/ref etc combinations"""
     src_file = request.getfixturevalue(src_file)
@@ -163,16 +171,18 @@ def test_block_pair_coverage(src_file, ref_file, proc_crs, overlap, max_block_me
             assert (accum_block_pair['ref_out_block'].intersection(raster_pair._ref_win) == raster_pair._ref_win)
 
 
-@pytest.mark.parametrize('src_file, ref_file, proc_crs, overlap, max_block_mem', [
-    ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (0, 0), 1.e-3),
-    ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (2, 2), 1.e-3),
-    ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (0, 0), 2.e-4),
-    ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (2, 2), 2.e-4),
-    ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (0, 0), 1.e-3),
-    ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 1.e-3),
-    ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (0, 0), 2.e-4),
-    ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 2.e-4),
-])
+@pytest.mark.parametrize(
+    'src_file, ref_file, proc_crs, overlap, max_block_mem', [
+        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (0, 0), 1.e-3),
+        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (2, 2), 1.e-3),
+        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (0, 0), 2.e-4),
+        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (2, 2), 2.e-4),
+        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (0, 0), 1.e-3),
+        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 1.e-3),
+        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (0, 0), 2.e-4),
+        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 2.e-4),
+    ]
+) # yapf: disable
 def test_block_pair_io(src_file, ref_file, proc_crs, overlap, max_block_mem, request):
     """
     Test block pairs can be read, reprojected and written as raster arrays without loss of data

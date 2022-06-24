@@ -26,25 +26,27 @@ from typing import Tuple
 import numpy as np
 import rasterio
 import rasterio as rio
-from homonim import errors
-from homonim import utils
-from homonim.enums import ProcCrs
-from homonim.raster_array import RasterArray
 from rasterio.enums import MaskFlags
 from rasterio.vrt import WarpedVRT
 from rasterio.warp import Resampling
 from rasterio.windows import Window
 
+from homonim import errors, utils
+from homonim.enums import ProcCrs
+from homonim.raster_array import RasterArray
+
 logger = logging.getLogger(__name__)
 
 """Named tuple to contain a set of matching block windows for a source-reference image pair"""
-BlockPair = namedtuple('BlockPair',
-                       ['band_i',  # band index (0 based)
-                        'src_in_block',  # overlapping source window
-                        'ref_in_block',  # overlapping reference window
-                        'src_out_block',  # non-overlapping source window
-                        'ref_out_block',  # non-overlapping reference window
-                        'outer'])  # True if src_*_block touches the boundary of the source image
+BlockPair = namedtuple(
+    'BlockPair',
+    ['band_i',  # band index (0 based)
+     'src_in_block',  # overlapping source window
+     'ref_in_block',  # overlapping reference window
+     'src_out_block',  # non-overlapping source window
+     'ref_out_block',  # non-overlapping reference window
+     'outer']
+)  # True if src_*_block touches the boundary of the source image
 
 
 class RasterPairReader:
@@ -111,8 +113,9 @@ class RasterPairReader:
         # warn if there is no nodata or associated mask
         is_masked = any([MaskFlags.all_valid not in im.mask_flag_enums[bi] for bi in range(im.count)])
         if im.nodata is None and not is_masked:
-            logger.warning(f'{im.name} has no mask or nodata value, '
-                           f'any invalid pixels should be masked before processing.')
+            logger.warning(
+                f'{im.name} has no mask or nodata value, any invalid pixels should be masked before processing.'
+            )
 
     @staticmethod
     def _validate_image_pair(src_im: rasterio.DatasetReader, ref_im: rasterio.DatasetReader):
@@ -130,22 +133,27 @@ class RasterPairReader:
 
         # check reference has enough bands
         if len(src_bands) > len(ref_bands):
-            raise errors.ImageContentError(f'Reference ({ref_im.name}) has fewer non-alpha bands than '
-                                           f'source ({src_im.name}).')
+            raise errors.ImageContentError(
+                f'Reference ({ref_im.name}) has fewer non-alpha bands than source ({src_im.name}).'
+            )
 
         # warn if source and reference band counts don't match
         if len(src_bands) != len(ref_bands):
-            logger.warning(f'Source and reference image non-alpha band counts don`t match. '
-                           f'Using the first {len(src_bands)} non-alpha bands of reference.')
+            logger.warning(
+                f'Source and reference image non-alpha band counts don`t match. Using the first {len(src_bands)} '
+                f'non-alpha bands of reference.'
+            )
 
         # warn if the source and reference are not in the same CRS
         if src_im.crs.to_proj4() != ref_im.crs.to_proj4():
-            logger.warning(f'Source and reference image pair are not in the same CRS: {src_im.name} and '
-                           f'{ref_im.name}')
+            logger.warning(
+                f'Source and reference image pair are not in the same CRS: {src_im.name} and {ref_im.name}'
+            )
 
     @staticmethod
-    def _resolve_proc_crs(src_im: rasterio.DatasetReader, ref_im: rasterio.DatasetReader,
-                          proc_crs: ProcCrs = ProcCrs.auto):
+    def _resolve_proc_crs(
+        src_im: rasterio.DatasetReader, ref_im: rasterio.DatasetReader, proc_crs: ProcCrs = ProcCrs.auto
+    ):
         """
         Resolve proc_crs from auto to the lowest resolution of the source and reference image pair.  If it is already
         resolved, then warn if it does not correspond to the lowest resolution image of the pair.
@@ -159,14 +167,16 @@ class RasterPairReader:
             proc_crs = ProcCrs.ref if src_pixel_smaller else ProcCrs.src
             logger.debug(
                 f"Source pixel size {np.round(src_im.res, decimals=3)} is {cmp_str} than the reference "
-                f"{np.round(ref_im.res, decimals=3)}. Using proc_crs='{proc_crs}'.")
+                f"{np.round(ref_im.res, decimals=3)}. Using proc_crs='{proc_crs}'."
+            )
         elif ((proc_crs == ProcCrs.src and src_pixel_smaller) or
               (proc_crs == ProcCrs.ref and not src_pixel_smaller)):
             # warn if the proc_crs value does not correspond to the lowest resolution of the source and
             # reference images
             rec_crs_str = ProcCrs.ref if src_pixel_smaller else ProcCrs.src
-            logger.warning(f"proc_crs={rec_crs_str} is recommended when "
-                           f"the source pixel size is {cmp_str} than the reference.")
+            logger.warning(
+                f"proc_crs={rec_crs_str} is recommended when the source pixel size is {cmp_str} than the reference."
+            )
         return proc_crs
 
     def _auto_block_shape(self, proc_win: Window = None):
@@ -209,8 +219,9 @@ class RasterPairReader:
 
         # warn if the block shape in the highest res image is less than a typical tile
         if np.any(block_shape / mem_scale < (256, 256)) and np.any(block_shape < (proc_win.height, proc_win.width)):
-            logger.warning(f"The auto block shape is small: {block_shape}.  Increase 'max_block_mem' to improve "
-                           f"processing times.")
+            logger.warning(
+                f"The auto block shape is small: {block_shape}.  Increase 'max_block_mem' to improve processing times."
+            )
 
         return block_shape
 
@@ -234,8 +245,10 @@ class RasterPairReader:
             # generate the auto block shape for reading
             proc_win = self._ref_win if self._proc_crs == ProcCrs.ref else self._src_win
             self._block_shape = self._auto_block_shape(proc_win=proc_win)
-            logger.debug(f'Auto block shape: {self._block_shape}, of image shape: {[proc_win.height, proc_win.width]}'
-                         f' ({self._proc_crs.name} pixels)')
+            logger.debug(
+                f'Auto block shape: {self._block_shape}, of image shape: {[proc_win.height, proc_win.width]}'
+                f' ({self._proc_crs.name} pixels)'
+            )
             logger.debug(f'Block overlap: {self._overlap} ({self._proc_crs.name} pixels)')
         finally:
             self.close()
@@ -243,8 +256,9 @@ class RasterPairReader:
     def _assert_open(self):
         """Raise an IoError if the source and reference images are not open."""
         if self.closed:
-            raise errors.IoError(f'The raster pair has not been opened: {self._src_filename.name} and '
-                                 f'{self._ref_filename.name}')
+            raise errors.IoError(
+                f'The raster pair has not been opened: {self._src_filename.name} and {self._ref_filename.name}'
+            )
 
     def open(self):
         """Open the source and reference images for reading."""
@@ -337,11 +351,13 @@ class RasterPairReader:
         self._assert_open()
 
         with self._src_lock:
-            src_ra = RasterArray.from_rio_dataset(self._src_im, indexes=self._src_bands[block_pair.band_i],
-                                                  window=block_pair.src_in_block)
+            src_ra = RasterArray.from_rio_dataset(
+                self._src_im, indexes=self._src_bands[block_pair.band_i], window=block_pair.src_in_block
+            )
         with self._ref_lock:
-            ref_ra = RasterArray.from_rio_dataset(self._ref_im, indexes=self._ref_bands[block_pair.band_i],
-                                                  window=block_pair.ref_in_block)
+            ref_ra = RasterArray.from_rio_dataset(
+                self._ref_im, indexes=self._ref_bands[block_pair.band_i], window=block_pair.ref_in_block
+            )
         return src_ra, ref_ra
 
     def block_pairs(self):
@@ -373,12 +389,12 @@ class RasterPairReader:
         # reading band interleaved images.
         for band_i in range(len(self._src_bands)):
             # Inner loop over the upper left corner row, col for each overlapping block
-            ul_row_range = range(proc_win.row_off - overlap[0],
-                                 proc_win.row_off + proc_win.height - overlap[0],
-                                 block_shape[0])
-            ul_col_range = range(proc_win.col_off - overlap[1],
-                                 proc_win.col_off + proc_win.width - overlap[1],
-                                 block_shape[1])
+            ul_row_range = range(
+                proc_win.row_off - overlap[0], proc_win.row_off + proc_win.height - overlap[0], block_shape[0]
+            )
+            ul_col_range = range(
+                proc_win.col_off - overlap[1], proc_win.col_off + proc_win.width - overlap[1], block_shape[1]
+            )
             for ul_row, ul_col in product(ul_row_range, ul_col_range):
                 # find UL and BR corners for overlapping block in proc space
                 ul = np.array((ul_row, ul_col))
@@ -403,9 +419,11 @@ class RasterPairReader:
                 # create the BlockPair named tuple, assigning 'proc' and 'other' back to 'src' and 'ref' for passing to
                 # read()
                 if self._proc_crs == ProcCrs.ref:
-                    block_pair = BlockPair(band_i, other_in_block, proc_in_block, other_out_block, proc_out_block,
-                                           outer)
+                    block_pair = BlockPair(
+                        band_i, other_in_block, proc_in_block, other_out_block, proc_out_block, outer
+                    )
                 else:
-                    block_pair = BlockPair(band_i, proc_in_block, other_in_block, proc_out_block, other_out_block,
-                                           outer)
+                    block_pair = BlockPair(
+                        band_i, proc_in_block, other_in_block, proc_out_block, other_out_block, outer
+                    )
                 yield block_pair

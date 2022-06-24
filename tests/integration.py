@@ -21,8 +21,7 @@ import pytest
 import rasterio as rio
 from rasterio.features import shapes
 
-from homonim import root_path
-from homonim import utils
+from homonim import root_path, utils
 from homonim.cli import cli
 from homonim.compare import RasterCompare
 from homonim.enums import ProcCrs, Method
@@ -42,7 +41,8 @@ def landsat_ref_file():
 @pytest.fixture()
 def s2_ref_file():
     return root_path.joinpath(
-        r'data/test_example/reference/COPERNICUS-S2-20151003T075826_20151003T082014_T35HKC_B432_Byte.tif')
+        r'data/test_example/reference/COPERNICUS-S2-20151003T075826_20151003T082014_T35HKC_B432_Byte.tif'
+    )
 
 
 @pytest.fixture()
@@ -61,24 +61,27 @@ def ngi_src_file():
     return root_path.joinpath(r'data/test_example/source/3324c_2015_1004_05_0182_RGB.tif')
 
 
+@pytest.mark.parametrize(
+    'src_files, ref_file, method, kernel_shape, proc_crs, mask_partial, exp_proc_crs', [
+        ('ngi_src_files', 'modis_ref_file', Method.gain, (1, 1), ProcCrs.auto, False, ProcCrs.ref),
+        ('ngi_src_files', 'landsat_ref_file', Method.gain_blk_offset, (5, 5), ProcCrs.auto, False, ProcCrs.ref),
+        ('ngi_src_files', 's2_ref_file', Method.gain_offset, (15, 15), ProcCrs.auto, False, ProcCrs.ref),
+        ('landsat_src_file', 's2_ref_file', Method.gain_blk_offset, (5, 5), ProcCrs.auto, False, ProcCrs.src),
+        ('landsat_src_file', 's2_ref_file', Method.gain_blk_offset, (31, 31), ProcCrs.ref, False, ProcCrs.ref),
+        ('ngi_src_files', 's2_ref_file', Method.gain_offset, (31, 31), ProcCrs.src, False, ProcCrs.src),
 
-@pytest.mark.parametrize('src_files, ref_file, method, kernel_shape, proc_crs, mask_partial, exp_proc_crs', [
-    ('ngi_src_files', 'modis_ref_file', Method.gain, (1, 1), ProcCrs.auto, False, ProcCrs.ref),
-    ('ngi_src_files', 'landsat_ref_file', Method.gain_blk_offset, (5, 5), ProcCrs.auto, False, ProcCrs.ref),
-    ('ngi_src_files', 's2_ref_file', Method.gain_offset, (15, 15), ProcCrs.auto, False, ProcCrs.ref),
-    ('landsat_src_file', 's2_ref_file', Method.gain_blk_offset, (5, 5), ProcCrs.auto, False, ProcCrs.src),
-    ('landsat_src_file', 's2_ref_file', Method.gain_blk_offset, (31, 31), ProcCrs.ref, False, ProcCrs.ref),
-    ('ngi_src_files', 's2_ref_file', Method.gain_offset, (31, 31), ProcCrs.src, False, ProcCrs.src),
-
-    ('ngi_src_files', 'modis_ref_file', Method.gain, (1, 1), ProcCrs.auto, True, ProcCrs.ref),
-    ('ngi_src_files', 'landsat_ref_file', Method.gain_blk_offset, (5, 5), ProcCrs.auto, True, ProcCrs.ref),
-    ('ngi_src_files', 's2_ref_file', Method.gain_offset, (15, 15), ProcCrs.auto, True, ProcCrs.ref),
-    ('landsat_src_file', 's2_ref_file', Method.gain_blk_offset, (5, 5), ProcCrs.auto, True, ProcCrs.src),
-    ('landsat_src_file', 's2_ref_file', Method.gain_blk_offset, (31, 31), ProcCrs.ref, True, ProcCrs.ref),
-    ('ngi_src_files', 's2_ref_file', Method.gain_offset, (31, 31), ProcCrs.src, True, ProcCrs.src),
-])
-def test_fuse(tmp_path, runner, src_files, ref_file, method, kernel_shape, proc_crs, mask_partial, exp_proc_crs,
-              request):
+        ('ngi_src_files', 'modis_ref_file', Method.gain, (1, 1), ProcCrs.auto, True, ProcCrs.ref),
+        ('ngi_src_files', 'landsat_ref_file', Method.gain_blk_offset, (5, 5), ProcCrs.auto, True, ProcCrs.ref),
+        ('ngi_src_files', 's2_ref_file', Method.gain_offset, (15, 15), ProcCrs.auto, True, ProcCrs.ref),
+        ('landsat_src_file', 's2_ref_file', Method.gain_blk_offset, (5, 5), ProcCrs.auto, True, ProcCrs.src),
+        ('landsat_src_file', 's2_ref_file', Method.gain_blk_offset, (31, 31), ProcCrs.ref, True, ProcCrs.ref),
+        ('ngi_src_files', 's2_ref_file', Method.gain_offset, (31, 31), ProcCrs.src, True, ProcCrs.src),
+    ]
+)
+def test_fuse(
+    tmp_path, runner, src_files, ref_file, method, kernel_shape, proc_crs, mask_partial, exp_proc_crs,
+    request
+):
     """Additional integration tests using 'real' aerial and satellite imagery"""
 
     src_files = request.getfixturevalue(src_files)
@@ -106,7 +109,7 @@ def test_fuse(tmp_path, runner, src_files, ref_file, method, kernel_shape, proc_
             assert (homo_res[band_key]['r2'] > src_res[band_key]['r2'])
             assert (homo_res[band_key]['RMSE'] < src_res[band_key]['RMSE'])
 
-       # test homo_file mask
+        # test homo_file mask
         with rio.open(src_file, 'r') as src_ds, rio.open(homo_file, 'r') as homo_ds:
             src_mask = src_ds.dataset_mask().astype('bool', copy=False)
             homo_mask = homo_ds.dataset_mask().astype('bool', copy=False)

@@ -32,7 +32,6 @@ from tqdm import tqdm
 
 from homonim import utils
 from homonim.enums import Method
-from homonim.errors import ImageFormatError
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +106,7 @@ class ParamStats:
 
                 def stats(v: np.ma.core.MaskedArray):
                     """Find mean, std, min & max statistics for a vector."""
-                    if v.mask.all():     # all values are invalid (nan / +-inf)
+                    if v.mask.all():  # all values are invalid (nan / +-inf)
                         return OrderedDict(Mean=float('nan'), Std=float('nan'), Min=float('nan'), Max=float('nan'))
                     else:
                         return OrderedDict(Mean=v.mean(), Std=v.std(), Min=v.min(), Max=v.max())

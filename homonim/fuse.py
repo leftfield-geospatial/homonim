@@ -27,15 +27,16 @@ from typing import Tuple
 import numpy as np
 import rasterio as rio
 import rasterio.io
+from rasterio.enums import Resampling
+from tqdm import tqdm
+from tqdm.contrib.logging import logging_redirect_tqdm
+
 from homonim import utils
 from homonim.enums import Method, ProcCrs
 from homonim.errors import IoError
 from homonim.kernel_model import KernelModel, RefSpaceModel, SrcSpaceModel
 from homonim.raster_array import RasterArray
 from homonim.raster_pair import RasterPairReader, BlockPair
-from rasterio.enums import Resampling
-from tqdm import tqdm
-from tqdm.contrib.logging import logging_redirect_tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -47,13 +48,18 @@ class RasterFuse:
 
     # default configuration dicts
     default_homo_config = dict(param_image=False, threads=multiprocessing.cpu_count(), max_block_mem=100)
-    default_out_profile = dict(driver='GTiff', dtype=RasterArray.default_dtype, nodata=RasterArray.default_nodata,
-                               creation_options=dict(tiled=True, blockxsize=512, blockysize=512, compress='deflate',
-                                                     interleave='band', photometric=None))
+    default_co = dict(
+        tiled=True, blockxsize=512, blockysize=512, compress='deflate', interleave='band', photometric=None
+    )
+    default_out_profile = dict(
+        driver='GTiff', dtype=RasterArray.default_dtype, nodata=RasterArray.default_nodata, creation_options=default_co
+    )
     default_model_config = KernelModel.default_config
 
-    def __init__(self, src_filename, ref_filename, homo_path, method, kernel_shape, proc_crs=ProcCrs.auto,
-                 overwrite=False, homo_config=None, model_config=None, out_profile=None):
+    def __init__(
+        self, src_filename, ref_filename, homo_path, method, kernel_shape, proc_crs=ProcCrs.auto,
+        overwrite=False, homo_config=None, model_config=None, out_profile=None
+    ):
         """
         Create a RasterFuse class.
 
@@ -140,11 +146,13 @@ class RasterFuse:
 
         # create the KernelModel according to proc_crs
         if self._proc_crs == ProcCrs.ref:
-            self._model = RefSpaceModel(method=method, kernel_shape=kernel_shape,
-                                        param_image=self._config['param_image'], **self._model_config)
+            self._model = RefSpaceModel(
+                method=method, kernel_shape=kernel_shape, param_image=self._config['param_image'], **self._model_config
+            )
         elif self._proc_crs == ProcCrs.src:
-            self._model = SrcSpaceModel(method=method, kernel_shape=kernel_shape,
-                                        param_image=self._config['param_image'], **self._model_config)
+            self._model = SrcSpaceModel(
+                method=method, kernel_shape=kernel_shape, param_image=self._config['param_image'], **self._model_config
+            )
 
         # initialise other variables
         self._write_lock = threading.Lock()
@@ -158,8 +166,9 @@ class RasterFuse:
         homo_path = pathlib.Path(homo_path)
         if homo_path.is_dir():
             # create a filename for the homogenised file in the provided directory
-            post_fix = utils.create_homo_postfix(self._proc_crs, self._method, self._kernel_shape,
-                                                 self._out_profile['driver'])
+            post_fix = utils.create_homo_postfix(
+                self._proc_crs, self._method, self._kernel_shape, self._out_profile['driver']
+            )
             self._homo_filename = homo_path.joinpath(self._src_filename.stem + post_fix)
         else:
             self._homo_filename = homo_path
@@ -167,12 +176,15 @@ class RasterFuse:
         self._param_filename = utils.create_param_filename(self._homo_filename)
 
         if not overwrite and self._homo_filename.exists():
-            raise FileExistsError(f"Homogenised image file exists and won't be overwritten without the "
-                                  f"'overwrite' option: {self._homo_filename}")
+            raise FileExistsError(
+                f"Homogenised image file exists and won't be overwritten without the 'overwrite' option: "
+                f"{self._homo_filename}"
+            )
         if not overwrite and self._config['param_image'] and self._param_filename.exists():
-            raise FileExistsError(f"Parameter image file exists and won't be overwritten without the "
-                                  f"'overwrite' option: {self._param_filename}")
-
+            raise FileExistsError(
+                f"Parameter image file exists and won't be overwritten without the 'overwrite' option: "
+                f"{self._param_filename}"
+            )
 
     def _create_out_profile(self) -> dict:
         """Create an output image rasterio profile from the source image profile and output configuration"""
@@ -190,16 +202,19 @@ class RasterFuse:
         # param_profile = self._combine_with_config(init_profile)
         param_profile = utils.combine_profiles(init_profile, self._out_profile)
         # force dtype and nodata to defaults
-        param_profile.update(dtype=RasterArray.default_dtype, count=len(self._raster_pair.src_bands) * 3,
-                             nodata=RasterArray.default_nodata)
+        param_profile.update(
+            dtype=RasterArray.default_dtype, count=len(self._raster_pair.src_bands) * 3,
+            nodata=RasterArray.default_nodata
+        )
         return param_profile
 
     def _set_metadata(self, im: rasterio.io.DatasetWriter):
         """Helper function to copy the RasterFuse configuration info to an image (GeoTiff) file."""
-        meta_dict = dict(HOMO_SRC_FILE=self._src_filename.name, HOMO_REF_FILE=self._ref_filename.name,
-                         HOMO_PROC_CRS=self._proc_crs.name, HOMO_METHOD=self._method.name,
-                         HOMO_KERNEL_SHAPE=self._kernel_shape, HOMO_CONF=str(self._config),
-                         HOMO_MODEL_CONF=str(self._model.config))
+        meta_dict = dict(
+            HOMO_SRC_FILE=self._src_filename.name, HOMO_REF_FILE=self._ref_filename.name,
+            HOMO_PROC_CRS=self._proc_crs.name, HOMO_METHOD=self._method.name, HOMO_KERNEL_SHAPE=self._kernel_shape,
+            HOMO_CONF=str(self._config), HOMO_MODEL_CONF=str(self._model.config)
+        )
         im.update_tags(**meta_dict)
 
     def _set_homo_metadata(self, im):
@@ -360,7 +375,9 @@ class RasterFuse:
         if self._config['param_image']:
             with self._param_lock:  # write the parameter block
                 indexes = np.arange(param_ra.count) * len(self._raster_pair.src_bands) + block_pair.band_i + 1
-                param_out_block = block_pair.ref_out_block if self._proc_crs == ProcCrs.ref else block_pair.src_out_block
+                param_out_block = (
+                    block_pair.ref_out_block if self._proc_crs == ProcCrs.ref else block_pair.src_out_block
+                )
                 param_ra.to_rio_dataset(self._param_im, indexes=indexes, window=param_out_block)
 
     def process(self):
@@ -384,6 +401,7 @@ class RasterFuse:
                            for block_pair in self._raster_pair.block_pairs()]
 
                 # wait for threads in order of completion, and raise any thread generated exceptions
-                for future in tqdm(concurrent.futures.as_completed(futures), bar_format=bar_format,
-                                   total=len(futures)):
+                for future in tqdm(
+                    concurrent.futures.as_completed(futures), bar_format=bar_format, total=len(futures)
+                ):
                     future.result()

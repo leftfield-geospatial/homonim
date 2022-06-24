@@ -31,8 +31,9 @@ from homonim.raster_array import RasterArray
 
 def test_read_only_properties(byte_array, byte_profile):
     """Test RasterArray read-only properties"""
-    basic_ra = RasterArray(byte_array, byte_profile['crs'], byte_profile['transform'],
-                           nodata=byte_profile['nodata'])
+    basic_ra = RasterArray(
+        byte_array, byte_profile['crs'], byte_profile['transform'], nodata=byte_profile['nodata']
+    )
     assert basic_ra.shape == byte_array.shape
     assert basic_ra.width == byte_array.shape[-1]
     assert basic_ra.height == byte_array.shape[-2]
@@ -46,17 +47,18 @@ def test_read_only_properties(byte_array, byte_profile):
 
 def test_array_property(byte_array, byte_profile):
     """Test array get/set"""
-    byte_ra = RasterArray(byte_array, byte_profile['crs'], byte_profile['transform'],
-                          nodata=byte_profile['nodata'])
+    byte_ra = RasterArray(
+        byte_array, byte_profile['crs'], byte_profile['transform'], nodata=byte_profile['nodata']
+    )
     assert (byte_ra.array == byte_array).all()  # test get
 
     array = byte_array / 2
     byte_ra.array = array
-    assert (byte_ra.array == array).all()   # test set with same num bands
+    assert (byte_ra.array == array).all()  # test set with same num bands
 
     array = np.stack((array, array), axis=0)
     byte_ra.array = array
-    assert (byte_ra.array == array).all()   # test set with more bands
+    assert (byte_ra.array == array).all()  # test set with more bands
     assert byte_ra.count == array.shape[0]
 
 
@@ -65,7 +67,7 @@ def test_nodata_mask(byte_ra):
     mask = byte_ra.mask
     byte_ra.nodata = 254
     assert byte_ra.nodata == 254
-    assert (byte_ra.mask == mask).all()     # test mask unchanged after setting nodata
+    assert (byte_ra.mask == mask).all()  # test mask unchanged after setting nodata
     assert (byte_ra.mask_ra.array == mask).all()
     assert byte_ra.mask_ra.transform == byte_ra.transform
 
@@ -249,8 +251,9 @@ def test_reprojection(rgb_byte_ra: RasterArray):
 
     # reproject with rescaling to WGS84 using a specified transform & shape
     to_transform = Affine.identity() * Affine.scale(.5e-5)
-    reproj_ra = rgb_byte_ra.reproject(crs=to_crs, transform=to_transform, shape=tuple(np.array(rgb_byte_ra.shape) * 2),
-                                      resampling=Resampling.bilinear)
+    reproj_ra = rgb_byte_ra.reproject(
+        crs=to_crs, transform=to_transform, shape=tuple(np.array(rgb_byte_ra.shape) * 2), resampling=Resampling.bilinear
+    )
     assert (reproj_ra.crs == to_crs)
     assert (reproj_ra.transform == to_transform)
     assert (reproj_ra.array[:, reproj_ra.mask].mean() ==

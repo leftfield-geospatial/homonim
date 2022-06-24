@@ -25,15 +25,14 @@ import numpy
 import numpy as np
 import rasterio as rio
 import rasterio.windows
-from homonim import utils
-from homonim.errors import ImageProfileError, ImageFormatError
-from rasterio import Affine
-from rasterio import transform
-from rasterio import windows
+from rasterio import Affine, transform, windows
 from rasterio.crs import CRS
 from rasterio.enums import MaskFlags
 from rasterio.warp import reproject, Resampling
 from rasterio.windows import Window
+
+from homonim import utils
+from homonim.errors import ImageProfileError, ImageFormatError
 
 logger = logging.getLogger(__name__)
 
@@ -168,13 +167,15 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         if len(index_list) > 1:
             array = np.full((len(index_list), window.height, window.width), fill_value=nodata, dtype=cls.default_dtype)
             bounded_array = array[(slice(array.shape[0]), *bounded_slices)]  # a bounded view into array
-            rio_dataset.read(out=bounded_array, indexes=index_list, window=bounded_window,
-                             out_dtype=cls.default_dtype, **kwargs)
+            rio_dataset.read(
+                out=bounded_array, indexes=index_list, window=bounded_window, out_dtype=cls.default_dtype, **kwargs
+            )
         else:
             array = np.full((window.height, window.width), fill_value=nodata, dtype=cls.default_dtype)
             bounded_array = array[bounded_slices]  # a bounded view into array
-            rio_dataset.read(out=bounded_array, indexes=index_list[0], window=bounded_window,
-                             out_dtype=cls.default_dtype, **kwargs)
+            rio_dataset.read(
+                out=bounded_array, indexes=index_list[0], window=bounded_window, out_dtype=cls.default_dtype, **kwargs
+            )
 
         # read into the bounded section of the array
 
@@ -266,8 +267,10 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
     @property
     def profile(self) -> dict:
         """The RasterArray properties formatted as a dictionary, compatible with rasterio."""
-        return dict(crs=self._crs, transform=self._transform, nodata=self._nodata, count=self.count,
-                    width=self.width, height=self.height, dtype=self.dtype)
+        return dict(
+            crs=self._crs, transform=self._transform, nodata=self._nodata, count=self.count, width=self.width,
+            height=self.height, dtype=self.dtype
+        )
 
     @property
     def proj_profile(self) -> dict:
@@ -348,8 +351,9 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         ul = np.array((window.row_off, window.col_off))
         shape = np.array((window.height, window.width))
         if np.any(ul < 0) or np.any(shape > self._array.shape[-2:]):
-            raise ValueError(f'The provided bounds ({bounds}) lie outside the extent of the RasterArray '
-                             f'({self.bounds})')
+            raise ValueError(
+                f'The provided bounds ({bounds}) lie outside the extent of the RasterArray ({self.bounds})'
+            )
 
         if self._array.ndim == 2:
             array = self._array[window.toslices()]
@@ -384,12 +388,16 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
                 Arguments to passed through the dataset's write() method.
         """
         if not np.all(self.res == rio_dataset.res):
-            raise ImageFormatError(f"The dataset resolution does not match that of the RasterArray. "
-                                   f"Dataset res: {rio_dataset.res}, RasterArray res: {self.res}")
+            raise ImageFormatError(
+                f"The dataset resolution does not match that of the RasterArray. "
+                f"Dataset res: {rio_dataset.res}, RasterArray res: {self.res}"
+            )
         # TODO : raise an issue with rasterio about the speed of crs comparison.  comparing the _crs attr is faster.
         if self.crs._crs != rio_dataset.crs._crs:
-            raise ImageFormatError(f"The dataset CRS does not match that of the RasterArray. "
-                                   f"Dataset CRS: {rio_dataset.crs.to_proj4()}, RasterArray CRS: {self.crs.to_proj4()}")
+            raise ImageFormatError(
+                f"The dataset CRS does not match that of the RasterArray. "
+                f"Dataset CRS: {rio_dataset.crs.to_proj4()}, RasterArray CRS: {self.crs.to_proj4()}"
+            )
 
         if indexes is None:
             indexes = utils.get_nonalpha_bands(rio_dataset)
@@ -400,8 +408,10 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
             raise ValueError(f'Band index(es) {error_indexes} are out of the valid range (1..{rio_dataset.count})')
 
         if (not np.isscalar(indexes)) and (len(indexes) > self.count):
-            raise ValueError(f'The length of indexes ({len(indexes)}) exceeds the number of bands in the '
-                             f'RasterArray ({self.count})')
+            raise ValueError(
+                f'The length of indexes ({len(indexes)}) exceeds the number of bands in the '
+                f'RasterArray ({self.count})'
+            )
 
         if window is None:
             # a window defining the region in the dataset corresponding to the RasterArray extents
@@ -415,7 +425,8 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         if np.any(bounded_ra.shape != np.array((window.height, window.width))):
             raise ValueError(
                 f'The bounds of the dataset / window ({rio_dataset.window_bounds(window)}) lie outside the '
-                f'bounds of the RasterArray ({bounded_ra.bounds})')
+                f'bounds of the RasterArray ({bounded_ra.bounds})'
+            )
 
         rio_dataset.write(bounded_ra.array, window=window, indexes=indexes, **kwargs)
 
@@ -437,8 +448,10 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
             with rio.open(filename, 'w', driver=driver, **self.profile, **kwargs) as out_im:
                 out_im.write(self._array, indexes=range(1, self.count + 1) if self.count > 1 else 1)
 
-    def reproject(self, crs=None, transform=None, shape=None, nodata=default_nodata, dtype=default_dtype,
-                  resampling=Resampling.lanczos, **kwargs):
+    def reproject(
+        self, crs=None, transform=None, shape=None, nodata=default_nodata, dtype=default_dtype,
+        resampling=Resampling.lanczos, **kwargs
+    ):
         """
         Re-project the RasterArray.
 

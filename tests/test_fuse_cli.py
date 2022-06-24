@@ -30,17 +30,20 @@ from homonim.fuse import RasterFuse
 from tests.conftest import str_contain_nos
 
 
-@pytest.mark.parametrize('method, kernel_shape', [
-    (Method.gain, (1, 1)),
-    (Method.gain_blk_offset, (1, 1)),
-    (Method.gain_offset, (5, 5)),
-])
+@pytest.mark.parametrize(
+    'method, kernel_shape', [
+        (Method.gain, (1, 1)),
+        (Method.gain_blk_offset, (1, 1)),
+        (Method.gain_offset, (5, 5)),
+    ]
+) # yapf: disable
 def test_fuse(tmp_path, runner, float_100cm_rgb_file, float_50cm_rgb_file, method, kernel_shape):
     """Test fuse cli output with different methods and kernel shapes"""
     ref_file = float_100cm_rgb_file
     src_file = float_50cm_rgb_file
-    post_fix = utils.create_homo_postfix(ProcCrs.ref, method, kernel_shape,
-                                         RasterFuse.default_out_profile['driver'])
+    post_fix = utils.create_homo_postfix(
+        ProcCrs.ref, method, kernel_shape, RasterFuse.default_out_profile['driver']
+    )
     homo_file = tmp_path.joinpath(src_file.stem + post_fix)
     cli_str = f'fuse -m {method.value} -k {kernel_shape[0]} {kernel_shape[1]} -od {tmp_path} {src_file} {ref_file}'
     result = runner.invoke(cli, cli_str.split())
@@ -175,8 +178,9 @@ def test_proc_crs(tmp_path, runner, float_100cm_ref_file, float_100cm_src_file, 
 def test_conf_file(tmp_path, runner, basic_fuse_cli_params):
     """Test passing a configuration file results in a correctly configured output"""
     # create test configuration file
-    conf_dict = dict(mask_partial=True, param_image=True, dtype='uint8', nodata=0,
-                     creation_options=dict(compress='lzw'))
+    conf_dict = dict(
+        mask_partial=True, param_image=True, dtype='uint8', nodata=0, creation_options=dict(compress='lzw')
+    )
     conf_file = tmp_path.joinpath('conf.yaml')
     with open(conf_file, 'w') as f:
         yaml.dump(conf_dict, f)
@@ -323,11 +327,13 @@ def test_r2_inpaint_thresh_error(runner, basic_fuse_cli_params, bad_r2_inpaint_t
     assert ("Invalid value" in result.output)
 
 
-@pytest.mark.parametrize('driver, dtype, nodata', [
-    ('GTiff', 'float64', float('nan')),
-    ('GTiff', 'uint16', 65535),
-    ('PNG', 'uint8', 0),
-])
+@pytest.mark.parametrize(
+    'driver, dtype, nodata', [
+        ('GTiff', 'float64', float('nan')),
+        ('GTiff', 'uint16', 65535),
+        ('PNG', 'uint8', 0),
+    ]
+) # yapf: disable
 def test_out_profile(runner, basic_fuse_cli_params, driver, dtype, nodata):
     """Test --out-* options generate a correctly configured output"""
     cli_str = basic_fuse_cli_params.cli_str + f' --out-driver {driver} --out-dtype {dtype} --out-nodata {nodata}'

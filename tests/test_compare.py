@@ -46,10 +46,12 @@ def _test_identical_compare_dict(res_dict):
     assert (res_dict['Mean']['rRMSE'] == pytest.approx(0))
 
 
-@pytest.mark.parametrize('src_file, ref_file', [
-    ('float_50cm_rgb_file', 'float_100cm_rgb_file'),
-    ('float_100cm_rgb_file', 'float_50cm_rgb_file'),
-])
+@pytest.mark.parametrize(
+    'src_file, ref_file', [
+        ('float_50cm_rgb_file', 'float_100cm_rgb_file'),
+        ('float_100cm_rgb_file', 'float_50cm_rgb_file'),
+    ]
+)  # yapf:disable
 def test_api(src_file, ref_file, request):
     """Basic test of RasterCompare for proc_crs=ref&src image combinations"""
     src_file = request.getfixturevalue(src_file)
@@ -59,12 +61,14 @@ def test_api(src_file, ref_file, request):
     _test_identical_compare_dict(res_dict)
 
 
-@pytest.mark.parametrize('src_file, ref_file, proc_crs, exp_proc_crs', [
-    ('float_50cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, ProcCrs.ref),
-    ('float_50cm_src_file', 'float_100cm_ref_file', ProcCrs.src, ProcCrs.src),
-    ('float_100cm_src_file', 'float_50cm_ref_file', ProcCrs.auto, ProcCrs.src),
-    ('float_100cm_src_file', 'float_50cm_ref_file', ProcCrs.ref, ProcCrs.ref),
-])
+@pytest.mark.parametrize(
+    'src_file, ref_file, proc_crs, exp_proc_crs', [
+        ('float_50cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, ProcCrs.ref),
+        ('float_50cm_src_file', 'float_100cm_ref_file', ProcCrs.src, ProcCrs.src),
+        ('float_100cm_src_file', 'float_50cm_ref_file', ProcCrs.auto, ProcCrs.src),
+        ('float_100cm_src_file', 'float_50cm_ref_file', ProcCrs.ref, ProcCrs.ref),
+    ]
+)  # yapf:disable
 def test_api__proc_crs(src_file, ref_file, proc_crs, exp_proc_crs, request):
     """Test resolution and forcing of the proc_crs parameter with different combinations of src/ref images"""
     src_file = request.getfixturevalue(src_file)

@@ -31,9 +31,10 @@ from homonim.kernel_model import KernelModel
 
 
 @pytest.mark.parametrize('src_file, ref_file', [
-    ('float_50cm_src_file', 'float_100cm_ref_file'),
-    ('float_100cm_src_file', 'float_50cm_ref_file'),
-])
+        ('float_50cm_src_file', 'float_100cm_ref_file'),
+        ('float_100cm_src_file', 'float_50cm_ref_file'),
+    ]
+) # yapf: disable
 def test_creation(src_file, ref_file, tmp_path, request):
     """Test creation and configuration of RasterFuse"""
     src_file = request.getfixturevalue(src_file)
@@ -47,8 +48,10 @@ def test_creation(src_file, ref_file, tmp_path, request):
     out_profile = RasterFuse.default_out_profile.copy()
     out_profile.update(driver='HFA', creation_options={})
 
-    raster_fuse = RasterFuse(src_file, ref_file, tmp_path, method, kernel_shape, homo_config=homo_config,
-                             model_config=model_config, out_profile=out_profile)
+    raster_fuse = RasterFuse(
+        src_file, ref_file, tmp_path, method, kernel_shape, homo_config=homo_config, model_config=model_config,
+        out_profile=out_profile
+    )
     with raster_fuse:
         assert (raster_fuse.method == method)
         assert (raster_fuse.kernel_shape == kernel_shape)
@@ -71,8 +74,10 @@ def test_overwrite(tmp_path, float_50cm_src_file, float_100cm_ref_file, overwrit
     """Test overwrite behaviour"""
     homo_config = RasterFuse.default_homo_config.copy()
     homo_config.update(param_image=True)
-    params = dict(src_filename=float_50cm_src_file, ref_filename=float_100cm_ref_file, homo_path=tmp_path,
-                  method=Method.gain_blk_offset, kernel_shape=(5, 5), homo_config=homo_config, overwrite=overwrite)
+    params = dict(
+        src_filename=float_50cm_src_file, ref_filename=float_100cm_ref_file, homo_path=tmp_path,
+        method=Method.gain_blk_offset, kernel_shape=(5, 5), homo_config=homo_config, overwrite=overwrite
+    )
 
     raster_fuse = RasterFuse(**params)
     raster_fuse.homo_filename.touch()
@@ -91,14 +96,16 @@ def test_overwrite(tmp_path, float_50cm_src_file, float_100cm_ref_file, overwrit
         _ = RasterFuse(**params)
 
 
-@pytest.mark.parametrize('src_file, ref_file, method, kernel_shape, max_block_mem', [
-    ('float_45cm_src_file', 'float_100cm_ref_file', Method.gain, (1, 1), 2.e-4),
-    ('float_45cm_src_file', 'float_100cm_ref_file', Method.gain_blk_offset, (1, 1), 1.e-3),
-    ('float_45cm_src_file', 'float_100cm_ref_file', Method.gain_offset, (5, 5), 1.e-3),
-    ('float_100cm_src_file', 'float_45cm_ref_file', Method.gain, (1, 1), 2.e-4),
-    ('float_100cm_src_file', 'float_45cm_ref_file', Method.gain_blk_offset, (1, 1), 1.e-3),
-    ('float_100cm_src_file', 'float_45cm_ref_file', Method.gain_offset, (5, 5), 1.e-3),
-])
+@pytest.mark.parametrize(
+    'src_file, ref_file, method, kernel_shape, max_block_mem', [
+        ('float_45cm_src_file', 'float_100cm_ref_file', Method.gain, (1, 1), 2.e-4),
+        ('float_45cm_src_file', 'float_100cm_ref_file', Method.gain_blk_offset, (1, 1), 1.e-3),
+        ('float_45cm_src_file', 'float_100cm_ref_file', Method.gain_offset, (5, 5), 1.e-3),
+        ('float_100cm_src_file', 'float_45cm_ref_file', Method.gain, (1, 1), 2.e-4),
+        ('float_100cm_src_file', 'float_45cm_ref_file', Method.gain_blk_offset, (1, 1), 1.e-3),
+        ('float_100cm_src_file', 'float_45cm_ref_file', Method.gain_offset, (5, 5), 1.e-3),
+    ]
+) # yapf: disable
 def test_basic_fusion(src_file, ref_file, method, kernel_shape, max_block_mem, tmp_path, request):
     """Test fusion output with different src/ref images, and method etc combinations"""
     src_file = request.getfixturevalue(src_file)
@@ -117,7 +124,7 @@ def test_basic_fusion(src_file, ref_file, method, kernel_shape, max_block_mem, t
         assert (out_mask == src_mask).all()
         assert (out_array[out_mask] == pytest.approx(src_array[src_mask], abs=2))
 
-
+# formatter: off
 @pytest.mark.parametrize('out_profile', [
     dict(driver='GTiff', dtype='float32', nodata=float('nan'),
          creation_options=dict(tiled=True, blockxsize=512, blockysize=512, compress='deflate', interleave='band',
@@ -125,12 +132,15 @@ def test_basic_fusion(src_file, ref_file, method, kernel_shape, max_block_mem, t
     dict(driver='GTiff', dtype='uint8', nodata=0,
          creation_options=dict(tiled=True, blockxsize=64, blockysize=64, compress='jpeg', interleave='pixel',
                                photometric='ycbcr')),
-    dict(driver='PNG', dtype='uint16', nodata=0, creation_options=dict()),
-])
+        dict(driver='PNG', dtype='uint16', nodata=0, creation_options=dict()),
+    ]
+) # yapf: disable
+# formatter: on
 def test_out_profile(float_100cm_rgb_file, tmp_path, out_profile):
     """Test fusion output image format (profile) with different out_profile configurations"""
-    raster_fuse = RasterFuse(float_100cm_rgb_file, float_100cm_rgb_file, tmp_path, Method.gain_blk_offset, (3, 3),
-                             out_profile=out_profile)
+    raster_fuse = RasterFuse(
+        float_100cm_rgb_file, float_100cm_rgb_file, tmp_path, Method.gain_blk_offset, (3, 3), out_profile=out_profile
+    )
     with raster_fuse:
         raster_fuse.process()
     assert (raster_fuse.homo_filename.exists())
@@ -155,20 +165,23 @@ def test_out_profile(float_100cm_rgb_file, tmp_path, out_profile):
                     (str(out_ds.profile[k]) == str(v)))
 
 
-@pytest.mark.parametrize('method, proc_crs', [
-    (Method.gain, ProcCrs.ref),
-    (Method.gain_blk_offset, ProcCrs.ref),
-    (Method.gain_offset, ProcCrs.ref),
-    (Method.gain, ProcCrs.src),
-    (Method.gain_blk_offset, ProcCrs.src),
-    (Method.gain_offset, ProcCrs.src),
-])
+@pytest.mark.parametrize(
+    'method, proc_crs', [
+        (Method.gain, ProcCrs.ref),
+        (Method.gain_blk_offset, ProcCrs.ref),
+        (Method.gain_offset, ProcCrs.ref),
+        (Method.gain, ProcCrs.src),
+        (Method.gain_blk_offset, ProcCrs.src),
+        (Method.gain_offset, ProcCrs.src),
+    ]
+) # yapf: disable
 def test_param_image(float_100cm_rgb_file, tmp_path, method, proc_crs):
     """Test creation and masking of parameter image for different method and proc_crs combinations"""
     homo_config = RasterFuse.default_homo_config.copy()
     homo_config.update(param_image=True)
-    raster_fuse = RasterFuse(float_100cm_rgb_file, float_100cm_rgb_file, tmp_path, method, (5, 5), proc_crs=proc_crs,
-                             homo_config=homo_config)
+    raster_fuse = RasterFuse(
+        float_100cm_rgb_file, float_100cm_rgb_file, tmp_path, method, (5, 5), proc_crs=proc_crs, homo_config=homo_config
+    )
     with raster_fuse:
         raster_fuse.process()
 
@@ -181,14 +194,16 @@ def test_param_image(float_100cm_rgb_file, tmp_path, method, proc_crs):
         assert (param_mask == src_ref_mask).all()
 
 
-@pytest.mark.parametrize('src_file, ref_file, kernel_shape, proc_crs, mask_partial', [
-    ('float_45cm_src_file', 'float_100cm_ref_file', (1, 1), ProcCrs.auto, False),
-    ('float_45cm_src_file', 'float_100cm_ref_file', (1, 1), ProcCrs.auto, True),
-    ('float_45cm_src_file', 'float_100cm_ref_file', (3, 3), ProcCrs.auto, True),
-    ('float_100cm_src_file', 'float_45cm_ref_file', (1, 1), ProcCrs.auto, False),
-    ('float_100cm_src_file', 'float_45cm_ref_file', (1, 1), ProcCrs.auto, True),
-    ('float_100cm_src_file', 'float_45cm_ref_file', (3, 3), ProcCrs.auto, True),
-])
+@pytest.mark.parametrize(
+    'src_file, ref_file, kernel_shape, proc_crs, mask_partial', [
+        ('float_45cm_src_file', 'float_100cm_ref_file', (1, 1), ProcCrs.auto, False),
+        ('float_45cm_src_file', 'float_100cm_ref_file', (1, 1), ProcCrs.auto, True),
+        ('float_45cm_src_file', 'float_100cm_ref_file', (3, 3), ProcCrs.auto, True),
+        ('float_100cm_src_file', 'float_45cm_ref_file', (1, 1), ProcCrs.auto, False),
+        ('float_100cm_src_file', 'float_45cm_ref_file', (1, 1), ProcCrs.auto, True),
+        ('float_100cm_src_file', 'float_45cm_ref_file', (3, 3), ProcCrs.auto, True),
+    ]
+) # yapf: disable
 def test_mask_partial(src_file, ref_file, tmp_path, kernel_shape, proc_crs, mask_partial, request):
     """Test partial masking with multiple image blocks"""
     src_file = request.getfixturevalue(src_file)
@@ -197,8 +212,10 @@ def test_mask_partial(src_file, ref_file, tmp_path, kernel_shape, proc_crs, mask
     model_config.update(mask_partial=mask_partial)
     homo_config = RasterFuse.default_homo_config.copy()
     homo_config.update(max_block_mem=1.e-1)
-    raster_fuse = RasterFuse(src_file, ref_file, tmp_path, Method.gain_blk_offset, kernel_shape,
-                             proc_crs=proc_crs, model_config=model_config, homo_config=homo_config)
+    raster_fuse = RasterFuse(
+        src_file, ref_file, tmp_path, Method.gain_blk_offset, kernel_shape, proc_crs=proc_crs,
+        model_config=model_config, homo_config=homo_config
+    )
     with raster_fuse:
         raster_fuse.process()
 
@@ -221,8 +238,9 @@ def test_build_overviews(float_50cm_ref_file, tmp_path):
     """Test that overviews are built for homogenised and parameter files"""
     homo_config = RasterFuse.default_homo_config.copy()
     homo_config.update(param_image=True)
-    raster_fuse = RasterFuse(float_50cm_ref_file, float_50cm_ref_file, tmp_path, Method.gain_blk_offset, (3, 3),
-                             homo_config=homo_config)
+    raster_fuse = RasterFuse(
+        float_50cm_ref_file, float_50cm_ref_file, tmp_path, Method.gain_blk_offset, (3, 3), homo_config=homo_config
+    )
     with raster_fuse:
         raster_fuse.process()
         raster_fuse.build_overviews(min_level_pixels=4)
@@ -259,20 +277,23 @@ def test_single_thread(tmp_path, float_50cm_ref_file):
     """Test single-threaded processing creates a homogenised file"""
     homo_config = RasterFuse.default_homo_config.copy()
     homo_config.update(threads=1)
-    raster_fuse = RasterFuse(float_50cm_ref_file, float_50cm_ref_file, tmp_path, Method.gain_blk_offset, (3, 3),
-                             homo_config=homo_config)
+    raster_fuse = RasterFuse(
+        float_50cm_ref_file, float_50cm_ref_file, tmp_path, Method.gain_blk_offset, (3, 3), homo_config=homo_config
+    )
     with raster_fuse:
         raster_fuse.process()
 
     assert (raster_fuse.homo_filename.exists())
 
 
-@pytest.mark.parametrize('src_file, ref_file, proc_crs, exp_proc_crs', [
-    ('float_50cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, ProcCrs.ref),
-    ('float_50cm_src_file', 'float_100cm_ref_file', ProcCrs.src, ProcCrs.src),
-    ('float_100cm_src_file', 'float_50cm_ref_file', ProcCrs.auto, ProcCrs.src),
-    ('float_100cm_src_file', 'float_50cm_ref_file', ProcCrs.ref, ProcCrs.ref),
-])
+@pytest.mark.parametrize(
+    'src_file, ref_file, proc_crs, exp_proc_crs', [
+        ('float_50cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, ProcCrs.ref),
+        ('float_50cm_src_file', 'float_100cm_ref_file', ProcCrs.src, ProcCrs.src),
+        ('float_100cm_src_file', 'float_50cm_ref_file', ProcCrs.auto, ProcCrs.src),
+        ('float_100cm_src_file', 'float_50cm_ref_file', ProcCrs.ref, ProcCrs.ref),
+    ]
+) # yapf: disable
 def test_proc_crs(tmp_path, src_file, ref_file, proc_crs, exp_proc_crs, request):
     """Test homogenised file creation for forced and auto proc_crs with different src/ref combinations"""
     src_file = request.getfixturevalue(src_file)
@@ -291,8 +312,10 @@ def test_tags(tmp_path, float_50cm_ref_file):
     method = Method.gain_blk_offset
     kernel_shape = (3, 3)
     proc_crs = ProcCrs.ref
-    raster_fuse = RasterFuse(float_50cm_ref_file, float_50cm_ref_file, tmp_path, method, kernel_shape,
-                             proc_crs=proc_crs, homo_config=homo_config)
+    raster_fuse = RasterFuse(
+        float_50cm_ref_file, float_50cm_ref_file, tmp_path, method, kernel_shape, proc_crs=proc_crs,
+        homo_config=homo_config
+    )
     with raster_fuse:
         raster_fuse.process()
 

@@ -21,11 +21,12 @@ from typing import Tuple
 
 import cv2 as cv
 import numpy as np
+from rasterio.enums import Resampling
+from rasterio.fill import fillnodata
+
 from homonim import utils
 from homonim.enums import Method
 from homonim.raster_array import RasterArray
-from rasterio.enums import Resampling
-from rasterio.fill import fillnodata
 
 
 class KernelModel:
@@ -39,15 +40,19 @@ class KernelModel:
     Based on the paper:
     Harris, Dugal & Van Niekerk, Adriaan. (2018). Radiometric homogenisation of aerial images by calibrating with
     satellite data. International Journal of Remote Sensing. 40. 1-25. 10.1080/01431161.2018.1528404.
-    https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data
+    https://www.researchgate.net/publication
+    /328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data
     """
 
-    default_config = dict(downsampling='average', upsampling='cubic_spline', r2_inpaint_thresh=0.25,
-                          mask_partial=False)
+    default_config = dict(
+        downsampling='average', upsampling='cubic_spline', r2_inpaint_thresh=0.25, mask_partial=False
+    )
 
-    def __init__(self, method, kernel_shape, param_image=False, r2_inpaint_thresh=default_config['r2_inpaint_thresh'],
-                 mask_partial=default_config['mask_partial'], downsampling=default_config['downsampling'],
-                 upsampling=default_config['upsampling']):
+    def __init__(
+        self, method, kernel_shape, param_image=False, r2_inpaint_thresh=default_config['r2_inpaint_thresh'],
+        mask_partial=default_config['mask_partial'], downsampling=default_config['downsampling'],
+        upsampling=default_config['upsampling']
+    ):
         """
         Construct a KernelModel.
 
@@ -103,15 +108,19 @@ class KernelModel:
     @property
     def config(self) -> dict:
         """A dict containing the KernelModel configuration."""
-        return dict(r2_inpaint_thresh=self._r2_inpaint_thresh, downsampling=self._downsampling,
-                    upsampling=self._upsampling, mask_partial=self._mask_partial)
+        return dict(
+            r2_inpaint_thresh=self._r2_inpaint_thresh, downsampling=self._downsampling, upsampling=self._upsampling,
+            mask_partial=self._mask_partial
+        )
 
     def _get_resampling(self, from_res, to_res):
         """Get the resampling method for re-projecting from resolution `from_res` to resolution `to_res`"""
         return self._downsampling if np.prod(np.abs(from_res)) <= np.prod(np.abs(to_res)) else self._upsampling
 
-    def _r2_array(self, ref_array, src_array, param_array, mask=None, mask_sum=None, ref_sum=None, src_sum=None,
-                  ref2_sum=None, src2_sum=None, src_ref_sum=None, dest_array=None, kernel_shape=None):
+    def _r2_array(
+        self, ref_array, src_array, param_array, mask=None, mask_sum=None, ref_sum=None, src_sum=None, ref2_sum=None,
+        src2_sum=None, src_ref_sum=None, dest_array=None, kernel_shape=None
+    ):
         """
         Helper function to find R2 coefficient of determination at each pixel/kernel location for the given matrices.
         """
@@ -168,8 +177,9 @@ class KernelModel:
 
         if dest_array is None:
             # assign a destination array to write R2 into, if it was not provided
-            dest_array = np.full(src_array.shape, fill_value=RasterArray.default_nodata,
-                                 dtype=RasterArray.default_dtype)
+            dest_array = np.full(
+                src_array.shape, fill_value=RasterArray.default_nodata, dtype=RasterArray.default_dtype
+            )
 
         # find R2 = 1 - RSS/TSS, and write into dest_array
         np.divide(ss_res_array, ss_tot_array, out=dest_array, where=mask)
@@ -235,8 +245,9 @@ class KernelModel:
 
         # setup a RasterArray profile for the parameters
         param_profile = src_ra.profile.copy()
-        param_profile.update(count=3 if self._param_image else 2, nodata=RasterArray.default_nodata,
-                             dtype=RasterArray.default_dtype)
+        param_profile.update(
+            count=3 if self._param_image else 2, nodata=RasterArray.default_nodata, dtype=RasterArray.default_dtype
+        )
 
         # convolve the kernel with src and ref to get kernel sums (uses DFT for large kernels)
         filter_args = dict(normalize=False, borderType=cv.BORDER_CONSTANT)  # common opencv arguments
@@ -252,8 +263,10 @@ class KernelModel:
 
         if self._param_image:
             # Find R2 of the sliding kernel models
-            self._r2_array(ref_array, src_array, param_ra.array[:1], mask=mask, ref_sum=ref_sum, src_sum=src_sum,
-                           dest_array=param_ra.array[2], kernel_shape=kernel_shape)
+            self._r2_array(
+                ref_array, src_array, param_ra.array[:1], mask=mask, ref_sum=ref_sum, src_sum=src_sum,
+                dest_array=param_ra.array[2], kernel_shape=kernel_shape
+            )
 
         return param_ra
 
@@ -327,15 +340,18 @@ class KernelModel:
         # setup a RasterArray profile for the parameters
         param_profile = src_ra.profile.copy()
         find_r2 = self._param_image or (self._r2_inpaint_thresh is not None)
-        param_profile.update(count=3 if find_r2 else 2, nodata=RasterArray.default_nodata,
-                             dtype=RasterArray.default_dtype)
+        param_profile.update(
+            count=3 if find_r2 else 2, nodata=RasterArray.default_nodata, dtype=RasterArray.default_dtype
+        )
 
         # find the numerator for the gain i.e N*cov(ref, src)
         filter_args = dict(normalize=False, borderType=cv.BORDER_CONSTANT)  # common opencv arguments
         src_sum = cv.boxFilter(src_array, -1, kernel_shape[::-1], **filter_args)
         ref_sum = cv.boxFilter(ref_array, -1, kernel_shape[::-1], **filter_args)
         src_ref_sum = cv.boxFilter(src_array * ref_array, -1, kernel_shape[::-1], **filter_args)
-        mask_sum = cv.boxFilter(mask.astype(RasterArray.default_dtype, copy=False), -1, kernel_shape[::-1], **filter_args)
+        mask_sum = cv.boxFilter(
+            mask.astype(RasterArray.default_dtype, copy=False), -1, kernel_shape[::-1], **filter_args
+        )
         m_num_array = (mask_sum * src_ref_sum) - (src_sum * ref_sum)
 
         # find the denominator for the gain i.e. N*var(src)
@@ -353,9 +369,11 @@ class KernelModel:
 
         if find_r2:
             # Find R2 of the sliding kernel models
-            self._r2_array(ref_array, src_array, param_ra.array[:2], mask=mask, mask_sum=mask_sum, ref_sum=ref_sum,
-                           src_sum=src_sum, src2_sum=src2_sum, src_ref_sum=src_ref_sum, dest_array=param_ra.array[2],
-                           kernel_shape=kernel_shape)
+            self._r2_array(
+                ref_array, src_array, param_ra.array[:2], mask=mask, mask_sum=mask_sum, ref_sum=ref_sum,
+                src_sum=src_sum, src2_sum=src2_sum, src_ref_sum=src_ref_sum, dest_array=param_ra.array[2],
+                kernel_shape=kernel_shape
+            )
 
         if self._r2_inpaint_thresh is not None:
             # fill/inpaint low R2 and negative gain areas in the offset parameter

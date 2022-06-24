@@ -33,10 +33,10 @@ from rasterio.warp import SUPPORTED_RESAMPLING
 from homonim import utils, version
 from homonim.compare import RasterCompare
 from homonim.enums import ProcCrs, Method
+from homonim.errors import ImageFormatError
 from homonim.fuse import RasterFuse
 from homonim.kernel_model import KernelModel
 from homonim.stats import ParamStats
-from homonim.errors import ImageFormatError
 
 logger = logging.getLogger(__name__)
 
@@ -81,8 +81,10 @@ def _nodata_cb(ctx, param, value):
         try:
             value = float(value.lower())
             if not rio.dtypes.can_cast_dtype(value, ctx.params['dtype']):
-                raise click.BadParameter(f"{value} cannot be cast to the output image data type {ctx.params['dtype']}",
-                                         param=param, param_hint="nodata")
+                raise click.BadParameter(
+                    f"{value} cannot be cast to the output image data type {ctx.params['dtype']}",
+                    param=param, param_hint="nodata"
+                )
         except (TypeError, ValueError):
             raise click.BadParameter(f"{value} is not a number", param=param, param_hint="nodata")
 
@@ -114,8 +116,7 @@ def _creation_options_cb(ctx, param, value):
         out = {}
         for pair in value:
             if '=' not in pair:
-                raise click.BadParameter(
-                    "Invalid syntax for KEY=VAL arg: {}".format(pair))
+                raise click.BadParameter("Invalid syntax for KEY=VAL arg: {}".format(pair))
             else:
                 k, v = pair.split('=', 1)
                 k = k.lower()
@@ -173,7 +174,8 @@ class _FuseCommand(_HomonimCommand):
     Where neither user supplied CLI, or config file values exist, parameters retain their defaults.
     """
 
-    # adapted from https://stackoverflow.com/questions/46358797/python-click-supply-arguments-and-options-from-a-configuration-file/46391887
+    # adapted from https://stackoverflow.com/questions/46358797/python-click-supply-arguments-and-options-from-a
+    # -configuration-file/46391887
     def invoke(self, ctx):
         config_file = ctx.params['conf']
         if config_file is not None:
@@ -195,37 +197,35 @@ class _FuseCommand(_HomonimCommand):
         # set the default creation_options if no other driver or creation_options have been specified
         # (this can't be done in a callback as it depends on 'driver')
         if (ctx.get_parameter_source('driver') == ParameterSource.DEFAULT and
-                ctx.get_parameter_source('creation_options') == ParameterSource.DEFAULT):
+            ctx.get_parameter_source('creation_options') == ParameterSource.DEFAULT):
             ctx.params['creation_options'] = RasterFuse.default_out_profile['creation_options']
 
         return click.Command.invoke(self, ctx)
 
 
 # define click options and arguments common to more than one command
-src_file_arg = click.argument("src-file", nargs=-1, metavar="INPUTS...",
-                              type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path))
-ref_file_arg = click.argument("ref-file", nargs=1, metavar="REFERENCE",
-                              type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path))
+src_file_arg = click.argument(
+    "src-file", nargs=-1, metavar="INPUTS...", type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path)
+)
+ref_file_arg = click.argument(
+    "ref-file", nargs=1, metavar="REFERENCE", type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path)
+)
 
-threads_option = click.option("-t", "--threads", type=click.INT, default=RasterFuse.default_homo_config['threads'],
-                              show_default=True, callback=_threads_cb,
-                              help=f"Number of image blocks to process concurrently (0 = use all cpus).")
-output_option = click.option("-o", "--output",
-                             type=click.Path(exists=False, dir_okay=False, writable=True, resolve_path=True,
-                                             path_type=pathlib.Path),
-                             help="Write results to a json file.")
+threads_option = click.option(
+    "-t", "--threads", type=click.INT, default=RasterFuse.default_homo_config['threads'], show_default=True,
+    callback=_threads_cb, help=f"Number of image blocks to process concurrently (0 = use all cpus)."
+)
+output_option = click.option(
+    "-o", "--output",
+    type=click.Path(exists=False, dir_okay=False, writable=True, resolve_path=True, path_type=pathlib.Path),
+    help="Write results to a json file."
+)
 
 
 # define the click CLI
 @click.group()
-@click.option(
-    '--verbose', '-v',
-    count=True,
-    help="Increase verbosity.")
-@click.option(
-    '--quiet', '-q',
-    count=True,
-    help="Decrease verbosity.")
+@click.option('--verbose', '-v', count=True, help="Increase verbosity.")
+@click.option('--quiet', '-q', count=True, help="Decrease verbosity.")
 @click.version_option(version=version.__version__, message="%(version)s")
 def cli(verbose, quiet):
     verbosity = verbose - quiet
@@ -237,68 +237,106 @@ def cli(verbose, quiet):
 # standard options
 @src_file_arg
 @ref_file_arg
-@click.option("-m", "--method", type=click.Choice([m.value for m in Method], case_sensitive=False),
-              default=Method.gain_blk_offset.value,
-              help="Homogenisation method.\ngain: Gain-only model. \ngain-blk-offset: Gain-only model applied to "
-                   "offset normalised image blocks [default]. \ngain-offset: Full gain and offset model.")
-@click.option("-k", "--kernel-shape", type=click.Tuple([click.INT, click.INT]), nargs=2, default=(5, 5),
-              show_default=True, metavar='<HEIGHT WIDTH>',
-              help="Kernel height and width in pixels of the --proc-crs / -pc image.")
-@click.option("-od", "--output-dir", type=click.Path(exists=True, file_okay=False, writable=True),
-              help="Directory in which to create homogenised image(s). [default: use source image directory]")
-@click.option("-ovw", "--overwrite", "overwrite", is_flag=True, type=bool, default=False, show_default=True,
-              help="Overwrite existing output file(s).")
-@click.option("-cmp", "--compare", "comp_file", type=click.Path(dir_okay=False, path_type=pathlib.Path),
-              is_flag=False, flag_value="ref", default=None, callback=_compare_cb,
-              help="Statistically compare source and homogenised images with this image.  If specified without an "
-                   "image file, source and homogenised images will be compared with the reference.")
-@click.option("-nbo", "--no-build-ovw", "build_ovw", type=click.BOOL, is_flag=True, default=True,
-              help="Turn off overview building for the homogenised image(s).")
-@click.option("-pc", "--proc-crs", type=click.Choice([pc.value for pc in ProcCrs], case_sensitive=False),
-              default=ProcCrs.auto.value,
-              help="The image CRS in which to perform parameter estimation.\nauto: Estimate in the lowest resolution "
-                   "of the source and reference image CRS's [default - recommended].\nsrc: Estimate in the source image CRS."
-                   "\nref: Estimate in the reference image CRS.")
-@click.option("-c", "--conf", type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path),
-              required=False, default=None, show_default=True,
-              help="Path to a yaml configuration file specifying the options below.")
+@click.option(
+    "-m", "--method", type=click.Choice([m.value for m in Method], case_sensitive=False),
+    default=Method.gain_blk_offset.value,
+    help="Homogenisation method.\ngain: Gain-only model. \ngain-blk-offset: Gain-only model applied to "
+         "offset normalised image blocks [default]. \ngain-offset: Full gain and offset model."
+)
+@click.option(
+    "-k", "--kernel-shape", type=click.Tuple([click.INT, click.INT]), nargs=2, default=(5, 5),
+    show_default=True, metavar='<HEIGHT WIDTH>',
+    help="Kernel height and width in pixels of the --proc-crs / -pc image."
+)
+@click.option(
+    "-od", "--output-dir", type=click.Path(exists=True, file_okay=False, writable=True),
+    help="Directory in which to create homogenised image(s). [default: use source image directory]"
+)
+@click.option(
+    "-ovw", "--overwrite", "overwrite", is_flag=True, type=bool, default=False, show_default=True,
+    help="Overwrite existing output file(s)."
+)
+@click.option(
+    "-cmp", "--compare", "comp_file", type=click.Path(dir_okay=False, path_type=pathlib.Path),
+    is_flag=False, flag_value="ref", default=None, callback=_compare_cb,
+    help="Statistically compare source and homogenised images with this image.  If specified without an "
+         "image file, source and homogenised images will be compared with the reference."
+)
+@click.option(
+    "-nbo", "--no-build-ovw", "build_ovw", type=click.BOOL, is_flag=True, default=True,
+    help="Turn off overview building for the homogenised image(s)."
+)
+@click.option(
+    "-pc", "--proc-crs", type=click.Choice([pc.value for pc in ProcCrs], case_sensitive=False),
+    default=ProcCrs.auto.value,
+    help="The image CRS in which to perform parameter estimation.\nauto: Estimate in the lowest resolution "
+         "of the source and reference image CRS's [default - recommended].\nsrc: Estimate in the source image CRS."
+         "\nref: Estimate in the reference image CRS."
+)
+@click.option(
+    "-c", "--conf", type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path),
+    required=False, default=None, show_default=True,
+    help="Path to a yaml configuration file specifying the options below."
+)
 # advanced options
-@click.option("-pi", "--param-image", type=click.BOOL, is_flag=True,
-              default=RasterFuse.default_homo_config['param_image'],
-              help=f"Create a debug image, containing model parameters and R\N{SUPERSCRIPT TWO} values for each "
-                   "homogenised image.")
-@click.option("-mp", "--mask-partial", type=click.BOOL, is_flag=True,
-              default=KernelModel.default_config['mask_partial'],
-              help=f"Mask biased homogenised pixels produced from partial kernel or source / reference image coverage.")
+@click.option(
+    "-pi", "--param-image", type=click.BOOL, is_flag=True,
+    default=RasterFuse.default_homo_config['param_image'],
+    help=f"Create a debug image, containing model parameters and R\N{SUPERSCRIPT TWO} values for each "
+         "homogenised image."
+)
+@click.option(
+    "-mp", "--mask-partial", type=click.BOOL, is_flag=True,
+    default=KernelModel.default_config['mask_partial'],
+    help=f"Mask biased homogenised pixels produced from partial kernel or source / reference image coverage."
+)
 @threads_option
-@click.option("-mbm", "--max-block-mem", type=click.FLOAT,
-              default=RasterFuse.default_homo_config['max_block_mem'], show_default=True,
-              help="Maximum image block size in megabytes (0 = block size is the image size).")
-@click.option("-ds", "--downsampling", type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
-              default=KernelModel.default_config['downsampling'], show_default=True,
-              help="Resampling method for re-projecting from high to low resolution.")
-@click.option("-us", "--upsampling", type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
-              default=KernelModel.default_config['upsampling'], show_default=True,
-              help="Resampling method for re-projecting from low to high resolution.")
-@click.option("-rit", "--r2-inpaint-thresh", type=click.FloatRange(min=0, max=1),
-              default=KernelModel.default_config['r2_inpaint_thresh'], show_default=True, metavar="FLOAT 0-1",
-              help="R\N{SUPERSCRIPT TWO} threshold below which to inpaint model parameters from "
-                   "surrounding areas (0 = turn off inpainting). For 'gain-offset' method only.")
-@click.option("--out-driver", "driver",
-              type=click.Choice(list(rio.drivers.raster_driver_extensions().values()), case_sensitive=False),
-              default=RasterFuse.default_out_profile['driver'], show_default=True, metavar="TEXT",
-              help="Output image format driver.  See the GDAL docs for options.")
-@click.option("--out-dtype", "dtype", type=click.Choice(list(rio.dtypes.dtype_fwd.values())[1:8], case_sensitive=False),
-              default=RasterFuse.default_out_profile['dtype'], show_default=True, help="Output image data type.")
-@click.option("--out-nodata", "nodata", type=click.STRING, callback=_nodata_cb, metavar="[NUMBER|null|nan]",
-              default=RasterFuse.default_out_profile['nodata'], show_default=True,
-              help="Output image nodata value.")
-@click.option('-co', '--out-profile', 'creation_options', metavar='NAME=VALUE', multiple=True,
-              default=(), callback=_creation_options_cb,
-              help="Driver specific image creation options for the output image(s).  See the GDAL docs for details.")
+@click.option(
+    "-mbm", "--max-block-mem", type=click.FLOAT,
+    default=RasterFuse.default_homo_config['max_block_mem'], show_default=True,
+    help="Maximum image block size in megabytes (0 = block size is the image size)."
+)
+@click.option(
+    "-ds", "--downsampling", type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
+    default=KernelModel.default_config['downsampling'], show_default=True,
+    help="Resampling method for re-projecting from high to low resolution."
+)
+@click.option(
+    "-us", "--upsampling", type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
+    default=KernelModel.default_config['upsampling'], show_default=True,
+    help="Resampling method for re-projecting from low to high resolution."
+)
+@click.option(
+    "-rit", "--r2-inpaint-thresh", type=click.FloatRange(min=0, max=1),
+    default=KernelModel.default_config['r2_inpaint_thresh'], show_default=True, metavar="FLOAT 0-1",
+    help="R\N{SUPERSCRIPT TWO} threshold below which to inpaint model parameters from "
+         "surrounding areas (0 = turn off inpainting). For 'gain-offset' method only."
+)
+@click.option(
+    "--out-driver", "driver",
+    type=click.Choice(list(rio.drivers.raster_driver_extensions().values()), case_sensitive=False),
+    default=RasterFuse.default_out_profile['driver'], show_default=True, metavar="TEXT",
+    help="Output image format driver.  See the GDAL docs for options."
+)
+@click.option(
+    "--out-dtype", "dtype", type=click.Choice(list(rio.dtypes.dtype_fwd.values())[1:8], case_sensitive=False),
+    default=RasterFuse.default_out_profile['dtype'], show_default=True, help="Output image data type."
+)
+@click.option(
+    "--out-nodata", "nodata", type=click.STRING, callback=_nodata_cb, metavar="[NUMBER|null|nan]",
+    default=RasterFuse.default_out_profile['nodata'], show_default=True,
+    help="Output image nodata value."
+)
+@click.option(
+    '-co', '--out-profile', 'creation_options', metavar='NAME=VALUE', multiple=True,
+    default=(), callback=_creation_options_cb,
+    help="Driver specific image creation options for the output image(s).  See the GDAL docs for details."
+)
 @click.pass_context
-def fuse(ctx, src_file, ref_file, method, kernel_shape, output_dir, overwrite, comp_file, build_ovw, proc_crs, conf,
-         **kwargs):
+def fuse(
+    ctx, src_file, ref_file, method, kernel_shape, output_dir, overwrite, comp_file, build_ovw, proc_crs, conf,
+    **kwargs
+):
     """
     Radiometrically homogenise image(s) by fusion with a reference.
 
@@ -337,9 +375,11 @@ def fuse(ctx, src_file, ref_file, method, kernel_shape, output_dir, overwrite, c
         raise click.BadParameter(str(ex))
 
     # build configuration dictionaries for ImFuse
-    config = dict(homo_config=_update_existing_keys(RasterFuse.default_homo_config, **kwargs),
-                  model_config=_update_existing_keys(RasterFuse.default_model_config, **kwargs),
-                  out_profile=_update_existing_keys(RasterFuse.default_out_profile, **kwargs))
+    config = dict(
+        homo_config=_update_existing_keys(RasterFuse.default_homo_config, **kwargs),
+        model_config=_update_existing_keys(RasterFuse.default_model_config, **kwargs),
+        out_profile=_update_existing_keys(RasterFuse.default_out_profile, **kwargs)
+    )
     compare_files = []
 
     # iterate over and homogenise source file(s)
@@ -348,8 +388,10 @@ def fuse(ctx, src_file, ref_file, method, kernel_shape, output_dir, overwrite, c
             homo_path = pathlib.Path(output_dir) if output_dir is not None else src_filename.parent
 
             logger.info(f'\nHomogenising {src_filename.name}')
-            with RasterFuse(src_filename, ref_file, homo_path, method=Method(method), kernel_shape=kernel_shape,
-                            proc_crs=ProcCrs(proc_crs), overwrite=overwrite, **config) as raster_fuse:
+            with RasterFuse(
+                src_filename, ref_file, homo_path, method=Method(method), kernel_shape=kernel_shape,
+                proc_crs=ProcCrs(proc_crs), overwrite=overwrite, **config
+            ) as raster_fuse:
                 start_time = timer()
                 raster_fuse.process()
                 # build overviews
@@ -362,11 +404,12 @@ def fuse(ctx, src_file, ref_file, method, kernel_shape, output_dir, overwrite, c
 
             # compare source and homogenised files with reference (invokes compare command with relevant parameters)
             if comp_file:
-                comp_file = ref_file if str(comp_file)=='ref' else comp_file
+                comp_file = ref_file if str(comp_file) == 'ref' else comp_file
                 ctx.invoke(compare, src_file=compare_files, ref_file=comp_file, proc_crs=proc_crs)
     except Exception:
-        logger.exception("Exception caught during processing.") # log exception info
+        logger.exception("Exception caught during processing.")  # log exception info
         raise click.Abort()
+
 
 cli.add_command(fuse)
 
@@ -375,11 +418,13 @@ cli.add_command(fuse)
 @click.command(cls=_HomonimCommand)
 @src_file_arg
 @ref_file_arg
-@click.option("-pc", "--proc-crs", type=click.Choice([pc.value for pc in ProcCrs], case_sensitive=False),
-              default=ProcCrs.auto.value, show_default=True,
-              help="The image CRS in which to perform processing.\nauto: process in the lowest "
-                   "resolution of the source and reference image CRS's (recommended).\nsrc: process in "
-                   "the source image CRS.\nref: process in the reference image CRS.")
+@click.option(
+    "-pc", "--proc-crs", type=click.Choice([pc.value for pc in ProcCrs], case_sensitive=False),
+    default=ProcCrs.auto.value, show_default=True,
+    help="The image CRS in which to perform processing.\nauto: process in the lowest "
+         "resolution of the source and reference image CRS's (recommended).\nsrc: process in "
+         "the source image CRS.\nref: process in the reference image CRS."
+)
 @output_option
 def compare(src_file, ref_file, proc_crs, output):
     """
@@ -419,8 +464,10 @@ def compare(src_file, ref_file, proc_crs, output):
         summary_dict = {}
         for src_file, _res_dict in res_dict.items():
             res_df = pd.DataFrame.from_dict(_res_dict, orient='index')
-            res_str = res_df.to_string(float_format="{:.2f}".format, index=True, justify="center",
-                                       index_names=False)
+            res_str = res_df.to_string(
+                float_format="{:.2f}".format, index=True, justify="center",
+                index_names=False
+            )
             logger.info(f'\n\n{src_file}:\n\n{res_str}')
             summary_dict[src_file] = _res_dict['Mean']
 
@@ -429,8 +476,10 @@ def compare(src_file, ref_file, proc_crs, output):
             summ_df = pd.DataFrame.from_dict(summary_dict, orient='index')
             summ_df = summ_df.rename(columns=dict(zip(summ_df.columns, ('Mean ' + summ_df.columns))))
             summ_df.insert(0, 'File', [pathlib.Path(fn).name for fn in summ_df.index])
-            summ_str = summ_df.to_string(float_format="{:.2f}".format, index=False, justify="center",
-                                         index_names=False)
+            summ_str = summ_df.to_string(
+                float_format="{:.2f}".format, index=False, justify="center",
+                index_names=False
+            )
             logger.info(f'\n\nSummary over bands:\n\n{summ_str}')
 
         if output is not None:
@@ -447,8 +496,10 @@ cli.add_command(compare)
 
 
 @click.command()
-@click.argument("param-file", nargs=-1, metavar="INPUTS...",
-                type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path), callback=_param_file_cb)
+@click.argument(
+    "param-file", nargs=-1, metavar="INPUTS...",
+    type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path), callback=_param_file_cb
+)
 @output_option
 def stats(param_file, output):
     """
@@ -476,8 +527,10 @@ def stats(param_file, output):
             logger.info(param_meta)
             # format the statistics as a dataframe to get printable string
             param_df = pd.DataFrame.from_dict(param_dict, orient='index')
-            param_str = param_df.to_string(float_format="{:.2f}".format, index=True, justify="center",
-                                           index_names=False)
+            param_str = param_df.to_string(
+                float_format="{:.2f}".format, index=True, justify="center",
+                index_names=False
+            )
             logger.info(f'Stats:\n{param_str}')
 
         if output is not None:
