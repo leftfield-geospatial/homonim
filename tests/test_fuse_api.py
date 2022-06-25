@@ -36,7 +36,7 @@ from homonim.kernel_model import KernelModel
     ]
 ) # yapf: disable
 def test_creation(src_file, ref_file, tmp_path, request):
-    """Test creation and configuration of RasterFuse"""
+    """ Test creation and configuration of RasterFuse. """
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
     method = Method.gain
@@ -71,7 +71,7 @@ def test_creation(src_file, ref_file, tmp_path, request):
 
 @pytest.mark.parametrize('overwrite', [False, True])
 def test_overwrite(tmp_path, float_50cm_src_file, float_100cm_ref_file, overwrite):
-    """Test overwrite behaviour"""
+    """ Test overwrite behaviour. """
     homo_config = RasterFuse.default_homo_config.copy()
     homo_config.update(param_image=True)
     params = dict(
@@ -107,7 +107,7 @@ def test_overwrite(tmp_path, float_50cm_src_file, float_100cm_ref_file, overwrit
     ]
 ) # yapf: disable
 def test_basic_fusion(src_file, ref_file, method, kernel_shape, max_block_mem, tmp_path, request):
-    """Test fusion output with different src/ref images, and method etc combinations"""
+    """ Test fusion output with different src/ref images, and method etc combinations. """
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
     homo_config = RasterFuse.default_homo_config.copy()
@@ -138,7 +138,7 @@ def test_basic_fusion(src_file, ref_file, method, kernel_shape, max_block_mem, t
 ) # yapf: disable
 # formatter: on
 def test_out_profile(float_100cm_rgb_file, tmp_path, out_profile):
-    """Test fusion output image format (profile) with different out_profile configurations"""
+    """ Test fusion output image format (profile) with different out_profile configurations. """
     raster_fuse = RasterFuse(
         float_100cm_rgb_file, float_100cm_rgb_file, tmp_path, Method.gain_blk_offset, (3, 3), out_profile=out_profile
     )
@@ -183,7 +183,7 @@ def test_out_profile(float_100cm_rgb_file, tmp_path, out_profile):
     ]
 ) # yapf: disable
 def test_param_image(float_100cm_rgb_file, tmp_path, method, proc_crs):
-    """Test creation and masking of parameter image for different method and proc_crs combinations"""
+    """ Test creation and masking of parameter image for different method and proc_crs combinations. """
     homo_config = RasterFuse.default_homo_config.copy()
     homo_config.update(param_image=True)
     raster_fuse = RasterFuse(
@@ -212,7 +212,7 @@ def test_param_image(float_100cm_rgb_file, tmp_path, method, proc_crs):
     ]
 ) # yapf: disable
 def test_mask_partial(src_file, ref_file, tmp_path, kernel_shape, proc_crs, mask_partial, request):
-    """Test partial masking with multiple image blocks"""
+    """ Test partial masking with multiple image blocks. """
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
     model_config = RasterFuse.default_model_config.copy()
@@ -242,7 +242,7 @@ def test_mask_partial(src_file, ref_file, tmp_path, kernel_shape, proc_crs, mask
 
 
 def test_build_overviews(float_50cm_ref_file, tmp_path):
-    """Test that overviews are built for homogenised and parameter files"""
+    """ Test that overviews are built for homogenised and parameter files. """
     homo_config = RasterFuse.default_homo_config.copy()
     homo_config.update(param_image=True)
     raster_fuse = RasterFuse(
@@ -264,14 +264,14 @@ def test_build_overviews(float_50cm_ref_file, tmp_path):
 
 
 def test_io_error(tmp_path, float_50cm_ref_file):
-    """Test we get an IoError if processing without opening/entering the context"""
+    """ Test we get an IoError if processing without opening/entering the context. """
     raster_fuse = RasterFuse(float_50cm_ref_file, float_50cm_ref_file, tmp_path, Method.gain_blk_offset, (3, 3))
     with pytest.raises(IoError):
         raster_fuse.process()
 
 
 def test_homo_filename(tmp_path, float_50cm_ref_file):
-    """Test homogenised file is created"""
+    """ Test homogenised file is created. """
     homo_filename = tmp_path.joinpath('out.tif')
     raster_fuse = RasterFuse(float_50cm_ref_file, float_50cm_ref_file, homo_filename, Method.gain_blk_offset, (3, 3))
     with raster_fuse:
@@ -281,7 +281,7 @@ def test_homo_filename(tmp_path, float_50cm_ref_file):
 
 
 def test_single_thread(tmp_path, float_50cm_ref_file):
-    """Test single-threaded processing creates a homogenised file"""
+    """ Test single-threaded processing creates a homogenised file. """
     homo_config = RasterFuse.default_homo_config.copy()
     homo_config.update(threads=1)
     raster_fuse = RasterFuse(
@@ -302,7 +302,7 @@ def test_single_thread(tmp_path, float_50cm_ref_file):
     ]
 ) # yapf: disable
 def test_proc_crs(tmp_path, src_file, ref_file, proc_crs, exp_proc_crs, request):
-    """Test homogenised file creation for forced and auto proc_crs with different src/ref combinations"""
+    """ Test homogenised file creation for forced and auto proc_crs with different src/ref combinations. """
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
     raster_fuse = RasterFuse(src_file, ref_file, tmp_path, Method.gain_blk_offset, (5, 5), proc_crs=proc_crs)
@@ -313,7 +313,7 @@ def test_proc_crs(tmp_path, src_file, ref_file, proc_crs, exp_proc_crs, request)
 
 
 def test_tags(tmp_path, float_50cm_ref_file):
-    """Test homogenised file metadata"""
+    """ Test homogenised file metadata. """
     homo_config = RasterFuse.default_homo_config.copy()
     homo_config.update(param_image=True)
     method = Method.gain_blk_offset

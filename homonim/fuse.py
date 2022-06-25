@@ -162,7 +162,7 @@ class RasterFuse:
         self._stack = None
 
     def _init_out_filenames(self, homo_path: pathlib.Path, overwrite: bool = True):
-        """set up the homogenised and parameter image filenames."""
+        """ Set up the homogenised and parameter image filenames. """
         homo_path = pathlib.Path(homo_path)
         if homo_path.is_dir():
             # create a filename for the homogenised file in the provided directory
@@ -187,14 +187,14 @@ class RasterFuse:
             )
 
     def _create_out_profile(self) -> dict:
-        """Create an output image rasterio profile from the source image profile and output configuration"""
+        """ Create an output image rasterio profile from the source image profile and output configuration. """
         # out_profile = self._combine_with_config(self._raster_pair.src_im.profile)
         out_profile = utils.combine_profiles(self._raster_pair.src_im.profile, self._out_profile)
         out_profile['count'] = len(self._raster_pair.src_bands)
         return out_profile
 
     def _create_param_profile(self) -> dict:
-        """Create a debug image rasterio profile from the proc_crs image and configuration"""
+        """ Create a debug image rasterio profile from the proc_crs image and configuration. """
         if self._raster_pair.proc_crs == ProcCrs.ref:
             init_profile = self._raster_pair.ref_im.profile
         else:
@@ -209,7 +209,7 @@ class RasterFuse:
         return param_profile
 
     def _set_metadata(self, im: rasterio.io.DatasetWriter):
-        """Helper function to copy the RasterFuse configuration info to an image (GeoTiff) file."""
+        """ Helper function to copy the RasterFuse configuration info to an image (GeoTiff) file. """
         meta_dict = dict(
             HOMO_SRC_FILE=self._src_filename.name, HOMO_REF_FILE=self._ref_filename.name,
             HOMO_PROC_CRS=self._proc_crs.name, HOMO_METHOD=self._method.name, HOMO_KERNEL_SHAPE=self._kernel_shape,
@@ -260,12 +260,12 @@ class RasterFuse:
                 im.update_tags(param_i + 1, **param_meta_dict)
 
     def _assert_open(self):
-        """Raise an IoError if the source, reference or homogenised image(s) are not open."""
+        """ Raise an IoError if the source, reference or homogenised image(s) are not open. """
         if self.closed:
             raise IoError(f'The image file(s) have not been opened.')
 
     def open(self):
-        """Open the source and reference images for reading, and output image(s) for writing."""
+        """ Open the source and reference images for reading, and output image(s) for writing. """
         self._raster_pair.open()
         self._out_im = rio.open(self._homo_filename, 'w', **self._create_out_profile())
         self._set_homo_metadata(self._out_im)
@@ -275,7 +275,7 @@ class RasterFuse:
             self._set_param_metadata(self._param_im)
 
     def close(self):
-        """Close all open images."""
+        """ Close all open images. """
         self._out_im.close()
         if self._param_im:
             self._param_im.close()
@@ -294,32 +294,32 @@ class RasterFuse:
 
     @property
     def method(self) -> Method:
-        """Homogenisation method."""
+        """ Homogenisation method. """
         return self._method
 
     @property
     def kernel_shape(self) -> Tuple[int, int]:
-        """Kernel shape."""
+        """ Kernel shape. """
         return tuple(self._kernel_shape)
 
     @property
     def proc_crs(self) -> ProcCrs:
-        """The 'processing CRS' i.e. which of the source/reference image spaces is selected for processing."""
+        """ The 'processing CRS' i.e. which of the source/reference image spaces is selected for processing. """
         return self._proc_crs
 
     @property
     def closed(self) -> bool:
-        """True when the RasterFuse images are closed, otherwise False."""
+        """ True when the RasterFuse images are closed, otherwise False. """
         return not self._out_im or self._out_im.closed or not self._raster_pair or self._raster_pair.closed
 
     @property
     def homo_filename(self) -> pathlib.Path:
-        """Path to the homogenised image file."""
+        """ Path to the homogenised image file. """
         return self._homo_filename
 
     @property
     def param_filename(self) -> pathlib.Path:
-        """Path to the parameter image file."""
+        """ Path to the parameter image file. """
         return self._param_filename if self._config['param_image'] else None
 
     def _build_overviews(self, im, max_num_levels=8, min_level_pixels=256):
@@ -360,7 +360,7 @@ class RasterFuse:
             self._build_overviews(self._param_im, max_num_levels=max_num_levels, min_level_pixels=min_level_pixels)
 
     def _process_block(self, block_pair: BlockPair):
-        """Thread-safe function to homogenise a source image block"""
+        """ Thread-safe function to homogenise a source image block. """
 
         # read source and reference blocks
         src_ra, ref_ra = self._raster_pair.read(block_pair)

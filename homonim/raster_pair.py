@@ -36,7 +36,7 @@ from homonim.enums import ProcCrs
 from homonim.raster_array import RasterArray
 
 logger = logging.getLogger(__name__)
-"""Named tuple to contain a set of matching block windows for a source-reference image pair"""
+""" Named tuple to contain a set of matching block windows for a source-reference image pair. """
 BlockPair = namedtuple(
     'BlockPair', [
         'band_i',  # band index (0 based)
@@ -97,7 +97,7 @@ class RasterPairReader:
 
     @staticmethod
     def _validate_image(im: rasterio.DatasetReader):
-        """Validate an open rasterio dataset for use as a source or reference image."""
+        """ Validate an open rasterio dataset for use as a source or reference image. """
 
         try:
             _ = im.read(1, window=im.block_window(1, 0, 0))
@@ -119,7 +119,7 @@ class RasterPairReader:
 
     @staticmethod
     def _validate_image_pair(src_im: rasterio.DatasetReader, ref_im: rasterio.DatasetReader):
-        """Validate a pair of rasterio datasets for use as a source-reference image pair."""
+        """ Validate a pair of rasterio datasets for use as a source-reference image pair. """
 
         for im in (src_im, ref_im):
             RasterPairReader._validate_image(im)
@@ -180,7 +180,7 @@ class RasterPairReader:
         return proc_crs
 
     def _auto_block_shape(self, proc_win: Window = None):
-        """Find a block shape that satisfies max_block_mem."""
+        """ Find a block shape that satisfies max_block_mem. """
 
         # adjust max_block_mem to represent the size of a block in the highest resolution image, but scaled to the
         # equivalent in proc_crs.
@@ -226,7 +226,7 @@ class RasterPairReader:
         return block_shape
 
     def _init_image_pair(self):
-        """Prepare the class for reading."""
+        """ Prepare the class for reading. """
         self.open()
         try:
             self._validate_image_pair(self._src_im, self._ref_im)
@@ -254,14 +254,14 @@ class RasterPairReader:
             self.close()
 
     def _assert_open(self):
-        """Raise an IoError if the source and reference images are not open."""
+        """ Raise an IoError if the source and reference images are not open. """
         if self.closed:
             raise errors.IoError(
                 f'The raster pair has not been opened: {self._src_filename.name} and {self._ref_filename.name}'
             )
 
     def open(self):
-        """Open the source and reference images for reading."""
+        """ Open the source and reference images for reading. """
         self._src_im = rio.open(self._src_filename, 'r')
         self._ref_im = rio.open(self._ref_filename, 'r')
 
@@ -276,7 +276,7 @@ class RasterPairReader:
                 self._src_im = WarpedVRT(self._src_im, crs=self._ref_im.crs, resampling=Resampling.bilinear)
 
     def close(self):
-        """Close the source and reference image datasets."""
+        """ Close the source and reference image datasets. """
         self._src_im.close()
         self._ref_im.close()
 
@@ -291,44 +291,44 @@ class RasterPairReader:
 
     @property
     def src_im(self) -> rasterio.DatasetReader:
-        """The source rasterio dataset."""
+        """ The source rasterio dataset. """
         self._assert_open()
         return self._src_im
 
     @property
     def ref_im(self) -> rasterio.DatasetReader:
-        """The reference rasterio dataset."""
+        """ The reference rasterio dataset. """
         self._assert_open()
         return self._ref_im
 
     @property
     def src_bands(self) -> Tuple[int, ]:
-        """The source non-alpha band indices (1-based)."""
+        """ The source non-alpha band indices (1-based). """
         return self._src_bands
 
     @property
     def ref_bands(self) -> Tuple[int, ]:
-        """The reference non-alpha band indices (1-based)."""
+        """ The reference non-alpha band indices (1-based). """
         return self._ref_bands
 
     @property
     def proc_crs(self) -> ProcCrs:
-        """The 'processing CRS' i.e. which of the source/reference image spaces is selected for processing."""
+        """ The 'processing CRS' i.e. which of the source/reference image spaces is selected for processing. """
         return self._proc_crs
 
     @property
     def overlap(self) -> Tuple[int, int]:
-        """The block overlap (rows, columns) in pixels of the 'proc_crs' image."""
+        """ The block overlap (rows, columns) in pixels of the 'proc_crs' image. """
         return tuple(self._overlap)
 
     @property
     def block_shape(self) -> Tuple[int, int]:
-        """The image block shape (rows, columns) in pixels of the 'proc_crs' image."""
+        """ The image block shape (rows, columns) in pixels of the 'proc_crs' image. """
         return tuple(self._block_shape)
 
     @property
     def closed(self) -> bool:
-        """True when the RasterPair is closed, otherwise False."""
+        """ True when the RasterPair is closed, otherwise False. """
         return not self._src_im or not self._ref_im or self._src_im.closed or self._ref_im.closed
 
     def read(self, block_pair):

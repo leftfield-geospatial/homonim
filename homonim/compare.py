@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 
 class RasterCompare:
-    """Class to statistically compare an image against a reference."""
+    """ Class to statistically compare an image against a reference. """
     default_config = dict(threads=cpu_count() - 1)
 
     def __init__(self, src_filename, ref_filename, proc_crs=ProcCrs.auto, threads=default_config['threads']):
@@ -66,7 +66,7 @@ class RasterCompare:
         self._raster_pair = RasterPairReader(self._src_filename, self._ref_filename, proc_crs=proc_crs)
         self._proc_crs = self._raster_pair.proc_crs
 
-    """dict specifying stats labels and functions"""
+    """ dict specifying stats labels and functions. """
     _stats = [
         dict(
             ABBREV='r2',
@@ -92,12 +92,14 @@ class RasterCompare:
 
     @property
     def proc_crs(self) -> ProcCrs:
-        """The 'processing CRS' i.e. which of the source/reference image spaces is selected for processing."""
+        """ The 'processing CRS' i.e. which of the source/reference image spaces is selected for processing. """
         return self._proc_crs
 
     @property
     def stats_key(self):
-        """Returns a string of abbreviations and corresponding descriptions for the statistics returned by compare()"""
+        """
+        Returns a string of abbreviations and corresponding descriptions for the statistics returned by compare().
+        """
         return pd.DataFrame(self._stats)[['ABBREV', 'DESCRIPTION']].to_string(index=False, justify="right")
 
     def compare(self):
@@ -123,7 +125,7 @@ class RasterCompare:
                 ) # yapf: disable
 
             def process_band(block_pair):
-                """Thread-safe function to process a block (that encompasses the full band)"""
+                """ Thread-safe function to process a block (that encompasses the full band). """
                 src_ra, ref_ra = raster_pair.read(block_pair)  # read src and ref bands
 
                 # re-project into the lowest resolution (_proc_crs) space

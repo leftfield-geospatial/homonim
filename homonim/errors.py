@@ -19,36 +19,36 @@
 
 
 class HomonimError(Exception):
-    """Root exception class"""
+    """ Root exception class. """
 
 
 class UnsupportedImageError(HomonimError):
-    """Raised when reading a 12bit jpeg compressed image"""
+    """ Raised when reading a 12bit jpeg compressed image. """
 
 
 class ImageContentError(HomonimError):
-    """Raised when an image has insufficient coverage or bands"""
+    """ Raised when an image has insufficient coverage or bands. """
 
 
 class BlockSizeError(HomonimError):
-    """Raised when the image block size is invalid"""
+    """ Raised when the image block size is invalid. """
 
 
 class ImageProfileError(HomonimError):
-    """Raised when an image profile is invalid"""
+    """ Raised when an image profile is invalid. """
 
 
 class ImageFormatError(HomonimError):
-    """Raised when an image format is invalid"""
+    """ Raised when an image format is invalid. """
 
 
 class IoError(HomonimError):
-    """Raised when accessing unopened file(s)"""
+    """ Raised when accessing unopened file(s). """
 
 
 class BandCountMismatchWarning(UserWarning):
-    """Warn when the reference and source band counts don't match"""
+    """ Warn when the reference and source band counts don't match. """
 
 
 class NodataMaskWarning(UserWarning):
-    """Warn when an image has no mask or nodata values"""
+    """ Warn when an image has no mask or nodata values. """

@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 
 def nan_equals(a, b):
-    """Compare two numpy objects a & b, returning true where elements of both a & b are nan"""
+    """ Compare two numpy objects a & b, returning true where elements of both a & b are nan. """
     return (a == b) | (np.isnan(a) & np.isnan(b))
 
 
@@ -131,7 +131,7 @@ def overlap_for_kernel(kernel_shape):
 
 
 def validate_threads(threads):
-    """Parse number of threads parameter."""
+    """ Parse number of threads parameter. """
     _cpu_count = cpu_count()
     threads = _cpu_count if threads == 0 else threads
     if threads > _cpu_count:
@@ -140,7 +140,7 @@ def validate_threads(threads):
 
 
 def create_homo_postfix(proc_crs, method, kernel_shape, driver='GTiff'):
-    """Create a filename postfix, including extension, for the homogenised image file"""
+    """ Create a filename postfix, including extension, for the homogenised image file. """
     ext_dict = rio.drivers.raster_driver_extensions()
     ext_idx = list(ext_dict.values()).index(driver)
     ext = list(ext_dict.keys())[ext_idx]
@@ -149,7 +149,7 @@ def create_homo_postfix(proc_crs, method, kernel_shape, driver='GTiff'):
 
 
 def create_param_filename(filename: pathlib.Path):
-    """Create a debug image filename, given the homogenised image filename"""
+    """ Create a debug image filename, given the homogenised image filename. """
     filename = pathlib.Path(filename)
     return filename.parent.joinpath(f'{filename.stem}_PARAM{filename.suffix}')
 
@@ -226,7 +226,7 @@ def combine_profiles(in_profile, config_profile):
         out_profile = in_profile.copy()  # copy the whole input profile
 
     def nested_update(self_dict, other_dict):
-        """Update self_dict with a flattened version of other_dict"""
+        """ Update self_dict with a flattened version of other_dict. """
         for other_key, other_value in other_dict.items():
             if isinstance(other_value, dict):
                 # flatten the driver specific nested dict into the root dict
@@ -240,7 +240,7 @@ def combine_profiles(in_profile, config_profile):
 
 
 def validate_param_image(param_filename):
-    """Check file is a valid parameter image"""
+    """ Check file is a valid parameter image. """
     if not param_filename.exists():
         raise FileNotFoundError(f'{param_filename} does not exist')
 

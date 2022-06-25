@@ -41,7 +41,7 @@ from homonim.raster_array import RasterArray
 def test_ref_basic_fit(
     float_100cm_ra: RasterArray, float_50cm_ra: RasterArray, method: Method, kernel_shape: Tuple[int, int]
 ):
-    """Test that ref-space models are fitted correctly against known parameters"""
+    """ Test that ref-space models are fitted correctly against known parameters. """
 
     # mask_partial is only applied in RefSpaceModel.apply(), so we just set it to False here
     kernel_model = RefSpaceModel(method, kernel_shape, mask_partial=False, r2_inpaint_thresh=0.25)
@@ -68,7 +68,7 @@ def test_ref_basic_fit(
 def test_src_basic_fit(
     float_100cm_ra: RasterArray, float_50cm_ra: RasterArray, method: Method, kernel_shape: Tuple[int, int]
 ):
-    """Test that src-space models are fitted correctly against known parameters"""
+    """ Test that src-space models are fitted correctly against known parameters. """
     kernel_model = SrcSpaceModel(method, kernel_shape, mask_partial=False, r2_inpaint_thresh=0.25)
     src_ra = float_100cm_ra
     ref_ra = float_50cm_ra
@@ -82,7 +82,7 @@ def test_src_basic_fit(
 
 
 def test_ref_basic_apply(float_100cm_ra: RasterArray, float_50cm_ra: RasterArray):
-    """Test application of known ref-space parameters"""
+    """ Test application of known ref-space parameters. """
     kernel_model = RefSpaceModel(Method.gain_blk_offset, (5, 5), mask_partial=False)
     src_ra = float_50cm_ra
 
@@ -100,7 +100,7 @@ def test_ref_basic_apply(float_100cm_ra: RasterArray, float_50cm_ra: RasterArray
 
 
 def test_src_basic_apply(float_100cm_ra: RasterArray):
-    """Test application of known src-space parameters"""
+    """ Test application of known src-space parameters. """
     kernel_model = SrcSpaceModel(Method.gain_blk_offset, (5, 5), mask_partial=False)
     src_ra = float_100cm_ra
 
@@ -128,7 +128,7 @@ def test_src_basic_apply(float_100cm_ra: RasterArray):
     ]
 ) # yapf: disable
 def test_ref_param_image(float_100cm_ra, float_50cm_ra, method, param_image):
-    """Test ref-space R2 band is added correctly with param_image==True"""
+    """ Test ref-space R2 band is added correctly with param_image==True. """
     kernel_model = RefSpaceModel(method, (5, 5), param_image=param_image, r2_inpaint_thresh=None)
     src_ra = float_50cm_ra
     ref_ra = float_100cm_ra
@@ -151,7 +151,7 @@ def test_ref_param_image(float_100cm_ra, float_50cm_ra, method, param_image):
     ]
 ) # yapf: disable
 def test_src_param_image(float_100cm_ra, float_50cm_ra, method, param_image):
-    """Test src-space R2 band is added correctly with param_image==True"""
+    """ Test src-space R2 band is added correctly with param_image==True. """
     kernel_model = SrcSpaceModel(method, (5, 5), param_image=param_image, r2_inpaint_thresh=None)
     src_ra = float_100cm_ra
     ref_ra = float_50cm_ra
@@ -165,7 +165,7 @@ def test_src_param_image(float_100cm_ra, float_50cm_ra, method, param_image):
 
 @pytest.mark.parametrize('kernel_shape', [(5, 5), (5, 7), (9, 9)])
 def test_r2_inpainting(float_50cm_ra: RasterArray, kernel_shape: Tuple[int, int]):
-    """Test R2 values and in-painting"""
+    """ Test R2 values and in-painting. """
 
     # make src and ref the same so we have known parameters == 1
     src_ra = float_50cm_ra
@@ -213,7 +213,7 @@ def test_r2_inpainting(float_50cm_ra: RasterArray, kernel_shape: Tuple[int, int]
     ]
 ) # yapf: disable
 def test_ref_masking(float_100cm_ra, float_50cm_ra, kernel_shape: Tuple[int, int], mask_partial: bool):
-    """Test ref-space partial masking"""
+    """ Test ref-space partial masking. """
     kernel_model = RefSpaceModel(Method.gain_blk_offset, kernel_shape, mask_partial=mask_partial)
     src_ra = float_50cm_ra.copy()
 
@@ -250,7 +250,7 @@ def test_ref_masking(float_100cm_ra, float_50cm_ra, kernel_shape: Tuple[int, int
     ]
 ) # yapf: disable
 def test_src_masking(float_100cm_ra, float_50cm_ra, kernel_shape: Tuple[int, int], mask_partial: bool):
-    """Test src-space partial masking"""
+    """ Test src-space partial masking. """
     kernel_model = SrcSpaceModel(Method.gain_blk_offset, kernel_shape, mask_partial=mask_partial)
     src_ra = float_100cm_ra
     ref_ra = float_50cm_ra
@@ -270,7 +270,7 @@ def test_src_masking(float_100cm_ra, float_50cm_ra, kernel_shape: Tuple[int, int
 
 
 def test_ref_force_proc_crs(float_100cm_ra, float_50cm_ra):
-    """Test fitting models in ref space with low res src"""
+    """ Test fitting models in ref space with low res src. """
     kernel_model = RefSpaceModel(Method.gain_blk_offset, (5, 5), mask_partial=False)
     src_ra = float_100cm_ra
     ref_ra = float_50cm_ra
@@ -280,7 +280,7 @@ def test_ref_force_proc_crs(float_100cm_ra, float_50cm_ra):
 
 
 def test_src_force_proc_crs(float_100cm_ra, float_50cm_ra):
-    """Test fitting models in src space with low res ref"""
+    """ Test fitting models in src space with low res ref. """
     kernel_model = SrcSpaceModel(Method.gain_blk_offset, (5, 5), mask_partial=False)
     src_ra = float_50cm_ra
     ref_ra = float_100cm_ra
@@ -297,13 +297,13 @@ def test_src_force_proc_crs(float_100cm_ra, float_50cm_ra):
     ]
 ) # yapf: disable
 def test_kernel_shape_exception(method, kernel_shape):
-    """Test bad kernel shape / method combination raises an exception"""
+    """ Test bad kernel shape / method combination raises an exception. """
     with pytest.raises(ValueError):
         _ = RefSpaceModel(method=method, kernel_shape=kernel_shape)
 
 
 def test_r2_array_defaults(float_100cm_ra):
-    """Test KernelModel._r2_array() with default (none) parameter values"""
+    """ Test KernelModel._r2_array() with default (none) parameter values. """
     kernel_model = RefSpaceModel(
         Method.gain_offset, (5, 5), mask_partial=False, r2_inpaint_thresh=None, param_image=False
     )

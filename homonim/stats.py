@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 
 class ParamStats:
-    """Class to find statistics of a parameter image."""
+    """ Class to find statistics of a parameter image. """
     default_config = dict(threads=cpu_count() - 1)
 
     def __init__(self, param_filename, threads=default_config['threads']):
@@ -64,7 +64,7 @@ class ParamStats:
 
     @property
     def metadata(self):
-        """Return a printable string of parameter metadata"""
+        """ Return a printable string of parameter metadata. """
         res_str = (
             f'Method: {self._method}\n'
             f'Kernel shape: {self._tags["HOMO_KERNEL_SHAPE"]}\n'
@@ -107,7 +107,7 @@ class ParamStats:
                 param_vec = np.ma.masked_invalid(param_vec).astype('float')  # mask out nan and inf values
 
                 def stats(v: np.ma.core.MaskedArray):
-                    """Find mean, std, min & max statistics for a vector."""
+                    """ Find mean, std, min & max statistics for a vector. """
                     if v.mask.all():  # all values are invalid (nan / +-inf)
                         return OrderedDict(Mean=float('nan'), Std=float('nan'), Min=float('nan'), Max=float('nan'))
                     else:

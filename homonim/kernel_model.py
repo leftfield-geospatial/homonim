@@ -95,24 +95,24 @@ class KernelModel:
 
     @property
     def method(self) -> Method:
-        """The homogenisation method."""
+        """ The homogenisation method. """
         return self._method
 
     @property
     def kernel_shape(self) -> Tuple[int, int]:
-        """The kernel (height, width)."""
+        """ The kernel (height, width). """
         return tuple(self._kernel_shape)
 
     @property
     def config(self) -> dict:
-        """A dict containing the KernelModel configuration."""
+        """ A dict containing the KernelModel configuration. """
         return dict(
             r2_inpaint_thresh=self._r2_inpaint_thresh, downsampling=self._downsampling, upsampling=self._upsampling,
             mask_partial=self._mask_partial
         )
 
     def _get_resampling(self, from_res, to_res):
-        """Get the resampling method for re-projecting from resolution `from_res` to resolution `to_res`"""
+        """ Get the resampling method for re-projecting from resolution `from_res` to resolution `to_res`. """
         return self._downsampling if np.prod(np.abs(from_res)) <= np.prod(np.abs(to_res)) else self._upsampling
 
     def _r2_array(

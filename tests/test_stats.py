@@ -28,7 +28,7 @@ from tests.conftest import str_contain_nos
 
 
 def _test_vals(param_stats):
-    """"Helper function to test statistics against known values for param_file (i.e. gain=1, offset=0, r2=1)"""
+    """ "Helper function to test statistics against known values for param_file (i.e. gain=1, offset=0, r2=1). """
     assert len(param_stats) == 9
     for band_name, band_stats in param_stats.items():
         assert ({'Mean', 'Std', 'Min', 'Max'} <= set(band_stats.keys()))
@@ -45,7 +45,7 @@ def _test_vals(param_stats):
 
 
 def test_api(param_file):
-    """Test ParamStats creation and execution"""
+    """ Test ParamStats creation and execution. """
     stats = ParamStats(param_file)
     assert (len(stats.metadata) > 0)
     param_stats = stats.stats()
@@ -53,13 +53,13 @@ def test_api(param_file):
 
 
 def test_api__file_format_error(float_100cm_rgb_file):
-    """Test incorrect parameter file format raises an error"""
+    """ Test incorrect parameter file format raises an error. """
     with pytest.raises(ImageFormatError):
         _ = ParamStats(float_100cm_rgb_file)
 
 
 def test_cli(runner, param_file):
-    """Test stats cli generates the correct output"""
+    """ Test stats cli generates the correct output. """
     cli_str = f'stats {param_file}'
     result = runner.invoke(cli, cli_str.split())
     assert (result.exit_code == 0)
@@ -79,7 +79,7 @@ B3_R2      1.00 0.00  1.00 1.00     0.00"""
 
 
 def test_cli__out_file(tmp_path, runner, param_file):
-    """Test stats cli --output option generates the correct values"""
+    """ Test stats cli --output option generates the correct values. """
     output_file = tmp_path.joinpath('stats.json')
     cli_str = f'stats {param_file} --output {output_file}'
     result = runner.invoke(cli, cli_str.split())
@@ -96,7 +96,7 @@ def test_cli__out_file(tmp_path, runner, param_file):
 
 
 def test_cli__mult_inputs(tmp_path, runner, param_file):
-    """Test stats cli with multiple input files"""
+    """ Test stats cli with multiple input files. """
     output_file = tmp_path.joinpath('stats.json')
     cli_str = f'stats {param_file} {param_file} --output {output_file}'
     result = runner.invoke(cli, cli_str.split())
@@ -111,7 +111,7 @@ def test_cli__mult_inputs(tmp_path, runner, param_file):
 
 
 def test_cli__file_format_error(runner, float_100cm_rgb_file):
-    """Test stats cli fails with error message when the parameter file format is incorrect"""
+    """ Test stats cli fails with error message when the parameter file format is incorrect. """
     cli_str = f'stats {float_100cm_rgb_file}'
     result = runner.invoke(cli, cli_str.split())
     assert (result.exit_code != 0)

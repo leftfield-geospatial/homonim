@@ -28,7 +28,7 @@ from tests.conftest import str_contain_nos
 
 
 def _test_identical_compare_dict(res_dict):
-    """Helper function to run tests on a compare results dictionary, where the compare was between identical images"""
+    """ Helper function to run tests on a compare results dictionary, where the compare was between identical images. """
     assert (len(res_dict) == 4)
     assert ('Mean' in res_dict)
     band_dict = res_dict.copy()
@@ -53,7 +53,7 @@ def _test_identical_compare_dict(res_dict):
     ]
 )  # yapf:disable
 def test_api(src_file, ref_file, request):
-    """Basic test of RasterCompare for proc_crs=ref&src image combinations"""
+    """ Basic test of RasterCompare for proc_crs=ref&src image combinations. """
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
     compare = RasterCompare(src_file, ref_file)
@@ -70,7 +70,7 @@ def test_api(src_file, ref_file, request):
     ]
 )  # yapf:disable
 def test_api__proc_crs(src_file, ref_file, proc_crs, exp_proc_crs, request):
-    """Test resolution and forcing of the proc_crs parameter with different combinations of src/ref images"""
+    """ Test resolution and forcing of the proc_crs parameter with different combinations of src/ref images. """
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
     compare = RasterCompare(src_file, ref_file, proc_crs=proc_crs)
@@ -80,14 +80,14 @@ def test_api__proc_crs(src_file, ref_file, proc_crs, exp_proc_crs, request):
 
 
 def test_api__single_thread(float_100cm_src_file, float_100cm_ref_file):
-    """Test single threaded compare"""
+    """ Test single threaded compare. """
     compare = RasterCompare(float_100cm_src_file, float_100cm_ref_file, threads=1)
     res_dict = compare.compare()
     assert (len(res_dict) == 2)
 
 
 def test_cli(runner, float_50cm_rgb_file, float_100cm_rgb_file):
-    """Test compare CLI with known outputs"""
+    """ Test compare CLI with known outputs. """
     ref_file = float_100cm_rgb_file
     src_file = float_50cm_rgb_file
 
@@ -102,7 +102,7 @@ Mean   1.00  0.00  0.00   144"""
 
 
 def test_cli__output_file(tmp_path, runner, float_50cm_rgb_file, float_100cm_rgb_file):
-    """Test compare CLI generated json file"""
+    """ Test compare CLI generated json file. """
     ref_file = float_100cm_rgb_file
     src_file = float_50cm_rgb_file
 
@@ -121,7 +121,7 @@ def test_cli__output_file(tmp_path, runner, float_50cm_rgb_file, float_100cm_rgb
 
 
 def test_cli__mult_inputs(tmp_path, runner, float_50cm_rgb_file, float_100cm_rgb_file):
-    """Test compare CLI with multiple src files"""
+    """ Test compare CLI with multiple src files. """
     ref_file = float_100cm_rgb_file
     src_file = float_50cm_rgb_file
 
@@ -140,7 +140,7 @@ def test_cli__mult_inputs(tmp_path, runner, float_50cm_rgb_file, float_100cm_rgb
 
 @pytest.mark.parametrize('proc_crs', ['auto', 'src', 'ref'])
 def test_cli__proc_crs(tmp_path, runner, float_50cm_rgb_file, float_100cm_rgb_file, proc_crs):
-    """Test compare CLI proc_crs behaviour ok"""
+    """ Test compare CLI proc_crs behaviour ok. """
     ref_file = float_100cm_rgb_file
     src_file = float_50cm_rgb_file
 

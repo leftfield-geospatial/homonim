@@ -80,7 +80,7 @@ def ngi_src_file():
 def test_fuse(
     tmp_path, runner, src_files, ref_file, method, kernel_shape, proc_crs, mask_partial, exp_proc_crs, request
 ):
-    """Additional integration tests using 'real' aerial and satellite imagery"""
+    """ Additional integration tests using 'real' aerial and satellite imagery. """
 
     src_files = request.getfixturevalue(src_files)
     src_files = src_files if isinstance(src_files, list) else [src_files]

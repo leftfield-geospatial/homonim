@@ -211,7 +211,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
 
     @property
     def array(self) -> numpy.ndarray:
-        """A 2 or 3D array of image data, if 3D, bands are along the first dimension."""
+        """ A 2 or 3D array of image data, if 3D, bands are along the first dimension. """
         return self._array
 
     @array.setter
@@ -223,52 +223,52 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
 
     @property
     def crs(self) -> rasterio.crs.CRS:
-        """The coordinate reference system."""
+        """ The coordinate reference system. """
         return self._crs
 
     @property
     def width(self) -> int:
-        """The array width in pixels."""
+        """ The array width in pixels. """
         return self.shape[-1]
 
     @property
     def height(self) -> int:
-        """The array height in pixels."""
+        """ The array height in pixels. """
         return self.shape[-2]
 
     @property
     def shape(self) -> Tuple[int, int]:
-        """The array shape (height, width) in pixels."""
+        """ The array shape (height, width) in pixels. """
         return tuple(self._array.shape[-2:])
 
     @property
     def count(self) -> int:
-        """The number of bands."""
+        """ The number of bands. """
         return self._array.shape[0] if self.array.ndim == 3 else 1
 
     @property
     def dtype(self) -> str:
-        """The internal data type of the image data."""
+        """ The internal data type of the image data. """
         return self._array.dtype.name
 
     @property
     def transform(self) -> rasterio.transform.Affine:
-        """An affine geo-transform describing the location and orientation of the array in the CRS."""
+        """ An affine geo-transform describing the location and orientation of the array in the CRS. """
         return self._transform
 
     @property
     def res(self) -> Tuple[float, float]:
-        """Array (x, y) resolution (m)."""
+        """ Array (x, y) resolution (m). """
         return (self._transform.a, -self._transform.e)
 
     @property
     def bounds(self) -> Tuple[float, ]:
-        """The (left, bottom, right, top) co-ordinates of the array extent."""
+        """ The (left, bottom, right, top) co-ordinates of the array extent. """
         return windows.bounds(windows.Window(0, 0, self.width, self.height), self._transform)
 
     @property
     def profile(self) -> dict:
-        """The RasterArray properties formatted as a dictionary, compatible with rasterio."""
+        """ The RasterArray properties formatted as a dictionary, compatible with rasterio. """
         return dict(
             crs=self._crs, transform=self._transform, nodata=self._nodata, count=self.count, width=self.width,
             height=self.height, dtype=self.dtype
@@ -285,7 +285,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
 
     @property
     def mask(self) -> numpy.ndarray:
-        """A 2D boolean mask corresponding to valid pixels in the array."""
+        """ A 2D boolean mask corresponding to valid pixels in the array. """
         if self._nodata is None:
             return np.full(self._array.shape[-2:], True)
         mask = ~utils.nan_equals(self._array, self._nodata)
@@ -311,7 +311,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
 
     @property
     def nodata(self) -> float:
-        """The nodata value."""
+        """ The nodata value. """
         return self._nodata
 
     @nodata.setter
@@ -331,7 +331,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
             self._nodata = value
 
     def copy(self):
-        """Create a deep copy of the RasterArray."""
+        """ Create a deep copy of the RasterArray. """
         return RasterArray.from_profile(self._array.copy(), self.profile)
 
     def slice_to_bounds(self, *bounds):

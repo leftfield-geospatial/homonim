@@ -21,6 +21,7 @@ import json
 import logging
 import pathlib
 import sys
+import re
 from timeit import default_timer as timer
 
 import click
@@ -40,21 +41,84 @@ from homonim.stats import ParamStats
 
 logger = logging.getLogger(__name__)
 
+class PlainInfoFormatter(logging.Formatter):
+    """ logging formatter to format INFO logs without the module name etc prefix. """
+
+    def format(self, record):
+        if record.levelno == logging.INFO:
+            self._style._fmt = "%(message)s"
+        else:
+            self._style._fmt = "%(levelname)s:%(name)s: %(message)s"
+        return super().format(record)
+
+class HomonimCommand(click.Command):
+    """ click Command sub-class for formatting help with RST markup. """
+
+    def get_help(self, ctx):
+        """ Strip some RST markup from the help text for CLI display.  Assumes no grid tables. """
+        if not hasattr(self, 'click_wrap_text'):
+            self.click_wrap_text = click.formatting.wrap_text
+        sub_strings = {
+            '\b\n': '\n\b',  # convert from RST friendly to click literal (unwrapped) block marker
+            ':option:': '',  # strip ':option:'
+            '\| ': '',  # strip RST literal (unwrapped) marker in e.g. tables and bullet lists
+            '\n\.\. _.*:\n': '',  # strip RST ref directive '\n.. <name>:\n'
+            '`(.*)<(.*)>`_': '\g<1>',  # convert from RST cross-ref '`<name> <<link>>`_' to 'name'
+            '::': ':'  # convert from RST '::' to ':'
+        }
+
+        def reformat_text(text, width, **kwargs):
+            for sub_key, sub_value in sub_strings.items():
+                text = re.sub(sub_key, sub_value, text, flags=re.DOTALL)
+            return self.click_wrap_text(text, width, **kwargs)
+
+        click.formatting.wrap_text = reformat_text
+        return click.Command.get_help(self, ctx)
+
+class FuseCommand(click.Command):
+    """ click Command sub-class for setting ``fuse`` parameters from a config file. """
+    def invoke(self, ctx):
+        # adapted from https://stackoverflow.com/questions/46358797/python-click-supply-arguments-and-options-from-a
+        # -configuration-file/46391887
+        config_file = ctx.params['conf']
+        if config_file is not None:
+
+            # read the config file into a dict
+            with open(config_file) as f:
+                config_dict = yaml.safe_load(f)
+
+            for conf_key, conf_value in config_dict.items():
+                if conf_key not in ctx.params:
+                    raise click.BadParameter(f"Unknown config file parameter '{conf_key}'", ctx=ctx, param_hint="conf")
+                else:
+                    param_src = ctx.get_parameter_source(conf_key)
+                    # overwrite default parameters with values from config file
+                    if ctx.params[conf_key] is None or param_src == ParameterSource.DEFAULT:
+                        ctx.params[conf_key] = conf_value
+                        ctx.set_parameter_source(conf_key, ParameterSource.COMMANDLINE)
+
+        # set the default creation_options if no other driver or creation_options have been specified
+        # (this can't be done in a callback as it depends on 'driver')
+        if (ctx.get_parameter_source('driver') == ParameterSource.DEFAULT and
+                ctx.get_parameter_source('creation_options') == ParameterSource.DEFAULT):
+            ctx.params['creation_options'] = RasterFuse.default_out_profile['creation_options']
+
+        return click.Command.invoke(self, ctx)
 
 def _update_existing_keys(default_dict, **kwargs):
-    """Update values in a dict with args from matching keys in **kwargs"""
+    """ Update values in a dict with args from matching keys in **kwargs. """
     return {k: kwargs.get(k, v) for k, v in default_dict.items()}
 
 
 def _configure_logging(verbosity):
-    """configure python logging level"""
+    """ configure python logging level."""
     # adapted from rasterio https://github.com/rasterio/rasterio
     log_level = max(10, 20 - 10 * verbosity)
 
     # limit logging config to homonim by applying to package logger, rather than root logger
     # pkg_logger level etc are then 'inherited' by logger = getLogger(__name__) in the modules
     pkg_logger = logging.getLogger(__package__)
-    formatter = _PlainInfoFormatter()
+    formatter = PlainInfoFormatter()
     handler = logging.StreamHandler(sys.stderr)
     handler.setFormatter(formatter)
     pkg_logger.addHandler(handler)
@@ -63,7 +127,7 @@ def _configure_logging(verbosity):
 
 
 def _threads_cb(ctx, param, value):
-    """click callback to validate threads"""
+    """ click callback to validate threads. """
     try:
         threads = utils.validate_threads(value)
     except Exception as ex:
@@ -72,7 +136,7 @@ def _threads_cb(ctx, param, value):
 
 
 def _nodata_cb(ctx, param, value):
-    """click callback to convert nodata value to None, nan or float"""
+    """ click callback to convert nodata value to None, nan or float. """
     # adapted from rasterio https://github.com/rasterio/rasterio
     if value is None or value.lower() in ["null", "nil", "none", "nada"]:
         return None
@@ -126,7 +190,7 @@ def _creation_options_cb(ctx, param, value):
 
 
 def _param_file_cb(ctx, param, value):
-    """click callback to validate parameter image file(s)"""
+    """ click callback to validate parameter image file(s). """
     for filename in value:
         filename = pathlib.Path(filename)
         try:
@@ -134,73 +198,6 @@ def _param_file_cb(ctx, param, value):
         except (FileNotFoundError, ImageFormatError):
             raise click.BadParameter(f'{filename.name} is not a valid parameter image.', param=param)
     return value
-
-
-class _PlainInfoFormatter(logging.Formatter):
-    """logging formatter to format INFO logs without the module name etc prefix"""
-
-    def format(self, record):
-        if record.levelno == logging.INFO:
-            self._style._fmt = "%(message)s"
-        else:
-            self._style._fmt = "%(levelname)s:%(name)s: %(message)s"
-        return super().format(record)
-
-
-class _HomonimCommand(click.Command):
-    """
-    click Command class that formats single newlines in help strings as single newlines.
-    """
-
-    def get_help(self, ctx):
-        """Format help strings with single newlines as single newlines."""
-        # adapted from https://stackoverflow.com/questions/55585564/python-click-formatting-help-text
-        # TODO : this breaks the wrapping of single newlines e.g. in long strings, that we don't want
-        orig_wrap_test = click.formatting.wrap_text
-
-        def wrap_text(text, width, **kwargs):
-            text = text.replace('\n', '\n\n')
-            return orig_wrap_test(text, width, **kwargs).replace('\n\n', '\n')
-
-        click.formatting.wrap_text = wrap_text
-        return click.Command.get_help(self, ctx)
-
-
-class _FuseCommand(_HomonimCommand):
-    """
-    click Command class that combines config file and context parameters.
-
-    User-supplied CLI values are given priority, followed by the config file values.
-    Where neither user supplied CLI, or config file values exist, parameters retain their defaults.
-    """
-
-    # adapted from https://stackoverflow.com/questions/46358797/python-click-supply-arguments-and-options-from-a
-    # -configuration-file/46391887
-    def invoke(self, ctx):
-        config_file = ctx.params['conf']
-        if config_file is not None:
-
-            # read the config file into a dict
-            with open(config_file) as f:
-                config_dict = yaml.safe_load(f)
-
-            for conf_key, conf_value in config_dict.items():
-                if conf_key not in ctx.params:
-                    raise click.BadParameter(f"Unknown config file parameter '{conf_key}'", ctx=ctx, param_hint="conf")
-                else:
-                    param_src = ctx.get_parameter_source(conf_key)
-                    # overwrite default parameters with values from config file
-                    if ctx.params[conf_key] is None or param_src == ParameterSource.DEFAULT:
-                        ctx.params[conf_key] = conf_value
-                        ctx.set_parameter_source(conf_key, ParameterSource.COMMANDLINE)
-
-        # set the default creation_options if no other driver or creation_options have been specified
-        # (this can't be done in a callback as it depends on 'driver')
-        if (ctx.get_parameter_source('driver') == ParameterSource.DEFAULT and
-                ctx.get_parameter_source('creation_options') == ParameterSource.DEFAULT):
-            ctx.params['creation_options'] = RasterFuse.default_out_profile['creation_options']
-
-        return click.Command.invoke(self, ctx)
 
 
 # define click options and arguments common to more than one command
@@ -217,7 +214,7 @@ threads_option = click.option(
 )
 output_option = click.option(
     "-o", "--output",
-    type=click.Path(exists=False, dir_okay=False, writable=True, resolve_path=True, path_type=pathlib.Path),
+    type=click.Path(exists=False, dir_okay=False, writable=True, path_type=pathlib.Path),
     help="Write results to a json file."
 )
 
@@ -233,19 +230,18 @@ def cli(verbose, quiet):
 
 
 # fuse command
-@click.command(cls=_FuseCommand)
+@click.command(cls=FuseCommand)
 # standard options
 @src_file_arg
 @ref_file_arg
 @click.option(
     "-m", "--method", type=click.Choice([m.value for m in Method], case_sensitive=False),
     default=Method.gain_blk_offset.value,
-    help="Homogenisation method.\ngain: Gain-only model. \ngain-blk-offset: Gain-only model applied to "
-    "offset normalised image blocks [default]. \ngain-offset: Full gain and offset model."
+    help="Homogenisation method."
 )
 @click.option(
     "-k", "--kernel-shape", type=click.Tuple([click.INT, click.INT]), nargs=2, default=(5, 5), show_default=True,
-    metavar='<HEIGHT WIDTH>', help="Kernel height and width in pixels of the --proc-crs / -pc image."
+    metavar='<HEIGHT WIDTH>', help="Kernel height and width in pixels of the `--proc-crs`_ image."
 )
 @click.option(
     "-od", "--output-dir", type=click.Path(exists=True, file_okay=False, writable=True),
@@ -268,9 +264,7 @@ def cli(verbose, quiet):
 @click.option(
     "-pc", "--proc-crs", type=click.Choice([pc.value for pc in ProcCrs], case_sensitive=False),
     default=ProcCrs.auto.value,
-    help="The image CRS in which to perform parameter estimation.\nauto: Estimate in the lowest resolution "
-    "of the source and reference image CRS's [default - recommended].\nsrc: Estimate in the source image CRS."
-    "\nref: Estimate in the reference image CRS."
+    help="The image CRS in which to perform parameter estimation."
 )
 @click.option(
     "-c", "--conf", type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path), required=False,
@@ -342,6 +336,13 @@ def fuse(
 
     For best results, the reference and source image(s) should be concurrent, co-located, and spectrally similar.
 
+    \ngain: Gain-only model. \ngain-blk-offset: Gain-only model applied to "
+        "offset normalised image blocks [default]. \ngain-offset: Full gain and offset model.
+
+\nauto: Estimate in the lowest resolution "
+    "of the source and reference image CRS's [default - recommended].\nsrc: Estimate in the source image CRS."
+    "\nref: Estimate in the reference image CRS.
+
     \b
     Examples:
     ---------
@@ -408,7 +409,7 @@ cli.add_command(fuse)
 
 
 # compare command
-@click.command(cls=_HomonimCommand)
+@click.command(cls=HomonimCommand)
 @src_file_arg
 @ref_file_arg
 @click.option(
@@ -482,7 +483,7 @@ def compare(src_file, ref_file, proc_crs, output):
 cli.add_command(compare)
 
 
-@click.command()
+@click.command(cls=HomonimCommand)
 @click.argument(
     "param-file", nargs=-1, metavar="INPUTS...", type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
     callback=_param_file_cb

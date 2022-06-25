@@ -35,7 +35,7 @@ from homonim.raster_pair import RasterPairReader
     ]
 ) # yapf: disable
 def test_creation(src_file, ref_file, expected_proc_crs, request):
-    """Test RasterPair creation and proc_crs resolution"""
+    """ Test RasterPair creation and proc_crs resolution. """
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
     raster_pair = RasterPairReader(src_file, ref_file)
@@ -60,7 +60,7 @@ def test_creation(src_file, ref_file, expected_proc_crs, request):
     ]
 ) # yapf: disable
 def test_coverage_exception(src_file, ref_file, request):
-    """Test that ref not covering the extent of src raises an error"""
+    """ Test that ref not covering the extent of src raises an error. """
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
     with pytest.raises(ImageContentError):
@@ -68,13 +68,13 @@ def test_coverage_exception(src_file, ref_file, request):
 
 
 def test_band_count_exception(rgba_file, byte_file):
-    """Test that src band count > ref band count raises an error"""
+    """ Test that src band count > ref band count raises an error. """
     with pytest.raises(ImageContentError):
         _ = RasterPairReader(rgba_file, byte_file)
 
 
 def test_block_shape_exception(float_50cm_src_file, float_100cm_ref_file):
-    """Test block shape errors"""
+    """ Test block shape errors. """
     # test auto block shape smaller than a pixel
     with pytest.raises(BlockSizeError):
         _ = RasterPairReader(float_50cm_src_file, float_100cm_ref_file, max_block_mem=1.e-5)
@@ -85,7 +85,7 @@ def test_block_shape_exception(float_50cm_src_file, float_100cm_ref_file):
 
 
 def test_not_open_exception(float_50cm_src_file, float_100cm_ref_file):
-    """Test that using a raster pair before entering the context raises an error"""
+    """ Test that using a raster pair before entering the context raises an error. """
     raster_pair = RasterPairReader(float_50cm_src_file, float_100cm_ref_file)
     with pytest.raises(IoError):
         _ = raster_pair.ref_im
@@ -110,7 +110,7 @@ def test_not_open_exception(float_50cm_src_file, float_100cm_ref_file):
     ]
 ) # yapf: disable
 def test_block_pair_continuity(src_file, ref_file, proc_crs, overlap, max_block_mem, request):
-    """Test the continuity of block pairs for different src/ref etc combinations"""
+    """ Test the continuity of block pairs for different src/ref etc combinations. """
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
     raster_pair = RasterPairReader(src_file, ref_file, proc_crs=proc_crs, overlap=overlap, max_block_mem=max_block_mem)
@@ -144,7 +144,7 @@ def test_block_pair_continuity(src_file, ref_file, proc_crs, overlap, max_block_
     ]
 ) # yapf: disable
 def test_block_pair_coverage(src_file, ref_file, proc_crs, overlap, max_block_mem, request):
-    """Test that combined block pairs cover the processing window for different src/ref etc combinations"""
+    """ Test that combined block pairs cover the processing window for different src/ref etc combinations. """
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
     raster_pair = RasterPairReader(src_file, ref_file, proc_crs=proc_crs, overlap=overlap, max_block_mem=max_block_mem)
