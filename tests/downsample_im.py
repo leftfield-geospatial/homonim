@@ -41,10 +41,10 @@ def parse_arguments():
         'Intended for NGI unrectified imagery.'
     )
     parser.add_argument(
-        "src_im_wildcard", help="source image wildcard pattern or directory (e.g. '.' or '*_CMP.TIF')", type=str
+        'src_im_wildcard', help='source image wildcard pattern or directory (e.g. `.` or `*_CMP.TIF`)', type=str
     )
     parser.add_argument(
-        "-s", "--scale", help="scale factor to downsample by (default=10)", default=10, choices=range(1, 1000), type=int
+        '-s', '--scale', help='scale factor to downsample by (default=10)', default=10, choices=range(1, 1000), type=int
     )
     return parser.parse_args()
 
@@ -85,7 +85,7 @@ def main(args):
                     ds_profile.update(
                         count=3, nodata=0, dtype='uint8', compress='deflate', tiled=True, blockxsize=256,
                         blockysize=256, transform=ds_transform, width=ds_shape[1], height=ds_shape[0],
-                        num_threads='all_cpus', interleave='band', photometric="MINISBLACK"
+                        num_threads='all_cpus', interleave='band', photometric='MINISBLACK'
                     )
 
                     # read and downsample
@@ -101,6 +101,6 @@ def main(args):
             print(f'Exception: {str(ex)}')
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     args = parse_arguments()
     main(args)

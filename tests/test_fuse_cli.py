@@ -324,7 +324,7 @@ def test_r2_inpaint_thresh_error(runner, basic_fuse_cli_params, bad_r2_inpaint_t
     cli_str = basic_fuse_cli_params.cli_str + f' --r2-inpaint-thresh {bad_r2_inpaint_thresh}'
     result = runner.invoke(cli, cli_str.split())
     assert (result.exit_code != 0)
-    assert ("Invalid value" in result.output)
+    assert ('Invalid value' in result.output)
 
 
 @pytest.mark.parametrize(
@@ -355,7 +355,7 @@ def test_out_driver_error(runner, basic_fuse_cli_params):
     cli_str = basic_fuse_cli_params.cli_str + f' --out-driver unk'
     result = runner.invoke(cli, cli_str.split())
     assert (result.exit_code != 0)
-    assert ("Invalid value" in result.output)
+    assert ('Invalid value' in result.output)
 
 
 def test_out_dtype_error(runner, basic_fuse_cli_params):
@@ -363,7 +363,7 @@ def test_out_dtype_error(runner, basic_fuse_cli_params):
     cli_str = basic_fuse_cli_params.cli_str + f' --out-dtype unk'
     result = runner.invoke(cli, cli_str.split())
     assert (result.exit_code != 0)
-    assert ("Invalid value" in result.output)
+    assert ('Invalid value' in result.output)
 
 
 def test_out_nodata_error(runner, basic_fuse_cli_params):
@@ -371,7 +371,7 @@ def test_out_nodata_error(runner, basic_fuse_cli_params):
     cli_str = basic_fuse_cli_params.cli_str + f' --out-dtype uint8 --out-nodata nan'
     result = runner.invoke(cli, cli_str.split())
     assert (result.exit_code != 0)
-    assert ("Invalid value" in result.output)
+    assert ('Invalid value' in result.output)
 
 
 def test_creation_options(runner, basic_fuse_cli_params):

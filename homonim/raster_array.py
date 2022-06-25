@@ -64,16 +64,16 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         """
 
         if (array.ndim < 2) or (array.ndim > 3):
-            raise ValueError("'array' must be have 2 or 3 dimensions with bands along the first dimension")
+            raise ValueError('`array` must be have 2 or 3 dimensions with bands along the first dimension')
         self._array = array
 
         if window is not None and (window.height, window.width) != array.shape[-2:]:
-            raise ValueError("'window' and 'array' width and height must match")
+            raise ValueError('`window` and `array` width and height must match')
 
         if isinstance(crs, CRS):
             self._crs = crs
         else:
-            raise TypeError("'crs' must be an instance of rasterio.crs.CRS")
+            raise TypeError('`crs` must be an instance of rasterio.crs.CRS')
 
         if isinstance(transform, Affine):
             if window is not None:
@@ -81,7 +81,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
             else:
                 self._transform = transform
         else:
-            raise TypeError("'transform' must be an instance of rasterio.transform.Affine")
+            raise TypeError("transform' must be an instance of rasterio.transform.Affine")
 
         self._nodata = nodata
         self._nodata_mask = None
@@ -391,14 +391,14 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         """
         if not np.all(self.res == rio_dataset.res):
             raise ImageFormatError(
-                f"The dataset resolution does not match that of the RasterArray. "
-                f"Dataset res: {rio_dataset.res}, RasterArray res: {self.res}"
+                f'The dataset resolution does not match that of the RasterArray. '
+                f'Dataset res: {rio_dataset.res}, RasterArray res: {self.res}'
             )
         # TODO : raise an issue with rasterio about the speed of crs comparison.  comparing the _crs attr is faster.
         if self.crs._crs != rio_dataset.crs._crs:
             raise ImageFormatError(
-                f"The dataset CRS does not match that of the RasterArray. "
-                f"Dataset CRS: {rio_dataset.crs.to_proj4()}, RasterArray CRS: {self.crs.to_proj4()}"
+                f'The dataset CRS does not match that of the RasterArray. '
+                f'Dataset CRS: {rio_dataset.crs.to_proj4()}, RasterArray CRS: {self.crs.to_proj4()}'
             )
 
         if indexes is None:
@@ -482,7 +482,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         """
 
         if transform is not None and shape is None:
-            raise ValueError('If "transform" is specified, "shape" must also be specified')
+            raise ValueError('If `transform` is specified, `shape` must also be specified')
 
         if isinstance(resampling, str):
             resampling = Resampling[resampling]

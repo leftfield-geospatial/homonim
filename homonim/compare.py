@@ -100,7 +100,7 @@ class RasterCompare:
         """
         Returns a string of abbreviations and corresponding descriptions for the statistics returned by compare().
         """
-        return pd.DataFrame(self._stats)[['ABBREV', 'DESCRIPTION']].to_string(index=False, justify="right")
+        return pd.DataFrame(self._stats)[['ABBREV', 'DESCRIPTION']].to_string(index=False, justify='right')
 
     def compare(self):
         """

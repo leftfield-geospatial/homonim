@@ -102,11 +102,11 @@ def validate_kernel_shape(kernel_shape, method=Method.gain_blk_offset):
     """
     kernel_shape = np.array(kernel_shape).astype(int)
     if not np.all(np.mod(kernel_shape, 2) == 1):
-        raise ValueError("kernel shape must be odd in both dimensions.")
+        raise ValueError('`kernel_shape` must be odd in both dimensions.')
     if method == Method.gain_offset and not np.product(kernel_shape) >= 25:
-        raise ValueError("kernel shape area should contain at least 25 elements for the gain-offset method.")
+        raise ValueError('`kernel_shape` area should contain at least 25 elements for the gain-offset method.')
     if not np.all(kernel_shape >= 1):
-        raise ValueError("kernel shape must be a minimum of one in both dimensions.")
+        raise ValueError('`kernel_shape` must be a minimum of one in both dimensions.')
     return kernel_shape
 
 

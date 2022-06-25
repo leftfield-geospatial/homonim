@@ -119,9 +119,9 @@ class RasterFuse:
                     Driver specific creation options.  See the rasterio documentation for more information.
         """
         if not isinstance(proc_crs, ProcCrs):
-            raise ValueError("'proc_crs' must be an instance of homonim.enums.ProcCrs")
+            raise ValueError('`proc_crs` must be an instance of homonim.enums.ProcCrs')
         if not isinstance(method, Method):
-            raise ValueError("'method' must be an instance of homonim.enums.Method")
+            raise ValueError('`method` must be an instance of homonim.enums.Method')
         self._method = method
 
         self._kernel_shape = utils.validate_kernel_shape(kernel_shape, method=method)
@@ -177,13 +177,13 @@ class RasterFuse:
 
         if not overwrite and self._homo_filename.exists():
             raise FileExistsError(
-                f"Homogenised image file exists and won't be overwritten without the 'overwrite' option: "
-                f"{self._homo_filename}"
+                f'Homogenised image file exists and won\'t be overwritten without the `overwrite` option: '
+                f'{self._homo_filename}'
             )
         if not overwrite and self._config['param_image'] and self._param_filename.exists():
             raise FileExistsError(
-                f"Parameter image file exists and won't be overwritten without the 'overwrite' option: "
-                f"{self._param_filename}"
+                f'Parameter image file exists and won\'t be overwritten without the `overwrite` option: '
+                f'{self._param_filename}'
             )
 
     def _create_out_profile(self) -> dict:

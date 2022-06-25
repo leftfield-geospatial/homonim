@@ -159,13 +159,13 @@ class RasterPairReader:
 
         # compare source and reference resolutions
         src_pixel_smaller = np.prod(np.abs(src_im.res)) <= np.prod(np.abs(ref_im.res))
-        cmp_str = "smaller" if src_pixel_smaller else "larger"
+        cmp_str = 'smaller' if src_pixel_smaller else 'larger'
         if proc_crs == ProcCrs.auto:
             # set proc_crs to the lowest resolution of the source and reference images
             proc_crs = ProcCrs.ref if src_pixel_smaller else ProcCrs.src
             logger.debug(
-                f"Source pixel size {np.round(src_im.res, decimals=3)} is {cmp_str} than the reference "
-                f"{np.round(ref_im.res, decimals=3)}. Using proc_crs='{proc_crs}'."
+                f'Source pixel size {np.round(src_im.res, decimals=3)} is {cmp_str} than the reference '
+                f'{np.round(ref_im.res, decimals=3)}. Using proc_crs=`{proc_crs}`.'
             )
         elif (
             (proc_crs == ProcCrs.src and src_pixel_smaller) or
@@ -175,7 +175,7 @@ class RasterPairReader:
             # reference images
             rec_crs_str = ProcCrs.ref if src_pixel_smaller else ProcCrs.src
             logger.warning(
-                f"proc_crs={rec_crs_str} is recommended when the source pixel size is {cmp_str} than the reference."
+                f'proc_crs={rec_crs_str} is recommended when the source pixel size is {cmp_str} than the reference.'
             )
         return proc_crs
 
@@ -215,12 +215,12 @@ class RasterPairReader:
         block_shape = np.ceil(block_shape).astype('int')
 
         if np.any(block_shape <= self._overlap):
-            raise errors.BlockSizeError(f"The auto block shape is smaller than the overlap.  Increase 'max_block_mem'.")
+            raise errors.BlockSizeError(f'The auto block shape is smaller than the overlap.  Increase `max_block_mem`.')
 
         # warn if the block shape in the highest res image is less than a typical tile
         if np.any(block_shape / mem_scale < (256, 256)) and np.any(block_shape < (proc_win.height, proc_win.width)):
             logger.warning(
-                f"The auto block shape is small: {block_shape}.  Increase 'max_block_mem' to improve processing times."
+                f'The auto block shape is small: {block_shape}.  Increase `max_block_mem` to improve processing times.'
             )
 
         return block_shape
