@@ -72,7 +72,7 @@ class RasterFuse:
             pixel boundary, and it should have at least as many bands as src_filename.  The ordering of the bands
             in src_filename and ref_filename should match.
         homo_path: str, pathlib.Path
-            Path to the homogenised file to create, or a directory in which in which to create an automatically named
+            Path to the corrected file to create, or a directory in which in which to create an automatically named
             file.
         method: homonim.enums.Method
             The radiometric homogenisation method.
@@ -106,7 +106,7 @@ class RasterFuse:
                     R2 threshold below which to inpaint model parameters from "surrounding areas.
                     For 'gain-offset' method only.
                 mask_partial: bool
-                    Mask homogenised pixels produced from partial kernel or image coverage.
+                    Mask corrected pixels produced from partial kernel or image coverage.
         out_profile: dict, optional
             Output image configuration dict with the items:
                 driver: str
@@ -162,10 +162,10 @@ class RasterFuse:
         self._stack = None
 
     def _init_out_filenames(self, homo_path: pathlib.Path, overwrite: bool = True):
-        """ Set up the homogenised and parameter image filenames. """
+        """ Set up the corrected and parameter image filenames. """
         homo_path = pathlib.Path(homo_path)
         if homo_path.is_dir():
-            # create a filename for the homogenised file in the provided directory
+            # create a filename for the corrected file in the provided directory
             post_fix = utils.create_homo_postfix(
                 self._proc_crs, self._method, self._kernel_shape, self._out_profile['driver']
             )
@@ -177,7 +177,7 @@ class RasterFuse:
 
         if not overwrite and self._homo_filename.exists():
             raise FileExistsError(
-                f'Homogenised image file exists and won\'t be overwritten without the `overwrite` option: '
+                f'Corrected image file exists and won\'t be overwritten without the `overwrite` option: '
                 f'{self._homo_filename}'
             )
         if not overwrite and self._config['param_image'] and self._param_filename.exists():
@@ -219,7 +219,7 @@ class RasterFuse:
 
     def _set_homo_metadata(self, im):
         """
-        Copy useful metadata to a homogenised image (GeoTIFF) file.
+        Copy useful metadata to a corrected image (GeoTIFF) file.
 
         Parameters
         ----------
@@ -260,7 +260,7 @@ class RasterFuse:
                 im.update_tags(param_i + 1, **param_meta_dict)
 
     def _assert_open(self):
-        """ Raise an IoError if the source, reference or homogenised image(s) are not open. """
+        """ Raise an IoError if the source, reference or corrected image(s) are not open. """
         if self.closed:
             raise IoError(f'The image file(s) have not been opened.')
 
@@ -314,7 +314,7 @@ class RasterFuse:
 
     @property
     def homo_filename(self) -> pathlib.Path:
-        """ Path to the homogenised image file. """
+        """ Path to the corrected image file. """
         return self._homo_filename
 
     @property
@@ -346,7 +346,7 @@ class RasterFuse:
 
     def build_overviews(self, max_num_levels=8, min_level_pixels=256):
         """
-        Build internal overviews, downsampled by successive powers of 2, for the homogenised and parameter image files.
+        Build internal overviews, downsampled by successive powers of 2, for the corrected and parameter image files.
         Should be called after homogenise().
 
         max_num_levels: int, optional
@@ -383,7 +383,7 @@ class RasterFuse:
 
     def process(self):
         """
-        Homogenise the source image in blocks.
+        Correct the source image in blocks.
         """
         self._assert_open()
 

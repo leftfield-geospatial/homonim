@@ -140,7 +140,7 @@ def validate_threads(threads):
 
 
 def create_homo_postfix(proc_crs, method, kernel_shape, driver='GTiff'):
-    """ Create a filename postfix, including extension, for the homogenised image file. """
+    """ Create a filename postfix, including extension, for the corrected image file. """
     ext_dict = rio.drivers.raster_driver_extensions()
     ext_idx = list(ext_dict.values()).index(driver)
     ext = list(ext_dict.keys())[ext_idx]
@@ -149,7 +149,7 @@ def create_homo_postfix(proc_crs, method, kernel_shape, driver='GTiff'):
 
 
 def create_param_filename(filename: pathlib.Path):
-    """ Create a debug image filename, given the homogenised image filename. """
+    """ Create a debug image filename, given the corrected image filename. """
     filename = pathlib.Path(filename)
     return filename.parent.joinpath(f'{filename.stem}_PARAM{filename.suffix}')
 

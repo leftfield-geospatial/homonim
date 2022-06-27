@@ -35,7 +35,7 @@ class KernelModel:
 
     The surface reflectance relationship between source and reference image blocks is approximated with localised linear
     models.  Models are estimated for each pixel location inside a small rectangular kernel (window), using a fast DFT
-    approach.  The homogenised output is produced by applying the model parameters to the source image.
+    approach.  The corrected output is produced by applying the model parameters to the source image.
 
     Based on the paper:
     Harris, Dugal & Van Niekerk, Adriaan. (2018). Radiometric homogenisation of aerial images by calibrating with
@@ -475,7 +475,7 @@ class KernelModel:
         Returns
         -------
         out_ra :RasterArray
-            Homogenised block in a RasterArray.
+            Corrected block in a RasterArray.
         """
         if ((param_ra.transform != src_ra.transform) or (param_ra.shape != src_ra.shape)):
             raise ValueError("'param_ra' and 'src_ra' must have the same CRS, transform and shape")
@@ -535,7 +535,7 @@ class RefSpaceModel(KernelModel):
         Returns
         -------
         out_ra :RasterArray
-            Homogenised block in a RasterArray.
+            Corrected block in a RasterArray.
         """
         # create a parameter RasterArray containing only the first two bands of param_ra
         # (to speed up the re-projection below)

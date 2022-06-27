@@ -75,7 +75,7 @@ reference.
 
    homonim fuse -m gain-blk-offset -k 5 5 -od . ./homonim/data/test_example/source/*_RGB.tif ./homonim/data/test_example/reference/COPERNICUS-S2-20151003T075826_20151003T082014_T35HKC_B432_Byte.tif
 
-Statistically compare the raw and homogenised aerial images with the included Landsat-8 reference.
+Statistically compare the raw and corrected aerial images with the included Landsat-8 reference.
 
 .. code:: shell
 

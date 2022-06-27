@@ -75,7 +75,7 @@ class HomonimCommand(click.Command):
         click.formatting.wrap_text = reformat_text
         return click.Command.get_help(self, ctx)
 
-class FuseCommand(click.Command):
+class FuseCommand(HomonimCommand):
     """ click Command sub-class for setting ``fuse`` parameters from a config file. """
     def invoke(self, ctx):
         # adapted from https://stackoverflow.com/questions/46358797/python-click-supply-arguments-and-options-from-a
@@ -215,7 +215,7 @@ threads_option = click.option(
 output_option = click.option(
     '-o', '--output',
     type=click.Path(exists=False, dir_okay=False, writable=True, path_type=pathlib.Path),
-    help='Write results to a json file.'
+    help='Write results to this json file.'
 )
 
 
@@ -225,6 +225,7 @@ output_option = click.option(
 @click.option('--quiet', '-q', count=True, help='Decrease verbosity.')
 @click.version_option(version=version.__version__, message='%(version)s')
 def cli(verbose, quiet):
+    """ Surface reflectance correction and comparison of aerial and satellite imagery. """
     verbosity = verbose - quiet
     _configure_logging(verbosity)
 
@@ -236,16 +237,15 @@ def cli(verbose, quiet):
 @ref_file_arg
 @click.option(
     '-m', '--method', type=click.Choice([m.value for m in Method], case_sensitive=False),
-    default=Method.gain_blk_offset.value,
-    help='Homogenisation method.'
+    default=Method.gain_blk_offset.value, help='Correction method.'
 )
 @click.option(
     '-k', '--kernel-shape', type=click.Tuple([click.INT, click.INT]), nargs=2, default=(5, 5), show_default=True,
-    metavar='<HEIGHT WIDTH>', help='Kernel height and width in pixels of the `--proc-crs`_ image.'
+    metavar='<HEIGHT WIDTH>', help='Kernel height and width in pixels of the ``--proc-crs`` image.'
 )
 @click.option(
     '-od', '--output-dir', type=click.Path(exists=True, file_okay=False, writable=True),
-    help='Directory in which to create homogenised image(s). [default: use source image directory]'
+    show_default='Source image directory.', help='Directory in which to place corrected image(s).'
 )
 @click.option(
     '-ovw', '--overwrite', 'overwrite', is_flag=True, type=bool, default=False, show_default=True,
@@ -254,17 +254,16 @@ def cli(verbose, quiet):
 @click.option(
     '-cmp', '--compare', 'comp_file', type=click.Path(dir_okay=False, path_type=pathlib.Path), is_flag=False,
     flag_value='ref', default=None, callback=_compare_cb,
-    help='Statistically compare source and homogenised images with this image.  If specified without an '
-    'image file, source and homogenised images will be compared with the reference.'
+    help='Statistically compare source and corrected images with this image.  If specified without an '
+    'image file, source and corrected images will be compared with the reference.'
 )
 @click.option(
     '-nbo', '--no-build-ovw', 'build_ovw', type=click.BOOL, is_flag=True, default=True,
-    help='Turn off overview building for the homogenised image(s).'
+    help='Turn off overview building for the corrected image(s).'
 )
 @click.option(
     '-pc', '--proc-crs', type=click.Choice([pc.value for pc in ProcCrs], case_sensitive=False),
-    default=ProcCrs.auto.value,
-    help='The image CRS in which to perform parameter estimation.'
+    default=ProcCrs.auto.value, help='The image CRS in which to estimate correction parameters.'
 )
 @click.option(
     '-c', '--conf', type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path), required=False,
@@ -274,11 +273,11 @@ def cli(verbose, quiet):
 @click.option(
     '-pi', '--param-image', type=click.BOOL, is_flag=True, default=RasterFuse.default_homo_config['param_image'],
     help=f'Create a debug image, containing model parameters and R\N{SUPERSCRIPT TWO} values for each '
-    'homogenised image.'
+    'corrected image.'
 )
 @click.option(
     '-mp', '--mask-partial', type=click.BOOL, is_flag=True, default=KernelModel.default_config['mask_partial'],
-    help=f'Mask biased homogenised pixels produced from partial kernel or source / reference image coverage.'
+    help=f'Mask biased corrected pixels produced from partial kernel or source / reference image coverage.'
 )
 @threads_option
 @click.option(
@@ -324,10 +323,11 @@ def cli(verbose, quiet):
 def fuse(
     ctx, src_file, ref_file, method, kernel_shape, output_dir, overwrite, comp_file, build_ovw, proc_crs, conf, **kwargs
 ):
+    # @formatter:on
     """
-    Radiometrically homogenise image(s) by fusion with a reference.
+    Correct image(s) to surface reflectance, by fusion with a reference.
 
-    INPUTS      Path(s) to source image(s) to be homogenised.
+    INPUTS      Path(s) to source image(s) to be corrected.
 
     REFERENCE   Path to a surface reflectance reference image.
 
@@ -336,32 +336,41 @@ def fuse(
 
     For best results, the reference and source image(s) should be concurrent, co-located, and spectrally similar.
 
-    \ngain: Gain-only model. \ngain-blk-offset: Gain-only model applied to "
-        "offset normalised image blocks [default]. \ngain-offset: Full gain and offset model.
+    The following options for ``--method`` are available:
+    \b
 
-\nauto: Estimate in the lowest resolution "
-    "of the source and reference image CRS's [default - recommended].\nsrc: Estimate in the source image CRS."
-    "\nref: Estimate in the reference image CRS.
+        * `gain`: Gain-only model.
+        * | `gain-blk-offset`: Gain-only model applied to offset normalised image
+          | blocks.
+        * `gain-offset`: Full gain and offset model.
+
+    The following options ``--proc-crs`` :
+    \b
+
+        * | `auto`: Estimate in the lowest resolution of the source and reference
+          | image CRS's (recommended). \r
+        * `src`: Estimate in the source image CRS.
+        * `ref`: Estimate in the reference image CRS.
+
 
     \b
+
     Examples:
     ---------
 
-    Homogenise 'source.tif' with 'reference.tif', using the 'gain-blk-offset' method, and a kernel of 5 x 5 pixels.
+    Correct 'source.tif' with 'reference.tif', using the 'gain-blk-offset' method, and a kernel of 5 x 5 pixels::
 
-    \b
-        $ homonim fuse -m gain-blk-offset -k 5 5 source.tif reference.tif
+        homonim fuse -m gain-blk-offset -k 5 5 source.tif reference.tif
 
 
-    Homogenise files matching 'source*.tif' with 'reference.tif', using the 'gain-offset' method and a kernel of 15 x 15
-    pixels. Place homogenised files in the './homog' directory, produce parameter images, and mask
-    partially covered pixels in the homogenised images.
+    Correct files matching 'source*.tif' with 'reference.tif', using the 'gain-offset' method and a kernel of 15 x 15
+    pixels. Place corrected files in the './homog' directory, produce parameter images, and mask
+    partially covered pixels in the corrected images::
 
-    \b
-        $ homonim fuse --method gain-offset --kernel-shape 15 15 -od ./homog
-          --param-image --mask-partial source*.tif reference.tif
+        $ homonim fuse --method gain-offset --kernel-shape 15 15 -od ./homog --param-image --mask-partial source*.tif reference.tif
 
     """
+    # @formatter:on
 
     try:
         kernel_shape = utils.validate_kernel_shape(kernel_shape, method=method)
@@ -396,7 +405,7 @@ def fuse(
             logger.info(f'Completed in {timer() - start_time:.2f} secs')
             compare_files += [src_filename, raster_fuse.homo_filename]  # build a list of files to pass to compare
 
-            # compare source and homogenised files with reference (invokes compare command with relevant parameters)
+            # compare source and corrected files with reference (invokes compare command with relevant parameters)
             if comp_file:
                 comp_file = ref_file if str(comp_file) == 'ref' else comp_file
                 ctx.invoke(compare, src_file=compare_files, ref_file=comp_file, proc_crs=proc_crs)
@@ -414,10 +423,7 @@ cli.add_command(fuse)
 @ref_file_arg
 @click.option(
     '-pc', '--proc-crs', type=click.Choice([pc.value for pc in ProcCrs], case_sensitive=False),
-    default=ProcCrs.auto.value, show_default=True,
-    help='The image CRS in which to perform processing.\nauto: process in the lowest resolution of the source and '
-         'reference image CRS\'s (recommended).\nsrc: process in the source image CRS.\nref: process in the reference '
-         'image CRS.'
+    default=ProcCrs.auto.value, show_default=True, help='The image CRS in which to compare.'
 )
 @output_option
 def compare(src_file, ref_file, proc_crs, output):
@@ -435,10 +441,10 @@ def compare(src_file, ref_file, proc_crs, output):
     Examples:
     ---------
 
-    Compare 'source.tif' and 'homogenised.tif with 'reference.tif'.
+    Compare 'source.tif' and 'corrected.tif with 'reference.tif'.
 
     \b
-        $ homonim compare source.tif homogenised.tif reference.tif
+        $ homonim compare source.tif corrected.tif reference.tif
     """
 
     try:

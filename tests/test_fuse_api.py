@@ -242,7 +242,7 @@ def test_mask_partial(src_file, ref_file, tmp_path, kernel_shape, proc_crs, mask
 
 
 def test_build_overviews(float_50cm_ref_file, tmp_path):
-    """ Test that overviews are built for homogenised and parameter files. """
+    """ Test that overviews are built for corrected and parameter files. """
     homo_config = RasterFuse.default_homo_config.copy()
     homo_config.update(param_image=True)
     raster_fuse = RasterFuse(
@@ -271,7 +271,7 @@ def test_io_error(tmp_path, float_50cm_ref_file):
 
 
 def test_homo_filename(tmp_path, float_50cm_ref_file):
-    """ Test homogenised file is created. """
+    """ Test corrected file is created. """
     homo_filename = tmp_path.joinpath('out.tif')
     raster_fuse = RasterFuse(float_50cm_ref_file, float_50cm_ref_file, homo_filename, Method.gain_blk_offset, (3, 3))
     with raster_fuse:
@@ -281,7 +281,7 @@ def test_homo_filename(tmp_path, float_50cm_ref_file):
 
 
 def test_single_thread(tmp_path, float_50cm_ref_file):
-    """ Test single-threaded processing creates a homogenised file. """
+    """ Test single-threaded processing creates a corrected file. """
     homo_config = RasterFuse.default_homo_config.copy()
     homo_config.update(threads=1)
     raster_fuse = RasterFuse(
@@ -302,7 +302,7 @@ def test_single_thread(tmp_path, float_50cm_ref_file):
     ]
 ) # yapf: disable
 def test_proc_crs(tmp_path, src_file, ref_file, proc_crs, exp_proc_crs, request):
-    """ Test homogenised file creation for forced and auto proc_crs with different src/ref combinations. """
+    """ Test corrected file creation for forced and auto proc_crs with different src/ref combinations. """
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
     raster_fuse = RasterFuse(src_file, ref_file, tmp_path, Method.gain_blk_offset, (5, 5), proc_crs=proc_crs)
@@ -313,7 +313,7 @@ def test_proc_crs(tmp_path, src_file, ref_file, proc_crs, exp_proc_crs, request)
 
 
 def test_tags(tmp_path, float_50cm_ref_file):
-    """ Test homogenised file metadata. """
+    """ Test corrected file metadata. """
     homo_config = RasterFuse.default_homo_config.copy()
     homo_config.update(param_image=True)
     method = Method.gain_blk_offset
