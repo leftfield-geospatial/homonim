@@ -11,7 +11,7 @@ Usage
   :prog: homonim fuse
 
 .. click:: homonim.cli:compare
-  :prog: homonim comapre
+  :prog: homonim compare
 
 .. click:: homonim.cli:stats
   :prog: homonim stats

@@ -58,6 +58,7 @@ setup(
         'click>=8',
         'tqdm>=4.6',
         'pyyaml>=5.4',
+        'cloup>=0.15',
     ],
     python_requires='>=3.6',
     classifiers=[
