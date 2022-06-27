@@ -53,6 +53,8 @@ class PlainInfoFormatter(logging.Formatter):
 
 class HomonimCommand(click.Command):
     """ click Command sub-class for formatting help with RST markup. """
+    def collect_usage_pieces(self, ctx):
+        return []
 
     def get_help(self, ctx):
         """ Strip some RST markup from the help text for CLI display.  Assumes no grid tables. """
@@ -77,6 +79,7 @@ class HomonimCommand(click.Command):
 
 class FuseCommand(HomonimCommand):
     """ click Command sub-class for setting ``fuse`` parameters from a config file. """
+
     def invoke(self, ctx):
         # adapted from https://stackoverflow.com/questions/46358797/python-click-supply-arguments-and-options-from-a
         # -configuration-file/46391887
@@ -258,8 +261,8 @@ def cli(verbose, quiet):
     'image file, source and corrected images will be compared with the reference.'
 )
 @click.option(
-    '-nbo', '--no-build-ovw', 'build_ovw', type=click.BOOL, is_flag=True, default=True,
-    help='Turn off overview building for the corrected image(s).'
+    '-bo/-nbo', '--build-ovw/--no-build-ovw', type=click.BOOL, default=True, show_default=True,
+    help='Build overviews for the corrected image(s).'
 )
 @click.option(
     '-pc', '--proc-crs', type=click.Choice([pc.value for pc in ProcCrs], case_sensitive=False),
@@ -271,12 +274,14 @@ def cli(verbose, quiet):
 )
 # advanced options
 @click.option(
-    '-pi', '--param-image', type=click.BOOL, is_flag=True, default=RasterFuse.default_homo_config['param_image'],
+    '-pi/-npi', '--param-image/--no-param-image', type=click.BOOL,
+    default=RasterFuse.default_homo_config['param_image'], show_default=True,
     help=f'Create a debug image, containing model parameters and R\N{SUPERSCRIPT TWO} values for each '
     'corrected image.'
 )
 @click.option(
-    '-mp', '--mask-partial', type=click.BOOL, is_flag=True, default=KernelModel.default_config['mask_partial'],
+    '-mp/-nmp', '--mask-partial/--no-mask-partial', type=click.BOOL,
+    default=KernelModel.default_config['mask_partial'], show_default=True,
     help=f'Mask biased corrected pixels produced from partial kernel or source / reference image coverage.'
 )
 @threads_option
@@ -336,7 +341,7 @@ def fuse(
 
     For best results, the reference and source image(s) should be concurrent, co-located, and spectrally similar.
 
-    The following options for ``--method`` are available:
+    The following options for ``method`` are available:
     \b
 
         * `gain`: Gain-only model.

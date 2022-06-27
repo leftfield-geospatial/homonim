@@ -486,7 +486,7 @@ class KernelModel:
 
 class RefSpaceModel(KernelModel):
     """
-    A KernelModel subclass, for estimating model parmaeters in the reference image CRS and grid.
+    A KernelModel subclass, for estimating model parameters in the reference image CRS and grid.
 
     The source image block is re-projected into the reference CRS to estimate the parameters.  Estimated parameters are
     subsequently re-projected to the source CRS for application to the (original) source image block.
