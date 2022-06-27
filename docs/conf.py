@@ -75,7 +75,7 @@ html_theme = 'sphinx_rtd_theme'
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
 
-# -- Options for autodoc -------------------------------------------------
+# -- Options for autodoc -----------------------------------------------------
 # see https://www.sphinx-doc.org/en/master/usage/extensions/autodoc.html
 # autodoc_mock_imports = ['rasterio', 'click']
 autosummary_generate = True
@@ -85,11 +85,12 @@ autodoc_member_order = 'bysource'
 autodoc_typehints = 'both'
 # autodoc_typehints_format = 'short'
 
-# -- Options for nbsphinx --------------------------------------------------
+# -- Options for nbsphinx ----------------------------------------------------
 # env.docname will be e.g. examples/l7_composite.ipynb.  The `../` is to
 # reference it from itself. preferable to link to actual version of the file
 # at the time of the doc build, than a hyperlink to github.
-# see https://github.com/aazuspan/wxee/blob/main/docs/conf.py for other examples
+# see https://github.com/aazuspan/wxee/blob/main/docs/conf.py for other
+# examples
 nbsphinx_prolog = """
 .. note::
 
@@ -97,3 +98,19 @@ nbsphinx_prolog = """
    interact with it, you can download it 
    :download:`here <../{{ env.docname }}.ipynb>`.
 """
+
+# -- Workaround for cloup arguments ------------------------------------------
+from sphinx_click import ext
+
+def _format_cloup_argument(arg):
+    """Format the output of a `click.Argument` or `cloup.Argument`."""
+    if hasattr(arg, 'help'):
+        # return the argument's help if this is a cloup argument
+        yield '.. option:: {}'.format(arg.human_readable_name)
+        yield ''
+        yield ext._indent(arg.help)
+    else:
+        return ext._format_argument(arg)
+
+# overwrite sphinx_click's _format_argument with the one above
+ext._format_argument = _format_cloup_argument
