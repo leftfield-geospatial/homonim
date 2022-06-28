@@ -5,7 +5,7 @@ homonim
 
 .. short_descr_start
 
-Correct aerial and satellite imagery to approximate surface reflectance.
+Correct aerial and satellite imagery to surface reflectance.
 
 .. short_descr_end
 
@@ -14,7 +14,7 @@ Correct aerial and satellite imagery to approximate surface reflectance.
 Description
 -----------
 
-``homonim`` provides a command line interface and API for correcting remotely sensed imagery to surface
+``homonim`` provides a command line interface and API for correcting remotely sensed imagery to approximate surface
 reflectance.  It is a form of *spectral harmonisation*, that adjusts for spatially varying atmospheric and anisotropic
 (BRDF) effects, by fusion with satellite surface reflectance data.  Manual reflectance measurements and target
 placements are not required.

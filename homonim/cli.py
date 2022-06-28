@@ -17,22 +17,21 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
+import inspect
 import json
 import logging
+import math
 import pathlib
-import sys
 import re
+import sys
 from timeit import default_timer as timer
 
 import click
 import cloup
-import math
 import pandas as pd
 import rasterio as rio
 import yaml
 from click.core import ParameterSource
-from rasterio.warp import SUPPORTED_RESAMPLING
-
 from homonim import utils, version
 from homonim.compare import RasterCompare
 from homonim.enums import ProcCrs, Method
@@ -40,6 +39,7 @@ from homonim.errors import ImageFormatError
 from homonim.fuse import RasterFuse
 from homonim.kernel_model import KernelModel
 from homonim.stats import ParamStats
+from rasterio.warp import SUPPORTED_RESAMPLING
 
 logger = logging.getLogger(__name__)
 
@@ -203,6 +203,7 @@ def _param_file_cb(ctx, param, value):
 
 context_settings = cloup.Context.settings(
     formatter_settings=cloup.HelpFormatter.settings(col2_min_width=math.inf, theme=cloup.HelpTheme.dark())
+    # formatter_settings = cloup.HelpFormatter.settings(theme=cloup.HelpTheme.dark())
 )
 
 # define click options and arguments common to more than one command
@@ -230,7 +231,7 @@ output_option = cloup.option(
 @cloup.group(context_settings=context_settings)
 @cloup.option('--verbose', '-v', count=True, help='Increase verbosity.')
 @cloup.option('--quiet', '-q', count=True, help='Decrease verbosity.')
-@click.version_option(version=version.__version__, message='%(version)s')
+@cloup.version_option(version=version.__version__, message='%(version)s')
 def cli(verbose, quiet):
     """ Surface reflectance correction and comparison of aerial and satellite imagery. """
     verbosity = verbose - quiet
@@ -244,9 +245,27 @@ def cli(verbose, quiet):
 @ref_file_arg
 @cloup.option_group(
     "Standard options",
-    cloup.option(
+    click.option(
         '-m', '--method', type=click.Choice([m.value for m in Method], case_sensitive=False),
-        default=Method.gain_blk_offset.value, help='Correction method.'
+        default=Method.gain_blk_offset.value,
+        help=inspect.cleandoc(
+            """Correction method.
+            \b
+    
+            ======== ==================================================================
+            `gain`   Gain only model
+            `gain`   Gain only model
+            `gain`   Gain only model
+            ======== ==================================================================
+    
+            \b
+    
+            * `gain`: Gain-only model.
+            * `gain-blk-offset`: Gain-only model applied to offset normalised image
+              blocks.
+            * `gain-offset`: Full gain and offset model.
+            """
+        )
     ),
     cloup.option(
         '-k', '--kernel-shape', type=click.Tuple([click.INT, click.INT]), nargs=2, default=(5, 5), show_default=True,
@@ -254,7 +273,7 @@ def cli(verbose, quiet):
     ),
     cloup.option(
         '-od', '--output-dir', type=click.Path(exists=True, file_okay=False, writable=True),
-        show_default='Source image directory.', help='Directory in which to place corrected image(s).'
+        show_default='source image directory.', help='Directory in which to place corrected image(s).'
     ),
     cloup.option(
         '-ovw', '--overwrite', 'overwrite', is_flag=True, type=bool, default=False, show_default=True,
