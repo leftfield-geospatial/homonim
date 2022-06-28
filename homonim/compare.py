@@ -132,6 +132,7 @@ class RasterCompare:
                 if self._proc_crs == ProcCrs.ref:
                     src_ra = src_ra.reproject(**ref_ra.proj_profile, resampling=Resampling.average)
                 else:
+                    # TODO: make and apply upsampling/downsampling settings.  This assumes only downsampling.
                     ref_ra = ref_ra.reproject(**src_ra.proj_profile, resampling=Resampling.average)
 
                 mask = src_ra.mask & ref_ra.mask  # combined src and ref mask

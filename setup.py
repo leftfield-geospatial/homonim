@@ -66,5 +66,9 @@ setup(
         'License :: OSI Approved :: GNU Affero General Public License v3',
         'Operating System :: OS Independent',
     ],
+    keywords=[
+        'drone imagery', 'aerial imagery', 'satellite imagery', 'surface reflectance', 'correction', 'harmonization',
+        'anisotropy', 'brdf', 'atmospheric correction',
+    ],
     entry_points={'console_scripts': ['homonim=homonim.cli:cli']},
 )
