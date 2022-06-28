@@ -84,7 +84,7 @@ Statistically compare the raw and corrected aerial images with the included Land
 Example
 -------
 
-Mosaics of 0.5 m resolution aerial imagery before and after homogenisation. A Landsat-7 surface reflectance image was
+Mosaics of 0.5 m resolution aerial imagery before and after correction. A Landsat-7 surface reflectance image was
 used as reference, and is shown in the background. Homogenisation was performed using the ``gain-blk-offset`` method and
 a 5 x 5 pixel kernel.
 
@@ -101,10 +101,10 @@ See the documentation `here <docs/usage.rst>`__.
 Terminology
 -----------
 
-While ``homonim`` implements a form of *spectral harmonisation*, we have used the term *homogenisation* to describe the
-method, in keeping with the `original
-formulation <https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data>`__.
-*Homogenisation* is implemented using a type of image *fusion*.
+``homonim`` is shorthand for *homogenise image* and is a reference to `the paper <https://www.researchgate
+.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data>`_ on which
+it is based.  The terms *correction* or *surface reflectance correction* are used to describe the method in the
+documentation, as these are commonly understood.
 
 Credits
 -------

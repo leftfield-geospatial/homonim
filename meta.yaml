@@ -41,7 +41,7 @@ test:
 about:
   home: https://github.com/dugalh/homonim
   summary: |
-    Radiometric homogenisation of aerial and satellite imagery by fusion with
+    Correction of aerial and satellite imagery to surface relfectance by fusion with
     satellite surface reflectance data.
   license: AGPL-3.0-only
   license_file: LICENSE

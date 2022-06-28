@@ -1,5 +1,5 @@
 """
-    Homonim: Radiometric homogenisation of aerial and satellite imagery
+    Homonim: Correction of aerial and satellite imagery to surface relfectance
     Copyright (C) 2021 Dugal Harris
     Email: dugalh@gmail.com
 
@@ -55,7 +55,8 @@ class RasterFuse:
         driver='GTiff', dtype=RasterArray.default_dtype, nodata=RasterArray.default_nodata, creation_options=default_co
     )
     default_model_config = KernelModel.default_config
-
+    # TODO: rename homo_config and any other homo variables to keep with 'correction' terminology
+    # TODO: rethink these config dicts... maybe something like cloup settings
     def __init__(
         self, src_filename, ref_filename, homo_path, method, kernel_shape, proc_crs=ProcCrs.auto, overwrite=False,
         homo_config=None, model_config=None, out_profile=None
@@ -75,7 +76,7 @@ class RasterFuse:
             Path to the corrected file to create, or a directory in which in which to create an automatically named
             file.
         method: homonim.enums.Method
-            The radiometric homogenisation method.
+            The surface reflectance correction method.
         kernel_shape: tuple
             The (height, width) of the kernel in pixels of the proc_crs image (the lowest resolution image, if
             proc_crs=ProcCrs.auto).
@@ -86,9 +87,9 @@ class RasterFuse:
         overwrite: bool, optional
             Overwrite the output file(s) if they exist. [default: True]
         homo_config: dict, optional
-            General homogenisation configuration dict with items:
+            Surface reflectance correction configuration with items:
                 param_image: bool
-                    Turn on/off the production of a debug image containing homogenisation parameters and R2 values.
+                    Turn on/off the production of a debug image containing correction parameters and R2 values.
                 threads: int
                     The number of blocks process concurrently (requires more memory). 0 = use all cpus.
                 max_block_mem: float

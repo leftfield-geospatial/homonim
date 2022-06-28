@@ -1,5 +1,5 @@
 """
-    Homonim: Radiometric homogenisation of aerial and satellite imagery
+    Homonim: Correction of aerial and satellite imagery to surface relfectance
     Copyright (C) 2021 Dugal Harris
     Email: dugalh@gmail.com
 
@@ -20,7 +20,7 @@ from enum import Enum
 
 
 class Method(str, Enum):
-    """ Enumeration for the homogenisation method. """
+    """ Enumeration for the surface reflectance correction method. """
     gain = 'gain'
     gain_blk_offset = 'gain-blk-offset'
     gain_offset = 'gain-offset'

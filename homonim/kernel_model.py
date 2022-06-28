@@ -1,5 +1,5 @@
 """
-    Homonim: Radiometric homogenisation of aerial and satellite imagery
+    Homonim: Correction of aerial and satellite imagery to surface relfectance
     Copyright (C) 2021 Dugal Harris
     Email: dugalh@gmail.com
 
@@ -31,7 +31,7 @@ from homonim.raster_array import RasterArray
 
 class KernelModel:
     """
-    A base class for surface reflectance modelling and homogenisation of blocks of image data.
+    A base class for surface reflectance modelling and correction of blocks of image data.
 
     The surface reflectance relationship between source and reference image blocks is approximated with localised linear
     models.  Models are estimated for each pixel location inside a small rectangular kernel (window), using a fast DFT
@@ -57,7 +57,7 @@ class KernelModel:
         Parameters
         ----------
         method: homonim.enums.Method
-                The radiometric homogenisation method.
+                The surface reflectance correction method.
         kernel_shape: tuple
                 The (height, width) of the kernel in pixels.
         param_image: bool, optional
@@ -95,7 +95,7 @@ class KernelModel:
 
     @property
     def method(self) -> Method:
-        """ The homogenisation method. """
+        """ The correction method. """
         return self._method
 
     @property

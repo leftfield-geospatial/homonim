@@ -20,7 +20,10 @@ For best results, the *reference* and *source* image(s) should be:
 
 The *reference* image bounds should contain those of the *source* image(s), and *source* / *reference* bands should correspond i.e. *reference* band 1 corresponds to *source* band 1, *reference* band 2 corresponds to *source* band 2 etc.  |rasterio|_ and |gdal|_ provide command line tools for re-ordering bands etc. ``rasterio`` is included in the ``homonim`` installation.
 
-The `method formulation <https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data>`_ assumes *source* images are raw i.e. without colour-balancing, gamma-correction etc adjustments.  Where possible, this assumption should be adhered to.  Adjusted *source* images will still benefit from homogenisation, however.  
+The `method formulation <https://www.researchgate
+.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data>`_ assumes
+*source* images are raw i.e. without colour-balancing, gamma-correction etc adjustments.  Where possible, this
+assumption should be adhered to.  Adjusted *source* images will still benefit from correction, however.
 
 
 .. |rasterio| replace:: ``rasterio``

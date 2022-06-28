@@ -1,5 +1,5 @@
 """
-    Homonim: Radiometric homogenisation of aerial and satellite imagery
+    Homonim: Correction of aerial and satellite imagery to surface relfectance
     Copyright (C) 2021 Dugal Harris
     Email: dugalh@gmail.com
 
