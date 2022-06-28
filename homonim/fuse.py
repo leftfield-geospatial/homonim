@@ -295,7 +295,7 @@ class RasterFuse:
 
     @property
     def method(self) -> Method:
-        """ Homogenisation method. """
+        """ Correction method. """
         return self._method
 
     @property

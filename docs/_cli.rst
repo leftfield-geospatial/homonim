@@ -66,7 +66,7 @@ Standard options
 .. _method:
 
 ``-m``, ``--method``:  ``gain``, ``gain-blk-offset`` or ``gain-offset``
-    Homogenisation method:
+    Correction method:
 
     * ``gain``: A gain-only model, suitable for haze-free and zero offset images (i.e. images where a surface reflectance of zero corresponds to a pixel value of ~zero).
     * ``gain-blk-offset``: A gain-only model applied to offset normalised image blocks.  The image block size is determined by max-block-mem_.  It is the default method and is suitable for most image combinations.

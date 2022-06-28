@@ -1,6 +1,6 @@
 # See https://github.com/dugalh/homonim/blob/main/docs/usage.rst#advanced-options for detailed documentation
 
-# Homogenisation configuration
+# Correction configuration
 param_image: False
 mask_partial: False
 threads: 0
