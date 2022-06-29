@@ -40,6 +40,7 @@ from homonim.errors import ImageFormatError
 from homonim.fuse import RasterFuse
 from homonim.kernel_model import KernelModel
 from homonim.stats import ParamStats
+from homonim.raster_array import RasterArray
 from rasterio.warp import SUPPORTED_RESAMPLING
 
 logger = logging.getLogger(__name__)
@@ -48,7 +49,7 @@ logger = logging.getLogger(__name__)
 class PlainInfoFormatter(logging.Formatter):
     """ logging formatter to format INFO logs without the module name etc prefix. """
 
-    def format(self, record):
+    def format(self, record: logging.LogRecord):
         if record.levelno == logging.INFO:
             self._style._fmt = '%(message)s'
         else:
@@ -68,9 +69,9 @@ class HomonimCommand(cloup.Command):
             ':option:': '',  # strip ':option:'
             '\| ': '',  # strip RST literal (unwrapped) marker in e.g. tables and bullet lists
             '\n\.\. _.*:\n': '',  # strip RST ref directive '\n.. <name>:\n'
-            '`(.*)<(.*)>`_': '\g<1>',  # convert from RST cross-ref '`<name> <<link>>`_' to 'name'
+            '`(.*) <(.*)>`_': '\g<1>',  # convert from RST cross-ref '`<name> <<link>>`_' to 'name'
             '::': ':'  # convert from RST '::' to ':'
-        }
+        } # yapf: disable
 
         def reformat_text(text: str, width: int, **kwargs):
             for sub_key, sub_value in sub_strings.items():
@@ -85,7 +86,7 @@ class FuseCommand(HomonimCommand):
     """ click.Command sub-class for setting fuse command parameters from a yaml config file. """
 
     def invoke(self, ctx: click.Context):
-        """ Merge config file with command line and default parmeter values.  """
+        """ Merge config file with command line and default parameter values.  """
         # adapted from https://stackoverflow.com/questions/46358797/python-click-supply-arguments-and-options-from-a
         # -configuration-file/46391887
         config_file = ctx.params['conf']
@@ -105,7 +106,7 @@ class FuseCommand(HomonimCommand):
                         ctx.set_parameter_source(conf_key, ParameterSource.COMMANDLINE)
 
         # Set the default creation_options if no other driver or creation_options have been specified.
-        # This can't be done in a callback as it depends on --out-driver.
+        # This can't be done in a callback as it depends on --driver.
         if (ctx.get_parameter_source('driver') == ParameterSource.DEFAULT and
                 ctx.get_parameter_source('creation_options') == ParameterSource.DEFAULT):
             ctx.params['creation_options'] = RasterFuse.default_out_profile['creation_options']
@@ -143,7 +144,7 @@ def _threads_cb(ctx: click.Context, param: click.Option, value):
 
 
 def _nodata_cb(ctx: click.Context, param: click.Option, value):
-    """ click callback to convert --out-nodata value to None, nan or float. """
+    """ click callback to convert --nodata value to None, nan or float. """
     # adapted from rasterio https://github.com/rasterio/rasterio
     if value is None or value.lower() in ['null', 'nil', 'none', 'nada']:
         return None
@@ -203,7 +204,7 @@ def _param_file_cb(ctx: click.Context, param: click.Option, value):
 
 
 # define click options and arguments common to more than one command
-# use cloup's argument to print their help on command line
+# use cloup's argument to auto print argument help on command line
 ref_file_arg = cloup.argument(
     'ref-file', nargs=1, metavar='REFERENCE', type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
     help='Path to a reference image.'
@@ -212,13 +213,12 @@ threads_option = click.option(
     '-t', '--threads', type=click.INT, default=RasterFuse.default_homo_config['threads'], show_default=True,
     callback=_threads_cb, help=f'Number of image blocks to process concurrently (0 = use all cpus).'
 )
-# TODO: make common options with geedim have same name/code
 output_option = click.option(
     '-op', '--output', type=click.Path(exists=False, dir_okay=False, writable=True, path_type=pathlib.Path),
     help='Write results to this json file.'
 )
 
-""" cloup context settings to print help in 'wide' format with heading/option emphasis. """
+""" cloup context settings to print help in 'linear' layout with heading/option emphasis. """
 context_settings = cloup.Context.settings(
     formatter_settings=cloup.HelpFormatter.settings(
         col2_min_width=math.inf, theme=cloup.HelpTheme(
@@ -254,18 +254,25 @@ def cli(verbose, quiet):
     # if cloup's mutually exclusive etc functionality is needed, it should be the latter.
     click.option(
         '-m', '--method', type=click.Choice([m.value for m in Method], case_sensitive=False),
-        default=Method.gain_blk_offset.value, help='Correction method.',
+        default=Method.gain_blk_offset.value, show_default=True,
+        help="""Correction method.
+        \b
+        
+        `gain`: gain-only model.
+        `gain-blk-offset`: gain-only model applied to offset normalised image blocks.
+        `gain-offset`: full gain and offset model.
+        """,
     ),
     click.option(
         '-k', '--kernel-shape', type=click.Tuple([click.INT, click.INT]), nargs=2, default=(5, 5), show_default=True,
-        metavar='<HEIGHT WIDTH>', help='Kernel height and width in pixels of the ``--proc-crs`` image.'
+        metavar='<HEIGHT WIDTH>', help='Kernel height and width in pixels of the :option:`--proc-crs` image.'
     ),
     click.option(
         '-od', '--out-dir', type=click.Path(exists=True, file_okay=False, writable=True),
         show_default='source image directory.', help='Directory in which to place corrected image(s).'
     ),
     click.option(
-        '-o', '--overwrite', 'overwrite', is_flag=True, type=bool, default=False, show_default=True,
+        '-o', '--overwrite', is_flag=True, type=bool, default=False, show_default=True,
         help='Overwrite existing output file(s).'
     ),
     click.option(
@@ -290,8 +297,8 @@ def cli(verbose, quiet):
     click.option(
         '-pi/-npi', '--param-image/--no-param-image', type=click.BOOL,
         default=RasterFuse.default_homo_config['param_image'], show_default=True,
-        help=f'Create a debug image, containing model parameters and R\N{SUPERSCRIPT TWO} values for each '
-        'corrected image.'
+        help=f'Create a parameter image for each corrected image, containing the corresponding model parameters and '
+             f'R\N{SUPERSCRIPT TWO} values.'
     ),
     click.option(
         '-mp/-nmp', '--mask-partial/--no-mask-partial', type=click.BOOL,
@@ -319,25 +326,34 @@ def cli(verbose, quiet):
         help='R\N{SUPERSCRIPT TWO} threshold below which to inpaint model parameters from surrounding areas '
         '(0 = turn off inpainting). Valid for `gain-offset` method only.'
     ),
-    # TODO: can/should we move this to advanced group
     click.option(
         '-pc', '--proc-crs', type=click.Choice([pc.value for pc in ProcCrs], case_sensitive=False),
-        default=ProcCrs.auto.value, help='The image CRS in which to estimate correction parameters.'
+        default=ProcCrs.auto.value, show_default=True,
+        help="""The image CRS in which to estimate correction parameters. 
+        \b
+    
+        - `auto`: lowest resolution of the source and reference CRSs. 
+        - `src`: source image CRS. 
+        - `ref`: reference image CRS.
+        """
     ),
     click.option(
-        '--out-driver', 'driver',
-        type=click.Choice(list(rio.drivers.raster_driver_extensions().values()), case_sensitive=False),
+        '--driver', type=click.Choice(list(rio.drivers.raster_driver_extensions().values()), case_sensitive=False),
         default=RasterFuse.default_out_profile['driver'], show_default=True, metavar='TEXT',
-        help='Output image format driver.  See the `GDAL docs <https://gdal.org/drivers/raster/index.html>`_ '
-             'for details.'
+        help='Output image format driver.  See the `GDAL docs <https://gdal.org/drivers/raster/index.html>`_ for '
+             'details.'
     ),
     click.option(
-        '--out-dtype', 'dtype', type=click.Choice(list(rio.dtypes.dtype_fwd.values())[1:8], case_sensitive=False),
-        default=RasterFuse.default_out_profile['dtype'], show_default=True, help='Output image data type.'
+        '--dtype', type=click.Choice(list(rio.dtypes.dtype_fwd.values())[1:8], case_sensitive=False),
+        default=RasterFuse.default_out_profile['dtype'], show_default=True,
+        help=f'Output image data type.  Valid for corrected images only, parameter images always use '
+             f'{RasterArray.default_dtype}.'
     ),
     click.option(
-        '--out-nodata', 'nodata', type=click.STRING, callback=_nodata_cb, metavar='[NUMBER|null|nan]',
-        default=RasterFuse.default_out_profile['nodata'], show_default=True, help='Output image nodata value.'
+        '--nodata', 'nodata', type=click.STRING, callback=_nodata_cb, metavar='[NUMBER|null|nan]',
+        default=RasterFuse.default_out_profile['nodata'], show_default=True,
+        help=f'Output image nodata value.  Valid for corrected images only, parameter images always use '
+             f'{RasterArray.default_nodata}.'
     ),
     click.option(
         '-co', '--creation-options', metavar='NAME=VALUE', multiple=True, default=(),
@@ -513,7 +529,7 @@ cli.add_command(compare)
     callback=_param_file_cb, help='Path(s) to parameter image(s).'
 )
 @output_option
-def stats(param_file, output):
+def stats(param_file: pathlib.Path, output: pathlib.Path):
     """
     Report parameter statistics.
 

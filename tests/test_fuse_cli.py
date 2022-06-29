@@ -338,7 +338,7 @@ def test_r2_inpaint_thresh_error(runner, basic_fuse_cli_params, bad_r2_inpaint_t
 ) # yapf: disable
 def test_out_profile(runner, basic_fuse_cli_params, driver, dtype, nodata):
     """ Test --out-* options generate a correctly configured output. """
-    cli_str = basic_fuse_cli_params.cli_str + f' --out-driver {driver} --out-dtype {dtype} --out-nodata {nodata}'
+    cli_str = basic_fuse_cli_params.cli_str + f' --driver {driver} --dtype {dtype} --nodata {nodata}'
     ext_dict = rio.drivers.raster_driver_extensions()
     ext_idx = list(ext_dict.values()).index(driver)
     ext = list(ext_dict.keys())[ext_idx]
@@ -353,24 +353,24 @@ def test_out_profile(runner, basic_fuse_cli_params, driver, dtype, nodata):
 
 
 def test_out_driver_error(runner, basic_fuse_cli_params):
-    """ Test --out-driver with invalid value raises an error. """
-    cli_str = basic_fuse_cli_params.cli_str + f' --out-driver unk'
+    """ Test --driver with invalid value raises an error. """
+    cli_str = basic_fuse_cli_params.cli_str + f' --driver unk'
     result = runner.invoke(cli, cli_str.split())
     assert (result.exit_code != 0)
     assert ('Invalid value' in result.output)
 
 
 def test_out_dtype_error(runner, basic_fuse_cli_params):
-    """ Test --out-dtype with invalid value raises an error. """
-    cli_str = basic_fuse_cli_params.cli_str + f' --out-dtype unk'
+    """ Test --dtype with invalid value raises an error. """
+    cli_str = basic_fuse_cli_params.cli_str + f' --dtype unk'
     result = runner.invoke(cli, cli_str.split())
     assert (result.exit_code != 0)
     assert ('Invalid value' in result.output)
 
 
 def test_out_nodata_error(runner, basic_fuse_cli_params):
-    """ Test --out-nodata with invalid value (cannot be cast to --out-dtype) raises an error. """
-    cli_str = basic_fuse_cli_params.cli_str + f' --out-dtype uint8 --out-nodata nan'
+    """ Test --nodata with invalid value (cannot be cast to --dtype) raises an error. """
+    cli_str = basic_fuse_cli_params.cli_str + f' --dtype uint8 --nodata nan'
     result = runner.invoke(cli, cli_str.split())
     assert (result.exit_code != 0)
     assert ('Invalid value' in result.output)
