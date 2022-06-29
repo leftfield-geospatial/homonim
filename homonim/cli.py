@@ -258,9 +258,9 @@ def cli(verbose, quiet):
         help="""Correction method.
         \b
         
-        `gain`: gain-only model.
-        `gain-blk-offset`: gain-only model applied to offset normalised image blocks.
-        `gain-offset`: full gain and offset model.
+        - `gain`: gain-only model.
+        - `gain-blk-offset`: gain-only model applied to offset normalised image blocks.
+        - `gain-offset`: full gain and offset model.
         """,
     ),
     click.option(
@@ -308,7 +308,7 @@ def cli(verbose, quiet):
     threads_option,
     click.option(
         '-mbm', '--max-block-mem', type=click.FLOAT, default=RasterFuse.default_homo_config['max_block_mem'],
-        show_default=True, help='Maximum image block size in megabytes (0 = block size is the image size).'
+        show_default=True, help='Maximum image block size in megabytes (0 = a block corresponds to the whole image).'
     ),
     click.option(
         '-ds', '--downsampling', type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
@@ -438,7 +438,7 @@ def fuse(
         # compare source and corrected files with reference (invokes compare command with relevant parameters)
         if comp_ref_file:
             comp_file = ref_file if str(comp_ref_file) == 'ref' else comp_ref_file
-            ctx.invoke(compare, src_file=comp_files, ref_file=comp_file, proc_crs=proc_crs)
+            ctx.invoke(compare, src_file=comp_files, ref_file=comp_file)
 
     except Exception:
         logger.exception('Exception caught during processing.')  # log exception info
@@ -455,19 +455,16 @@ cli.add_command(fuse)
     help='Path(s) to image(s) to compare with reference.'
 )
 @ref_file_arg
-# TODO: ProcCrs.src does not fit with "input" images...
-@click.option(
-    '-pc', '--proc-crs', type=click.Choice([pc.value for pc in ProcCrs], case_sensitive=False),
-    default=ProcCrs.auto.value, show_default=True, help='The image CRS in which to compare.'
-)
 @output_option
-def compare(src_file: Tuple[pathlib.Path,], ref_file: pathlib.Path, proc_crs: ProcCrs, output: pathlib.Path):
+def compare(src_file: Tuple[pathlib.Path,], ref_file: pathlib.Path, output: pathlib.Path):
     """
     Compare image(s) with a reference.
 
     Report similarity statistics between input image(s) and a reference image.  Typically, this is used to compare the
     before and after accuracy of surface reflectance correction, by comparing source and corrected images with a
     new reference image.
+
+    Images will be re-projected and compared in the lowest resolution of the input and reference image CRS's.
 
     Reference image extents must encompass those of the input image(s), and input / reference band ordering should
     match i.e. reference band 1 corresponds to input band 1, reference band 2 corresponds to input band 2 etc.
@@ -487,7 +484,7 @@ def compare(src_file: Tuple[pathlib.Path,], ref_file: pathlib.Path, proc_crs: Pr
         for src_filename in src_file:
             logger.info(f'\nComparing {src_filename.name}')
             start_time = timer()
-            cmp = RasterCompare(src_filename, ref_file, proc_crs=ProcCrs(proc_crs))
+            cmp = RasterCompare(src_filename, ref_file, proc_crs=ProcCrs.auto)
             res_dict[str(src_filename)] = cmp.compare()
             logger.info(f'Completed in {timer() - start_time:.2f} secs')
 

@@ -136,23 +136,3 @@ def test_cli__mult_inputs(tmp_path, runner, float_50cm_rgb_file, float_100cm_rgb
 
     src_file = str(src_file)
     assert (src_file in stats_dict)
-
-
-@pytest.mark.parametrize('proc_crs', ['auto', 'src', 'ref'])
-def test_cli__proc_crs(tmp_path, runner, float_50cm_rgb_file, float_100cm_rgb_file, proc_crs):
-    """ Test compare CLI proc_crs behaviour ok. """
-    ref_file = float_100cm_rgb_file
-    src_file = float_50cm_rgb_file
-
-    output_file = tmp_path.joinpath('compare.json')
-    cli_str = f'compare {src_file} {ref_file} --proc-crs {proc_crs} --output {output_file}'
-    result = runner.invoke(cli, cli_str.split())
-    assert (result.exit_code == 0)
-    assert (output_file.exists())
-
-    with open(output_file) as f:
-        stats_dict = json.load(f)
-
-    src_file = str(src_file)
-    assert (src_file in stats_dict)
-    _test_identical_compare_dict(stats_dict[src_file])
