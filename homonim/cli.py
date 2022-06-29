@@ -335,13 +335,13 @@ def cli(verbose, quiet):
         help="""The image CRS in which to estimate correction parameters. 
         \b
     
-        - `auto`: lowest resolution of the source and reference CRS's. 
+        - `auto`: lowest resolution of the source and reference CRS's (recommended). 
         - `src`: source image CRS. 
         - `ref`: reference image CRS.
         """
     ),
     click.option(
-        '--driver', type=click.Choice(list(rio.drivers.raster_driver_extensions().values()), case_sensitive=False),
+        '--driver', type=click.Choice(set(rio.drivers.raster_driver_extensions().values()), case_sensitive=False),
         default=RasterFuse.default_out_profile['driver'], show_default=True, metavar='TEXT',
         help='Output image format driver.  See the `GDAL docs <https://gdal.org/drivers/raster/index.html>`_ for '
              'details.'
@@ -467,10 +467,10 @@ def compare(src_file: Tuple[pathlib.Path,], ref_file: pathlib.Path, output: path
     before and after accuracy of surface reflectance correction, by comparing source and corrected images with a
     new reference image.
 
-    Images will be re-projected and compared in the lowest resolution of the input and reference image CRS's.
-
     Reference image extents must encompass those of the input image(s), and input / reference band ordering should
     match i.e. reference band 1 corresponds to input band 1, reference band 2 corresponds to input band 2 etc.
+
+    Images will be re-projected and compared in the lowest resolution of the input and reference image CRS's.
     \b
 
     Examples:
