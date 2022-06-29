@@ -66,11 +66,13 @@ class HomonimCommand(cloup.Command):
             self.wrap_text = cloup.formatting._formatter.wrap_text
         sub_strings = {
             '\b\n': '\n\b',  # convert from RST friendly to click literal (unwrapped) block marker
-            ':option:': '',  # strip ':option:'
             '\| ': '',  # strip RST literal (unwrapped) marker in e.g. tables and bullet lists
             '\n\.\. _.*:\n': '',  # strip RST ref directive '\n.. <name>:\n'
-            '`(.*) <(.*)>`_': '\g<1>',  # convert from RST cross-ref '`<name> <<link>>`_' to 'name'
-            '::': ':'  # convert from RST '::' to ':'
+            '`(.*?) <(.*?)>`_': '\g<1>',  # convert from RST cross-ref '`<name> <<link>>`_' to 'name'
+            '::': ':',  # convert from RST '::' to ':'
+            '``(.*?)``': '\g<1>',  # convert from RST '``literal``' to 'literal'
+            ':option:`(.*?)( <.*?>)?`': '\g<1>',  # convert ':option:`--name <group-command --name>`' to '--name'
+            ':option:`(.*?)`': '\g<1>',  # convert ':option:`--name`' to '--name'
         } # yapf: disable
 
         def reformat_text(text: str, width: int, **kwargs):
@@ -260,12 +262,12 @@ def cli(verbose, quiet):
         
         - `gain`: gain-only model.
         - `gain-blk-offset`: gain-only model applied to offset normalised image blocks.
-        - `gain-offset`: full gain and offset model.
+        - `gain-offset`: gain and offset model.
         """,
     ),
     click.option(
         '-k', '--kernel-shape', type=click.Tuple([click.INT, click.INT]), nargs=2, default=(5, 5), show_default=True,
-        metavar='<HEIGHT WIDTH>', help='Kernel height and width in pixels of the :option:`--proc-crs` image.'
+        metavar='HEIGHT WIDTH', help='Kernel height and width in pixels of the :option:`--proc-crs` image.'
     ),
     click.option(
         '-od', '--out-dir', type=click.Path(exists=True, file_okay=False, writable=True),
@@ -276,10 +278,11 @@ def cli(verbose, quiet):
         help='Overwrite existing output file(s).'
     ),
     click.option(
-        '-cmp', '--compare', 'comp_ref_file', type=click.Path(dir_okay=False, path_type=pathlib.Path), is_flag=False,
+        '-cmp', '--compare', 'comp_ref_file', metavar='FILE', type=click.Path(dir_okay=False,
+            path_type=pathlib.Path), is_flag=False,
         flag_value='ref', default=None, callback=_compare_cb,
-        help='Statistically compare source and corrected images with this image.  If specified without an '
-        'image file, source and corrected images will be compared with the reference.'
+        help='Compare source and corrected images with this reference image.  If no ``FILE`` value is given, source '
+             'and corrected images are compared with :option:`REFERENCE`.'
     ),
     click.option(
         '-bo/-nbo', '--build-ovw/--no-build-ovw', type=click.BOOL, default=True, show_default=True,
@@ -297,8 +300,8 @@ def cli(verbose, quiet):
     click.option(
         '-pi/-npi', '--param-image/--no-param-image', type=click.BOOL,
         default=RasterFuse.default_homo_config['param_image'], show_default=True,
-        help=f'Create a parameter image for each corrected image, containing the corresponding model parameters and '
-             f'R\N{SUPERSCRIPT TWO} values.'
+        help=f'Write the  model parameters and R\N{SUPERSCRIPT TWO} values for each corrected image into a parameter '
+             f'image file.'
     ),
     click.option(
         '-mp/-nmp', '--mask-partial/--no-mask-partial', type=click.BOOL,
@@ -308,7 +311,7 @@ def cli(verbose, quiet):
     threads_option,
     click.option(
         '-mbm', '--max-block-mem', type=click.FLOAT, default=RasterFuse.default_homo_config['max_block_mem'],
-        show_default=True, help='Maximum image block size in megabytes (0 = a block corresponds to the whole image).'
+        show_default=True, help='Maximum image block size in megabytes (0 = block corresponds to the whole image).'
     ),
     click.option(
         '-ds', '--downsampling', type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
@@ -332,7 +335,7 @@ def cli(verbose, quiet):
         help="""The image CRS in which to estimate correction parameters. 
         \b
     
-        - `auto`: lowest resolution of the source and reference CRSs. 
+        - `auto`: lowest resolution of the source and reference CRS's. 
         - `src`: source image CRS. 
         - `ref`: reference image CRS.
         """
@@ -452,7 +455,7 @@ cli.add_command(fuse)
 @cloup.command(cls=HomonimCommand)
 @cloup.argument(
     'src-file', nargs=-1, metavar='IMAGE...', type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
-    help='Path(s) to image(s) to compare with reference.'
+    help='Path(s) to image(s) to compare with :option:`REFERENCE`.'
 )
 @ref_file_arg
 @output_option
@@ -530,8 +533,8 @@ def stats(param_file: pathlib.Path, output: pathlib.Path):
     """
     Report parameter statistics.
 
-    Report the minimum, maximum, mean etc. values of a parameter image generated with the ``--param-image`` option of
-    the ``fuse`` command.
+    Report the minimum, maximum, mean etc. values of a parameter image generated with the
+    :option:`--param-image <homonim-fuse --param-image>` option of the ``fuse`` command.
     """
 
     try:

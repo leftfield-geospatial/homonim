@@ -38,7 +38,8 @@ logger = logging.getLogger(__name__)
 class RasterCompare:
     """ Class to statistically compare an image against a reference. """
     default_config = dict(threads=cpu_count() - 1)
-
+    # TODO: should we call the source image, an input image and change ProcCrs.src to make it clear that this can
+    #  compare corrected images too?
     def __init__(self, src_filename, ref_filename, proc_crs=ProcCrs.auto, threads=default_config['threads']):
         """
         Construct the RasterCompare object
