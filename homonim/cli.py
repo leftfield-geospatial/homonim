@@ -212,8 +212,9 @@ threads_option = click.option(
     '-t', '--threads', type=click.INT, default=RasterFuse.default_homo_config['threads'], show_default=True,
     callback=_threads_cb, help=f'Number of image blocks to process concurrently (0 = use all cpus).'
 )
+# TODO: make common options with geedim have same name/code
 output_option = click.option(
-    '-o', '--output', type=click.Path(exists=False, dir_okay=False, writable=True, path_type=pathlib.Path),
+    '-op', '--output', type=click.Path(exists=False, dir_okay=False, writable=True, path_type=pathlib.Path),
     help='Write results to this json file.'
 )
 
@@ -234,7 +235,7 @@ context_settings = cloup.Context.settings(
 @click.option('--quiet', '-q', count=True, help='Decrease verbosity.')
 @click.version_option(version=version.__version__, message='%(version)s')
 def cli(verbose, quiet):
-    """ Surface reflectance correction and comparison. """
+    """ Surface reflectance correction and support utilities. """
     verbosity = verbose - quiet
     _configure_logging(verbosity)
 
@@ -264,11 +265,11 @@ def cli(verbose, quiet):
         show_default='source image directory.', help='Directory in which to place corrected image(s).'
     ),
     click.option(
-        '-ovw', '--overwrite', 'overwrite', is_flag=True, type=bool, default=False, show_default=True,
+        '-o', '--overwrite', 'overwrite', is_flag=True, type=bool, default=False, show_default=True,
         help='Overwrite existing output file(s).'
     ),
     click.option(
-        '-cmp', '--compare', 'comp_file', type=click.Path(dir_okay=False, path_type=pathlib.Path), is_flag=False,
+        '-cmp', '--compare', 'comp_ref_file', type=click.Path(dir_okay=False, path_type=pathlib.Path), is_flag=False,
         flag_value='ref', default=None, callback=_compare_cb,
         help='Statistically compare source and corrected images with this image.  If specified without an '
         'image file, source and corrected images will be compared with the reference.'
@@ -277,6 +278,7 @@ def cli(verbose, quiet):
         '-bo/-nbo', '--build-ovw/--no-build-ovw', type=click.BOOL, default=True, show_default=True,
         help='Build overviews for the corrected image(s).'
     ),
+    # TODO: can/should we move this to advanced group
     click.option(
         '-pc', '--proc-crs', type=click.Choice([pc.value for pc in ProcCrs], case_sensitive=False),
         default=ProcCrs.auto.value, help='The image CRS in which to estimate correction parameters.'
@@ -347,8 +349,8 @@ def cli(verbose, quiet):
 @click.pass_context
 def fuse(
     ctx: click.Context, src_file: Tuple[pathlib.Path,], ref_file: pathlib.Path, method: Method,
-    kernel_shape: Tuple[int, int], out_dir: pathlib.Path, overwrite: bool, comp_file: pathlib.Path, build_ovw: bool,
-    proc_crs: ProcCrs, conf: pathlib.Path, **kwargs
+    kernel_shape: Tuple[int, int], out_dir: pathlib.Path, overwrite: bool, comp_ref_file: pathlib.Path,
+    build_ovw: bool, proc_crs: ProcCrs, conf: pathlib.Path, **kwargs
 ):
     # @formatter:off
     """
@@ -395,7 +397,7 @@ def fuse(
         model_config=_update_existing_keys(RasterFuse.default_model_config, **kwargs),
         out_profile=_update_existing_keys(RasterFuse.default_out_profile, **kwargs)
     )
-    compare_files = []
+    comp_files = []
 
     # iterate over and homogenise source file(s)
     try:
@@ -415,12 +417,13 @@ def fuse(
                     raster_fuse.build_overviews()
 
             logger.info(f'Completed in {timer() - start_time:.2f} secs')
-            compare_files += [src_filename, raster_fuse.homo_filename]  # build a list of files to pass to compare
+            comp_files += [src_filename, raster_fuse.homo_filename]  # build a list of files to pass to compare
 
-            # compare source and corrected files with reference (invokes compare command with relevant parameters)
-            if comp_file:
-                comp_file = ref_file if str(comp_file) == 'ref' else comp_file
-                ctx.invoke(compare, src_file=compare_files, ref_file=comp_file, proc_crs=proc_crs)
+        # compare source and corrected files with reference (invokes compare command with relevant parameters)
+        if comp_ref_file:
+            comp_file = ref_file if str(comp_ref_file) == 'ref' else comp_ref_file
+            ctx.invoke(compare, src_file=comp_files, ref_file=comp_file, proc_crs=proc_crs)
+
     except Exception:
         logger.exception('Exception caught during processing.')  # log exception info
         raise click.Abort()
