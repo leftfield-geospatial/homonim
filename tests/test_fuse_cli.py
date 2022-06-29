@@ -101,10 +101,10 @@ def test_file_exists_error(runner, basic_fuse_cli_params):
 
 
 def test_overwrite(runner, basic_fuse_cli_params):
-    """ Test overwriting existing output file(s) with -ovw. """
+    """ Test overwriting existing output file(s) with -o. """
     basic_fuse_cli_params.homo_file.touch()
     basic_fuse_cli_params.param_file.touch()
-    cli_str = basic_fuse_cli_params.cli_str + ' --param-image -ovw'
+    cli_str = basic_fuse_cli_params.cli_str + ' --param-image -o'
     result = runner.invoke(cli, cli_str.split())
     assert (result.exit_code == 0)
     assert (basic_fuse_cli_params.homo_file.exists())
@@ -117,7 +117,7 @@ def test_compare(runner, float_100cm_ref_file, float_100cm_src_file):
     src_file = float_100cm_src_file
     # test --compare in flag (no value), and value configurayion
     cli_strs = [
-        f'fuse  {src_file} {ref_file} --compare', f'fuse {src_file} {ref_file} --compare {float_100cm_ref_file} -ovw'
+        f'fuse  {src_file} {ref_file} --compare', f'fuse {src_file} {ref_file} --compare {float_100cm_ref_file} -o'
     ]
     for cli_str in cli_strs:
         result = runner.invoke(cli, cli_str.split())
@@ -214,7 +214,7 @@ def test_param_image(runner, basic_fuse_cli_params):
     assert (not basic_fuse_cli_params.param_file.exists())
 
     # test --param-image generates a valid parameter image
-    cli_str = basic_fuse_cli_params.cli_str + ' --param-image -ovw'
+    cli_str = basic_fuse_cli_params.cli_str + ' --param-image -o'
     result = runner.invoke(cli, cli_str.split())
     assert (result.exit_code == 0)
     assert (basic_fuse_cli_params.homo_file.exists())
