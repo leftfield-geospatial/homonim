@@ -5,6 +5,7 @@ param_image: False
 mask_partial: False
 threads: 0
 max_block_mem: 100
+proc_crs: auto
 
 # Model configuration
 downsampling: average

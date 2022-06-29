@@ -278,11 +278,6 @@ def cli(verbose, quiet):
         '-bo/-nbo', '--build-ovw/--no-build-ovw', type=click.BOOL, default=True, show_default=True,
         help='Build overviews for the corrected image(s).'
     ),
-    # TODO: can/should we move this to advanced group
-    click.option(
-        '-pc', '--proc-crs', type=click.Choice([pc.value for pc in ProcCrs], case_sensitive=False),
-        default=ProcCrs.auto.value, help='The image CRS in which to estimate correction parameters.'
-    ),
     click.option(
         '-c', '--conf', type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path),
         required=False, default=None, show_default=True,
@@ -323,6 +318,11 @@ def cli(verbose, quiet):
         default=KernelModel.default_config['r2_inpaint_thresh'], show_default=True, metavar='FLOAT 0-1',
         help='R\N{SUPERSCRIPT TWO} threshold below which to inpaint model parameters from surrounding areas '
         '(0 = turn off inpainting). Valid for `gain-offset` method only.'
+    ),
+    # TODO: can/should we move this to advanced group
+    click.option(
+        '-pc', '--proc-crs', type=click.Choice([pc.value for pc in ProcCrs], case_sensitive=False),
+        default=ProcCrs.auto.value, help='The image CRS in which to estimate correction parameters.'
     ),
     click.option(
         '--out-driver', 'driver',

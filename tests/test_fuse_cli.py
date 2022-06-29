@@ -115,7 +115,7 @@ def test_compare(runner, float_100cm_ref_file, float_100cm_src_file):
     """ Test --compare, in flag and value configurations, against expected output. """
     ref_file = float_100cm_ref_file
     src_file = float_100cm_src_file
-    # test --compare in flag (no value), and value configurayion
+    # test --compare in flag (no value), and value configuration
     cli_strs = [
         f'fuse  {src_file} {ref_file} --compare', f'fuse {src_file} {ref_file} --compare {float_100cm_ref_file} -o'
     ]
@@ -160,8 +160,8 @@ def test_proc_crs(tmp_path, runner, float_100cm_ref_file, float_100cm_src_file, 
     src_file = float_100cm_src_file
     method = Method.gain_blk_offset
     kernel_shape = (3, 3)
-    _res_proc_crs = ProcCrs.ref if proc_crs == ProcCrs.auto else proc_crs
-    post_fix = utils.create_homo_postfix(_res_proc_crs, method, kernel_shape, RasterFuse.default_out_profile['driver'])
+    res_proc_crs = ProcCrs.ref if proc_crs == ProcCrs.auto else proc_crs
+    post_fix = utils.create_homo_postfix(res_proc_crs, method, kernel_shape, RasterFuse.default_out_profile['driver'])
     homo_file = tmp_path.joinpath(src_file.stem + post_fix)
     cli_str = (
         f'fuse -m {method.value} -k {kernel_shape[0]} {kernel_shape[1]} -od {tmp_path} -pc {proc_crs.value} '
@@ -172,7 +172,7 @@ def test_proc_crs(tmp_path, runner, float_100cm_ref_file, float_100cm_src_file, 
     assert (homo_file.exists())
 
     with rio.open(homo_file, 'r') as out_ds:
-        assert (out_ds.tags()['HOMO_PROC_CRS'] == _res_proc_crs.name)
+        assert (out_ds.tags()['HOMO_PROC_CRS'] == res_proc_crs.name)
 
 
 def test_conf_file(tmp_path, runner, basic_fuse_cli_params):
@@ -202,6 +202,8 @@ def test_conf_file(tmp_path, runner, basic_fuse_cli_params):
             out_mask = out_ds.dataset_mask().astype('bool', copy=False)
             assert (src_mask[out_mask].all())
             assert (src_mask.sum() > out_mask.sum())
+            # test proc_crs
+            assert (out_ds.tags()['HOMO_PROC_CRS'] == basic_fuse_cli_params.proc_crs.name)
 
 
 def test_param_image(runner, basic_fuse_cli_params):
