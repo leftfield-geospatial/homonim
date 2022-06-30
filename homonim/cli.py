@@ -286,12 +286,12 @@ def cli(verbose, quiet):
     ),
     click.option(
         '-bo/-nbo', '--build-ovw/--no-build-ovw', type=click.BOOL, default=True, show_default=True,
-        help='Build overviews for the corrected image(s).'
+        help='Build overviews for the output image(s).'
     ),
     click.option(
         '-c', '--conf', type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path),
         required=False, default=None, show_default=True,
-        help='Path to a yaml configuration file specifying advanced options.'
+        help='Path to a yaml configuration file specifying advanced options (as follow below).'
     )
 )
 # advanced options
@@ -316,18 +316,22 @@ def cli(verbose, quiet):
     click.option(
         '-ds', '--downsampling', type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
         default=KernelModel.default_config['downsampling'], show_default=True,
-        help='Resampling method for re-projecting from high to low resolution.'
+        help='Resampling method for re-projecting from high to low resolution.  See the `rasterio docs '
+             '<https://rasterio.readthedocs.io/en/latest/api/rasterio.enums.html#rasterio.enums.Resampling>`_ for '
+             'details.'
     ),
     click.option(
         '-us', '--upsampling', type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
         default=KernelModel.default_config['upsampling'], show_default=True,
-        help='Resampling method for re-projecting from low to high resolution.'
+        help='Resampling method for re-projecting from low to high resolution.  See the `rasterio docs '
+             '<https://rasterio.readthedocs.io/en/latest/api/rasterio.enums.html#rasterio.enums.Resampling>`_ for '
+             'details.'
     ),
     click.option(
         '-rit', '--r2-inpaint-thresh', type=click.FloatRange(min=0, max=1),
         default=KernelModel.default_config['r2_inpaint_thresh'], show_default=True, metavar='FLOAT 0-1',
         help='R\N{SUPERSCRIPT TWO} threshold below which to inpaint model parameters from surrounding areas '
-        '(0 = turn off inpainting). Valid for `gain-offset` method only.'
+        '(0 = turn off inpainting). Valid for `gain-offset` :option:`--method` only.'
     ),
     click.option(
         '-pc', '--proc-crs', type=click.Choice([pc.value for pc in ProcCrs], case_sensitive=False),
