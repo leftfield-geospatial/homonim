@@ -47,19 +47,12 @@ class RasterFuse:
     """
 
     # default configuration dicts
-    default_homo_config = dict(param_image=False, threads=multiprocessing.cpu_count(), max_block_mem=100)
-    # default_co = dict(
-    #     tiled=True, blockxsize=512, blockysize=512, compress='deflate', interleave='band', photometric=None
-    # )
-    # default_out_profile = dict(
-    #     driver='GTiff', dtype=RasterArray.default_dtype, nodata=RasterArray.default_nodata, creation_options=default_co
-    # )
-    # default_model_config = KernelModel.create_config()
-    # TODO: rename homo_config and any other homo variables to keep with 'correction' terminology
+    default_fuse_config = dict(param_image=False, threads=multiprocessing.cpu_count(), max_block_mem=100)
+    # TODO: rename fuse_config and any other homo variables to keep with 'correction' terminology
     # TODO: rethink these config dicts... maybe something like cloup settings
     def __init__(
-        self, src_filename, ref_filename, homo_path, method, kernel_shape, proc_crs=ProcCrs.auto, overwrite=False,
-        homo_config=None, model_config=None, out_profile=None
+        self, src_filename, ref_filename, out_path, method, kernel_shape, proc_crs=ProcCrs.auto, overwrite=False,
+        fuse_config=None, model_config=None, out_profile=None
     ):
         """
         Create a RasterFuse class.
@@ -72,7 +65,7 @@ class RasterFuse:
             Path to the reference image file.  The extents of this image should cover src_filename with at least a 2
             pixel boundary, and it should have at least as many bands as src_filename.  The ordering of the bands
             in src_filename and ref_filename should match.
-        homo_path: str, pathlib.Path
+        out_path: str, pathlib.Path
             Path to the corrected file to create, or a directory in which in which to create an automatically named
             file.
         method: homonim.enums.Method
@@ -86,7 +79,7 @@ class RasterFuse:
             used. [default: ProcCrs.auto]
         overwrite: bool, optional
             Overwrite the output file(s) if they exist. [default: True]
-        homo_config: dict, optional
+        fuse_config: dict, optional
             Surface reflectance correction configuration with items:
                 param_image: bool
                     Turn on/off the production of a debug image containing correction parameters and R2 values.
@@ -131,11 +124,12 @@ class RasterFuse:
 
         self._src_filename = pathlib.Path(src_filename)
         self._ref_filename = pathlib.Path(ref_filename)
-        self._config = homo_config if homo_config else self.default_homo_config
+        self._config = fuse_config if fuse_config else self.default_fuse_config
         # TODO: delete self._model_config and use self._model.param_image
         model_config = model_config or {}
+        out_profile = out_profile or {}
         # update out profile defaults with out_profile
-        self._out_profile = self.create_out_profile(**out_profile) if out_profile else self.create_out_profile()
+        self._out_profile = self.create_out_profile(**out_profile)
 
         self._config['threads'] = utils.validate_threads(self._config['threads'])
 
@@ -154,7 +148,7 @@ class RasterFuse:
             method=method, kernel_shape=kernel_shape, find_r2=self._config['param_image'], **model_config,
         )
 
-        self._init_out_filenames(pathlib.Path(homo_path), overwrite)
+        self._init_out_filenames(pathlib.Path(out_path), overwrite)
 
         # initialise other variables
         self._write_lock = threading.Lock()
@@ -224,17 +218,17 @@ class RasterFuse:
         """
         return dict(driver=driver, dtype=dtype, nodata=nodata, creation_options=creation_options)
 
-    def _init_out_filenames(self, homo_path: pathlib.Path, overwrite: bool = True):
+    def _init_out_filenames(self, out_path: pathlib.Path, overwrite: bool = True):
         """ Set up the corrected and parameter image filenames. """
-        homo_path = pathlib.Path(homo_path)
-        if homo_path.is_dir():
+        out_path = pathlib.Path(out_path)
+        if out_path.is_dir():
             # create a filename for the corrected file in the provided directory
             post_fix = utils.create_homo_postfix(
                 self._proc_crs, self._method, self._kernel_shape, self._out_profile['driver']
             )
-            self._homo_filename = homo_path.joinpath(self._src_filename.stem + post_fix)
+            self._homo_filename = out_path.joinpath(self._src_filename.stem + post_fix)
         else:
-            self._homo_filename = homo_path
+            self._homo_filename = out_path
 
         self._param_filename = utils.create_param_filename(self._homo_filename)
 

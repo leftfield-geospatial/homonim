@@ -212,7 +212,7 @@ ref_file_arg = cloup.argument(
     help='Path to a reference image.'
 )
 threads_option = click.option(
-    '-t', '--threads', type=click.INT, default=RasterFuse.default_homo_config['threads'], show_default=True,
+    '-t', '--threads', type=click.INT, default=RasterFuse.default_fuse_config['threads'], show_default=True,
     callback=_threads_cb, help=f'Number of image blocks to process concurrently (0 = use all cpus).'
 )
 output_option = click.option(
@@ -299,7 +299,7 @@ def cli(verbose, quiet):
     "Advanced options",
     click.option(
         '-pi/-npi', '--param-image/--no-param-image', type=click.BOOL,
-        default=RasterFuse.default_homo_config['param_image'], show_default=True,
+        default=RasterFuse.default_fuse_config['param_image'], show_default=True,
         help=f'Write the  model parameters and R\N{SUPERSCRIPT TWO} values for each corrected image into a parameter '
              f'image file.'
     ),
@@ -310,7 +310,7 @@ def cli(verbose, quiet):
     ),
     threads_option,
     click.option(
-        '-mbm', '--max-block-mem', type=click.FLOAT, default=RasterFuse.default_homo_config['max_block_mem'],
+        '-mbm', '--max-block-mem', type=click.FLOAT, default=RasterFuse.default_fuse_config['max_block_mem'],
         show_default=True, help='Maximum image block size in megabytes (0 = block corresponds to the whole image).'
     ),
     click.option(
@@ -416,7 +416,7 @@ def fuse(
 
     # build configuration dictionaries for ImFuse
     config = dict(
-        homo_config=_update_existing_keys(RasterFuse.default_homo_config, **kwargs),
+        fuse_config=_update_existing_keys(RasterFuse.default_fuse_config, **kwargs),
         model_config=_update_existing_keys(KernelModel.create_config(), **kwargs),
         out_profile=_update_existing_keys(RasterFuse.create_out_profile(), **kwargs)
     )
@@ -425,11 +425,11 @@ def fuse(
     # iterate over and homogenise source file(s)
     try:
         for src_filename in src_file:
-            homo_path = pathlib.Path(out_dir) if out_dir is not None else src_filename.parent
+            out_path = pathlib.Path(out_dir) if out_dir is not None else src_filename.parent
 
             logger.info(f'\nHomogenising {src_filename.name}')
             with RasterFuse(
-                src_filename, ref_file, homo_path, method=Method(method), kernel_shape=kernel_shape,
+                src_filename, ref_file, out_path, method=Method(method), kernel_shape=kernel_shape,
                 proc_crs=ProcCrs(proc_crs), overwrite=overwrite, **config
             ) as raster_fuse: # yapf: disable
                 start_time = timer()

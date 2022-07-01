@@ -42,12 +42,12 @@ def test_creation(src_file, ref_file, tmp_path, request):
     method = Method.gain
     kernel_shape = (3, 3)
     model_config = KernelModel.create_config(mask_partial=True)
-    homo_config = RasterFuse.default_homo_config.copy()
-    homo_config.update(param_image=True)
+    fuse_config = RasterFuse.default_fuse_config.copy()
+    fuse_config.update(param_image=True)
     out_profile = RasterFuse.create_out_profile(driver='HFA', creation_options={})
 
     raster_fuse = RasterFuse(
-        src_file, ref_file, tmp_path, method, kernel_shape, homo_config=homo_config, model_config=model_config,
+        src_file, ref_file, tmp_path, method, kernel_shape, fuse_config=fuse_config, model_config=model_config,
         out_profile=out_profile
     )
     with raster_fuse:
@@ -58,7 +58,7 @@ def test_creation(src_file, ref_file, tmp_path, request):
         assert (raster_fuse.param_filename is not None)
         assert (not raster_fuse.closed)
 
-        assert (raster_fuse._config == homo_config)
+        assert (raster_fuse._config == fuse_config)
         assert (raster_fuse._model.config == model_config)
         for k, v in model_config.items():
             assert (raster_fuse._model.__getattribute__(f'_{k}') == v)
@@ -70,11 +70,11 @@ def test_creation(src_file, ref_file, tmp_path, request):
 @pytest.mark.parametrize('overwrite', [False, True])
 def test_overwrite(tmp_path, float_50cm_src_file, float_100cm_ref_file, overwrite):
     """ Test overwrite behaviour. """
-    homo_config = RasterFuse.default_homo_config.copy()
-    homo_config.update(param_image=True)
+    fuse_config = RasterFuse.default_fuse_config.copy()
+    fuse_config.update(param_image=True)
     params = dict(
-        src_filename=float_50cm_src_file, ref_filename=float_100cm_ref_file, homo_path=tmp_path,
-        method=Method.gain_blk_offset, kernel_shape=(5, 5), homo_config=homo_config, overwrite=overwrite
+        src_filename=float_50cm_src_file, ref_filename=float_100cm_ref_file, out_path=tmp_path,
+        method=Method.gain_blk_offset, kernel_shape=(5, 5), fuse_config=fuse_config, overwrite=overwrite
     )
 
     raster_fuse = RasterFuse(**params)
@@ -108,9 +108,9 @@ def test_basic_fusion(src_file, ref_file, method, kernel_shape, max_block_mem, t
     """ Test fusion output with different src/ref images, and method etc combinations. """
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
-    homo_config = RasterFuse.default_homo_config.copy()
-    homo_config.update(max_block_mem=max_block_mem)
-    raster_fuse = RasterFuse(src_file, ref_file, tmp_path, method, kernel_shape, homo_config=homo_config)
+    fuse_config = RasterFuse.default_fuse_config.copy()
+    fuse_config.update(max_block_mem=max_block_mem)
+    raster_fuse = RasterFuse(src_file, ref_file, tmp_path, method, kernel_shape, fuse_config=fuse_config)
     with raster_fuse:
         raster_fuse.process()
     assert (raster_fuse.homo_filename.exists())
@@ -182,10 +182,10 @@ def test_out_profile(float_100cm_rgb_file, tmp_path, out_profile):
 ) # yapf: disable
 def test_param_image(float_100cm_rgb_file, tmp_path, method, proc_crs):
     """ Test creation and masking of parameter image for different method and proc_crs combinations. """
-    homo_config = RasterFuse.default_homo_config.copy()
-    homo_config.update(param_image=True)
+    fuse_config = RasterFuse.default_fuse_config.copy()
+    fuse_config.update(param_image=True)
     raster_fuse = RasterFuse(
-        float_100cm_rgb_file, float_100cm_rgb_file, tmp_path, method, (5, 5), proc_crs=proc_crs, homo_config=homo_config
+        float_100cm_rgb_file, float_100cm_rgb_file, tmp_path, method, (5, 5), proc_crs=proc_crs, fuse_config=fuse_config
     )
     with raster_fuse:
         raster_fuse.process()
@@ -214,11 +214,11 @@ def test_mask_partial(src_file, ref_file, tmp_path, kernel_shape, proc_crs, mask
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
     model_config = KernelModel.create_config(mask_partial=mask_partial)
-    homo_config = RasterFuse.default_homo_config.copy()
-    homo_config.update(max_block_mem=1.e-1)
+    fuse_config = RasterFuse.default_fuse_config.copy()
+    fuse_config.update(max_block_mem=1.e-1)
     raster_fuse = RasterFuse(
         src_file, ref_file, tmp_path, Method.gain_blk_offset, kernel_shape, proc_crs=proc_crs,
-        model_config=model_config, homo_config=homo_config
+        model_config=model_config, fuse_config=fuse_config
     )
     with raster_fuse:
         raster_fuse.process()
@@ -240,10 +240,10 @@ def test_mask_partial(src_file, ref_file, tmp_path, kernel_shape, proc_crs, mask
 
 def test_build_overviews(float_50cm_ref_file, tmp_path):
     """ Test that overviews are built for corrected and parameter files. """
-    homo_config = RasterFuse.default_homo_config.copy()
-    homo_config.update(param_image=True)
+    fuse_config = RasterFuse.default_fuse_config.copy()
+    fuse_config.update(param_image=True)
     raster_fuse = RasterFuse(
-        float_50cm_ref_file, float_50cm_ref_file, tmp_path, Method.gain_blk_offset, (3, 3), homo_config=homo_config
+        float_50cm_ref_file, float_50cm_ref_file, tmp_path, Method.gain_blk_offset, (3, 3), fuse_config=fuse_config
     )
     with raster_fuse:
         raster_fuse.process()
@@ -279,10 +279,10 @@ def test_homo_filename(tmp_path, float_50cm_ref_file):
 
 def test_single_thread(tmp_path, float_50cm_ref_file):
     """ Test single-threaded processing creates a corrected file. """
-    homo_config = RasterFuse.default_homo_config.copy()
-    homo_config.update(threads=1)
+    fuse_config = RasterFuse.default_fuse_config.copy()
+    fuse_config.update(threads=1)
     raster_fuse = RasterFuse(
-        float_50cm_ref_file, float_50cm_ref_file, tmp_path, Method.gain_blk_offset, (3, 3), homo_config=homo_config
+        float_50cm_ref_file, float_50cm_ref_file, tmp_path, Method.gain_blk_offset, (3, 3), fuse_config=fuse_config
     )
     with raster_fuse:
         raster_fuse.process()
@@ -311,14 +311,14 @@ def test_proc_crs(tmp_path, src_file, ref_file, proc_crs, exp_proc_crs, request)
 
 def test_tags(tmp_path, float_50cm_ref_file):
     """ Test corrected file metadata. """
-    homo_config = RasterFuse.default_homo_config.copy()
-    homo_config.update(param_image=True)
+    fuse_config = RasterFuse.default_fuse_config.copy()
+    fuse_config.update(param_image=True)
     method = Method.gain_blk_offset
     kernel_shape = (3, 3)
     proc_crs = ProcCrs.ref
     raster_fuse = RasterFuse(
         float_50cm_ref_file, float_50cm_ref_file, tmp_path, method, kernel_shape, proc_crs=proc_crs,
-        homo_config=homo_config
+        fuse_config=fuse_config
     )
     with raster_fuse:
         raster_fuse.process()
@@ -342,4 +342,4 @@ def test_tags(tmp_path, float_50cm_ref_file):
         assert (tags['FUSE_KERNEL_SHAPE'] == f'[{kernel_shape[0]} {kernel_shape[1]}]')
         for key,val in KernelModel.create_config().items():
             assert (tags[f'FUSE_MODEL_{key.upper()}'] == str(val))
-        assert (yaml.safe_load(tags['FUSE_CONF']) == homo_config)
+        assert (yaml.safe_load(tags['FUSE_CONF']) == fuse_config)
