@@ -44,11 +44,11 @@ def test_creation(src_file, ref_file, tmp_path, request):
     model_config = KernelModel.create_config(mask_partial=True)
     homo_config = RasterFuse.default_homo_config.copy()
     homo_config.update(param_image=True)
-    out_profile = RasterFuse.default_out_profile.copy()
-    out_profile.update(driver='HFA', creation_options={})
+    out_profile = RasterFuse.create_out_profile(driver='HFA', creation_options={})
 
     raster_fuse = RasterFuse(
-        src_file, ref_file, tmp_path, method, kernel_shape, model_config=model_config, out_profile=out_profile
+        src_file, ref_file, tmp_path, method, kernel_shape, homo_config=homo_config, model_config=model_config,
+        out_profile=out_profile
     )
     with raster_fuse:
         assert (raster_fuse.method == method)

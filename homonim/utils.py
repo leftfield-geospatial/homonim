@@ -210,7 +210,7 @@ def combine_profiles(in_profile, config_profile):
         The input/initial rasterio profile to update.  Driver-specific items are in the root dict.
     config_profile: dict
         The configuration profile.  Driver specific options are contained in a nested dict, with 'creation_options' key.
-        E.g. see homonim.fuse.RasterFuse.default_out_profile.
+        E.g. see homonim.fuse.RasterFuse.create_out_profile().
 
     Returns
     -------

@@ -22,7 +22,7 @@ import pathlib
 import threading
 from concurrent import futures
 from contextlib import ExitStack
-from typing import Tuple
+from typing import Tuple, Dict
 
 import numpy as np
 import rasterio as rio
@@ -48,12 +48,12 @@ class RasterFuse:
 
     # default configuration dicts
     default_homo_config = dict(param_image=False, threads=multiprocessing.cpu_count(), max_block_mem=100)
-    default_co = dict(
-        tiled=True, blockxsize=512, blockysize=512, compress='deflate', interleave='band', photometric=None
-    )
-    default_out_profile = dict(
-        driver='GTiff', dtype=RasterArray.default_dtype, nodata=RasterArray.default_nodata, creation_options=default_co
-    )
+    # default_co = dict(
+    #     tiled=True, blockxsize=512, blockysize=512, compress='deflate', interleave='band', photometric=None
+    # )
+    # default_out_profile = dict(
+    #     driver='GTiff', dtype=RasterArray.default_dtype, nodata=RasterArray.default_nodata, creation_options=default_co
+    # )
     # default_model_config = KernelModel.create_config()
     # TODO: rename homo_config and any other homo variables to keep with 'correction' terminology
     # TODO: rethink these config dicts... maybe something like cloup settings
@@ -134,7 +134,8 @@ class RasterFuse:
         self._config = homo_config if homo_config else self.default_homo_config
         # TODO: delete self._model_config and use self._model.param_image
         model_config = model_config or {}
-        self._out_profile = out_profile if out_profile else self.default_out_profile
+        # update out profile defaults with out_profile
+        self._out_profile = self.create_out_profile(**out_profile) if out_profile else self.create_out_profile()
 
         self._config['threads'] = utils.validate_threads(self._config['threads'])
 
@@ -161,6 +162,67 @@ class RasterFuse:
         self._out_im = None
         self._param_im = None
         self._stack = None
+
+    @property
+    def method(self) -> Method:
+        """ Correction method. """
+        return self._method
+
+    @property
+    def kernel_shape(self) -> Tuple[int, int]:
+        """ Kernel shape. """
+        return tuple(self._kernel_shape)
+
+    @property
+    def proc_crs(self) -> ProcCrs:
+        """ The 'processing CRS' i.e. which of the source/reference image spaces is selected for processing. """
+        return self._proc_crs
+
+    @property
+    def closed(self) -> bool:
+        """ True when the RasterFuse images are closed, otherwise False. """
+        return not self._out_im or self._out_im.closed or not self._raster_pair or self._raster_pair.closed
+
+    @property
+    def homo_filename(self) -> pathlib.Path:
+        """ Path to the corrected image file. """
+        return self._homo_filename
+
+    @property
+    def param_filename(self) -> pathlib.Path:
+        """ Path to the parameter image file. """
+        return self._param_filename if self._config['param_image'] else None
+
+    @staticmethod
+    def create_out_profile(
+        driver: str = 'GTiff',
+        dtype: str = RasterArray.default_dtype,
+        nodata: float = RasterArray.default_nodata,
+        creation_options: Dict = dict(
+            tiled=True, blockxsize=512, blockysize=512, compress='deflate', interleave='band', photometric=None
+        )
+    )->Dict: # yapf: disable
+        """
+        Utility method to create a rasterio image profile for the output image(s) that can be passed to
+        :meth:`RasterFuse.__init__`.  Without arguments, the default profile values are returned.
+
+        Parameters
+        ----------
+        driver: str, optional
+            Output format driver.
+        dtype: str, optional
+            Output image data type.
+        nodata: float, optional
+            Output image nodata value.
+        creation_options: dict, optional
+            Driver specific creation options.  See the GDAL documentation for more information.
+
+        Returns
+        -------
+        dict
+            rasterio image profile.
+        """
+        return dict(driver=driver, dtype=dtype, nodata=nodata, creation_options=creation_options)
 
     def _init_out_filenames(self, homo_path: pathlib.Path, overwrite: bool = True):
         """ Set up the corrected and parameter image filenames. """
@@ -298,36 +360,6 @@ class RasterFuse:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
         self._stack.__exit__(exc_type, exc_val, exc_tb)
-
-    @property
-    def method(self) -> Method:
-        """ Correction method. """
-        return self._method
-
-    @property
-    def kernel_shape(self) -> Tuple[int, int]:
-        """ Kernel shape. """
-        return tuple(self._kernel_shape)
-
-    @property
-    def proc_crs(self) -> ProcCrs:
-        """ The 'processing CRS' i.e. which of the source/reference image spaces is selected for processing. """
-        return self._proc_crs
-
-    @property
-    def closed(self) -> bool:
-        """ True when the RasterFuse images are closed, otherwise False. """
-        return not self._out_im or self._out_im.closed or not self._raster_pair or self._raster_pair.closed
-
-    @property
-    def homo_filename(self) -> pathlib.Path:
-        """ Path to the corrected image file. """
-        return self._homo_filename
-
-    @property
-    def param_filename(self) -> pathlib.Path:
-        """ Path to the parameter image file. """
-        return self._param_filename if self._config['param_image'] else None
 
     def _build_overviews(self, im, max_num_levels=8, min_level_pixels=256):
         """

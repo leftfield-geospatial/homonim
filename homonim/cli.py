@@ -111,7 +111,7 @@ class FuseCommand(HomonimCommand):
         # This can't be done in a callback as it depends on --driver.
         if (ctx.get_parameter_source('driver') == ParameterSource.DEFAULT and
                 ctx.get_parameter_source('creation_options') == ParameterSource.DEFAULT):
-            ctx.params['creation_options'] = RasterFuse.default_out_profile['creation_options']
+            ctx.params['creation_options'] = RasterFuse.create_out_profile()['creation_options']
 
         return click.Command.invoke(self, ctx)
 
@@ -346,19 +346,19 @@ def cli(verbose, quiet):
     ),
     click.option(
         '--driver', type=click.Choice(set(rio.drivers.raster_driver_extensions().values()), case_sensitive=False),
-        default=RasterFuse.default_out_profile['driver'], show_default=True, metavar='TEXT',
+        default=RasterFuse.create_out_profile()['driver'], show_default=True, metavar='TEXT',
         help='Output image format driver.  See the `GDAL docs <https://gdal.org/drivers/raster/index.html>`_ for '
              'details.'
     ),
     click.option(
         '--dtype', type=click.Choice(list(rio.dtypes.dtype_fwd.values())[1:8], case_sensitive=False),
-        default=RasterFuse.default_out_profile['dtype'], show_default=True,
+        default=RasterFuse.create_out_profile()['dtype'], show_default=True,
         help=f'Output image data type.  Valid for corrected images only, parameter images always use '
              f'{RasterArray.default_dtype}.'
     ),
     click.option(
         '--nodata', 'nodata', type=click.STRING, callback=_nodata_cb, metavar='[NUMBER|null|nan]',
-        default=RasterFuse.default_out_profile['nodata'], show_default=True,
+        default=RasterFuse.create_out_profile()['nodata'], show_default=True,
         help=f'Output image nodata value.  Valid for corrected images only, parameter images always use '
              f'{RasterArray.default_nodata}.'
     ),
@@ -418,7 +418,7 @@ def fuse(
     config = dict(
         homo_config=_update_existing_keys(RasterFuse.default_homo_config, **kwargs),
         model_config=_update_existing_keys(KernelModel.create_config(), **kwargs),
-        out_profile=_update_existing_keys(RasterFuse.default_out_profile, **kwargs)
+        out_profile=_update_existing_keys(RasterFuse.create_out_profile(), **kwargs)
     )
     comp_files = []
 

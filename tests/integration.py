@@ -86,7 +86,7 @@ def test_fuse(
     src_files = src_files if isinstance(src_files, list) else [src_files]
     ref_file = request.getfixturevalue(ref_file)
     src_file_str = ' '.join([str(fn) for fn in src_files])
-    post_fix = utils.create_homo_postfix(exp_proc_crs, method, kernel_shape, RasterFuse.default_out_profile['driver'])
+    post_fix = utils.create_homo_postfix(exp_proc_crs, method, kernel_shape, RasterFuse.create_out_profile()['driver'])
     homo_files = [tmp_path.joinpath(src_file.stem + post_fix) for src_file in src_files]
 
     cli_str = (
