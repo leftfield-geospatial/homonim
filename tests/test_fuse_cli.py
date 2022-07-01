@@ -49,8 +49,8 @@ def test_fuse(tmp_path, runner, float_100cm_rgb_file, float_50cm_rgb_file, metho
     assert (homo_file.exists())
 
     with rio.open(src_file, 'r') as src_ds, rio.open(homo_file, 'r') as out_ds:
-        assert (out_ds.tags()['HOMO_METHOD'] == method.name)
-        assert (out_ds.tags()['HOMO_KERNEL_SHAPE'] == f'[{kernel_shape[0]} {kernel_shape[1]}]')
+        assert (out_ds.tags()['FUSE_METHOD'] == method.name)
+        assert (out_ds.tags()['FUSE_KERNEL_SHAPE'] == f'[{kernel_shape[0]} {kernel_shape[1]}]')
 
         src_array = src_ds.read(indexes=src_ds.indexes)
         src_mask = src_ds.dataset_mask().astype('bool', copy=False)
@@ -129,7 +129,7 @@ def test_compare(runner, float_100cm_ref_file, float_100cm_src_file):
     Mean   1.00  0.00  0.00   144"""
         assert (str_contain_nos(src_cmp_str, result.output))
 
-        homo_cmp_str = """float_100cm_src_HOMO_cREF_mGAIN-BLK-OFFSET_k5_5.tif:
+        homo_cmp_str = """float_100cm_src_FUSE_cREF_mGAIN-BLK-OFFSET_k5_5.tif:
     
             r2   RMSE  rRMSE   N 
     Band 1 1.00  0.00  0.00   144
@@ -138,7 +138,7 @@ def test_compare(runner, float_100cm_ref_file, float_100cm_src_file):
 
         sum_cmp_str = """File                         Mean r2  Mean RMSE  Mean rRMSE  Mean N
                                     float_100cm_src.tif   1.00      0.00        0.00      144  
-    float_100cm_src_HOMO_cREF_mGAIN-BLK-OFFSET_k5_5.tif   1.00      0.00        0.00      144"""
+    float_100cm_src_FUSE_cREF_mGAIN-BLK-OFFSET_k5_5.tif   1.00      0.00        0.00      144"""
         assert (str_contain_nos(sum_cmp_str, result.output))
 
 
@@ -172,7 +172,7 @@ def test_proc_crs(tmp_path, runner, float_100cm_ref_file, float_100cm_src_file, 
     assert (homo_file.exists())
 
     with rio.open(homo_file, 'r') as out_ds:
-        assert (out_ds.tags()['HOMO_PROC_CRS'] == res_proc_crs.name)
+        assert (out_ds.tags()['FUSE_PROC_CRS'] == res_proc_crs.name)
 
 
 def test_conf_file(tmp_path, runner, basic_fuse_cli_params):
@@ -203,7 +203,7 @@ def test_conf_file(tmp_path, runner, basic_fuse_cli_params):
             assert (src_mask[out_mask].all())
             assert (src_mask.sum() > out_mask.sum())
             # test proc_crs
-            assert (out_ds.tags()['HOMO_PROC_CRS'] == basic_fuse_cli_params.proc_crs.name)
+            assert (out_ds.tags()['FUSE_PROC_CRS'] == basic_fuse_cli_params.proc_crs.name)
 
 
 def test_param_image(runner, basic_fuse_cli_params):
@@ -271,9 +271,8 @@ def test_upsampling(runner, basic_fuse_cli_params, upsampling):
     assert (basic_fuse_cli_params.homo_file.exists())
     with rio.open(basic_fuse_cli_params.homo_file, 'r') as out_ds:
         tags_dict = out_ds.tags()
-        assert ('HOMO_MODEL_CONF' in tags_dict)
-        model_conf = yaml.safe_load(tags_dict['HOMO_MODEL_CONF'])
-        assert (model_conf['upsampling'] == upsampling)
+        assert ('FUSE_MODEL_UPSAMPLING' in tags_dict)
+        assert (yaml.safe_load(tags_dict['FUSE_MODEL_UPSAMPLING']) == upsampling)
 
 
 @pytest.mark.parametrize('downsampling', [r.name for r in rio.warp.SUPPORTED_RESAMPLING])
@@ -285,9 +284,8 @@ def test_downsampling(runner, basic_fuse_cli_params, downsampling):
     assert (basic_fuse_cli_params.homo_file.exists())
     with rio.open(basic_fuse_cli_params.homo_file, 'r') as out_ds:
         tags_dict = out_ds.tags()
-        assert ('HOMO_MODEL_CONF' in tags_dict)
-        model_conf = yaml.safe_load(tags_dict['HOMO_MODEL_CONF'])
-        assert (model_conf['downsampling'] == downsampling)
+        assert ('FUSE_MODEL_DOWNSAMPLING' in tags_dict)
+        assert (yaml.safe_load(tags_dict['FUSE_MODEL_DOWNSAMPLING']) == downsampling)
 
 
 def test_upsampling_error(runner, basic_fuse_cli_params):
@@ -315,9 +313,8 @@ def test_r2_inpaint_thresh(runner, basic_fuse_cli_params, r2_inpaint_thresh):
     assert (basic_fuse_cli_params.homo_file.exists())
     with rio.open(basic_fuse_cli_params.homo_file, 'r') as out_ds:
         tags_dict = out_ds.tags()
-        assert ('HOMO_MODEL_CONF' in tags_dict)
-        model_conf = yaml.safe_load(tags_dict['HOMO_MODEL_CONF'])
-        assert (model_conf['r2_inpaint_thresh'] == r2_inpaint_thresh)
+        assert ('FUSE_MODEL_R2_INPAINT_THRESH' in tags_dict)
+        assert (yaml.safe_load(tags_dict['FUSE_MODEL_R2_INPAINT_THRESH']) == r2_inpaint_thresh)
 
 
 @pytest.mark.parametrize('bad_r2_inpaint_thresh', [-1, 2])

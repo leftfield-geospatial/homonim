@@ -59,16 +59,16 @@ class ParamStats:
         # read some parameters from the metadata
         with rio.open(self._param_filename, 'r') as param_im:
             self._tags = param_im.tags()
-            self._method = self._tags['HOMO_METHOD'].replace('_', '-')
-            self._r2_inpaint_thresh = yaml.safe_load(self._tags['HOMO_MODEL_CONF'])['r2_inpaint_thresh']
+            self._method = self._tags['FUSE_METHOD'].replace('_', '-')
+            self._r2_inpaint_thresh = yaml.safe_load(self._tags['FUSE_MODEL_CONF'])['r2_inpaint_thresh']
 
     @property
     def metadata(self):
         """ Return a printable string of parameter metadata. """
         res_str = (
             f'Method: {self._method}\n'
-            f'Kernel shape: {self._tags["HOMO_KERNEL_SHAPE"]}\n'
-            f'Processing CRS: {self._tags["HOMO_PROC_CRS"]}'
+            f'Kernel shape: {self._tags["FUSE_KERNEL_SHAPE"]}\n'
+            f'Processing CRS: {self._tags["FUSE_PROC_CRS"]}'
         )
         if self._method == 'gain-offset':
             res_str += f'\nR\N{SUPERSCRIPT TWO} inpaint threshold: {self._r2_inpaint_thresh}'

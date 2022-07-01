@@ -118,7 +118,7 @@ def test_src_basic_apply(float_100cm_ra: RasterArray):
 
 
 @pytest.mark.parametrize(
-    'method, param_image', [
+    'method, find_r2', [
         (Method.gain, True),
         (Method.gain, False),
         (Method.gain_offset, True),
@@ -127,13 +127,13 @@ def test_src_basic_apply(float_100cm_ra: RasterArray):
         (Method.gain_blk_offset, False),
     ]
 ) # yapf: disable
-def test_ref_param_image(float_100cm_ra, float_50cm_ra, method, param_image):
-    """ Test ref-space R2 band is added correctly with param_image==True. """
-    kernel_model = RefSpaceModel(method, (5, 5), param_image=param_image, r2_inpaint_thresh=None)
+def test_ref_find_r2(float_100cm_ra, float_50cm_ra, method, find_r2):
+    """ Test ref-space R2 band is added correctly with find_r2==True. """
+    kernel_model = RefSpaceModel(method, (5, 5), find_r2=find_r2, r2_inpaint_thresh=None)
     src_ra = float_50cm_ra
     ref_ra = float_100cm_ra
     param_ra = kernel_model.fit(ref_ra, src_ra)
-    if param_image:
+    if find_r2:
         assert (param_ra.count == 3)
         assert np.nanmax(param_ra.array[2]) <= 1
     else:
@@ -141,7 +141,7 @@ def test_ref_param_image(float_100cm_ra, float_50cm_ra, method, param_image):
 
 
 @pytest.mark.parametrize(
-    'method, param_image', [
+    'method, find_r2', [
         (Method.gain, True),
         (Method.gain, False),
         (Method.gain_offset, True),
@@ -150,13 +150,13 @@ def test_ref_param_image(float_100cm_ra, float_50cm_ra, method, param_image):
         (Method.gain_blk_offset, False),
     ]
 ) # yapf: disable
-def test_src_param_image(float_100cm_ra, float_50cm_ra, method, param_image):
-    """ Test src-space R2 band is added correctly with param_image==True. """
-    kernel_model = SrcSpaceModel(method, (5, 5), param_image=param_image, r2_inpaint_thresh=None)
+def find_r2(float_100cm_ra, float_50cm_ra, method, find_r2):
+    """ Test src-space R2 band is added correctly with find_r2==True. """
+    kernel_model = SrcSpaceModel(method, (5, 5), find_r2=find_r2, r2_inpaint_thresh=None)
     src_ra = float_100cm_ra
     ref_ra = float_50cm_ra
     param_ra = kernel_model.fit(ref_ra, src_ra)
-    if param_image:
+    if find_r2:
         assert (param_ra.count == 3)
         assert np.nanmax(param_ra.array[2]) <= 1
     else:
@@ -305,10 +305,29 @@ def test_kernel_shape_exception(method, kernel_shape):
 def test_r2_array_defaults(float_100cm_ra):
     """ Test KernelModel._r2_array() with default (none) parameter values. """
     kernel_model = RefSpaceModel(
-        Method.gain_offset, (5, 5), mask_partial=False, r2_inpaint_thresh=None, param_image=False
+        Method.gain_offset, (5, 5), mask_partial=False, r2_inpaint_thresh=None, find_r2=False
     )
     src_ra = float_100cm_ra
     ref_ra = float_100cm_ra
     param_ra = kernel_model.fit(ref_ra.copy(), src_ra)
     r2_array = kernel_model._r2_array(ref_ra.array, ref_ra.array, param_ra.array)
     assert (r2_array[~np.isnan(r2_array)] == pytest.approx(1, abs=1.e-3))
+
+
+def test_config():
+    """ Test KernelModel is configured correctly.  """
+    config = dict(
+        r2_inpaint_thresh=0.1, mask_partial=True, downsampling=Resampling.bilinear, upsampling=Resampling.nearest,
+    )
+    kernel_model = RefSpaceModel(Method.gain, (5, 5), find_r2=True, **config)
+    assert kernel_model.config == config
+    for key in config.keys():
+        attr_name = '_' + key
+        assert hasattr(kernel_model, attr_name)
+        assert getattr(kernel_model, attr_name) == config[key]
+
+
+def test_config_exception():
+    """ Test an Exception is raised if an unknown config kwarg is passed.  """
+    with pytest.raises(TypeError):
+        kernel_model = RefSpaceModel(Method.gain, (5, 5), find_r2=True, unknown='value')

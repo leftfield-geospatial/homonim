@@ -41,16 +41,14 @@ def test_creation(src_file, ref_file, tmp_path, request):
     ref_file = request.getfixturevalue(ref_file)
     method = Method.gain
     kernel_shape = (3, 3)
-    model_config = KernelModel.default_config.copy()
-    model_config.update(mask_partial=True)
+    model_config = KernelModel.create_config(mask_partial=True)
     homo_config = RasterFuse.default_homo_config.copy()
     homo_config.update(param_image=True)
     out_profile = RasterFuse.default_out_profile.copy()
     out_profile.update(driver='HFA', creation_options={})
 
     raster_fuse = RasterFuse(
-        src_file, ref_file, tmp_path, method, kernel_shape, homo_config=homo_config, model_config=model_config,
-        out_profile=out_profile
+        src_file, ref_file, tmp_path, method, kernel_shape, model_config=model_config, out_profile=out_profile
     )
     with raster_fuse:
         assert (raster_fuse.method == method)
@@ -61,7 +59,7 @@ def test_creation(src_file, ref_file, tmp_path, request):
         assert (not raster_fuse.closed)
 
         assert (raster_fuse._config == homo_config)
-        assert (raster_fuse._model_config == model_config)
+        assert (raster_fuse._model.config == model_config)
         for k, v in model_config.items():
             assert (raster_fuse._model.__getattribute__(f'_{k}') == v)
         assert (raster_fuse._out_profile == out_profile)
@@ -215,8 +213,7 @@ def test_mask_partial(src_file, ref_file, tmp_path, kernel_shape, proc_crs, mask
     """ Test partial masking with multiple image blocks. """
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
-    model_config = RasterFuse.default_model_config.copy()
-    model_config.update(mask_partial=mask_partial)
+    model_config = KernelModel.create_config(mask_partial=mask_partial)
     homo_config = RasterFuse.default_homo_config.copy()
     homo_config.update(max_block_mem=1.e-1)
     raster_fuse = RasterFuse(
@@ -334,14 +331,15 @@ def test_tags(tmp_path, float_50cm_ref_file):
         tags = out_ds.tags()
         assert (
             {
-                'HOMO_SRC_FILE', 'HOMO_REF_FILE', 'HOMO_METHOD', 'HOMO_KERNEL_SHAPE', 'HOMO_PROC_CRS',
-                'HOMO_MODEL_CONF', 'HOMO_CONF'
+                'FUSE_SRC_FILE', 'FUSE_REF_FILE', 'FUSE_METHOD', 'FUSE_KERNEL_SHAPE', 'FUSE_PROC_CRS',
+                'FUSE_CONF', *{f'FUSE_MODEL_{k.upper()}' for k in KernelModel.create_config().keys()},
             } <= set(tags)
         )
-        assert (tags['HOMO_SRC_FILE'] == float_50cm_ref_file.name)
-        assert (tags['HOMO_REF_FILE'] == float_50cm_ref_file.name)
-        assert (tags['HOMO_METHOD'].lower() == method.name)
-        assert (tags['HOMO_PROC_CRS'].lower() == proc_crs.name)
-        assert (tags['HOMO_KERNEL_SHAPE'] == f'[{kernel_shape[0]} {kernel_shape[1]}]')
-        assert (yaml.safe_load(tags['HOMO_MODEL_CONF']) == RasterFuse.default_model_config)
-        assert (yaml.safe_load(tags['HOMO_CONF']) == homo_config)
+        assert (tags['FUSE_SRC_FILE'] == float_50cm_ref_file.name)
+        assert (tags['FUSE_REF_FILE'] == float_50cm_ref_file.name)
+        assert (tags['FUSE_METHOD'].lower() == method.name)
+        assert (tags['FUSE_PROC_CRS'].lower() == proc_crs.name)
+        assert (tags['FUSE_KERNEL_SHAPE'] == f'[{kernel_shape[0]} {kernel_shape[1]}]')
+        for key,val in KernelModel.create_config().items():
+            assert (tags[f'FUSE_MODEL_{key.upper()}'] == str(val))
+        assert (yaml.safe_load(tags['FUSE_CONF']) == homo_config)

@@ -144,7 +144,7 @@ def create_homo_postfix(proc_crs, method, kernel_shape, driver='GTiff'):
     ext_dict = rio.drivers.raster_driver_extensions()
     ext_idx = list(ext_dict.values()).index(driver)
     ext = list(ext_dict.keys())[ext_idx]
-    post_fix = f'_HOMO_c{proc_crs.name.upper()}_m{method.upper()}_k{kernel_shape[0]}_{kernel_shape[1]}.{ext}'
+    post_fix = f'_FUSE_c{proc_crs.name.upper()}_m{method.upper()}_k{kernel_shape[0]}_{kernel_shape[1]}.{ext}'
     return post_fix
 
 
@@ -248,7 +248,7 @@ def validate_param_image(param_filename):
         tags = param_im.tags()
         # check band count is a multiple of 3 and that expected metadata tags exist
         if (param_im.count == 0 or divmod(param_im.count, 3)[1] != 0 or
-                not {'HOMO_METHOD', 'HOMO_MODEL_CONF', 'HOMO_PROC_CRS'} <= set(tags)):
+                not {'FUSE_METHOD', 'FUSE_KERNEL_SHAPE', 'FUSE_PROC_CRS'} <= set(tags)):
             raise ImageFormatError(f'{param_filename.name} is not a valid parameter image.')
 
         # check band descriptions end with the expected suffixes

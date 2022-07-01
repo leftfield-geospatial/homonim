@@ -17,7 +17,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
-from typing import Tuple
+from typing import Tuple, Dict, List
 
 import cv2 as cv
 import numpy as np
@@ -44,12 +44,10 @@ class KernelModel:
     /328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data
     """
 
-    default_config = dict(downsampling='average', upsampling='cubic_spline', r2_inpaint_thresh=0.25, mask_partial=False)
+    # default_config = dict(downsampling='average', upsampling='cubic_spline', r2_inpaint_thresh=0.25, mask_partial=False)
 
     def __init__(
-        self, method, kernel_shape, param_image=False, r2_inpaint_thresh=default_config['r2_inpaint_thresh'],
-        mask_partial=default_config['mask_partial'], downsampling=default_config['downsampling'],
-        upsampling=default_config['upsampling']
+        self, method, kernel_shape, find_r2=False, **kwargs,
     ):
         """
         Construct a KernelModel.
@@ -57,58 +55,88 @@ class KernelModel:
         Parameters
         ----------
         method: homonim.enums.Method
-                The surface reflectance correction method.
+            The surface reflectance correction method.
         kernel_shape: tuple
-                The (height, width) of the kernel in pixels.
-        param_image: bool, optional
-                Turn on/off the calculation of Pearson's correlation coefficient (r2) for each kernel model.
-                (Typically used for producing 'debug' images of the model parameters and accuracies.)
-                [default: False]
-        r2_inpaint_thresh: float, optional
-                The R2 (coefficient of determination) threshold below which to 'in-paint' kernel model parameters from
-                surrounding areas (applies to 'method' == Method.gain_offset only).  For pixels where the model gives a
-                poor approximation to the data (this can occur in e.g. shadowed areas, poor source-reference
-                co-registration, or areas where there has been land cover change between the source and reference
-                images), model offsets are interpolated from surrounding areas, and gains re-estimated.  It can be set
-                to 'None' to turn off in-painting.
-                [default: 0.25]
-        mask_partial: bool, optional
-                Masks output pixels that were not produced by full kernel or source/reference image coverage.  Useful
-                for ensuring strict model validity, and reducing seam-lines between adjacent images. [default: False]
-        downsampling: rasterio.enums.Resampling
-                The resampling method to use when downsampling.  [default: Resampling.average]
-        upsampling: rasterio.enums.Resampling
-                The resampling method to use when upsampling.  [default: Resampling.cubic_spline]
+            The (height, width) of the kernel in pixels.
+        find_r2: bool, optional
+            Turn on/off the calculation of Pearson's correlation coefficient (r2) for each kernel model.
+            (Typically used for producing 'debug' images of the model parameters and accuracies.)
+            [default: False]
+        kwargs:
+            Optional configuration arguments.  See :meth:`KernelModel.config` for details.
         """
-
+        # TODO: add method & kernel_shape into kwargs?
         if not isinstance(method, Method):
             raise ValueError("'method' should be an instance of homonim.enums.Method")
+
         self._method = method
-
         self._kernel_shape = utils.validate_kernel_shape(kernel_shape, method=method)
+        self._find_r2 = find_r2
 
-        self._param_image = param_image
-        self._r2_inpaint_thresh = r2_inpaint_thresh
-        self._mask_partial = mask_partial
-        self._downsampling = downsampling
-        self._upsampling = upsampling
+        # update config defaults with any passed values, and set _ attributes
+        config = self.create_config(**kwargs)
+        for conf_key, conf_val in config.items():
+            setattr(self, '_' + conf_key, conf_val)
 
     @property
     def method(self) -> Method:
-        """ The correction method. """
+        """ Correction method. """
         return self._method
 
     @property
     def kernel_shape(self) -> Tuple[int, int]:
-        """ The kernel (height, width). """
+        """ Kernel (height, width) in pixels. """
         return tuple(self._kernel_shape)
 
     @property
-    def config(self) -> dict:
-        """ A dict containing the KernelModel configuration. """
+    def find_r2(self) -> bool:
+        """ Whether to create and incude r2 in parameter arrays. """
+        return self._find_r2
+
+    @property
+    def config(self) -> Dict:
+        """ KernelModel configuration dictionary. """
         return dict(
-            r2_inpaint_thresh=self._r2_inpaint_thresh, downsampling=self._downsampling, upsampling=self._upsampling,
-            mask_partial=self._mask_partial
+            r2_inpaint_thresh=self._r2_inpaint_thresh, mask_partial=self._mask_partial, downsampling=self._downsampling,
+            upsampling=self._upsampling,
+        )
+
+    @staticmethod
+    def create_config(
+        r2_inpaint_thresh:float=0.25, mask_partial:bool=False, downsampling: Resampling=Resampling.average,
+        upsampling: Resampling=Resampling.cubic_spline,
+    ) -> Dict:
+        """
+        Utility method to create a KernelModel configuration dictionary that can be passed to
+        :meth:`KernelModel.__init__`.  Without arguments, the default configuration values are returned.
+
+        Parameters
+        ----------
+        r2_inpaint_thresh: float, optional
+            The R2 (coefficient of determination) threshold below which to 'in-paint' kernel model parameters from
+            surrounding areas (applies to 'method' == Method.gain_offset only).  For pixels where the model gives a
+            poor approximation to the data (this can occur in e.g. shadowed areas, poor source-reference
+            co-registration, or areas where there has been land cover change between the source and reference
+            images), model offsets are interpolated from surrounding areas, and gains re-estimated.  It can be set
+            to 'None' to turn off in-painting.
+            [default: 0.25]
+        mask_partial: bool, optional
+            Masks output pixels that were not produced by full kernel or source/reference image coverage.  Useful
+            for ensuring strict model validity, and reducing seam-lines between adjacent images. [default: False]
+        downsampling: rasterio.enums.Resampling
+            The resampling method to use when downsampling.  [default: Resampling.average]
+        upsampling: rasterio.enums.Resampling
+            The resampling method to use when upsampling.  [default: Resampling.cubic_spline]
+
+        Returns
+        -------
+        dict
+            Configuration dictionary.
+        """
+
+        return dict(
+            r2_inpaint_thresh=r2_inpaint_thresh, mask_partial=mask_partial, downsampling=downsampling,
+            upsampling=upsampling,
         )
 
     def _get_resampling(self, from_res, to_res):
@@ -231,7 +259,7 @@ class KernelModel:
         -------
         param_ra :RasterArray
             RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second, and optionally
-            R2 for each kernel model in the third band when param_image==True.
+            R2 for each kernel model in the third band when find_r2==True.
         """
         # adapted from https://www.mathsisfun.com/data/least-squares-regression.html with c=0
         if kernel_shape is None:
@@ -248,7 +276,7 @@ class KernelModel:
         # setup a RasterArray profile for the parameters
         param_profile = src_ra.profile.copy()
         param_profile.update(
-            count=3 if self._param_image else 2, nodata=RasterArray.default_nodata, dtype=RasterArray.default_dtype
+            count=3 if self._find_r2 else 2, nodata=RasterArray.default_nodata, dtype=RasterArray.default_dtype
         )
 
         # convolve the kernel with src and ref to get kernel sums (uses DFT for large kernels)
@@ -263,7 +291,7 @@ class KernelModel:
         # find sliding kernel gains, avoiding divide by 0
         np.divide(ref_sum, src_sum, out=param_ra.array[0], where=mask)
 
-        if self._param_image:
+        if self._find_r2:
             # Find R2 of the sliding kernel models
             self._r2_array(
                 ref_array, src_array, param_ra.array[:1], mask=mask, ref_sum=ref_sum, src_sum=src_sum,
@@ -287,7 +315,7 @@ class KernelModel:
         -------
         param_ra :RasterArray
             RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second, and optionally
-            R2 for each kernel model in the third band when param_image==True.
+            R2 for each kernel model in the third band when find_r2==True.
         """
         if kernel_shape is None:
             kernel_shape = self._kernel_shape
@@ -325,7 +353,7 @@ class KernelModel:
         -------
         param_ra :RasterArray
             RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second, and optionally
-            R2 for each kernel model in the third band when param_image==True.
+            R2 for each kernel model in the third band when find_r2==True.
         """
         # Least squares formulae adapted from https://www.mathsisfun.com/data/least-squares-regression.html
         if kernel_shape is None:
@@ -341,7 +369,7 @@ class KernelModel:
 
         # setup a RasterArray profile for the parameters
         param_profile = src_ra.profile.copy()
-        find_r2 = self._param_image or (self._r2_inpaint_thresh is not None)
+        find_r2 = self._find_r2 or (self._r2_inpaint_thresh is not None)
         param_profile.update(
             count=3 if find_r2 else 2, nodata=RasterArray.default_nodata, dtype=RasterArray.default_dtype
         )
@@ -441,7 +469,7 @@ class KernelModel:
         -------
         param_ra :RasterArray
             RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second, and optionally
-            R2 for each kernel model in the third band when param_image==True.
+            R2 for each kernel model in the third band when find_r2==True.
         """
         # TODO : include a CRS comparison below i.e. one that is faster that rasterio's current implementation
         if ((ref_ra.transform != src_ra.transform) or (ref_ra.shape != src_ra.shape)):
@@ -510,7 +538,7 @@ class RefSpaceModel(KernelModel):
         -------
         param_ra :RasterArray
             RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second, and optionally
-            R2 for each kernel model in the third band when param_image==True.
+            R2 for each kernel model in the third band when find_r2==True.
         """
         # choose resampling method based on whether we are up- or downsampling
         resampling = self._get_resampling(src_ra.res, ref_ra.res)
@@ -584,7 +612,7 @@ class SrcSpaceModel(KernelModel):
         -------
         param_ra :RasterArray
             RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second, and optionally
-            R2 for each kernel model in the third band when param_image==True.
+            R2 for each kernel model in the third band when find_r2==True.
         """
         # choose resampling method based on whether we are up- or downsampling
         resampling = self._get_resampling(ref_ra.res, src_ra.res)

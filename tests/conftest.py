@@ -50,7 +50,7 @@ def str_contain_nos(str1, str2):
 @pytest.fixture
 def param_file():
     """ Basic parameter image. """
-    return root_path.joinpath('data/test_example/param/float_100cm_rgb_HOMO_cREF_mGAIN-OFFSET_k5_5_PARAM.tif')
+    return root_path.joinpath('data/test_example/param/float_100cm_rgb_FUSE_cREF_mGAIN-OFFSET_k5_5_PARAM.tif')
 
 
 @pytest.fixture

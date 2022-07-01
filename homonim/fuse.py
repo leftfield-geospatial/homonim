@@ -54,7 +54,7 @@ class RasterFuse:
     default_out_profile = dict(
         driver='GTiff', dtype=RasterArray.default_dtype, nodata=RasterArray.default_nodata, creation_options=default_co
     )
-    default_model_config = KernelModel.default_config
+    # default_model_config = KernelModel.create_config()
     # TODO: rename homo_config and any other homo variables to keep with 'correction' terminology
     # TODO: rethink these config dicts... maybe something like cloup settings
     def __init__(
@@ -119,6 +119,8 @@ class RasterFuse:
                 creation_options: dict
                     Driver specific creation options.  See the rasterio documentation for more information.
         """
+        # TODO: refactor so that process() takes an output filename, and kernel model settings.  Then the context
+        #  enter only opens the source and ref files.  The corrected & param file are created and opened in process. (?)
         if not isinstance(proc_crs, ProcCrs):
             raise ValueError('`proc_crs` must be an instance of homonim.enums.ProcCrs')
         if not isinstance(method, Method):
@@ -130,7 +132,8 @@ class RasterFuse:
         self._src_filename = pathlib.Path(src_filename)
         self._ref_filename = pathlib.Path(ref_filename)
         self._config = homo_config if homo_config else self.default_homo_config
-        self._model_config = model_config if model_config else self.default_model_config
+        # TODO: delete self._model_config and use self._model.param_image
+        model_config = model_config or {}
         self._out_profile = out_profile if out_profile else self.default_out_profile
 
         self._config['threads'] = utils.validate_threads(self._config['threads'])
@@ -143,17 +146,14 @@ class RasterFuse:
         self._raster_pair = RasterPairReader(src_filename, ref_filename, **raster_pair_args)
         self._proc_crs = self._raster_pair.proc_crs
 
-        self._init_out_filenames(pathlib.Path(homo_path), overwrite)
-
         # create the KernelModel according to proc_crs
-        if self._proc_crs == ProcCrs.ref:
-            self._model = RefSpaceModel(
-                method=method, kernel_shape=kernel_shape, param_image=self._config['param_image'], **self._model_config
-            )
-        elif self._proc_crs == ProcCrs.src:
-            self._model = SrcSpaceModel(
-                method=method, kernel_shape=kernel_shape, param_image=self._config['param_image'], **self._model_config
-            )
+        # TODO: abbreviate the below
+        model_cls = SrcSpaceModel if self._proc_crs == ProcCrs.src else RefSpaceModel
+        self._model = model_cls(
+            method=method, kernel_shape=kernel_shape, find_r2=self._config['param_image'], **model_config,
+        )
+
+        self._init_out_filenames(pathlib.Path(homo_path), overwrite)
 
         # initialise other variables
         self._write_lock = threading.Lock()
@@ -211,10 +211,14 @@ class RasterFuse:
 
     def _set_metadata(self, im: rasterio.io.DatasetWriter):
         """ Helper function to copy the RasterFuse configuration info to an image (GeoTiff) file. """
+        # TODO: rather than keep copies of e.g. method and kernel_shape, have them as properties of the actual class
+        #  that uses them (KernelModel) in this case, and retrieve them via the e.g. self._kernel_model attr
+        # TODO: auto create meta keys from self._model config.
+        model_config = {f'FUSE_MODEL_{k.upper()}': v for k, v in self._model.config.items()}
         meta_dict = dict(
-            HOMO_SRC_FILE=self._src_filename.name, HOMO_REF_FILE=self._ref_filename.name,
-            HOMO_PROC_CRS=self._proc_crs.name, HOMO_METHOD=self._method.name, HOMO_KERNEL_SHAPE=self._kernel_shape,
-            HOMO_CONF=str(self._config), HOMO_MODEL_CONF=str(self._model.config)
+            FUSE_SRC_FILE=self._src_filename.name, FUSE_REF_FILE=self._ref_filename.name,
+            FUSE_PROC_CRS=self._proc_crs.name, FUSE_METHOD=self._method.name, FUSE_KERNEL_SHAPE=self._kernel_shape,
+            FUSE_CONF=str(self._config), **model_config,
         )
         im.update_tags(**meta_dict)
 
@@ -271,6 +275,8 @@ class RasterFuse:
         self._out_im = rio.open(self._homo_filename, 'w', **self._create_out_profile())
         self._set_homo_metadata(self._out_im)
 
+        # TODO: since param_image is the only (?) item in _config that is used in RasterFuse, rather just have a
+        #  self.param_image attr
         if self._config['param_image']:
             self._param_im = rio.open(self._param_filename, 'w', **self._create_param_profile())
             self._set_param_metadata(self._param_im)

@@ -305,7 +305,7 @@ def cli(verbose, quiet):
     ),
     click.option(
         '-mp/-nmp', '--mask-partial/--no-mask-partial', type=click.BOOL,
-        default=KernelModel.default_config['mask_partial'], show_default=True,
+        default=KernelModel.create_config()['mask_partial'], show_default=True,
         help=f'Mask output pixels produced from partial kernel, or source / reference, image coverage.'
     ),
     threads_option,
@@ -315,21 +315,21 @@ def cli(verbose, quiet):
     ),
     click.option(
         '-ds', '--downsampling', type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
-        default=KernelModel.default_config['downsampling'], show_default=True,
+        default=KernelModel.create_config()['downsampling'].name, show_default=True,
         help='Resampling method for re-projecting from high to low resolution.  See the `rasterio docs '
              '<https://rasterio.readthedocs.io/en/latest/api/rasterio.enums.html#rasterio.enums.Resampling>`_ for '
              'details.'
     ),
     click.option(
         '-us', '--upsampling', type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
-        default=KernelModel.default_config['upsampling'], show_default=True,
+        default=KernelModel.create_config()['upsampling'].name, show_default=True,
         help='Resampling method for re-projecting from low to high resolution.  See the `rasterio docs '
              '<https://rasterio.readthedocs.io/en/latest/api/rasterio.enums.html#rasterio.enums.Resampling>`_ for '
              'details.'
     ),
     click.option(
         '-rit', '--r2-inpaint-thresh', type=click.FloatRange(min=0, max=1),
-        default=KernelModel.default_config['r2_inpaint_thresh'], show_default=True, metavar='FLOAT 0-1',
+        default=KernelModel.create_config()['r2_inpaint_thresh'], show_default=True, metavar='FLOAT 0-1',
         help='R\N{SUPERSCRIPT TWO} threshold below which to inpaint model parameters from surrounding areas '
         '(0 = turn off inpainting). Valid for `gain-offset` :option:`--method` only.'
     ),
@@ -417,7 +417,7 @@ def fuse(
     # build configuration dictionaries for ImFuse
     config = dict(
         homo_config=_update_existing_keys(RasterFuse.default_homo_config, **kwargs),
-        model_config=_update_existing_keys(RasterFuse.default_model_config, **kwargs),
+        model_config=_update_existing_keys(KernelModel.create_config(), **kwargs),
         out_profile=_update_existing_keys(RasterFuse.default_out_profile, **kwargs)
     )
     comp_files = []
