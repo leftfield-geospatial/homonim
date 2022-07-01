@@ -76,12 +76,15 @@ def test_band_count_exception(rgba_file, byte_file):
 def test_block_shape_exception(float_50cm_src_file, float_100cm_ref_file):
     """ Test block shape errors. """
     # test auto block shape smaller than a pixel
+    raster_pair = RasterPairReader(float_50cm_src_file, float_100cm_ref_file)
     with pytest.raises(BlockSizeError):
-        _ = RasterPairReader(float_50cm_src_file, float_100cm_ref_file, max_block_mem=1.e-5)
+        with raster_pair:
+            block_pairs = [block_pair for block_pair in raster_pair.block_pairs(max_block_mem=1.e-5)]
 
     # test auto block shape smaller than overlap
     with pytest.raises(BlockSizeError):
-        _ = RasterPairReader(float_50cm_src_file, float_100cm_ref_file, overlap=(5, 5), max_block_mem=1.e-4)
+        with raster_pair:
+            block_pairs = [block_pair for block_pair in raster_pair.block_pairs(overlap=(5, 5), max_block_mem=1.e-4)]
 
 
 def test_not_open_exception(float_50cm_src_file, float_100cm_ref_file):
@@ -113,9 +116,9 @@ def test_block_pair_continuity(src_file, ref_file, proc_crs, overlap, max_block_
     """ Test the continuity of block pairs for different src/ref etc combinations. """
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
-    raster_pair = RasterPairReader(src_file, ref_file, proc_crs=proc_crs, overlap=overlap, max_block_mem=max_block_mem)
+    raster_pair = RasterPairReader(src_file, ref_file, proc_crs=proc_crs)
     with raster_pair:
-        block_pairs = list(raster_pair.block_pairs())
+        block_pairs = list(raster_pair.block_pairs(overlap=overlap, max_block_mem=max_block_mem))
         prev_block_pair = block_pairs[0]
         for block_pair in block_pairs[1:]:
             if block_pair.band_i == prev_block_pair.band_i:  # blocks in the same band
@@ -147,9 +150,9 @@ def test_block_pair_coverage(src_file, ref_file, proc_crs, overlap, max_block_me
     """ Test that combined block pairs cover the processing window for different src/ref etc combinations. """
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
-    raster_pair = RasterPairReader(src_file, ref_file, proc_crs=proc_crs, overlap=overlap, max_block_mem=max_block_mem)
+    raster_pair = RasterPairReader(src_file, ref_file, proc_crs=proc_crs)
     with raster_pair:
-        block_pairs = list(raster_pair.block_pairs())
+        block_pairs = list(raster_pair.block_pairs(overlap=overlap, max_block_mem=max_block_mem))
         accum_block_pair = block_pairs[0]._asdict()  # a dict to hold combined windows
 
         # find the combined windows for the block pairs
@@ -191,13 +194,13 @@ def test_block_pair_io(src_file, ref_file, proc_crs, overlap, max_block_mem, req
     """
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
-    raster_pair = RasterPairReader(src_file, ref_file, proc_crs=proc_crs, overlap=overlap, max_block_mem=max_block_mem)
+    raster_pair = RasterPairReader(src_file, ref_file, proc_crs=proc_crs)
 
     # create src and ref test datasets for writing, and enter the raster pair context
     with MemoryFile() as src_mf, MemoryFile() as ref_mf, raster_pair:
         with src_mf.open(**raster_pair.src_im.profile) as src_ds, ref_mf.open(**raster_pair.ref_im.profile) as ref_ds:
             # read, reproject and write block pairs to their respective datasets
-            block_pairs = list(raster_pair.block_pairs())
+            block_pairs = list(raster_pair.block_pairs(overlap=overlap, max_block_mem=max_block_mem))
             for block_pair in block_pairs:
                 src_ra, ref_ra = raster_pair.read(block_pair)
                 if raster_pair.proc_crs == ProcCrs.ref:

@@ -414,7 +414,7 @@ def fuse(
     except Exception as ex:
         raise click.BadParameter(str(ex))
 
-    # build configuration dictionaries for ImFuse
+    # build configuration dictionaries for RasterFuse
     config = dict(
         fuse_config=_update_existing_keys(RasterFuse.default_fuse_config, **kwargs),
         model_config=_update_existing_keys(KernelModel.create_config(), **kwargs),
