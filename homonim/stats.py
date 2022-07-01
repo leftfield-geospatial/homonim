@@ -60,7 +60,7 @@ class ParamStats:
         with rio.open(self._param_filename, 'r') as param_im:
             self._tags = param_im.tags()
             self._method = self._tags['FUSE_METHOD'].replace('_', '-')
-            self._r2_inpaint_thresh = yaml.safe_load(self._tags['FUSE_MODEL_CONF'])['r2_inpaint_thresh']
+            self._r2_inpaint_thresh = yaml.safe_load(self._tags['FUSE_MODEL_R2_INPAINT_THRESH'])
 
     @property
     def metadata(self):
