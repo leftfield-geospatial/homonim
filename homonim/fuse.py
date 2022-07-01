@@ -133,12 +133,8 @@ class RasterFuse:
 
         self._config['threads'] = utils.validate_threads(self._config['threads'])
 
-        # get the block overlap for kernel_shape
-        overlap = utils.overlap_for_kernel(self._kernel_shape)
-
         # check the reference and source image validity via RasterPairReader, and get the proc_crs attribute
-        raster_pair_args = dict(proc_crs=proc_crs, overlap=overlap, max_block_mem=self._config['max_block_mem'])
-        self._raster_pair = RasterPairReader(src_filename, ref_filename, **raster_pair_args)
+        self._raster_pair = RasterPairReader(src_filename, ref_filename, proc_crs=proc_crs)
         self._proc_crs = self._raster_pair.proc_crs
 
         # create the KernelModel according to proc_crs
@@ -419,12 +415,14 @@ class RasterFuse:
         Correct the source image in blocks.
         """
         self._assert_open()
+        overlap = utils.overlap_for_kernel(self._kernel_shape)
+        block_pair_args = dict(overlap=overlap, max_block_mem=self._config['max_block_mem'])
 
         # get block pairs and process
         bar_format = '{l_bar}{bar}|{n_fmt}/{total_fmt} blocks [{elapsed}<{remaining}]'  # tqdm progress bar format
         if self._config['threads'] == 1:
             # process blocks consecutively in the main thread (useful for profiling)
-            block_pairs = [block_pair for block_pair in self._raster_pair.block_pairs()]
+            block_pairs = [block_pair for block_pair in self._raster_pair.block_pairs(**block_pair_args)]
             for block_pair in tqdm(block_pairs, bar_format=bar_format):
                 self._process_block(block_pair)
         else:
@@ -432,7 +430,8 @@ class RasterFuse:
             with futures.ThreadPoolExecutor(max_workers=self._config['threads']) as executor:
                 # submit blocks for processing
                 proc_futures = [
-                    executor.submit(self._process_block, block_pair) for block_pair in self._raster_pair.block_pairs()
+                    executor.submit(self._process_block, block_pair)
+                    for block_pair in self._raster_pair.block_pairs(**block_pair_args)
                 ]
 
                 # wait for threads in order of completion, and raise any thread generated exceptions

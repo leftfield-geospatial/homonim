@@ -256,7 +256,7 @@ def test_max_block_mem(runner, basic_fuse_cli_params):
     assert (basic_fuse_cli_params.homo_file.exists())
 
     # test that max_block_mem too small raises a BlockSizeError
-    cli_str = basic_fuse_cli_params.cli_str + ' -mbm 1e-6'
+    cli_str = basic_fuse_cli_params.cli_str + ' -o -mbm 1e-6'
     result = runner.invoke(cli, cli_str.split())
     assert (result.exit_code != 0)
     assert ('BlockSizeError' in result.output)
