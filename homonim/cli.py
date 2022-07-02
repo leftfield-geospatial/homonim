@@ -428,12 +428,11 @@ def fuse(
             out_path = pathlib.Path(out_dir) if out_dir is not None else src_filename.parent
 
             logger.info(f'\nHomogenising {src_filename.name}')
-            with RasterFuse(
-                src_filename, ref_file, out_path, method=Method(method), kernel_shape=kernel_shape,
-                proc_crs=ProcCrs(proc_crs), overwrite=overwrite, **config
-            ) as raster_fuse: # yapf: disable
+            with RasterFuse(src_filename, ref_file, proc_crs=ProcCrs(proc_crs)) as raster_fuse:
                 start_time = timer()
-                raster_fuse.process()
+                raster_fuse.process(
+                    out_path, method=Method(method), kernel_shape=kernel_shape, overwrite=overwrite, **config
+                )
                 # build overviews
                 if build_ovw:
                     # TODO: pass as param to process()

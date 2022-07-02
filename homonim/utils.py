@@ -139,7 +139,7 @@ def validate_threads(threads):
     return threads
 
 
-def create_homo_postfix(proc_crs, method, kernel_shape, driver='GTiff'):
+def create_out_postfix(proc_crs, method, kernel_shape, driver='GTiff'):
     """ Create a filename postfix, including extension, for the corrected image file. """
     ext_dict = rio.drivers.raster_driver_extensions()
     ext_idx = list(ext_dict.values()).index(driver)

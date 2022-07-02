@@ -27,7 +27,7 @@ from homonim.compare import RasterCompare
 from homonim.enums import ProcCrs, Method
 from homonim.fuse import RasterFuse
 
-
+# TODO: move these files into test directory...
 @pytest.fixture()
 def modis_ref_file():
     return root_path.joinpath(r'data/test_example/reference/MODIS-006-MCD43A4-2015_09_15_B143.tif')
@@ -86,7 +86,7 @@ def test_fuse(
     src_files = src_files if isinstance(src_files, list) else [src_files]
     ref_file = request.getfixturevalue(ref_file)
     src_file_str = ' '.join([str(fn) for fn in src_files])
-    post_fix = utils.create_homo_postfix(exp_proc_crs, method, kernel_shape, RasterFuse.create_out_profile()['driver'])
+    post_fix = utils.create_out_postfix(exp_proc_crs, method, kernel_shape, RasterFuse.create_out_profile()['driver'])
     homo_files = [tmp_path.joinpath(src_file.stem + post_fix) for src_file in src_files]
 
     cli_str = (

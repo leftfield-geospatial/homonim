@@ -361,7 +361,7 @@ def default_fuse_cli_params(tmp_path, float_100cm_ref_file, float_50cm_src_file)
     method = Method.gain_blk_offset
     kernel_shape = (5, 5)
     proc_crs = ProcCrs.ref
-    post_fix = utils.create_homo_postfix(proc_crs, method, kernel_shape, RasterFuse.create_out_profile()['driver'])
+    post_fix = utils.create_out_postfix(proc_crs, method, kernel_shape, RasterFuse.create_out_profile()['driver'])
     homo_file = tmp_path.joinpath(src_file.stem + post_fix)
     param_file = utils.create_param_filename(homo_file)
 
@@ -377,7 +377,7 @@ def basic_fuse_cli_params(tmp_path, float_100cm_ref_file, float_100cm_src_file):
     method = Method.gain_blk_offset
     kernel_shape = (3, 3)
     proc_crs = ProcCrs.ref
-    post_fix = utils.create_homo_postfix(proc_crs, method, kernel_shape, RasterFuse.create_out_profile()['driver'])
+    post_fix = utils.create_out_postfix(proc_crs, method, kernel_shape, RasterFuse.create_out_profile()['driver'])
     homo_file = tmp_path.joinpath(src_file.stem + post_fix)
     param_file = utils.create_param_filename(homo_file)
 
