@@ -339,7 +339,7 @@ def test_tags(tmp_path, float_50cm_ref_file):
         assert (tags['FUSE_REF_FILE'] == float_50cm_ref_file.name)
         assert (tags['FUSE_METHOD'].lower() == method.name)
         assert (tags['FUSE_PROC_CRS'].lower() == proc_crs.name)
-        assert (tags['FUSE_KERNEL_SHAPE'] == f'[{kernel_shape[0]} {kernel_shape[1]}]')
+        assert (tags['FUSE_KERNEL_SHAPE'] == str(kernel_shape))
         for key,val in KernelModel.create_config().items():
             assert (tags[f'FUSE_MODEL_{key.upper()}'] == str(val))
         assert (yaml.safe_load(tags['FUSE_CONF']) == fuse_config)

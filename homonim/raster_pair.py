@@ -22,6 +22,7 @@ import threading
 from collections import namedtuple
 from itertools import product
 from typing import Tuple
+from contextlib import ExitStack
 
 import numpy as np
 import rasterio
@@ -30,6 +31,7 @@ from rasterio.enums import MaskFlags
 from rasterio.vrt import WarpedVRT
 from rasterio.warp import Resampling
 from rasterio.windows import Window
+from tqdm.contrib.logging import logging_redirect_tqdm
 
 from homonim import errors, utils
 from homonim.enums import ProcCrs
@@ -85,6 +87,7 @@ class RasterPairReader:
         self._ref_lock = threading.Lock()
         self._src_im = None
         self._ref_im = None
+        self._stack = None
         self._init_image_pair()
 
     @property
@@ -304,13 +307,15 @@ class RasterPairReader:
         self._ref_im.close()
 
     def __enter__(self):
-        self._env = rio.Env(GDAL_NUM_THREADS='ALL_CPUs').__enter__()
+        self._stack = ExitStack()
+        self._stack.enter_context(rio.Env(GDAL_NUM_THREADS='ALL_CPUs'))
+        self._stack.enter_context(logging_redirect_tqdm([logging.getLogger(__package__)]))
         self.open()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
-        self._env.__exit__(exc_type, exc_val, exc_tb)
+        self._stack.__exit__(exc_type, exc_val, exc_tb)
 
 
     def read(self, block_pair):

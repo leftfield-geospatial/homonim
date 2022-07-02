@@ -436,6 +436,7 @@ def fuse(
                 raster_fuse.process()
                 # build overviews
                 if build_ovw:
+                    # TODO: pass as param to process()
                     logger.info(f'Building overviews')
                     raster_fuse.build_overviews()
 

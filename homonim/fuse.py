@@ -21,7 +21,7 @@ import multiprocessing
 import pathlib
 import threading
 from concurrent import futures
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager
 from typing import Tuple, Dict
 
 import numpy as np
@@ -41,7 +41,7 @@ from homonim.raster_pair import RasterPairReader, BlockPair
 logger = logging.getLogger(__name__)
 
 
-class RasterFuse:
+class RasterFuse(RasterPairReader):
     """
     Class for homogenising ('fusing') a source image with a reference image.
     """
@@ -114,36 +114,26 @@ class RasterFuse:
         """
         # TODO: refactor so that process() takes an output filename, and kernel model settings.  Then the context
         #  enter only opens the source and ref files.  The corrected & param file are created and opened in process. (?)
-        if not isinstance(proc_crs, ProcCrs):
-            raise ValueError('`proc_crs` must be an instance of homonim.enums.ProcCrs')
+        RasterPairReader.__init__(self, src_filename, ref_filename, proc_crs=proc_crs)
         if not isinstance(method, Method):
             raise ValueError('`method` must be an instance of homonim.enums.Method')
         self._method = method
-
         self._kernel_shape = utils.validate_kernel_shape(kernel_shape, method=method)
 
-        self._src_filename = pathlib.Path(src_filename)
-        self._ref_filename = pathlib.Path(ref_filename)
-        self._config = fuse_config if fuse_config else self.default_fuse_config
         # TODO: delete self._model_config and use self._model.param_image
+        self._config = fuse_config if fuse_config else self.default_fuse_config
         model_config = model_config or {}
         out_profile = out_profile or {}
         # update out profile defaults with out_profile
         self._out_profile = self.create_out_profile(**out_profile)
-
         self._config['threads'] = utils.validate_threads(self._config['threads'])
-
-        # check the reference and source image validity via RasterPairReader, and get the proc_crs attribute
-        self._raster_pair = RasterPairReader(src_filename, ref_filename, proc_crs=proc_crs)
-        self._proc_crs = self._raster_pair.proc_crs
 
         # create the KernelModel according to proc_crs
         # TODO: abbreviate the below
-        model_cls = SrcSpaceModel if self._proc_crs == ProcCrs.src else RefSpaceModel
+        model_cls = SrcSpaceModel if self.proc_crs == ProcCrs.src else RefSpaceModel
         self._model = model_cls(
             method=method, kernel_shape=kernel_shape, find_r2=self._config['param_image'], **model_config,
         )
-
         self._init_out_filenames(pathlib.Path(out_path), overwrite)
 
         # initialise other variables
@@ -151,7 +141,6 @@ class RasterFuse:
         self._param_lock = threading.Lock()
         self._out_im = None
         self._param_im = None
-        self._stack = None
 
     @property
     def method(self) -> Method:
@@ -163,15 +152,10 @@ class RasterFuse:
         """ Kernel shape. """
         return tuple(self._kernel_shape)
 
-    @property
-    def proc_crs(self) -> ProcCrs:
-        """ The 'processing CRS' i.e. which of the source/reference image spaces is selected for processing. """
-        return self._proc_crs
-
-    @property
-    def closed(self) -> bool:
-        """ True when the RasterFuse images are closed, otherwise False. """
-        return not self._out_im or self._out_im.closed or not self._raster_pair or self._raster_pair.closed
+    # @property
+    # def closed(self) -> bool:
+    #     """ True when the RasterFuse images are closed, otherwise False. """
+    #     return not self._out_im or self._out_im.closed or RasterPairReader.closed(self)
 
     @property
     def homo_filename(self) -> pathlib.Path:
@@ -220,7 +204,7 @@ class RasterFuse:
         if out_path.is_dir():
             # create a filename for the corrected file in the provided directory
             post_fix = utils.create_homo_postfix(
-                self._proc_crs, self._method, self._kernel_shape, self._out_profile['driver']
+                self.proc_crs, self._method, self.kernel_shape, self._out_profile['driver']
             )
             self._homo_filename = out_path.joinpath(self._src_filename.stem + post_fix)
         else:
@@ -241,22 +225,22 @@ class RasterFuse:
 
     def _create_out_profile(self) -> dict:
         """ Create an output image rasterio profile from the source image profile and output configuration. """
-        # out_profile = self._combine_with_config(self._raster_pair.src_im.profile)
-        out_profile = utils.combine_profiles(self._raster_pair.src_im.profile, self._out_profile)
-        out_profile['count'] = len(self._raster_pair.src_bands)
+        # out_profile = self._combine_with_config(self.src_im.profile)
+        out_profile = utils.combine_profiles(self.src_im.profile, self._out_profile)
+        out_profile['count'] = len(self.src_bands)
         return out_profile
 
     def _create_param_profile(self) -> dict:
         """ Create a debug image rasterio profile from the proc_crs image and configuration. """
-        if self._raster_pair.proc_crs == ProcCrs.ref:
-            init_profile = self._raster_pair.ref_im.profile
+        if self.proc_crs == ProcCrs.ref:
+            init_profile = self.ref_im.profile
         else:
-            init_profile = self._raster_pair.src_im.profile
+            init_profile = self.src_im.profile
         # param_profile = self._combine_with_config(init_profile)
         param_profile = utils.combine_profiles(init_profile, self._out_profile)
         # force dtype and nodata to defaults
         param_profile.update(
-            dtype=RasterArray.default_dtype, count=len(self._raster_pair.src_bands) * 3,
+            dtype=RasterArray.default_dtype, count=len(self.src_bands) * 3,
             nodata=RasterArray.default_nodata
         )
         return param_profile
@@ -269,7 +253,7 @@ class RasterFuse:
         model_config = {f'FUSE_MODEL_{k.upper()}': v for k, v in self._model.config.items()}
         meta_dict = dict(
             FUSE_SRC_FILE=self._src_filename.name, FUSE_REF_FILE=self._ref_filename.name,
-            FUSE_PROC_CRS=self._proc_crs.name, FUSE_METHOD=self._method.name, FUSE_KERNEL_SHAPE=self._kernel_shape,
+            FUSE_PROC_CRS=self.proc_crs.name, FUSE_METHOD=self._method.name, FUSE_KERNEL_SHAPE=self.kernel_shape,
             FUSE_CONF=str(self._config), **model_config,
         )
         im.update_tags(**meta_dict)
@@ -285,11 +269,11 @@ class RasterFuse:
         """
         self._assert_open()
         self._set_metadata(im)
-        for bi in range(0, min(im.count, len(self._raster_pair.ref_bands))):
-            ref_bi = self._raster_pair.ref_bands[bi]
-            ref_meta_dict = self._raster_pair.ref_im.tags(ref_bi)
+        for bi in range(0, min(im.count, len(self.ref_bands))):
+            ref_bi = self.ref_bands[bi]
+            ref_meta_dict = self.ref_im.tags(ref_bi)
             homo_meta_dict = {k: v for k, v in ref_meta_dict.items() if k in ['ABBREV', 'ID', 'NAME']}
-            im.set_band_description(bi + 1, self._raster_pair.ref_im.descriptions[ref_bi - 1])
+            im.set_band_description(bi + 1, self.ref_im.descriptions[ref_bi - 1])
             im.update_tags(bi + 1, **homo_meta_dict)
 
     def _set_param_metadata(self, im):
@@ -304,11 +288,11 @@ class RasterFuse:
         # Use reference file band descriptions to make debug image band descriptions
         self._assert_open()
         self._set_metadata(im)
-        num_src_bands = len(self._raster_pair.src_bands)
+        num_src_bands = len(self.src_bands)
         for bi in range(0, num_src_bands):
-            ref_bi = self._raster_pair.ref_bands[bi]
-            ref_descr = self._raster_pair.ref_im.descriptions[ref_bi - 1] or f'B{ref_bi}'
-            ref_meta_dict = self._raster_pair.ref_im.tags(ref_bi)
+            ref_bi = self.ref_bands[bi]
+            ref_descr = self.ref_im.descriptions[ref_bi - 1] or f'B{ref_bi}'
+            ref_meta_dict = self.ref_im.tags(ref_bi)
             for param_i, param_name in zip(range(bi, im.count, num_src_bands), ['GAIN', 'OFFSET', 'R2']):
                 im.set_band_description(param_i + 1, f'{ref_descr}_{param_name}')
                 param_meta_dict = {
@@ -316,14 +300,9 @@ class RasterFuse:
                 }
                 im.update_tags(param_i + 1, **param_meta_dict)
 
-    def _assert_open(self):
-        """ Raise an IoError if the source, reference or corrected image(s) are not open. """
-        if self.closed:
-            raise IoError(f'The image file(s) have not been opened.')
-
-    def open(self):
+    def _open(self):
         """ Open the source and reference images for reading, and output image(s) for writing. """
-        self._raster_pair.open()
+        RasterPairReader.open(self)
         self._out_im = rio.open(self._homo_filename, 'w', **self._create_out_profile())
         self._set_homo_metadata(self._out_im)
 
@@ -333,23 +312,28 @@ class RasterFuse:
             self._param_im = rio.open(self._param_filename, 'w', **self._create_param_profile())
             self._set_param_metadata(self._param_im)
 
-    def close(self):
+    def open_out(self):
+        """ Open the source and reference images for reading, and output image(s) for writing. """
+        self._out_im = rio.open(self._homo_filename, 'w', **self._create_out_profile())
+        self._set_homo_metadata(self._out_im)
+
+        # TODO: since param_image is the only (?) item in _config that is used in RasterFuse, rather just have a
+        #  self.param_image attr
+        if self._config['param_image']:
+            self._param_im = rio.open(self._param_filename, 'w', **self._create_param_profile())
+            self._set_param_metadata(self._param_im)
+
+    def close_out(self):
         """ Close all open images. """
         self._out_im.close()
         if self._param_im:
             self._param_im.close()
-        self._raster_pair.close()
 
-    def __enter__(self):
-        self._stack = ExitStack()
-        self._stack.enter_context(rio.Env(GDAL_NUM_THREADS='ALL_CPUs'))
-        self._stack.enter_context(logging_redirect_tqdm([logging.getLogger(__package__)]))
-        self.open()
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close()
-        self._stack.__exit__(exc_type, exc_val, exc_tb)
+    @contextmanager
+    def out_manager(self):
+        self.open_out()
+        yield
+        self.close_out()
 
     def _build_overviews(self, im, max_num_levels=8, min_level_pixels=256):
         """
@@ -384,15 +368,19 @@ class RasterFuse:
             Minimum width/height (in pixels) of any overview level.
         """
         self._assert_open()
-        self._build_overviews(self._out_im, max_num_levels=max_num_levels, min_level_pixels=min_level_pixels)
-        if self._config['param_image']:
-            self._build_overviews(self._param_im, max_num_levels=max_num_levels, min_level_pixels=min_level_pixels)
+        out_im = rio.open(self._homo_filename, 'r+')
+        with out_im:
+            self._build_overviews(out_im, max_num_levels=max_num_levels, min_level_pixels=min_level_pixels)
+            if self._config['param_image']:
+                param_im = rio.open(self._param_filename, 'r+')
+                with param_im:
+                    self._build_overviews(param_im, max_num_levels=max_num_levels, min_level_pixels=min_level_pixels)
 
     def _process_block(self, block_pair: BlockPair):
         """ Thread-safe function to homogenise a source image block. """
 
         # read source and reference blocks
-        src_ra, ref_ra = self._raster_pair.read(block_pair)
+        src_ra, ref_ra = self.read(block_pair)
         # fit and apply the sliding kernel models
         param_ra = self._model.fit(ref_ra, src_ra)
         out_ra = self._model.apply(src_ra, param_ra)
@@ -404,9 +392,9 @@ class RasterFuse:
 
         if self._config['param_image']:
             with self._param_lock:  # write the parameter block
-                indexes = np.arange(param_ra.count) * len(self._raster_pair.src_bands) + block_pair.band_i + 1
+                indexes = np.arange(param_ra.count) * len(self.src_bands) + block_pair.band_i + 1
                 param_out_block = (
-                    block_pair.ref_out_block if self._proc_crs == ProcCrs.ref else block_pair.src_out_block
+                    block_pair.ref_out_block if self.proc_crs == ProcCrs.ref else block_pair.src_out_block
                 )
                 param_ra.to_rio_dataset(self._param_im, indexes=indexes, window=param_out_block)
 
@@ -415,27 +403,28 @@ class RasterFuse:
         Correct the source image in blocks.
         """
         self._assert_open()
-        overlap = utils.overlap_for_kernel(self._kernel_shape)
+        overlap = utils.overlap_for_kernel(self.kernel_shape)
         block_pair_args = dict(overlap=overlap, max_block_mem=self._config['max_block_mem'])
 
         # get block pairs and process
         bar_format = '{l_bar}{bar}|{n_fmt}/{total_fmt} blocks [{elapsed}<{remaining}]'  # tqdm progress bar format
-        if self._config['threads'] == 1:
-            # process blocks consecutively in the main thread (useful for profiling)
-            block_pairs = [block_pair for block_pair in self._raster_pair.block_pairs(**block_pair_args)]
-            for block_pair in tqdm(block_pairs, bar_format=bar_format):
-                self._process_block(block_pair)
-        else:
-            # process blocks concurrently
-            with futures.ThreadPoolExecutor(max_workers=self._config['threads']) as executor:
-                # submit blocks for processing
-                proc_futures = [
-                    executor.submit(self._process_block, block_pair)
-                    for block_pair in self._raster_pair.block_pairs(**block_pair_args)
-                ]
+        with self.out_manager():
+            if self._config['threads'] == 1:
+                # process blocks consecutively in the main thread (useful for profiling)
+                block_pairs = [block_pair for block_pair in self.block_pairs(**block_pair_args)]
+                for block_pair in tqdm(block_pairs, bar_format=bar_format):
+                    self._process_block(block_pair)
+            else:
+                # process blocks concurrently
+                with futures.ThreadPoolExecutor(max_workers=self._config['threads']) as executor:
+                    # submit blocks for processing
+                    proc_futures = [
+                        executor.submit(self._process_block, block_pair)
+                        for block_pair in self.block_pairs(**block_pair_args)
+                    ]
 
-                # wait for threads in order of completion, and raise any thread generated exceptions
-                for future in tqdm(
-                    futures.as_completed(proc_futures), bar_format=bar_format, total=len(proc_futures)
-                ): # yapf: disable
-                    future.result()
+                    # wait for threads in order of completion, and raise any thread generated exceptions
+                    for future in tqdm(
+                        futures.as_completed(proc_futures), bar_format=bar_format, total=len(proc_futures)
+                    ): # yapf: disable
+                        future.result()

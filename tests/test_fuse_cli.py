@@ -50,7 +50,7 @@ def test_fuse(tmp_path, runner, float_100cm_rgb_file, float_50cm_rgb_file, metho
 
     with rio.open(src_file, 'r') as src_ds, rio.open(homo_file, 'r') as out_ds:
         assert (out_ds.tags()['FUSE_METHOD'] == method.name)
-        assert (out_ds.tags()['FUSE_KERNEL_SHAPE'] == f'[{kernel_shape[0]} {kernel_shape[1]}]')
+        assert (out_ds.tags()['FUSE_KERNEL_SHAPE'] == str(kernel_shape))
 
         src_array = src_ds.read(indexes=src_ds.indexes)
         src_mask = src_ds.dataset_mask().astype('bool', copy=False)
