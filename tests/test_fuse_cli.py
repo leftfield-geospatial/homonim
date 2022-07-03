@@ -271,8 +271,8 @@ def test_upsampling(runner, basic_fuse_cli_params, upsampling):
     assert (basic_fuse_cli_params.homo_file.exists())
     with rio.open(basic_fuse_cli_params.homo_file, 'r') as out_ds:
         tags_dict = out_ds.tags()
-        assert ('FUSE_MODEL_UPSAMPLING' in tags_dict)
-        assert (yaml.safe_load(tags_dict['FUSE_MODEL_UPSAMPLING']) == upsampling)
+        assert ('FUSE_UPSAMPLING' in tags_dict)
+        assert (yaml.safe_load(tags_dict['FUSE_UPSAMPLING']) == upsampling)
 
 
 @pytest.mark.parametrize('downsampling', [r.name for r in rio.warp.SUPPORTED_RESAMPLING])
@@ -284,8 +284,8 @@ def test_downsampling(runner, basic_fuse_cli_params, downsampling):
     assert (basic_fuse_cli_params.homo_file.exists())
     with rio.open(basic_fuse_cli_params.homo_file, 'r') as out_ds:
         tags_dict = out_ds.tags()
-        assert ('FUSE_MODEL_DOWNSAMPLING' in tags_dict)
-        assert (yaml.safe_load(tags_dict['FUSE_MODEL_DOWNSAMPLING']) == downsampling)
+        assert ('FUSE_DOWNSAMPLING' in tags_dict)
+        assert (yaml.safe_load(tags_dict['FUSE_DOWNSAMPLING']) == downsampling)
 
 
 def test_upsampling_error(runner, basic_fuse_cli_params):
@@ -313,8 +313,8 @@ def test_r2_inpaint_thresh(runner, basic_fuse_cli_params, r2_inpaint_thresh):
     assert (basic_fuse_cli_params.homo_file.exists())
     with rio.open(basic_fuse_cli_params.homo_file, 'r') as out_ds:
         tags_dict = out_ds.tags()
-        assert ('FUSE_MODEL_R2_INPAINT_THRESH' in tags_dict)
-        assert (yaml.safe_load(tags_dict['FUSE_MODEL_R2_INPAINT_THRESH']) == r2_inpaint_thresh)
+        assert ('FUSE_R2_INPAINT_THRESH' in tags_dict)
+        assert (yaml.safe_load(tags_dict['FUSE_R2_INPAINT_THRESH']) == r2_inpaint_thresh)
 
 
 @pytest.mark.parametrize('bad_r2_inpaint_thresh', [-1, 2])

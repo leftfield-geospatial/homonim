@@ -43,7 +43,7 @@ def test_creation(src_file, ref_file, tmp_path, request):
     # kernel_shape = (3, 3)
     # model_config = KernelModel.create_config(mask_partial=True)
     fuse_config = RasterFuse.default_fuse_config.copy()
-    fuse_config.update(param_image=True)
+    # fuse_config.update(param_image=True)
     # out_profile = RasterFuse.create_out_profile(driver='HFA', creation_options={})
 
     # raster_fuse = RasterFuse(
@@ -72,12 +72,11 @@ def test_creation(src_file, ref_file, tmp_path, request):
 def test_overwrite(tmp_path, float_50cm_src_file, float_100cm_ref_file, overwrite):
     """ Test overwrite behaviour. """
     fuse_config = RasterFuse.default_fuse_config.copy()
-    fuse_config.update(param_image=True)
     fuse_filename = tmp_path.joinpath('corrected.tif')
     param_filename = utils.create_param_filename(fuse_filename)
     params = dict(
-        out_filename=fuse_filename, method=Method.gain_blk_offset, kernel_shape=(5, 5), overwrite=overwrite,
-        fuse_config=fuse_config,
+        out_filename=fuse_filename, param_filename=param_filename, method=Method.gain_blk_offset, kernel_shape=(5, 5),
+        overwrite=overwrite, fuse_config=fuse_config,
     )
 
     raster_fuse = RasterFuse(src_filename=float_50cm_src_file, ref_filename=float_100cm_ref_file)
@@ -192,12 +191,11 @@ def test_out_profile(float_100cm_rgb_file, tmp_path, out_profile):
 def test_param_image(float_100cm_rgb_file, tmp_path, method, proc_crs):
     """ Test creation and masking of parameter image for different method and proc_crs combinations. """
     fuse_config = RasterFuse.default_fuse_config.copy()
-    fuse_config.update(param_image=True)
     fuse_filename = tmp_path.joinpath('corrected.tif')
     param_filename = utils.create_param_filename(fuse_filename)
     raster_fuse = RasterFuse(float_100cm_rgb_file, float_100cm_rgb_file, proc_crs=proc_crs)
     with raster_fuse:
-        raster_fuse.process(fuse_filename, method, (5, 5), fuse_config=fuse_config)
+        raster_fuse.process(fuse_filename, method, (5, 5), param_filename=param_filename, fuse_config=fuse_config)
 
     assert (param_filename.exists())
 
@@ -249,20 +247,22 @@ def test_mask_partial(src_file, ref_file, tmp_path, kernel_shape, proc_crs, mask
 def test_build_overviews(float_50cm_ref_file, tmp_path):
     """ Test that overviews are built for corrected and parameter files. """
     fuse_config = RasterFuse.default_fuse_config.copy()
-    fuse_config.update(param_image=True)
     fuse_filename = tmp_path.joinpath('corrected.tif')
     param_filename = utils.create_param_filename(fuse_filename)
     raster_fuse = RasterFuse(float_50cm_ref_file, float_50cm_ref_file)
 
     # replace raster_fuse.build_overviews() with a test_build_overviews() that forces min_level_pixels==1, otherwise
     # overviews won't be built for the small test raster
-    orig_build_overviews = raster_fuse.build_overviews
-    def test_build_overviews():
-        orig_build_overviews(min_level_pixels=1)
-    raster_fuse.build_overviews = test_build_overviews
+    orig_build_overviews = raster_fuse._build_overviews
+    def test_build_overviews(im):
+        orig_build_overviews(im, min_level_pixels=1)
+    raster_fuse._build_overviews = test_build_overviews
 
     with raster_fuse:
-        raster_fuse.process(fuse_filename, Method.gain_blk_offset, (3, 3), fuse_config=fuse_config, build_ovw=True)
+        raster_fuse.process(
+            fuse_filename, Method.gain_blk_offset, (3, 3), param_filename=param_filename, fuse_config=fuse_config,
+            build_ovw=True
+        )
 
     assert (fuse_filename.exists())
     assert (param_filename.exists())
@@ -327,33 +327,34 @@ def test_proc_crs(tmp_path, src_file, ref_file, proc_crs, exp_proc_crs, request)
 def test_tags(tmp_path, float_50cm_ref_file):
     """ Test corrected file metadata. """
     fuse_config = RasterFuse.default_fuse_config.copy()
-    fuse_config.update(param_image=True)
     method = Method.gain_blk_offset
     kernel_shape = (3, 3)
     proc_crs = ProcCrs.ref
     raster_fuse = RasterFuse(float_50cm_ref_file, float_50cm_ref_file, proc_crs=proc_crs)
+    out_filename = tmp_path.joinpath('corrected.tif')
+    param_filename = utils.create_param_filename(out_filename)
     with raster_fuse:
-        raster_fuse.process(tmp_path, method, kernel_shape, fuse_config=fuse_config)
+        raster_fuse.process(out_filename, method, kernel_shape, param_filename=param_filename, fuse_config=fuse_config)
 
-    assert (raster_fuse.homo_filename.exists())
-    assert (raster_fuse.param_filename.exists())
-    utils.validate_param_image(raster_fuse.param_filename)
+    assert (out_filename.exists())
+    assert (param_filename.exists())
+    utils.validate_param_image(param_filename)
 
-    with rio.open(raster_fuse.homo_filename, 'r') as out_ds:
+    with rio.open(out_filename, 'r') as out_ds:
         tags = out_ds.tags()
         assert (
             {
                 'FUSE_SRC_FILE', 'FUSE_REF_FILE', 'FUSE_METHOD', 'FUSE_KERNEL_SHAPE', 'FUSE_PROC_CRS',
                 'FUSE_MAX_BLOCK_MEM', 'FUSE_THREADS',
-                *{f'FUSE_MODEL_{k.upper()}' for k in KernelModel.create_config().keys()},
+                *{f'FUSE_{k.upper()}' for k in KernelModel.create_config().keys()},
             } <= set(tags)
         )
         assert (tags['FUSE_SRC_FILE'] == float_50cm_ref_file.name)
         assert (tags['FUSE_REF_FILE'] == float_50cm_ref_file.name)
-        assert (tags['FUSE_METHOD'].lower() == method.name)
-        assert (tags['FUSE_PROC_CRS'].lower() == proc_crs.name)
+        assert (tags['FUSE_METHOD'] == str(method.name))
+        assert (tags['FUSE_PROC_CRS'] == str(proc_crs.name))
         assert (tags['FUSE_KERNEL_SHAPE'] == str(kernel_shape))
         for key,val in KernelModel.create_config().items():
-            assert (tags[f'FUSE_MODEL_{key.upper()}'] == str(val))
+            assert (tags[f'FUSE_{key.upper()}'] == val.name if hasattr(val, 'name') else str(val))
         assert (yaml.safe_load(tags['FUSE_MAX_BLOCK_MEM']) == fuse_config['max_block_mem'])
         assert (yaml.safe_load(tags['FUSE_THREADS']) == fuse_config['threads'])
