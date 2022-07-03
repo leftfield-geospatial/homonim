@@ -46,8 +46,6 @@ class RasterFuse(RasterPairReader):
     Class for homogenising ('fusing') a source image with a reference image.
     """
 
-    # default configuration dicts
-    default_fuse_config = dict(param_image=False, threads=multiprocessing.cpu_count(), max_block_mem=100)
     # TODO: rename fuse_config and any other homo variables to keep with 'correction' terminology
     # TODO: rethink these config dicts... maybe something like cloup settings
     def __init__(
@@ -74,6 +72,30 @@ class RasterFuse(RasterPairReader):
         self._param_lock = threading.Lock()
 
     @staticmethod
+    def create_config(
+        threads: int = multiprocessing.cpu_count(),
+        max_block_mem: float = 100,
+    )->Dict: # yapf: disable
+        """
+        Utility method to create a RasterFuse configuration dictionary that can be passed to :meth:`RasterFuse.process`.
+        Without arguments, the a default configuration is returned.
+
+        Parameters
+        ----------
+        threads: int, optional
+            Number of image blocks to process concurrently.
+        max_block_mem: float, optional
+            Maximum size of on image block in megabytes. Note that the total memory consumed by a thread is
+            proportional to, but a number of times larger than this number.
+
+        Returns
+        -------
+        dict
+            Block processing configuration dictionary.
+        """
+        return dict(threads=threads, max_block_mem=max_block_mem)
+
+    @staticmethod
     def create_out_profile(
         driver: str = 'GTiff',
         dtype: str = RasterArray.default_dtype,
@@ -83,8 +105,8 @@ class RasterFuse(RasterPairReader):
         )
     )->Dict: # yapf: disable
         """
-        Utility method to create a rasterio image profile for the output image(s) that can be passed to
-        :meth:`RasterFuse.__init__`.  Without arguments, the default profile values are returned.
+        Utility method to create a partial rasterio image profile for the output image(s) that can be passed to
+        :meth:`RasterFuse.process`.  Without arguments, the a default profile is returned.
 
         Parameters
         ----------
@@ -100,10 +122,9 @@ class RasterFuse(RasterPairReader):
         Returns
         -------
         dict
-            rasterio image profile.
+            rasterio image profile for output images.
         """
         return dict(driver=driver, dtype=dtype, nodata=nodata, creation_options=creation_options)
-
 
     def _merge_out_profile(self, out_profile: Dict=None) -> dict:
         """ Create an output image rasterio profile from the source image profile and output configuration. """
@@ -265,8 +286,8 @@ class RasterFuse(RasterPairReader):
 
     def process(
         self, out_filename: Union[Path, str], method: Method, kernel_shape: Tuple[int, int],
-        param_filename: Union[Path, str] = None, overwrite: bool = False, model_config: Dict = None,
-        out_profile: Dict = None, fuse_config: Dict = None, build_ovw: bool = True,
+        param_filename: Union[Path, str] = None, build_ovw: bool = True, overwrite: bool = False,
+        model_config: Dict = None, out_profile: Dict = None, fuse_config: Dict = None,
     ):
         """
         Correct the source image in blocks.
@@ -284,42 +305,16 @@ class RasterFuse(RasterPairReader):
         param_filename: str, Path, optional
             Path to an optional parameter file to write with correction parameters and R2 values.  By default,
             no parameter file is written.
-        overwrite: bool, optional
-            Overwrite the output file(s) if they exist. [default: True]
-        fuse_config: dict, optional
-            Surface reflectance correction configuration with items:
-                param_image: bool
-                    Turn on/off the production of a debug image containing correction parameters and R2 values.
-                threads: int
-                    The number of blocks process concurrently (requires more memory). 0 = use all cpus.
-                max_block_mem: float
-                    An upper limit on the image block size in MB.  Useful for limiting the memory used by each block-
-                    processing thread. Note that this is not a limit on the total memory consumed by a thread, as a
-                    number of working block-sized arrays are created, but is proportional to the total memory consumed
-                    by a thread.
-        model_config: dict, optional
-            Radiometric modelling configuration dict with items:
-                downsampling: rasterio.enums.Resampling, str
-                    Resampling method for downsampling.
-                upsampling: rasterio.enums.Resampling, str
-                    Resampling method for upsampling.
-                r2_inpaint_thresh: float
-                    R2 threshold below which to inpaint model parameters from "surrounding areas.
-                    For 'gain-offset' method only.
-                mask_partial: bool
-                    Mask corrected pixels produced from partial kernel or image coverage.
-        out_profile: dict, optional
-            Output image configuration dict with the items:
-                driver: str
-                    Output format driver.
-                dtype: str
-                    Output image data type.
-                nodata: float
-                    Output image nodata value.
-                creation_options: dict
-                    Driver specific creation options.  See the rasterio documentation for more information.
         build_ovw: bool
-            Whether to build overviews.
+            Whether to build overviews for the output image(s).
+        overwrite: bool, optional
+            Overwrite the output file(s) if they exist.
+        model_config: dict, optional
+            Configuration for the correction model.   See :meth:`KernelModel.create_config` for details.
+        out_profile: dict, optional
+            Configuration for the output image(s).   See :meth:`RasterFuse.create_out_profile` for details.
+        fuse_config: dict, optional
+            Configuration for the block processing.   See :meth:`RasterFuse.create_config` for details.
         """
         # call out_filename something else, in unit tests too, fuse_filename, corr_filename...?
         # TODO: might we pass in a model, rather than its config
@@ -331,13 +326,13 @@ class RasterFuse(RasterPairReader):
         overlap = utils.overlap_for_kernel(kernel_shape)
         out_profile = self.create_out_profile(**(out_profile or {}))
         model_config = KernelModel.create_config(**(model_config or {}))
-        fuse_config = fuse_config if fuse_config else self.default_fuse_config
+        fuse_config = RasterFuse.create_config(**(fuse_config or {}))
         fuse_config['threads'] = utils.validate_threads(fuse_config['threads'])
 
         # create the KernelModel according to proc_crs
         model_cls = SrcSpaceModel if self.proc_crs == ProcCrs.src else RefSpaceModel
         self._model = model_cls(
-            method=method, kernel_shape=kernel_shape, find_r2=fuse_config['param_image'], **model_config,
+            method=method, kernel_shape=kernel_shape, find_r2=param_filename is not None, **model_config,
         )
 
         block_pair_args = dict(overlap=overlap, max_block_mem=fuse_config['max_block_mem'])

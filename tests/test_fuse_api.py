@@ -39,44 +39,21 @@ def test_creation(src_file, ref_file, tmp_path, request):
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
     # TODO: tidy comments, and add replacement test for process
-    # method = Method.gain
-    # kernel_shape = (3, 3)
-    # model_config = KernelModel.create_config(mask_partial=True)
-    fuse_config = RasterFuse.default_fuse_config.copy()
-    # fuse_config.update(param_image=True)
-    # out_profile = RasterFuse.create_out_profile(driver='HFA', creation_options={})
-
-    # raster_fuse = RasterFuse(
-    #     src_file, ref_file, tmp_path, method, kernel_shape, fuse_config=fuse_config, model_config=model_config,
-    #     out_profile=out_profile
-    # )
     raster_fuse = RasterFuse(src_file, ref_file)
     with raster_fuse:
-        # assert (raster_fuse.method == method)
-        # assert (raster_fuse.kernel_shape == kernel_shape)
         assert (raster_fuse.proc_crs != ProcCrs.auto)
-        # assert (raster_fuse.homo_filename is not None)
-        # assert (raster_fuse.param_filename is not None)
         assert (not raster_fuse.closed)
-
-        # assert (raster_fuse._config == fuse_config)
-        # assert (raster_fuse._model.config == model_config)
-        # for k, v in model_config.items():
-        #     assert (raster_fuse._model.__getattribute__(f'_{k}') == v)
-        # assert (raster_fuse._out_profile == out_profile)
-
     assert raster_fuse.closed
 
 
 @pytest.mark.parametrize('overwrite', [False, True])
 def test_overwrite(tmp_path, float_50cm_src_file, float_100cm_ref_file, overwrite):
     """ Test overwrite behaviour. """
-    fuse_config = RasterFuse.default_fuse_config.copy()
     fuse_filename = tmp_path.joinpath('corrected.tif')
     param_filename = utils.create_param_filename(fuse_filename)
     params = dict(
         out_filename=fuse_filename, param_filename=param_filename, method=Method.gain_blk_offset, kernel_shape=(5, 5),
-        overwrite=overwrite, fuse_config=fuse_config,
+        overwrite=overwrite, 
     )
 
     raster_fuse = RasterFuse(src_filename=float_50cm_src_file, ref_filename=float_100cm_ref_file)
@@ -112,8 +89,7 @@ def test_basic_fusion(src_file, ref_file, method, kernel_shape, max_block_mem, t
     """ Test fusion output with different src/ref images, and method etc combinations. """
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
-    fuse_config = RasterFuse.default_fuse_config.copy()
-    fuse_config.update(max_block_mem=max_block_mem)
+    fuse_config = RasterFuse.create_config(max_block_mem=max_block_mem)
     fuse_filename = tmp_path.joinpath('corrected.tif')
     raster_fuse = RasterFuse(src_file, ref_file)
     with raster_fuse:
@@ -190,12 +166,11 @@ def test_out_profile(float_100cm_rgb_file, tmp_path, out_profile):
 ) # yapf: disable
 def test_param_image(float_100cm_rgb_file, tmp_path, method, proc_crs):
     """ Test creation and masking of parameter image for different method and proc_crs combinations. """
-    fuse_config = RasterFuse.default_fuse_config.copy()
     fuse_filename = tmp_path.joinpath('corrected.tif')
     param_filename = utils.create_param_filename(fuse_filename)
     raster_fuse = RasterFuse(float_100cm_rgb_file, float_100cm_rgb_file, proc_crs=proc_crs)
     with raster_fuse:
-        raster_fuse.process(fuse_filename, method, (5, 5), param_filename=param_filename, fuse_config=fuse_config)
+        raster_fuse.process(fuse_filename, method, (5, 5), param_filename=param_filename)
 
     assert (param_filename.exists())
 
@@ -221,8 +196,7 @@ def test_mask_partial(src_file, ref_file, tmp_path, kernel_shape, proc_crs, mask
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
     model_config = KernelModel.create_config(mask_partial=mask_partial)
-    fuse_config = RasterFuse.default_fuse_config.copy()
-    fuse_config.update(max_block_mem=1.e-1)
+    fuse_config = RasterFuse.create_config(max_block_mem=1.e-1)
     fuse_file = tmp_path.joinpath('corrected.tif')
     raster_fuse = RasterFuse(src_file, ref_file, proc_crs=proc_crs)
     with raster_fuse:
@@ -246,7 +220,6 @@ def test_mask_partial(src_file, ref_file, tmp_path, kernel_shape, proc_crs, mask
 
 def test_build_overviews(float_50cm_ref_file, tmp_path):
     """ Test that overviews are built for corrected and parameter files. """
-    fuse_config = RasterFuse.default_fuse_config.copy()
     fuse_filename = tmp_path.joinpath('corrected.tif')
     param_filename = utils.create_param_filename(fuse_filename)
     raster_fuse = RasterFuse(float_50cm_ref_file, float_50cm_ref_file)
@@ -260,8 +233,7 @@ def test_build_overviews(float_50cm_ref_file, tmp_path):
 
     with raster_fuse:
         raster_fuse.process(
-            fuse_filename, Method.gain_blk_offset, (3, 3), param_filename=param_filename, fuse_config=fuse_config,
-            build_ovw=True
+            fuse_filename, Method.gain_blk_offset, (3, 3), param_filename=param_filename, build_ovw=True
         )
 
     assert (fuse_filename.exists())
@@ -294,8 +266,7 @@ def test_homo_filename(tmp_path, float_50cm_ref_file):
 
 def test_single_thread(tmp_path, float_50cm_ref_file):
     """ Test single-threaded processing creates a corrected file. """
-    fuse_config = RasterFuse.default_fuse_config.copy()
-    fuse_config.update(threads=1)
+    fuse_config = RasterFuse.create_config(threads=1)
     fuse_filename = tmp_path.joinpath('corrected.tif')
     raster_fuse = RasterFuse(float_50cm_ref_file, float_50cm_ref_file)
     with raster_fuse:
@@ -326,10 +297,10 @@ def test_proc_crs(tmp_path, src_file, ref_file, proc_crs, exp_proc_crs, request)
 
 def test_tags(tmp_path, float_50cm_ref_file):
     """ Test corrected file metadata. """
-    fuse_config = RasterFuse.default_fuse_config.copy()
     method = Method.gain_blk_offset
     kernel_shape = (3, 3)
     proc_crs = ProcCrs.ref
+    fuse_config = RasterFuse.create_config()
     raster_fuse = RasterFuse(float_50cm_ref_file, float_50cm_ref_file, proc_crs=proc_crs)
     out_filename = tmp_path.joinpath('corrected.tif')
     param_filename = utils.create_param_filename(out_filename)

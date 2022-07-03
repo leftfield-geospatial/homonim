@@ -212,7 +212,7 @@ ref_file_arg = cloup.argument(
     help='Path to a reference image.'
 )
 threads_option = click.option(
-    '-t', '--threads', type=click.INT, default=RasterFuse.default_fuse_config['threads'], show_default=True,
+    '-t', '--threads', type=click.INT, default=RasterFuse.create_config()['threads'], show_default=True,
     callback=_threads_cb, help=f'Number of image blocks to process concurrently (0 = use all cpus).'
 )
 output_option = click.option(
@@ -298,8 +298,7 @@ def cli(verbose, quiet):
 @cloup.option_group(
     "Advanced options",
     click.option(
-        '-pi/-npi', '--param-image/--no-param-image', type=click.BOOL,
-        default=RasterFuse.default_fuse_config['param_image'], show_default=True,
+        '-pi/-npi', '--param-image/--no-param-image', type=click.BOOL, default=False, show_default=True,
         help=f'Write the  model parameters and R\N{SUPERSCRIPT TWO} values for each corrected image into a parameter '
              f'image file.'
     ),
@@ -310,7 +309,7 @@ def cli(verbose, quiet):
     ),
     threads_option,
     click.option(
-        '-mbm', '--max-block-mem', type=click.FLOAT, default=RasterFuse.default_fuse_config['max_block_mem'],
+        '-mbm', '--max-block-mem', type=click.FLOAT, default=RasterFuse.create_config()['max_block_mem'],
         show_default=True, help='Maximum image block size in megabytes (0 = block corresponds to the whole image).'
     ),
     click.option(
@@ -373,7 +372,7 @@ def cli(verbose, quiet):
 def fuse(
     ctx: click.Context, src_file: Tuple[pathlib.Path,], ref_file: pathlib.Path, method: Method,
     kernel_shape: Tuple[int, int], out_dir: pathlib.Path, overwrite: bool, comp_ref_file: pathlib.Path,
-    build_ovw: bool, proc_crs: ProcCrs, conf: pathlib.Path, **kwargs
+    build_ovw: bool, proc_crs: ProcCrs, conf: pathlib.Path, param_image: bool, **kwargs
 ):
     # @formatter:off
     """
@@ -415,9 +414,9 @@ def fuse(
         raise click.BadParameter(str(ex))
 
     # build configuration dictionaries for RasterFuse
-    fuse_config=_update_existing_keys(RasterFuse.default_fuse_config, **kwargs)
-    model_config=_update_existing_keys(KernelModel.create_config(), **kwargs)
-    out_profile=_update_existing_keys(RasterFuse.create_out_profile(), **kwargs)
+    fuse_config = _update_existing_keys(RasterFuse.create_config(), **kwargs)
+    model_config = _update_existing_keys(KernelModel.create_config(), **kwargs)
+    out_profile = _update_existing_keys(RasterFuse.create_out_profile(), **kwargs)
     config = dict(fuse_config=fuse_config, model_config=model_config, out_profile=out_profile)
     comp_files = []
 
@@ -432,12 +431,12 @@ def fuse(
                     raster_fuse.proc_crs, method=method, kernel_shape=kernel_shape, driver=out_profile['driver'],
                 )
                 out_filename = out_path.joinpath(src_filename.stem + post_fix)
-                param_filename = utils.create_param_filename(out_filename) if fuse_config['param_image'] else None
+                param_filename = utils.create_param_filename(out_filename) if param_image else None
 
                 start_time = timer()
                 raster_fuse.process(
-                    out_filename, method=Method(method), kernel_shape=kernel_shape, param_filename=param_filename,
-                    overwrite=overwrite, build_ovw=build_ovw, **config,
+                    out_filename, Method(method), kernel_shape, param_filename=param_filename, build_ovw=build_ovw,
+                    overwrite=overwrite, **config,
                 )
 
             logger.info(f'Completed in {timer() - start_time:.2f} secs')
