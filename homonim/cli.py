@@ -415,32 +415,33 @@ def fuse(
         raise click.BadParameter(str(ex))
 
     # build configuration dictionaries for RasterFuse
-    config = dict(
-        fuse_config=_update_existing_keys(RasterFuse.default_fuse_config, **kwargs),
-        model_config=_update_existing_keys(KernelModel.create_config(), **kwargs),
-        out_profile=_update_existing_keys(RasterFuse.create_out_profile(), **kwargs)
-    )
+    fuse_config=_update_existing_keys(RasterFuse.default_fuse_config, **kwargs)
+    model_config=_update_existing_keys(KernelModel.create_config(), **kwargs)
+    out_profile=_update_existing_keys(RasterFuse.create_out_profile(), **kwargs)
+    config = dict(fuse_config=fuse_config, model_config=model_config, out_profile=out_profile)
     comp_files = []
 
     # iterate over and homogenise source file(s)
     try:
         for src_filename in src_file:
             out_path = pathlib.Path(out_dir) if out_dir is not None else src_filename.parent
-
-            logger.info(f'\nHomogenising {src_filename.name}')
+            logger.info(f'\nCorrecting {src_filename.name}')
             with RasterFuse(src_filename, ref_file, proc_crs=ProcCrs(proc_crs)) as raster_fuse:
+                # construct output filenames
+                post_fix = utils.create_out_postfix(
+                    raster_fuse.proc_crs, method=method, kernel_shape=kernel_shape, driver=out_profile['driver'],
+                )
+                out_filename = out_path.joinpath(src_filename.stem + post_fix)
+                param_filename = utils.create_param_filename(out_filename) if fuse_config['param_image'] else None
+
                 start_time = timer()
                 raster_fuse.process(
-                    out_path, method=Method(method), kernel_shape=kernel_shape, overwrite=overwrite, **config
+                    out_filename, method=Method(method), kernel_shape=kernel_shape, param_filename=param_filename,
+                    overwrite=overwrite, build_ovw=build_ovw, **config,
                 )
-                # build overviews
-                if build_ovw:
-                    # TODO: pass as param to process()
-                    logger.info(f'Building overviews')
-                    raster_fuse.build_overviews()
 
             logger.info(f'Completed in {timer() - start_time:.2f} secs')
-            comp_files += [src_filename, raster_fuse.homo_filename]  # build a list of files to pass to compare
+            comp_files += [src_filename, out_filename]  # build a list of files to pass to compare
 
         # compare source and corrected files with reference (invokes compare command with relevant parameters)
         if comp_ref_file:
