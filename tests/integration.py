@@ -24,7 +24,7 @@ from rasterio.features import shapes
 from homonim import root_path, utils
 from homonim.cli import cli
 from homonim.compare import RasterCompare
-from homonim.enums import ProcCrs, Method
+from homonim.enums import ProcCrs, Model
 from homonim.fuse import RasterFuse
 
 # TODO: move these files into test directory...
@@ -62,23 +62,23 @@ def ngi_src_file():
 
 
 @pytest.mark.parametrize(
-    'src_files, ref_file, method, kernel_shape, proc_crs, mask_partial, exp_proc_crs', [
-        ('ngi_src_files', 'modis_ref_file', Method.gain, (1, 1), ProcCrs.auto, False, ProcCrs.ref),
-        ('ngi_src_files', 'landsat_ref_file', Method.gain_blk_offset, (5, 5), ProcCrs.auto, False, ProcCrs.ref),
-        ('ngi_src_files', 's2_ref_file', Method.gain_offset, (15, 15), ProcCrs.auto, False, ProcCrs.ref),
-        ('landsat_src_file', 's2_ref_file', Method.gain_blk_offset, (5, 5), ProcCrs.auto, False, ProcCrs.src),
-        ('landsat_src_file', 's2_ref_file', Method.gain_blk_offset, (31, 31), ProcCrs.ref, False, ProcCrs.ref),
-        ('ngi_src_files', 's2_ref_file', Method.gain_offset, (31, 31), ProcCrs.src, False, ProcCrs.src),
-        ('ngi_src_files', 'modis_ref_file', Method.gain, (1, 1), ProcCrs.auto, True, ProcCrs.ref),
-        ('ngi_src_files', 'landsat_ref_file', Method.gain_blk_offset, (5, 5), ProcCrs.auto, True, ProcCrs.ref),
-        ('ngi_src_files', 's2_ref_file', Method.gain_offset, (15, 15), ProcCrs.auto, True, ProcCrs.ref),
-        ('landsat_src_file', 's2_ref_file', Method.gain_blk_offset, (5, 5), ProcCrs.auto, True, ProcCrs.src),
-        ('landsat_src_file', 's2_ref_file', Method.gain_blk_offset, (31, 31), ProcCrs.ref, True, ProcCrs.ref),
-        ('ngi_src_files', 's2_ref_file', Method.gain_offset, (31, 31), ProcCrs.src, True, ProcCrs.src),
+    'src_files, ref_file, model, kernel_shape, proc_crs, mask_partial, exp_proc_crs', [
+        ('ngi_src_files', 'modis_ref_file', Model.gain, (1, 1), ProcCrs.auto, False, ProcCrs.ref),
+        ('ngi_src_files', 'landsat_ref_file', Model.gain_blk_offset, (5, 5), ProcCrs.auto, False, ProcCrs.ref),
+        ('ngi_src_files', 's2_ref_file', Model.gain_offset, (15, 15), ProcCrs.auto, False, ProcCrs.ref),
+        ('landsat_src_file', 's2_ref_file', Model.gain_blk_offset, (5, 5), ProcCrs.auto, False, ProcCrs.src),
+        ('landsat_src_file', 's2_ref_file', Model.gain_blk_offset, (31, 31), ProcCrs.ref, False, ProcCrs.ref),
+        ('ngi_src_files', 's2_ref_file', Model.gain_offset, (31, 31), ProcCrs.src, False, ProcCrs.src),
+        ('ngi_src_files', 'modis_ref_file', Model.gain, (1, 1), ProcCrs.auto, True, ProcCrs.ref),
+        ('ngi_src_files', 'landsat_ref_file', Model.gain_blk_offset, (5, 5), ProcCrs.auto, True, ProcCrs.ref),
+        ('ngi_src_files', 's2_ref_file', Model.gain_offset, (15, 15), ProcCrs.auto, True, ProcCrs.ref),
+        ('landsat_src_file', 's2_ref_file', Model.gain_blk_offset, (5, 5), ProcCrs.auto, True, ProcCrs.src),
+        ('landsat_src_file', 's2_ref_file', Model.gain_blk_offset, (31, 31), ProcCrs.ref, True, ProcCrs.ref),
+        ('ngi_src_files', 's2_ref_file', Model.gain_offset, (31, 31), ProcCrs.src, True, ProcCrs.src),
     ]
 )
 def test_fuse(
-    tmp_path, runner, src_files, ref_file, method, kernel_shape, proc_crs, mask_partial, exp_proc_crs, request
+    tmp_path, runner, src_files, ref_file, model, kernel_shape, proc_crs, mask_partial, exp_proc_crs, request
 ):
     """ Additional integration tests using 'real' aerial and satellite imagery. """
 
@@ -86,11 +86,11 @@ def test_fuse(
     src_files = src_files if isinstance(src_files, list) else [src_files]
     ref_file = request.getfixturevalue(ref_file)
     src_file_str = ' '.join([str(fn) for fn in src_files])
-    post_fix = utils.create_out_postfix(exp_proc_crs, method, kernel_shape, RasterFuse.create_out_profile()['driver'])
+    post_fix = utils.create_out_postfix(exp_proc_crs, model, kernel_shape, RasterFuse.create_out_profile()['driver'])
     corr_files = [tmp_path.joinpath(src_file.stem + post_fix) for src_file in src_files]
 
     cli_str = (
-        f'fuse -m {method.value} -k {kernel_shape[0]} {kernel_shape[1]} -od {tmp_path} -pc {proc_crs.value}'
+        f'fuse -m {model.value} -k {kernel_shape[0]} {kernel_shape[1]} -od {tmp_path} -pc {proc_crs.value}'
         f' -mbm 1 {src_file_str} {ref_file}'
     )
     if mask_partial:

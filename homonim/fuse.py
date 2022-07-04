@@ -32,7 +32,7 @@ from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from homonim import utils
-from homonim.enums import Method, ProcCrs
+from homonim.enums import Model, ProcCrs
 from homonim.errors import IoError
 from homonim.kernel_model import KernelModel, RefSpaceModel, SrcSpaceModel
 from homonim.raster_array import RasterArray
@@ -60,8 +60,8 @@ class RasterFuse(RasterPairReader):
             ordering of the source and reference bands should match.
         proc_crs: homonim.enums.ProcCrs, optional
             The initial proc_crs setting, specifying which of the source/reference image spaces should be used for
-            estimating correction parameterS.  If proc_crs=ProcCrs.auto (recommended), the lowest resolution
-            image space will be used.
+            estimating correction parameterS.  See :class:`~homonim.enums.ProcCrs` for details. If
+            proc_crs=ProcCrs.auto (recommended), the lowest resolution image space will be used.
         """
         RasterPairReader.__init__(self, src_filename, ref_filename, proc_crs=proc_crs)
         self._write_lock = threading.Lock()
@@ -279,12 +279,12 @@ class RasterFuse(RasterPairReader):
 
     def process(
         self, corr_filename: Union[Path, str],
-        method: Method,
+        model: Model,
         kernel_shape: Tuple[int, int],
         param_filename: Union[Path, str] = None,
         build_ovw: bool = True,
         overwrite: bool = False,
-        method_config: Dict = None,
+        model_config: Dict = None,
         out_profile: Dict = None,
         block_config: Dict = None,
     ):  # yapf: disable
@@ -295,11 +295,11 @@ class RasterFuse(RasterPairReader):
         ----------
         corr_filename: str, Path
             Path to the corrected file to create.
-        method: homonim.enums.Method
-            The surface reflectance correction method to use.  See :class:`~homonim.enums.Method` for options.
+        model: homonim.enums.Model
+            The surface reflectance correction model to use.  See :class:`~homonim.enums.Method` for options.
         kernel_shape: tuple
-            The (height, width) of the kernel in pixels of the :attr:`proc_crs` image (the lowest resolution image, if
-            ``proc_crs==ProcCrs.auto``).
+            The (height, width) of the kernel in pixels of the :attr:`proc_crs` image (the lowest resolution
+            image, if :attr:`proc_crs`==:attr:`ProcCrs.auto`).
         param_filename: str, Path, optional
             Path to an optional parameter file to write with correction parameters and R2 values.  By default,
             no parameter file is written.
@@ -307,8 +307,8 @@ class RasterFuse(RasterPairReader):
             Build overviews for the output image(s).
         overwrite: bool, optional
             Overwrite the output file(s) if they exist.
-        method_config: dict, optional
-            Configuration dictionary for the correction method.  See :meth:`KernelModel.create_config` for possible
+        model_config: dict, optional
+            Configuration dictionary for the correction model.  See :meth:`KernelModel.create_config` for possible
             keys and default values.
         out_profile: dict, optional
             Configuration dictionary for the output image(s).   See :meth:`RasterFuse.create_out_profile` for
@@ -321,36 +321,36 @@ class RasterFuse(RasterPairReader):
         # TODO: might we pass in a model, rather than its config
         # TODO: can we make at least some of these kwargs to simplify passing from cli and to self._process_block
         self._assert_open()
-        method = Method(method)
-        kernel_shape = tuple(utils.validate_kernel_shape(kernel_shape, method=method))
+        model_type = Model(model)
+        kernel_shape = tuple(utils.validate_kernel_shape(kernel_shape, model=model))
         overlap = utils.overlap_for_kernel(kernel_shape)
         out_profile = self.create_out_profile(**(out_profile or {}))
-        method_config = KernelModel.create_config(**(method_config or {}))
+        model_config = KernelModel.create_config(**(model_config or {}))
         block_config = RasterFuse.create_config(**(block_config or {}))
         block_config['threads'] = utils.validate_threads(block_config['threads'])
 
         # create the KernelModel according to proc_crs
         model_cls = SrcSpaceModel if self.proc_crs == ProcCrs.src else RefSpaceModel
-        self._model = model_cls(method, kernel_shape, find_r2=param_filename is not None, **method_config)
+        model = model_cls(model, kernel_shape, find_r2=param_filename is not None, **model_config)
 
         block_pair_args = dict(overlap=overlap, max_block_mem=block_config['max_block_mem'])
         # get block pairs and process
         bar_format = '{l_bar}{bar}|{n_fmt}/{total_fmt} blocks [{elapsed}<{remaining}]'  # tqdm progress bar format
         with self._out_files(
             corr_filename, param_filename=param_filename, out_profile=out_profile, overwrite=overwrite,
-            build_ovw=build_ovw, method=method, kernel_shape=kernel_shape, **method_config, **block_config
+            build_ovw=build_ovw, model=model_type, kernel_shape=kernel_shape, **model_config, **block_config
         ) as (out_im, param_im):
             if block_config['threads'] == 1:
                 # process blocks consecutively in the main thread (useful for profiling)
                 block_pairs = [block_pair for block_pair in self.block_pairs(**block_pair_args)]
                 for block_pair in tqdm(block_pairs, bar_format=bar_format):
-                    self._process_block(block_pair, self._model, corr_im=out_im, param_im=param_im)
+                    self._process_block(block_pair, model, corr_im=out_im, param_im=param_im)
             else:
                 # process blocks concurrently
                 with futures.ThreadPoolExecutor(max_workers=block_config['threads']) as executor:
                     # submit blocks for processing
                     proc_futures = [
-                        executor.submit(self._process_block, block_pair, self._model, out_im, param_im)
+                        executor.submit(self._process_block, block_pair, model, out_im, param_im)
                         for block_pair in self.block_pairs(**block_pair_args)
                     ]
 

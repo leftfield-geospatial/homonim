@@ -68,7 +68,7 @@ Download the ``homonim`` github repository to get the test imagery. If you have 
 Alternatively, download it from `here <https://github.com/dugalh/homonim/archive/refs/heads/main.zip>`__, extract the
 zip archive and rename the *homonim-main* directory to *homonim*.
 
-Using the ``gain-blk-offset`` method and a 5 x 5 pixel kernel, correct the aerial images with the Sentinel-2
+Using the ``gain-blk-offset`` model and a 5 x 5 pixel kernel, correct the aerial images with the Sentinel-2
 reference.
 
 .. code:: shell
@@ -85,7 +85,7 @@ Example
 -------
 
 Mosaics of 0.5 m resolution aerial imagery before and after correction. A Landsat-7 surface reflectance image was
-used as reference, and is shown in the background. Correction was performed using the ``gain-blk-offset`` method and
+used as reference, and is shown in the background. Correction was performed using the ``gain-blk-offset`` model and
 a 5 x 5 pixel kernel.
 
 .. figure:: data/readme_eg.jpg

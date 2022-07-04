@@ -35,7 +35,7 @@ import yaml
 from click.core import ParameterSource
 from homonim import utils, version
 from homonim.compare import RasterCompare
-from homonim.enums import ProcCrs, Method
+from homonim.enums import ProcCrs, Model
 from homonim.errors import ImageFormatError
 from homonim.fuse import RasterFuse
 from homonim.kernel_model import KernelModel
@@ -255,9 +255,9 @@ def cli(verbose, quiet):
     # note: either use click.option(...), or cloup.option(..., help=inspect.cleandoc(...)) for RST help strings,
     # if cloup's mutually exclusive etc functionality is needed, it should be the latter.
     click.option(
-        '-m', '--method', type=click.Choice([m.value for m in Method], case_sensitive=False),
-        default=Method.gain_blk_offset.value, show_default=True,
-        help="""Correction method.
+        '-m', '--model', type=click.Choice([m.value for m in Model], case_sensitive=False),
+        default=Model.gain_blk_offset.value, show_default=True,
+        help="""Correction model.
         \b
         
         - `gain`: gain-only model.
@@ -330,7 +330,7 @@ def cli(verbose, quiet):
         '-rit', '--r2-inpaint-thresh', type=click.FloatRange(min=0, max=1),
         default=KernelModel.create_config()['r2_inpaint_thresh'], show_default=True, metavar='FLOAT 0-1',
         help='R\N{SUPERSCRIPT TWO} threshold below which to inpaint model parameters from surrounding areas '
-        '(0 = turn off inpainting). Valid for `gain-offset` :option:`--method` only.'
+        '(0 = turn off inpainting). Valid for `gain-offset` :option:`--model` only.'
     ),
     click.option(
         '-pc', '--proc-crs', type=click.Choice([pc.value for pc in ProcCrs], case_sensitive=False),
@@ -370,7 +370,7 @@ def cli(verbose, quiet):
 )
 @click.pass_context
 def fuse(
-    ctx: click.Context, src_file: Tuple[pathlib.Path,], ref_file: pathlib.Path, method: Method,
+    ctx: click.Context, src_file: Tuple[pathlib.Path,], ref_file: pathlib.Path, model: Model,
     kernel_shape: Tuple[int, int], out_dir: pathlib.Path, overwrite: bool, comp_ref_file: pathlib.Path,
     build_ovw: bool, proc_crs: ProcCrs, conf: pathlib.Path, param_image: bool, **kwargs
 ):
@@ -395,12 +395,12 @@ def fuse(
 
         homonim fuse source.tif reference.tif
 
-    Correct `source.tif` with `reference.tif` using the `gain-blk-offset` method, a kernel of 5 x 5 pixels,
+    Correct `source.tif` with `reference.tif` using the `gain-blk-offset` model, a kernel of 5 x 5 pixels,
     and placing the corrected images in the `corrected` directory::
 
-        homonim fuse --method gain-blk-offset --kernel-shape 5 5 --out-dir ./corrected source.tif reference.tif
+        homonim fuse --model gain-blk-offset --kernel-shape 5 5 --out-dir ./corrected source.tif reference.tif
 
-    Correct files matching `source*.tif` with `reference1.tif` using the `gain-offset` method and a kernel of 15 x 15
+    Correct files matching `source*.tif` with `reference1.tif` using the `gain-offset` model and a kernel of 15 x 15
     pixels.  Produce parameter images, mask partially covered pixels in the corrected images, and statistically
     compare source and corrected images with `reference2.tif`::
 
@@ -409,15 +409,15 @@ def fuse(
     # @formatter:on
 
     try:
-        kernel_shape = utils.validate_kernel_shape(kernel_shape, method=method)
+        kernel_shape = utils.validate_kernel_shape(kernel_shape, model=model)
     except Exception as ex:
         raise click.BadParameter(str(ex))
 
     # build configuration dictionaries for RasterFuse
     block_config = _update_existing_keys(RasterFuse.create_config(), **kwargs)
-    method_config = _update_existing_keys(KernelModel.create_config(), **kwargs)
+    model_config = _update_existing_keys(KernelModel.create_config(), **kwargs)
     out_profile = _update_existing_keys(RasterFuse.create_out_profile(), **kwargs)
-    config = dict(block_config=block_config, method_config=method_config, out_profile=out_profile)
+    config = dict(block_config=block_config, model_config=model_config, out_profile=out_profile)
     comp_files = []
 
     # iterate over and correct source file(s)
@@ -428,14 +428,14 @@ def fuse(
             with RasterFuse(src_filename, ref_file, proc_crs=proc_crs) as raster_fuse:
                 # construct output filenames
                 post_fix = utils.create_out_postfix(
-                    raster_fuse.proc_crs, method=method, kernel_shape=kernel_shape, driver=out_profile['driver'],
+                    raster_fuse.proc_crs, model=model, kernel_shape=kernel_shape, driver=out_profile['driver'],
                 )
                 corr_filename = out_path.joinpath(src_filename.stem + post_fix)
                 param_filename = utils.create_param_filename(corr_filename) if param_image else None
 
                 start_time = timer()
                 raster_fuse.process(
-                    corr_filename, Method(method), kernel_shape, param_filename=param_filename, build_ovw=build_ovw,
+                    corr_filename, Model(model), kernel_shape, param_filename=param_filename, build_ovw=build_ovw,
                     overwrite=overwrite, **config,
                 )
 

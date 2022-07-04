@@ -25,7 +25,7 @@ from rasterio.enums import Resampling
 from rasterio.fill import fillnodata
 
 from homonim import utils
-from homonim.enums import Method
+from homonim.enums import Model
 from homonim.raster_array import RasterArray
 
 
@@ -47,15 +47,15 @@ class KernelModel:
     # default_config = dict(downsampling='average', upsampling='cubic_spline', r2_inpaint_thresh=0.25, mask_partial=False)
 
     def __init__(
-        self, method, kernel_shape, find_r2=False, **kwargs,
+        self, model, kernel_shape, find_r2=False, **kwargs,
     ):
         """
         Construct a KernelModel.
 
         Parameters
         ----------
-        method: homonim.enums.Method
-            The surface reflectance correction method.
+        model: homonim.enums.Model
+            The surface reflectance correction model.
         kernel_shape: tuple
             The (height, width) of the kernel in pixels.
         find_r2: bool, optional
@@ -65,12 +65,9 @@ class KernelModel:
         kwargs:
             Optional configuration arguments.  See :meth:`KernelModel.config` for details.
         """
-        # TODO: add method & kernel_shape into kwargs?
-        if not isinstance(method, Method):
-            raise ValueError("'method' should be an instance of homonim.enums.Method")
-
-        self._method = method
-        self._kernel_shape = utils.validate_kernel_shape(kernel_shape, method=method)
+        # TODO: add model & kernel_shape into kwargs?
+        self._model = Model(model)
+        self._kernel_shape = utils.validate_kernel_shape(kernel_shape, model=model)
         self._find_r2 = find_r2
 
         # update config defaults with any passed values, and set _ attributes
@@ -79,9 +76,9 @@ class KernelModel:
             setattr(self, '_' + conf_key, conf_val)
 
     @property
-    def method(self) -> Method:
-        """ Correction method. """
-        return self._method
+    def model(self) -> Model:
+        """ Correction model. """
+        return self._model
 
     @property
     def kernel_shape(self) -> Tuple[int, int]:
@@ -114,7 +111,7 @@ class KernelModel:
         ----------
         r2_inpaint_thresh: float, optional
             The R2 (coefficient of determination) threshold below which to 'in-paint' kernel model parameters from
-            surrounding areas (applies to 'method' == Method.gain_offset only).  For pixels where the model gives a
+            surrounding areas (applies to 'model' == Model.gain_offset only).  For pixels where the model gives a
             poor approximation to the data (this can occur in e.g. shadowed areas, poor source-reference
             co-registration, or areas where there has been land cover change between the source and reference
             images), model offsets are interpolated from surrounding areas, and gains re-estimated.  It can be set
@@ -182,7 +179,7 @@ class KernelModel:
         ss_tot_array = (mask_sum * ref2_sum) - (ref_sum ** 2)
 
         if param_array.shape[0] > 1:
-            # find RSS for method == Method.gain_offset
+            # find RSS for model == Model.gain_offset
             if src_sum is None:
                 src_sum = cv.boxFilter(src_array, -1, kernel_shape[::-1], **filter_args)
 
@@ -198,7 +195,7 @@ class KernelModel:
                 ref2_sum + (mask_sum * (param_array[1] ** 2))
             ) # yapf: disable
         else:
-            # find RSS for method == Method.gain or Method.gain_blk_offset
+            # find RSS for model == Model.gain or Model.gain_blk_offset
             # RSS = sum((ref - m*src)**2), where m is the first band of param_array
             # The above can be expanded and expressed in terms of cv.boxFilter kernel sums as:
             ss_res_array = (((param_array[0] ** 2) * src2_sum) - (2 * param_array[0] * src_ref_sum) + ref2_sum)
@@ -479,9 +476,9 @@ class KernelModel:
             kernel_shape = self._kernel_shape
         kernel_shape = tuple(kernel_shape)  # force to tuple for opencv
 
-        if self._method == Method.gain:
+        if self._model == Model.gain:
             param_ra = self._fit_gain(ref_ra, src_ra, kernel_shape=kernel_shape)
-        elif self._method == Method.gain_blk_offset:
+        elif self._model == Model.gain_blk_offset:
             param_ra = self._fit_gain_blk_offset(ref_ra, src_ra, kernel_shape=kernel_shape)
         else:
             param_ra = self._fit_gain_offset(ref_ra, src_ra, kernel_shape=kernel_shape)

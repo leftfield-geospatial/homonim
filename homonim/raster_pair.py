@@ -21,7 +21,7 @@ import pathlib
 import threading
 from collections import namedtuple
 from itertools import product
-from typing import Tuple
+from typing import Tuple, NamedTuple
 from contextlib import ExitStack
 
 import numpy as np
@@ -38,43 +38,44 @@ from homonim.enums import ProcCrs
 from homonim.raster_array import RasterArray
 
 logger = logging.getLogger(__name__)
-""" Named tuple to contain a set of matching block windows for a source-reference image pair. """
-BlockPair = namedtuple(
-    'BlockPair', [
-        'band_i',  # band index (0 based)
-        'src_in_block',  # overlapping source window
-        'ref_in_block',  # overlapping reference window
-        'src_out_block',  # non-overlapping source window
-        'ref_out_block',  # non-overlapping reference window
-        'outer'
-    ]
-)  # True if src_*_block touches the boundary of the source image
+
+class BlockPair(NamedTuple):
+    """ A set of matching block windows for a source-reference image pair. """
+    band_i: int
+    """ Band index (0 based). """
+    src_in_block: Window
+    """ Overlapping source window. """
+    ref_in_block: Window
+    """ Overlapping reference window. """
+    src_out_block: Window
+    """ Non-overlapping source window. """
+    ref_out_block: Window
+    """ Non-overlapping reference window. """
+    outer: bool
+    """ True if any part of the source blocks touch the source image boundary. """
 
 
 class RasterPairReader:
-    """
-    A thread-safe class for reading matching blocks from a source and reference image pair.
-
-    Images are divided into (optionally overlapping) blocks to satisfy a maximum block memory limit.  Blocks extents
-    are constructed so that re-projections between source and reference do not lose valid data.
-    """
-
     def __init__(self, src_filename, ref_filename, proc_crs=ProcCrs.auto):
         """
-        Construct a RasterPairReader.
+        A thread-safe class for reading matching blocks from a source and reference image pair.
+
+        Images are divided into (optionally overlapping) blocks to satisfy a maximum block memory limit.  Blocks extents
+        are constructed so that re-projections between source and reference do not lose valid data.
 
         Parameters
         ----------
-        src_filename: str, pathlib.Path
+        src_filename: str, Path
             Path to the source image file.
-        ref_filename: str, pathlib.Path
-            Path to the reference image file.  The extents of this image should cover src_filename with at least a 2
-            pixel boundary, and it should have at least as many bands as src_filename.  The ordering of the bands
-            in src_filename and ref_filename should match.
-        proc_crs: homonim.enums.ProcCrs
-            The initial proc_crs setting, if proc_crs=ProcCrs.auto (recommended), the RasterPairReader.proc_crs
-            attribute will be set to represent the lowest resolution of the source and reference image.
-            [default: ProcCrs.auto]
+        ref_filename: str, Path
+            Path to the reference image file.  The extents of this image should cover the source with at least a 2
+            pixel boundary.  The reference image should have at least as many bands as the source, and the
+            ordering of the source and reference bands should match.
+        proc_crs: homonim.enums.ProcCrs, optional
+            The initial proc_crs setting, specifying which of the source/reference image spaces should be used for
+            processing.  See :class:`~homonim.enums.ProcCrs` for details. If proc_crs=ProcCrs.auto (recommended), the
+            lowest resolution image space will be used.  Source and reference blocks are constructed so that
+            re-projections to and from the ``proc_crs`` CRS will not lose valid pixels.
         """
         self._src_filename = pathlib.Path(src_filename)
         self._ref_filename = pathlib.Path(ref_filename)
@@ -91,44 +92,37 @@ class RasterPairReader:
 
     @property
     def src_im(self) -> rasterio.DatasetReader:
-        """ The source rasterio dataset. """
+        """ Source rasterio dataset. """
         self._assert_open()
         return self._src_im
 
     @property
     def ref_im(self) -> rasterio.DatasetReader:
-        """ The reference rasterio dataset. """
+        """ Reference rasterio dataset. """
         self._assert_open()
         return self._ref_im
 
     @property
     def src_bands(self) -> Tuple[int, ]:
-        """ The source non-alpha band indices (1-based). """
+        """ Source non-alpha band indices (1-based). """
         return self._src_bands
 
     @property
     def ref_bands(self) -> Tuple[int, ]:
-        """ The reference non-alpha band indices (1-based). """
+        """ Reference non-alpha band indices (1-based). """
         return self._ref_bands
 
     @property
     def proc_crs(self) -> ProcCrs:
-        """ The 'processing CRS' i.e. which of the source/reference image spaces is selected for processing. """
+        """
+        Which of the source/reference image CRS's is selected for processing.  See :class:`homonim.enums.ProcCrs` for a
+        description of possible values.
+        """
         return self._proc_crs
-
-    # @property
-    # def overlap(self) -> Tuple[int, int]:
-    #     """ The block overlap (rows, columns) in pixels of the 'proc_crs' image. """
-    #     return tuple(self._overlap)
-    #
-    # @property
-    # def block_shape(self) -> Tuple[int, int]:
-    #     """ The image block shape (rows, columns) in pixels of the 'proc_crs' image. """
-    #     return tuple(self._block_shape)
 
     @property
     def closed(self) -> bool:
-        """ True when the RasterPair is closed, otherwise False. """
+        """ Are both source and refernce images closed. """
         return not self._src_im or not self._ref_im or self._src_im.closed or self._ref_im.closed
 
     @staticmethod
@@ -189,8 +183,8 @@ class RasterPairReader:
         src_im: rasterio.DatasetReader, ref_im: rasterio.DatasetReader, proc_crs: ProcCrs = ProcCrs.auto
     ):
         """
-        Resolve proc_crs from auto to the lowest resolution of the source and reference image pair.  If it is already
-        resolved, then warn if it does not correspond to the lowest resolution image of the pair.
+        Resolve proc_crs from ProcCrs.auto to the lowest resolution of the source and reference image pair.  If it is
+        already resolved, then warn if it does not correspond to the lowest resolution image of the pair.
         """
 
         # compare source and reference resolutions
@@ -259,7 +253,7 @@ class RasterPairReader:
         return block_shape
 
     def _init_image_pair(self):
-        """ Prepare the class for reading. """
+        """ Prepare the raster pair for reading. """
         self.open()
         try:
             self._validate_image_pair(self._src_im, self._ref_im)
@@ -316,7 +310,6 @@ class RasterPairReader:
         self.close()
         self._stack.__exit__(exc_type, exc_val, exc_tb)
 
-
     def read(self, block_pair):
         """
         Read a matching pair of source and reference image blocks.
@@ -324,15 +317,15 @@ class RasterPairReader:
         Parameters
         ----------
         block_pair: BlockPair
-            The BlockPair named tuple (as returned by block_pairs()) specifying the source and reference blocks to be
-            read.
+            BlockPair named tuple as returned by :meth:`block_pairs`, that specifies the source and reference blocks
+            to be read.
 
         Returns
         -------
         src_ra: RasterArray
-            The source image block wrapped in a RasterArray.
+            Source image block wrapped in a RasterArray.
         ref_ra: RasterArray
-            The reference image block wrapped in a RasterArray.
+            Reference image block wrapped in a RasterArray.
         """
         self._assert_open()
 
@@ -353,16 +346,16 @@ class RasterPairReader:
         Parameters
         ----------
         overlap: tuple
-            Block overlap (rows, columns) in pixels of the proc_crs image. [default: (0,0)]
+            Block overlap (rows, columns) in pixels of the :attr:`proc_crs` image.
         max_block_mem: float
-            The maximum allowable block size in MB. The image is divided into 2**n blocks with n the smallest number
-            where max_block_mem is satisfied.  If max_block_mem=float('inf'), the block shape will be set to the
-            encompass full extent of the source image. [default: float('inf')]
+            Maximum allowable block size in MB. The image is divided into 2**n blocks with n the smallest number
+            where max_block_mem is satisfied.  If ``max_block_mem==float('inf')``, the block shape will be set to the
+            encompass full extent of the source image.
 
         Yields
         -------
         block_pair: BlockPair
-            A BlockPair named tuple specifying the overlapping ('*_in_block'), and non-overlapping ('*_out_block')
+            BlockPair named tuple specifying the overlapping ('*_in_block'), and non-overlapping ('*_out_block')
             source and reference image blocks.
         """
         self._assert_open()

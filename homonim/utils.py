@@ -27,7 +27,7 @@ from rasterio.enums import ColorInterp
 from rasterio.vrt import WarpedVRT
 from rasterio.windows import Window
 
-from homonim.enums import Method
+from homonim.enums import Model
 from homonim.errors import ImageFormatError
 
 logger = logging.getLogger(__name__)
@@ -84,7 +84,7 @@ def round_window_to_grid(win):
     return Window(col_off=col_range[0], row_off=row_range[0], width=np.diff(col_range)[0], height=np.diff(row_range)[0])
 
 
-def validate_kernel_shape(kernel_shape, method=Method.gain_blk_offset):
+def validate_kernel_shape(kernel_shape, model=Model.gain_blk_offset):
     """
     Check a kernel_shape (height, width) tuple for validity.  Raises ValueError if kernel_shape is invalid.
 
@@ -92,8 +92,8 @@ def validate_kernel_shape(kernel_shape, method=Method.gain_blk_offset):
     ----------
     kernel_shape: tuple
         The kernel (height, width) in pixels.
-    method: Method, optional
-        The modelling method kernel_shape will be used with.
+    model: Model, optional
+        The modelling model kernel_shape will be used with.
 
     Returns
     -------
@@ -103,8 +103,8 @@ def validate_kernel_shape(kernel_shape, method=Method.gain_blk_offset):
     kernel_shape = np.array(kernel_shape).astype(int)
     if not np.all(np.mod(kernel_shape, 2) == 1):
         raise ValueError('`kernel_shape` must be odd in both dimensions.')
-    if method == Method.gain_offset and not np.product(kernel_shape) >= 25:
-        raise ValueError('`kernel_shape` area should contain at least 25 elements for the gain-offset method.')
+    if model == Model.gain_offset and not np.product(kernel_shape) >= 25:
+        raise ValueError('`kernel_shape` area should contain at least 25 elements for the gain-offset model.')
     if not np.all(kernel_shape >= 1):
         raise ValueError('`kernel_shape` must be a minimum of one in both dimensions.')
     return kernel_shape
@@ -139,12 +139,12 @@ def validate_threads(threads):
     return threads
 
 
-def create_out_postfix(proc_crs, method, kernel_shape, driver='GTiff'):
+def create_out_postfix(proc_crs, model, kernel_shape, driver='GTiff'):
     """ Create a filename postfix, including extension, for the corrected image file. """
     ext_dict = rio.drivers.raster_driver_extensions()
     ext_idx = list(ext_dict.values()).index(driver)
     ext = list(ext_dict.keys())[ext_idx]
-    post_fix = f'_FUSE_c{proc_crs.name.upper()}_m{method.upper()}_k{kernel_shape[0]}_{kernel_shape[1]}.{ext}'
+    post_fix = f'_FUSE_c{proc_crs.name.upper()}_m{model.upper()}_k{kernel_shape[0]}_{kernel_shape[1]}.{ext}'
     return post_fix
 
 
@@ -248,7 +248,7 @@ def validate_param_image(param_filename):
         tags = param_im.tags()
         # check band count is a multiple of 3 and that expected metadata tags exist
         if (param_im.count == 0 or divmod(param_im.count, 3)[1] != 0 or
-                not {'FUSE_METHOD', 'FUSE_KERNEL_SHAPE', 'FUSE_PROC_CRS'} <= set(tags)):
+                not {'FUSE_MODEL', 'FUSE_KERNEL_SHAPE', 'FUSE_PROC_CRS'} <= set(tags)):
             raise ImageFormatError(f'{param_filename.name} is not a valid parameter image.')
 
         # check band descriptions end with the expected suffixes

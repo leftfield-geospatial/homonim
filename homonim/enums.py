@@ -19,11 +19,22 @@
 from enum import Enum
 
 
-class Method(str, Enum):
-    """ Enumeration for the surface reflectance correction method. """
+class Model(str, Enum):
+    """ Enumeration for the surface reflectance correction model. """
     gain = 'gain'
+    """ 
+    Gain-only model, suitable for haze-free and zero offset images (i.e. images where a surface reflectance of 
+    zero corresponds to a pixel value of ~zero). 
+    """
     gain_blk_offset = 'gain-blk-offset'
+    """ 
+    Gain-only model applied to offset normalised image blocks.  Suitable for most image combinations.
+    """
     gain_offset = 'gain-offset'
+    """
+    Gain and offset model.  The most accurate model, but sensitive to differences between source and reference, 
+    such as shadowing and land cover changes.  Suitable for well-matched source / reference image pairs.  
+    """
 
 
 class ProcCrs(str, Enum):

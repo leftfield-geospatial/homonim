@@ -22,7 +22,7 @@ import pytest
 import rasterio as rio
 import yaml
 from homonim import utils
-from homonim.enums import ProcCrs, Method
+from homonim.enums import ProcCrs, Model
 from homonim.errors import IoError
 from homonim.fuse import RasterFuse
 from homonim.kernel_model import KernelModel
@@ -52,7 +52,7 @@ def test_overwrite(tmp_path, float_50cm_src_file, float_100cm_ref_file, overwrit
     corr_filename = tmp_path.joinpath('corrected.tif')
     param_filename = utils.create_param_filename(corr_filename)
     params = dict(
-        corr_filename=corr_filename, param_filename=param_filename, method=Method.gain_blk_offset, kernel_shape=(5, 5),
+        corr_filename=corr_filename, param_filename=param_filename, model=Model.gain_blk_offset, kernel_shape=(5, 5),
         overwrite=overwrite, 
     )
 
@@ -76,24 +76,24 @@ def test_overwrite(tmp_path, float_50cm_src_file, float_100cm_ref_file, overwrit
 
 
 @pytest.mark.parametrize(
-    'src_file, ref_file, method, kernel_shape, max_block_mem', [
-        ('float_45cm_src_file', 'float_100cm_ref_file', Method.gain, (1, 1), 2.e-4),
-        ('float_45cm_src_file', 'float_100cm_ref_file', Method.gain_blk_offset, (1, 1), 1.e-3),
-        ('float_45cm_src_file', 'float_100cm_ref_file', Method.gain_offset, (5, 5), 1.e-3),
-        ('float_100cm_src_file', 'float_45cm_ref_file', Method.gain, (1, 1), 2.e-4),
-        ('float_100cm_src_file', 'float_45cm_ref_file', Method.gain_blk_offset, (1, 1), 1.e-3),
-        ('float_100cm_src_file', 'float_45cm_ref_file', Method.gain_offset, (5, 5), 1.e-3),
+    'src_file, ref_file, model, kernel_shape, max_block_mem', [
+        ('float_45cm_src_file', 'float_100cm_ref_file', Model.gain, (1, 1), 2.e-4),
+        ('float_45cm_src_file', 'float_100cm_ref_file', Model.gain_blk_offset, (1, 1), 1.e-3),
+        ('float_45cm_src_file', 'float_100cm_ref_file', Model.gain_offset, (5, 5), 1.e-3),
+        ('float_100cm_src_file', 'float_45cm_ref_file', Model.gain, (1, 1), 2.e-4),
+        ('float_100cm_src_file', 'float_45cm_ref_file', Model.gain_blk_offset, (1, 1), 1.e-3),
+        ('float_100cm_src_file', 'float_45cm_ref_file', Model.gain_offset, (5, 5), 1.e-3),
     ]
 ) # yapf: disable
-def test_basic_fusion(src_file, ref_file, method, kernel_shape, max_block_mem, tmp_path, request):
-    """ Test fusion output with different src/ref images, and method etc combinations. """
+def test_basic_fusion(src_file, ref_file, model, kernel_shape, max_block_mem, tmp_path, request):
+    """ Test fusion output with different src/ref images, and model etc combinations. """
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
     block_config = RasterFuse.create_config(max_block_mem=max_block_mem)
     corr_filename = tmp_path.joinpath('corrected.tif')
     raster_fuse = RasterFuse(src_file, ref_file)
     with raster_fuse:
-        raster_fuse.process(corr_filename, method, kernel_shape, block_config=block_config)
+        raster_fuse.process(corr_filename, model, kernel_shape, block_config=block_config)
     assert (corr_filename.exists())
     with rio.open(src_file, 'r') as src_ds, rio.open(corr_filename, 'r') as out_ds:
         src_array = src_ds.read(indexes=1)
@@ -125,7 +125,7 @@ def test_out_profile(float_100cm_rgb_file, tmp_path, out_profile):
     raster_fuse = RasterFuse(float_100cm_rgb_file, float_100cm_rgb_file)
     corr_filename = tmp_path.joinpath('corrected.tif')
     with raster_fuse:
-        raster_fuse.process(corr_filename, Method.gain_blk_offset, (3, 3), out_profile=out_profile)
+        raster_fuse.process(corr_filename, Model.gain_blk_offset, (3, 3), out_profile=out_profile)
     assert (corr_filename.exists())
     out_profile.update(**out_profile['creation_options'])
     out_profile.pop('creation_options')
@@ -155,22 +155,22 @@ def test_out_profile(float_100cm_rgb_file, tmp_path, out_profile):
 
 
 @pytest.mark.parametrize(
-    'method, proc_crs', [
-        (Method.gain, ProcCrs.ref),
-        (Method.gain_blk_offset, ProcCrs.ref),
-        (Method.gain_offset, ProcCrs.ref),
-        (Method.gain, ProcCrs.src),
-        (Method.gain_blk_offset, ProcCrs.src),
-        (Method.gain_offset, ProcCrs.src),
+    'model, proc_crs', [
+        (Model.gain, ProcCrs.ref),
+        (Model.gain_blk_offset, ProcCrs.ref),
+        (Model.gain_offset, ProcCrs.ref),
+        (Model.gain, ProcCrs.src),
+        (Model.gain_blk_offset, ProcCrs.src),
+        (Model.gain_offset, ProcCrs.src),
     ]
 ) # yapf: disable
-def test_param_image(float_100cm_rgb_file, tmp_path, method, proc_crs):
-    """ Test creation and masking of parameter image for different method and proc_crs combinations. """
+def test_param_image(float_100cm_rgb_file, tmp_path, model, proc_crs):
+    """ Test creation and masking of parameter image for different model and proc_crs combinations. """
     corr_filename = tmp_path.joinpath('corrected.tif')
     param_filename = utils.create_param_filename(corr_filename)
     raster_fuse = RasterFuse(float_100cm_rgb_file, float_100cm_rgb_file, proc_crs=proc_crs)
     with raster_fuse:
-        raster_fuse.process(corr_filename, method, (5, 5), param_filename=param_filename)
+        raster_fuse.process(corr_filename, model, (5, 5), param_filename=param_filename)
 
     assert (param_filename.exists())
 
@@ -195,13 +195,13 @@ def test_mask_partial(src_file, ref_file, tmp_path, kernel_shape, proc_crs, mask
     """ Test partial masking with multiple image blocks. """
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
-    method_config = KernelModel.create_config(mask_partial=mask_partial)
+    model_config = KernelModel.create_config(mask_partial=mask_partial)
     block_config = RasterFuse.create_config(max_block_mem=1.e-1)
     corr_file = tmp_path.joinpath('corrected.tif')
     raster_fuse = RasterFuse(src_file, ref_file, proc_crs=proc_crs)
     with raster_fuse:
         raster_fuse.process(
-            corr_file, Method.gain_blk_offset, kernel_shape, method_config=method_config, block_config=block_config
+            corr_file, Model.gain_blk_offset, kernel_shape, model_config=model_config, block_config=block_config
         )
     assert (corr_file.exists())
     with rio.open(src_file, 'r') as src_ds, rio.open(corr_file, 'r') as fuse_ds:
@@ -233,7 +233,7 @@ def test_build_overviews(float_50cm_ref_file, tmp_path):
 
     with raster_fuse:
         raster_fuse.process(
-            corr_filename, Method.gain_blk_offset, (3, 3), param_filename=param_filename, build_ovw=True
+            corr_filename, Model.gain_blk_offset, (3, 3), param_filename=param_filename, build_ovw=True
         )
 
     assert (corr_filename.exists())
@@ -251,7 +251,7 @@ def test_io_error(tmp_path, float_50cm_ref_file):
     """ Test we get an IoError if processing without opening/entering the context. """
     raster_fuse = RasterFuse(float_50cm_ref_file, float_50cm_ref_file)
     with pytest.raises(IoError):
-        raster_fuse.process(tmp_path, Method.gain_blk_offset, (3, 3))
+        raster_fuse.process(tmp_path, Model.gain_blk_offset, (3, 3))
 
 
 def test_corr_filename(tmp_path, float_50cm_ref_file):
@@ -259,7 +259,7 @@ def test_corr_filename(tmp_path, float_50cm_ref_file):
     corr_filename = tmp_path.joinpath('corrected.tif')
     raster_fuse = RasterFuse(float_50cm_ref_file, float_50cm_ref_file)
     with raster_fuse:
-        raster_fuse.process(corr_filename, Method.gain_blk_offset, (3, 3))
+        raster_fuse.process(corr_filename, Model.gain_blk_offset, (3, 3))
 
     assert (corr_filename.exists())
 
@@ -270,7 +270,7 @@ def test_single_thread(tmp_path, float_50cm_ref_file):
     corr_filename = tmp_path.joinpath('corrected.tif')
     raster_fuse = RasterFuse(float_50cm_ref_file, float_50cm_ref_file)
     with raster_fuse:
-        raster_fuse.process(corr_filename, Method.gain_blk_offset, (3, 3), block_config=block_config)
+        raster_fuse.process(corr_filename, Model.gain_blk_offset, (3, 3), block_config=block_config)
 
     assert (corr_filename.exists())
 
@@ -291,13 +291,13 @@ def test_proc_crs(tmp_path, src_file, ref_file, proc_crs, exp_proc_crs, request)
     raster_fuse = RasterFuse(src_file, ref_file, proc_crs=proc_crs)
     assert (raster_fuse.proc_crs == exp_proc_crs)
     with raster_fuse:
-        raster_fuse.process(corr_filename, Method.gain_blk_offset, (5, 5))
+        raster_fuse.process(corr_filename, Model.gain_blk_offset, (5, 5))
     assert (corr_filename.exists())
 
 
 def test_tags(tmp_path, float_50cm_ref_file):
     """ Test corrected file metadata. """
-    method = Method.gain_blk_offset
+    model = Model.gain_blk_offset
     kernel_shape = (3, 3)
     proc_crs = ProcCrs.ref
     block_config = RasterFuse.create_config()
@@ -305,7 +305,7 @@ def test_tags(tmp_path, float_50cm_ref_file):
     corr_filename = tmp_path.joinpath('corrected.tif')
     param_filename = utils.create_param_filename(corr_filename)
     with raster_fuse:
-        raster_fuse.process(corr_filename, method, kernel_shape, param_filename=param_filename, block_config=block_config)
+        raster_fuse.process(corr_filename, model, kernel_shape, param_filename=param_filename, block_config=block_config)
 
     assert (corr_filename.exists())
     assert (param_filename.exists())
@@ -315,14 +315,14 @@ def test_tags(tmp_path, float_50cm_ref_file):
         tags = out_ds.tags()
         assert (
             {
-                'FUSE_SRC_FILE', 'FUSE_REF_FILE', 'FUSE_METHOD', 'FUSE_KERNEL_SHAPE', 'FUSE_PROC_CRS',
+                'FUSE_SRC_FILE', 'FUSE_REF_FILE', 'FUSE_MODEL', 'FUSE_KERNEL_SHAPE', 'FUSE_PROC_CRS',
                 'FUSE_MAX_BLOCK_MEM', 'FUSE_THREADS',
                 *{f'FUSE_{k.upper()}' for k in KernelModel.create_config().keys()},
             } <= set(tags)
         )
         assert (tags['FUSE_SRC_FILE'] == float_50cm_ref_file.name)
         assert (tags['FUSE_REF_FILE'] == float_50cm_ref_file.name)
-        assert (tags['FUSE_METHOD'] == str(method.name))
+        assert (tags['FUSE_MODEL'] == str(model.name))
         assert (tags['FUSE_PROC_CRS'] == str(proc_crs.name))
         assert (tags['FUSE_KERNEL_SHAPE'] == str(kernel_shape))
         for key,val in KernelModel.create_config().items():

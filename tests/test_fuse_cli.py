@@ -25,31 +25,31 @@ import yaml
 
 from homonim import utils
 from homonim.cli import cli
-from homonim.enums import ProcCrs, Method
+from homonim.enums import ProcCrs, Model
 from homonim.fuse import RasterFuse
 from tests.conftest import str_contain_nos
 
 
 @pytest.mark.parametrize(
-    'method, kernel_shape', [
-        (Method.gain, (1, 1)),
-        (Method.gain_blk_offset, (1, 1)),
-        (Method.gain_offset, (5, 5)),
+    'model, kernel_shape', [
+        (Model.gain, (1, 1)),
+        (Model.gain_blk_offset, (1, 1)),
+        (Model.gain_offset, (5, 5)),
     ]
 ) # yapf: disable
-def test_fuse(tmp_path, runner, float_100cm_rgb_file, float_50cm_rgb_file, method, kernel_shape):
+def test_fuse(tmp_path, runner, float_100cm_rgb_file, float_50cm_rgb_file, model, kernel_shape):
     """ Test fuse cli output with different methods and kernel shapes. """
     ref_file = float_100cm_rgb_file
     src_file = float_50cm_rgb_file
-    post_fix = utils.create_out_postfix(ProcCrs.ref, method, kernel_shape, RasterFuse.create_out_profile()['driver'])
+    post_fix = utils.create_out_postfix(ProcCrs.ref, model, kernel_shape, RasterFuse.create_out_profile()['driver'])
     corr_file = tmp_path.joinpath(src_file.stem + post_fix)
-    cli_str = f'fuse -m {method.value} -k {kernel_shape[0]} {kernel_shape[1]} -od {tmp_path} {src_file} {ref_file}'
+    cli_str = f'fuse -m {model.value} -k {kernel_shape[0]} {kernel_shape[1]} -od {tmp_path} {src_file} {ref_file}'
     result = runner.invoke(cli, cli_str.split())
     assert (result.exit_code == 0)
     assert (corr_file.exists())
 
     with rio.open(src_file, 'r') as src_ds, rio.open(corr_file, 'r') as out_ds:
-        assert (out_ds.tags()['FUSE_METHOD'] == method.name)
+        assert (out_ds.tags()['FUSE_MODEL'] == model.name)
         assert (out_ds.tags()['FUSE_KERNEL_SHAPE'] == str(kernel_shape))
 
         src_array = src_ds.read(indexes=src_ds.indexes)
@@ -61,18 +61,18 @@ def test_fuse(tmp_path, runner, float_100cm_rgb_file, float_50cm_rgb_file, metho
 
 
 def test_fuse_defaults(runner, default_fuse_cli_params):
-    """ Test fuse cli works without method or kernel shape arguments. """
+    """ Test fuse cli works without model or kernel shape arguments. """
     result = runner.invoke(cli, default_fuse_cli_params.cli_str.split())
     assert (result.exit_code == 0)
     assert (default_fuse_cli_params.corr_file.exists())
 
 
 def test_method_error(runner, default_fuse_cli_params):
-    """ Test unknown method generates an error. """
+    """ Test unknown model generates an error. """
     cli_str = default_fuse_cli_params.cli_str + ' -m unk'
     result = runner.invoke(cli, cli_str.split())
     assert (result.exit_code != 0)
-    assert ("Invalid value for '-m' / '--method'" in result.output)
+    assert ("Invalid value for '-m' / '--model'" in result.output)
 
 
 @pytest.mark.parametrize('bad_kernel_shape', [(0, 0), (2, 3), (3, 2)])
@@ -158,13 +158,13 @@ def test_proc_crs(tmp_path, runner, float_100cm_ref_file, float_100cm_src_file, 
     """ Test valid --proc-crs settings generate an output with correct metadata. """
     ref_file = float_100cm_ref_file
     src_file = float_100cm_src_file
-    method = Method.gain_blk_offset
+    model = Model.gain_blk_offset
     kernel_shape = (3, 3)
     res_proc_crs = ProcCrs.ref if proc_crs == ProcCrs.auto else proc_crs
-    post_fix = utils.create_out_postfix(res_proc_crs, method, kernel_shape, RasterFuse.create_out_profile()['driver'])
+    post_fix = utils.create_out_postfix(res_proc_crs, model, kernel_shape, RasterFuse.create_out_profile()['driver'])
     corr_file = tmp_path.joinpath(src_file.stem + post_fix)
     cli_str = (
-        f'fuse -m {method.value} -k {kernel_shape[0]} {kernel_shape[1]} -od {tmp_path} -pc {proc_crs.value} '
+        f'fuse -m {model.value} -k {kernel_shape[0]} {kernel_shape[1]} -od {tmp_path} -pc {proc_crs.value} '
         f'{src_file} {ref_file}'
     )
     result = runner.invoke(cli, cli_str.split())

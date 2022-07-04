@@ -73,3 +73,28 @@ ParamStats
 
     ~ParamStats.metadata
 
+BlockPair
+----------
+.. currentmodule:: homonim.raster_pair
+
+.. autoclass:: BlockPair
+    :members:
+
+enums
+-----
+
+Model
+^^^^^^
+
+.. currentmodule:: homonim.enums
+
+.. autoclass:: Model
+    :members:
+
+ProcCrs
+^^^^^^^
+
+.. currentmodule:: homonim.enums
+
+.. autoclass:: ProcCrs
+    :members:

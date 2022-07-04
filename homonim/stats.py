@@ -31,7 +31,7 @@ from rasterio.windows import get_data_window
 from tqdm import tqdm
 
 from homonim import utils
-from homonim.enums import Method
+from homonim.enums import Model
 
 logger = logging.getLogger(__name__)
 
@@ -59,18 +59,18 @@ class ParamStats:
         # read some parameters from the metadata
         with rio.open(self._param_filename, 'r') as param_im:
             self._tags = param_im.tags()
-            self._method = self._tags['FUSE_METHOD'].replace('_', '-')
-            self._r2_inpaint_thresh = yaml.safe_load(self._tags['FUSE_MODEL_R2_INPAINT_THRESH'])
+            self._model = self._tags['FUSE_MODEL'].replace('_', '-')
+            self._r2_inpaint_thresh = yaml.safe_load(self._tags['FUSE_R2_INPAINT_THRESH'])
 
     @property
     def metadata(self):
         """ Return a printable string of parameter metadata. """
         res_str = (
-            f'Method: {self._method}\n'
+            f'Model: {self._model}\n'
             f'Kernel shape: {self._tags["FUSE_KERNEL_SHAPE"]}\n'
             f'Processing CRS: {self._tags["FUSE_PROC_CRS"]}'
         )
-        if self._method == 'gain-offset':
+        if self._model == 'gain-offset':
             res_str += f'\nR\N{SUPERSCRIPT TWO} inpaint threshold: {self._r2_inpaint_thresh}'
         return res_str
 
@@ -114,8 +114,8 @@ class ParamStats:
                         return OrderedDict(Mean=v.mean(), Std=v.std(), Min=v.min(), Max=v.max())
 
                 stats_dict = stats(param_vec)
-                if (self._method == Method.gain_offset) and (band_i >= param_im.count * 2 / 3):
-                    # Find the r2 inpaint portion if these parameters are from Method.gain_offset
+                if (self._model == Model.gain_offset) and (band_i >= param_im.count * 2 / 3):
+                    # Find the r2 inpaint portion if these parameters are from Model.gain_offset
                     inpaint_portion = np.sum(param_vec < self._r2_inpaint_thresh) / len(param_vec)
                     stats_dict['Inpaint (%)'] = inpaint_portion * 100
 

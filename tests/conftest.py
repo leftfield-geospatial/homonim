@@ -31,12 +31,12 @@ from rasterio.warp import reproject
 from rasterio.windows import Window
 
 from homonim import root_path, utils
-from homonim.enums import ProcCrs, Method
+from homonim.enums import ProcCrs, Model
 from homonim.fuse import RasterFuse
 from homonim.raster_array import RasterArray
 """ Named tuple to contain fuse cli parameters and string. """
 FuseCliParams = namedtuple('FuseCliParams',
-    ['src_file', 'ref_file', 'method', 'kernel_shape', 'proc_crs', 'corr_file', 'param_file', 'cli_str']
+    ['src_file', 'ref_file', 'model', 'kernel_shape', 'proc_crs', 'corr_file', 'param_file', 'cli_str']
 ) # yapf: disable
 
 
@@ -358,15 +358,15 @@ def default_fuse_cli_params(tmp_path, float_100cm_ref_file, float_50cm_src_file)
     """ FuseCliParams with default parameter values. """
     ref_file = float_100cm_ref_file
     src_file = float_50cm_src_file
-    method = Method.gain_blk_offset
+    model = Model.gain_blk_offset
     kernel_shape = (5, 5)
     proc_crs = ProcCrs.ref
-    post_fix = utils.create_out_postfix(proc_crs, method, kernel_shape, RasterFuse.create_out_profile()['driver'])
+    post_fix = utils.create_out_postfix(proc_crs, model, kernel_shape, RasterFuse.create_out_profile()['driver'])
     corr_file = tmp_path.joinpath(src_file.stem + post_fix)
     param_file = utils.create_param_filename(corr_file)
 
     cli_str = (f'fuse -od {tmp_path} {src_file} {ref_file}')
-    return FuseCliParams(src_file, ref_file, method, kernel_shape, proc_crs, corr_file, param_file, cli_str)
+    return FuseCliParams(src_file, ref_file, model, kernel_shape, proc_crs, corr_file, param_file, cli_str)
 
 
 @pytest.fixture
@@ -374,15 +374,15 @@ def basic_fuse_cli_params(tmp_path, float_100cm_ref_file, float_100cm_src_file):
     """ FuseCliParams with basic parameter values. """
     ref_file = float_100cm_ref_file
     src_file = float_100cm_src_file
-    method = Method.gain_blk_offset
+    model = Model.gain_blk_offset
     kernel_shape = (3, 3)
     proc_crs = ProcCrs.ref
-    post_fix = utils.create_out_postfix(proc_crs, method, kernel_shape, RasterFuse.create_out_profile()['driver'])
+    post_fix = utils.create_out_postfix(proc_crs, model, kernel_shape, RasterFuse.create_out_profile()['driver'])
     corr_file = tmp_path.joinpath(src_file.stem + post_fix)
     param_file = utils.create_param_filename(corr_file)
 
     cli_str = (
-        f'fuse -m {method.value} -k {kernel_shape[0]} {kernel_shape[1]} -od {tmp_path} -pc {proc_crs.value} '
+        f'fuse -m {model.value} -k {kernel_shape[0]} {kernel_shape[1]} -od {tmp_path} -pc {proc_crs.value} '
         f'{src_file} {ref_file}'
     )
-    return FuseCliParams(src_file, ref_file, method, kernel_shape, proc_crs, corr_file, param_file, cli_str)
+    return FuseCliParams(src_file, ref_file, model, kernel_shape, proc_crs, corr_file, param_file, cli_str)
