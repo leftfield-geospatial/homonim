@@ -35,12 +35,11 @@ from homonim.raster_pair import RasterPairReader
 logger = logging.getLogger(__name__)
 
 
-class RasterCompare:
+class RasterCompare(RasterPairReader):
     """ Class to statistically compare an image against a reference. """
-    default_config = dict(threads=cpu_count() - 1)
     # TODO: should we call the source image, an input image and change ProcCrs.src to make it clear that this can
     #  compare corrected images too?
-    def __init__(self, src_filename, ref_filename, proc_crs=ProcCrs.auto, threads=default_config['threads']):
+    def __init__(self, src_filename, ref_filename, proc_crs=ProcCrs.auto):
         """
         Construct the RasterCompare object
 
@@ -53,19 +52,8 @@ class RasterCompare:
         proc_crs: homonim.enums.ProcCrs, optional
             The image CRS and resolution in which to perform the comparison.  proc_crs=ProcCrs.auto will
             automatically choose the lowest resolution of the source and reference CRS's (recommended)
-        threads: int, optional
-            The number of threads to use for concurrent processing of bands (requires more memory).  0 = use all cpus.
         """
-        self._src_filename = pathlib.Path(src_filename)
-        self._ref_filename = pathlib.Path(ref_filename)
-        self._threads = utils.validate_threads(threads)
-
-        # check src and ref image validity via RasterPairReader and get proc_crs
-        # self._raster_pair is initialised to read in bands (not blocks)
-        if not isinstance(proc_crs, ProcCrs):
-            raise ValueError("'proc_crs' must be an instance of homonim.enums.ProcCrs")
-        self._raster_pair = RasterPairReader(self._src_filename, self._ref_filename, proc_crs=proc_crs)
-        self._proc_crs = self._raster_pair.proc_crs
+        RasterPairReader.__init__(self, src_filename, ref_filename, proc_crs=proc_crs)
 
     """ dict specifying stats labels and functions. """
     _stats = [
@@ -92,77 +80,77 @@ class RasterCompare:
     ] # yapf: disable
 
     @property
-    def proc_crs(self) -> ProcCrs:
-        """ The 'processing CRS' i.e. which of the source/reference image spaces is selected for processing. """
-        return self._proc_crs
-
-    @property
     def stats_key(self):
         """
         Returns a string of abbreviations and corresponding descriptions for the statistics returned by compare().
         """
         return pd.DataFrame(self._stats)[['ABBREV', 'DESCRIPTION']].to_string(index=False, justify='right')
 
-    def compare(self):
+    def compare(self, threads=cpu_count()):
         """
         Statistically compare source and reference images and return results.
+
+        Parameters
+        ----------
+        threads: int, optional
+            The number of threads to use for concurrent processing of bands (requires more memory).  0 = use all cpus.
 
         Returns
         -------
         res_dict: dict[dict]
                   A dictionary representing the results.
         """
-        res_dict = OrderedDict()
+        self._assert_open()
+        threads = utils.validate_threads(threads)
 
+        res_dict = OrderedDict()
         bar_format = '{l_bar}{bar}|{n_fmt}/{total_fmt} bands [{elapsed}<{remaining}]'
 
-        with self._raster_pair as raster_pair:
+        def get_res_key(band_i):
+            return (
+                self.ref_im.descriptions[self.ref_bands[band_i] - 1] or
+                self.src_im.descriptions[self.src_bands[band_i] - 1] or
+                f'Band {band_i + 1}'
+            ) # yapf: disable
 
-            def get_res_key(band_i):
-                return (
-                    raster_pair.ref_im.descriptions[raster_pair.ref_bands[band_i] - 1] or
-                    raster_pair.src_im.descriptions[raster_pair.src_bands[band_i] - 1] or
-                    f'Band {band_i + 1}'
-                ) # yapf: disable
+        def process_band(block_pair):
+            """ Thread-safe function to process a block (that encompasses the full band). """
+            src_ra, ref_ra = self.read(block_pair)  # read src and ref bands
 
-            def process_band(block_pair):
-                """ Thread-safe function to process a block (that encompasses the full band). """
-                src_ra, ref_ra = raster_pair.read(block_pair)  # read src and ref bands
+            # re-project into the lowest resolution (_proc_crs) space
+            if self._proc_crs == ProcCrs.ref:
+                src_ra = src_ra.reproject(**ref_ra.proj_profile, resampling=Resampling.average)
+            else:
+                # TODO: make and apply upsampling/downsampling settings.  This assumes only downsampling.
+                ref_ra = ref_ra.reproject(**src_ra.proj_profile, resampling=Resampling.average)
 
-                # re-project into the lowest resolution (_proc_crs) space
-                if self._proc_crs == ProcCrs.ref:
-                    src_ra = src_ra.reproject(**ref_ra.proj_profile, resampling=Resampling.average)
-                else:
-                    # TODO: make and apply upsampling/downsampling settings.  This assumes only downsampling.
-                    ref_ra = ref_ra.reproject(**src_ra.proj_profile, resampling=Resampling.average)
+            mask = src_ra.mask & ref_ra.mask  # combined src and ref mask
 
-                mask = src_ra.mask & ref_ra.mask  # combined src and ref mask
+            # find stats of valid data
+            src_vec = src_ra.array[mask]
+            ref_vec = ref_ra.array[mask]
 
-                # find stats of valid data
-                src_vec = src_ra.array[mask]
-                ref_vec = ref_ra.array[mask]
+            stats_dict = OrderedDict()
+            for _stat in self._stats:
+                stats_dict[_stat['ABBREV']] = _stat['fn'](src_vec, ref_vec)
 
-                stats_dict = OrderedDict()
-                for _stat in self._stats:
-                    stats_dict[_stat['ABBREV']] = _stat['fn'](src_vec, ref_vec)
+            # form a string describing the band
+            description = get_res_key(block_pair.band_i)
+            return description, stats_dict
 
-                # form a string describing the band
-                description = get_res_key(block_pair.band_i)
-                return description, stats_dict
+        # populate res_dict with band-ordered keys
+        for band_i in range(len(self.src_bands)):
+            description = get_res_key(band_i)
+            res_dict[description] = None
 
-            # populate res_dict with band-ordered keys
-            for band_i in range(len(raster_pair.src_bands)):
-                description = get_res_key(band_i)
-                res_dict[description] = None
+        # process bands concurrently
+        with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
+            futures = [executor.submit(process_band, block_pair) for block_pair in self.block_pairs()]
 
-            # process bands concurrently
-            with concurrent.futures.ThreadPoolExecutor(max_workers=self._threads) as executor:
-                futures = [executor.submit(process_band, block_pair) for block_pair in raster_pair.block_pairs()]
-
-                # wait for threads, get results and raise any thread generated exceptions
-                for future in tqdm(concurrent.futures.as_completed(futures), bar_format=bar_format, total=len(futures)):
-                    band_desc, band_dict = future.result()
-                    res_dict[band_desc] = band_dict
+            # wait for threads, get results and raise any thread generated exceptions
+            for future in tqdm(concurrent.futures.as_completed(futures), bar_format=bar_format, total=len(futures)):
+                band_desc, band_dict = future.result()
+                res_dict[band_desc] = band_dict
 
         # use a pandas dataframe to find the mean of the statistics over the bands
         res_df = pd.DataFrame.from_dict(res_dict, orient='index')

@@ -491,8 +491,8 @@ def compare(src_file: Tuple[pathlib.Path,], ref_file: pathlib.Path, output: path
         for src_filename in src_file:
             logger.info(f'\nComparing {src_filename.name}')
             start_time = timer()
-            cmp = RasterCompare(src_filename, ref_file, proc_crs=ProcCrs.auto)
-            res_dict[str(src_filename)] = cmp.compare()
+            with RasterCompare(src_filename, ref_file, proc_crs=ProcCrs.auto) as cmp:
+                res_dict[str(src_filename)] = cmp.compare()
             logger.info(f'Completed in {timer() - start_time:.2f} secs')
 
         # print a key for the following tables

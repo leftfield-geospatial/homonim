@@ -56,8 +56,8 @@ def test_api(src_file, ref_file, request):
     """ Basic test of RasterCompare for proc_crs=ref&src image combinations. """
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
-    compare = RasterCompare(src_file, ref_file)
-    res_dict = compare.compare()
+    with RasterCompare(src_file, ref_file) as compare:
+        res_dict = compare.compare()
     _test_identical_compare_dict(res_dict)
 
 
@@ -73,16 +73,16 @@ def test_api__proc_crs(src_file, ref_file, proc_crs, exp_proc_crs, request):
     """ Test resolution and forcing of the proc_crs parameter with different combinations of src/ref images. """
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
-    compare = RasterCompare(src_file, ref_file, proc_crs=proc_crs)
-    assert (compare.proc_crs == exp_proc_crs)
-    res_dict = compare.compare()
+    with RasterCompare(src_file, ref_file, proc_crs=proc_crs) as compare:
+        assert (compare.proc_crs == exp_proc_crs)
+        res_dict = compare.compare()
     assert (len(res_dict) == 2)
 
 
 def test_api__single_thread(float_100cm_src_file, float_100cm_ref_file):
     """ Test single threaded compare. """
-    compare = RasterCompare(float_100cm_src_file, float_100cm_ref_file, threads=1)
-    res_dict = compare.compare()
+    with RasterCompare(float_100cm_src_file, float_100cm_ref_file) as compare:
+        res_dict = compare.compare(threads=1)
     assert (len(res_dict) == 2)
 
 
