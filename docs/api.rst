@@ -80,6 +80,15 @@ BlockPair
 .. autoclass:: BlockPair
     :members:
 
+
+KernelModel.create_config
+-------------------------
+.. currentmodule:: homonim.kernel_model
+
+.. automethod:: KernelModel.create_config
+
+
+
 enums
 -----
 

@@ -48,7 +48,7 @@ def test_ref_basic_fit(
     src_ra = float_50cm_ra
     ref_ra = float_100cm_ra
 
-    param_ra = kernel_model.fit(ref_ra.copy(), src_ra)
+    param_ra = kernel_model.fit(src_ra, ref_ra.copy())
     assert (param_ra.shape == ref_ra.shape)
     assert (param_ra.transform == ref_ra.transform)
     assert (ref_ra.mask == param_ra.mask).all()  # given that ref_ra.mask == downsample(src_ra.mask)
@@ -73,7 +73,7 @@ def test_src_basic_fit(
     src_ra = float_100cm_ra
     ref_ra = float_50cm_ra
 
-    param_ra = kernel_model.fit(ref_ra, src_ra)
+    param_ra = kernel_model.fit(src_ra, ref_ra)
     assert (param_ra.shape == src_ra.shape)
     assert (param_ra.transform == src_ra.transform)
     assert (src_ra.mask == param_ra.mask).all()  # given that src_ra.mask == upsample(ref_ra.mask)
@@ -132,7 +132,7 @@ def test_ref_find_r2(float_100cm_ra, float_50cm_ra, model, find_r2):
     kernel_model = RefSpaceModel(model, (5, 5), find_r2=find_r2, r2_inpaint_thresh=None)
     src_ra = float_50cm_ra
     ref_ra = float_100cm_ra
-    param_ra = kernel_model.fit(ref_ra, src_ra)
+    param_ra = kernel_model.fit(src_ra, ref_ra)
     if find_r2:
         assert (param_ra.count == 3)
         assert np.nanmax(param_ra.array[2]) <= 1
@@ -182,12 +182,12 @@ def test_r2_inpainting(float_50cm_ra: RasterArray, kernel_shape: Tuple[int, int]
     no_inpaint_kernel_model = RefSpaceModel(
         Model.gain_offset, kernel_shape=kernel_shape, r2_inpaint_thresh=-np.inf, mask_partial=False
     )
-    no_inpaint_param_ra = no_inpaint_kernel_model.fit(ref_ra.copy(), src_ra)
+    no_inpaint_param_ra = no_inpaint_kernel_model.fit(src_ra, ref_ra.copy())
 
     inpaint_kernel_model = RefSpaceModel(
         Model.gain_offset, kernel_shape=kernel_shape, r2_inpaint_thresh=0.5, mask_partial=False
     )
-    inpaint_param_ra = inpaint_kernel_model.fit(ref_ra.copy(), src_ra)
+    inpaint_param_ra = inpaint_kernel_model.fit(src_ra, ref_ra.copy())
 
     # test r2 values
     for param_ra in [no_inpaint_param_ra, inpaint_param_ra]:
@@ -256,7 +256,7 @@ def test_src_masking(float_100cm_ra, float_50cm_ra, kernel_shape: Tuple[int, int
     ref_ra = float_50cm_ra
 
     # create test parameters
-    param_ra = kernel_model.fit(ref_ra, src_ra)
+    param_ra = kernel_model.fit(src_ra, ref_ra)
 
     if not mask_partial:
         assert (src_ra.mask == param_ra.mask).all()
@@ -274,7 +274,7 @@ def test_ref_force_proc_crs(float_100cm_ra, float_50cm_ra):
     kernel_model = RefSpaceModel(Model.gain_blk_offset, (5, 5), mask_partial=False)
     src_ra = float_100cm_ra
     ref_ra = float_50cm_ra
-    param_ra = kernel_model.fit(ref_ra.copy(), src_ra)
+    param_ra = kernel_model.fit(src_ra, ref_ra.copy())
     out_ra = kernel_model.apply(src_ra, param_ra)
     assert (src_ra.array[src_ra.mask] == pytest.approx(out_ra.array[out_ra.mask], abs=2))
 
@@ -284,7 +284,7 @@ def test_src_force_proc_crs(float_100cm_ra, float_50cm_ra):
     kernel_model = SrcSpaceModel(Model.gain_blk_offset, (5, 5), mask_partial=False)
     src_ra = float_50cm_ra
     ref_ra = float_100cm_ra
-    param_ra = kernel_model.fit(ref_ra, src_ra)
+    param_ra = kernel_model.fit(src_ra, ref_ra)
     out_ra = kernel_model.apply(src_ra, param_ra)
     assert (src_ra.array[src_ra.mask] == pytest.approx(out_ra.array[out_ra.mask], abs=2))
 
@@ -309,7 +309,7 @@ def test_r2_array_defaults(float_100cm_ra):
     )
     src_ra = float_100cm_ra
     ref_ra = float_100cm_ra
-    param_ra = kernel_model.fit(ref_ra.copy(), src_ra)
+    param_ra = kernel_model.fit(src_ra, ref_ra.copy())
     r2_array = kernel_model._r2_array(ref_ra.array, ref_ra.array, param_ra.array)
     assert (r2_array[~np.isnan(r2_array)] == pytest.approx(1, abs=1.e-3))
 
@@ -320,7 +320,6 @@ def test_config():
         r2_inpaint_thresh=0.1, mask_partial=True, downsampling=Resampling.bilinear, upsampling=Resampling.nearest,
     )
     kernel_model = RefSpaceModel(Model.gain, (5, 5), find_r2=True, **config)
-    assert kernel_model.config == config
     for key in config.keys():
         attr_name = '_' + key
         assert hasattr(kernel_model, attr_name)

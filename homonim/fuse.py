@@ -261,7 +261,7 @@ class RasterFuse(RasterPairReader):
         # read source and reference blocks
         src_ra, ref_ra = self.read(block_pair)
         # fit and apply the sliding kernel models
-        param_ra = model.fit(ref_ra, src_ra)
+        param_ra = model.fit(src_ra, ref_ra)
         corr_ra = model.apply(src_ra, param_ra)
         # change the corrected nodata value so that is is masked correctly for corr_im
         corr_ra.nodata = corr_im.nodata

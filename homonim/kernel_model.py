@@ -30,27 +30,19 @@ from homonim.raster_array import RasterArray
 
 
 class KernelModel:
-    """
-    A base class for surface reflectance modelling and correction of blocks of image data.
-
-    The surface reflectance relationship between source and reference image blocks is approximated with localised linear
-    models.  Models are estimated for each pixel location inside a small rectangular kernel (window), using a fast DFT
-    approach.  The corrected output is produced by applying the model parameters to the source image.
-
-    Based on the paper:
-    Harris, Dugal & Van Niekerk, Adriaan. (2018). Radiometric homogenisation of aerial images by calibrating with
-    satellite data. International Journal of Remote Sensing. 40. 1-25. 10.1080/01431161.2018.1528404.
-    https://www.researchgate.net/publication
-    /328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data
-    """
-
-    # default_config = dict(downsampling='average', upsampling='cubic_spline', r2_inpaint_thresh=0.25, mask_partial=False)
-
-    def __init__(
-        self, model, kernel_shape, find_r2=False, **kwargs,
-    ):
+    def __init__(self, model: Model, kernel_shape: Tuple[int, int], find_r2: bool = False, **kwargs):
         """
-        Construct a KernelModel.
+        A base class for surface reflectance modelling and correction of blocks of image data.
+
+        The surface reflectance relationship between source and reference image blocks is approximated with localised
+        linear models.  Models are estimated for each pixel location inside a small rectangular kernel (window),
+        using a fast DFT approach.  The corrected output is produced by applying the model parameters to the source
+        image.
+
+        Based on the paper:
+        Harris, Dugal & Van Niekerk, Adriaan. (2018). Radiometric homogenisation of aerial images by calibrating with
+        satellite data. International Journal of Remote Sensing. 40. 1-25. 10.1080/01431161.2018.1528404.
+        https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data
 
         Parameters
         ----------
@@ -59,11 +51,10 @@ class KernelModel:
         kernel_shape: tuple
             The (height, width) of the kernel in pixels.
         find_r2: bool, optional
-            Turn on/off the calculation of Pearson's correlation coefficient (r2) for each kernel model.
-            (Typically used for producing 'debug' images of the model parameters and accuracies.)
-            [default: False]
+            Whether to calculate R2 (coefficient of determinsation) for each kernel model, and include in
+            parameter arrays.
         kwargs:
-            Optional configuration arguments.  See :meth:`KernelModel.config` for details.
+            Optional configuration arguments.  See :meth:`KernelModel.create_config` for keys and defaults values.
         """
         # TODO: add model & kernel_shape into kwargs?
         self._model = Model(model)
@@ -77,7 +68,7 @@ class KernelModel:
 
     @property
     def model(self) -> Model:
-        """ Correction model. """
+        """ Correction model type. """
         return self._model
 
     @property
@@ -87,16 +78,8 @@ class KernelModel:
 
     @property
     def find_r2(self) -> bool:
-        """ Whether to create and incude r2 in parameter arrays. """
+        """ Whether to create and incude R2 (coefficient of determinsation) in parameter arrays. """
         return self._find_r2
-
-    @property
-    def config(self) -> Dict:
-        """ KernelModel configuration dictionary. """
-        return dict(
-            r2_inpaint_thresh=self._r2_inpaint_thresh, mask_partial=self._mask_partial, downsampling=self._downsampling,
-            upsampling=self._upsampling,
-        )
 
     @staticmethod
     def create_config(
@@ -110,42 +93,43 @@ class KernelModel:
         Parameters
         ----------
         r2_inpaint_thresh: float, optional
-            The R2 (coefficient of determination) threshold below which to 'in-paint' kernel model parameters from
-            surrounding areas (applies to 'model' == Model.gain_offset only).  For pixels where the model gives a
-            poor approximation to the data (this can occur in e.g. shadowed areas, poor source-reference
-            co-registration, or areas where there has been land cover change between the source and reference
-            images), model offsets are interpolated from surrounding areas, and gains re-estimated.  It can be set
-            to 'None' to turn off in-painting.
-            [default: 0.25]
+            The R2 (coefficient of determination) threshold below which to `in-paint` kernel model parameters from
+            surrounding areas (applies to :attr:`model` == :attr:`~homonim.enums.Model.gain_offset` only).  For pixels
+            where the model gives a poor approximation to the data (this can occur in e.g. shadowed areas, poor
+            source-reference co-registration, or areas where there has been land cover change between the source and
+            reference images), model offsets are interpolated from surrounding areas, and gains re-estimated.  It can
+            be set to ``None`` to turn off in-painting.
         mask_partial: bool, optional
-            Masks output pixels that were not produced by full kernel or source/reference image coverage.  Useful
-            for ensuring strict model validity, and reducing seam-lines between adjacent images. [default: False]
+            Mask output pixels not produced by full kernel or source/reference image coverage.  Useful for ensuring
+            strict model validity, and reducing seam-lines between adjacent images.
         downsampling: rasterio.enums.Resampling
-            The resampling method to use when downsampling.  [default: Resampling.average]
+            The resampling method to use when downsampling.
         upsampling: rasterio.enums.Resampling
-            The resampling method to use when upsampling.  [default: Resampling.cubic_spline]
+            The resampling method to use when upsampling.
 
         Returns
         -------
         dict
             Configuration dictionary.
         """
-
         return dict(
             r2_inpaint_thresh=r2_inpaint_thresh, mask_partial=mask_partial, downsampling=downsampling,
             upsampling=upsampling,
         )
 
-    def _get_resampling(self, from_res, to_res):
+    def _get_resampling(self, from_res: float, to_res: float):
         """ Get the resampling method for re-projecting from resolution `from_res` to resolution `to_res`. """
         return self._downsampling if np.prod(np.abs(from_res)) <= np.prod(np.abs(to_res)) else self._upsampling
 
     def _r2_array(
-        self, ref_array, src_array, param_array, mask=None, mask_sum=None, ref_sum=None, src_sum=None, ref2_sum=None,
-        src2_sum=None, src_ref_sum=None, dest_array=None, kernel_shape=None
+        self, ref_array: np.ndarray, src_array: np.ndarray, param_array: np.ndarray, mask: np.ndarray = None,
+        mask_sum: np.ndarray = None, ref_sum: np.ndarray = None, src_sum: np.ndarray = None,
+        ref2_sum: np.ndarray = None, src2_sum: np.ndarray = None, src_ref_sum: np.ndarray = None,
+        dest_array: np.ndarray = None, kernel_shape: Tuple[int, int] = None
     ):
         """
-        Helper function to find R2 coefficient of determination at each pixel/kernel location for the given matrices.
+        Utility function to find R2 (coefficient of determination) at each pixel/kernel location for the given
+        arrays.
         """
 
         if kernel_shape is None:
@@ -186,7 +170,6 @@ class KernelModel:
             # RSS = sum((ref - ref_hat)**2)
             #     = sum((ref - (m*src + c))**2), where m and c are the first 2 bands of param_array
             # The above can be expanded and expressed in terms of cv.boxFilter kernel sums as:
-
             ss_res_array = (
                 ((param_array[0] ** 2) * src2_sum) +
                 (2 * np.product(param_array[:2], axis=0) * src_sum) -
@@ -196,6 +179,7 @@ class KernelModel:
             ) # yapf: disable
         else:
             # find RSS for model == Model.gain or Model.gain_blk_offset
+
             # RSS = sum((ref - m*src)**2), where m is the first band of param_array
             # The above can be expanded and expressed in terms of cv.boxFilter kernel sums as:
             ss_res_array = (((param_array[0] ** 2) * src2_sum) - (2 * param_array[0] * src_ref_sum) + ref2_sum)
@@ -214,21 +198,21 @@ class KernelModel:
         return dest_array
 
     @staticmethod
-    def _fit_block_norm(ref_ra, src_ra):
+    def _fit_block_norm(src_ra: RasterArray, ref_ra: RasterArray) -> np.ndarray:
         """
         Find a scale and offset for a source block, so that the standard deviation and first percentile of the source
-        and reference blocks match.  (Can be thought of as a rough dark object subtraction (DOS) approach).
+        and reference blocks match.  (Can be thought of as a basic dark object subtraction (DOS) approach).
 
         Parameters
         ----------
-        ref_ra : RasterArray
-            Reference data block in a RasterArray.
         src_ra : RasterArray
             Source data block in a RasterArray, with the same CRS, shape & extents as ref_ra.
+        ref_ra : RasterArray
+            Reference data block in a RasterArray.
 
         Returns
         -------
-        norm_model: numpy.array
+        norm_model: numpy.ndarray
             A two element [gain, offset] model to 'normalise' the source block.
         """
         norm_model = np.zeros(2)
@@ -239,16 +223,16 @@ class KernelModel:
         norm_model[1] = np.percentile(ref_ra.array[mask], 1) - np.percentile(src_ra.array[mask], 1) * norm_model[0]
         return norm_model
 
-    def _fit_gain(self, ref_ra, src_ra, kernel_shape=None):
+    def _fit_gain(self, src_ra: RasterArray, ref_ra: RasterArray, kernel_shape: Tuple[int, int] = None) -> RasterArray:
         """
         Find sliding kernel gains, for a band, using opencv convolution.
 
         Parameters
         ----------
-        ref_ra : RasterArray
-            Reference data block in a RasterArray.
         src_ra : RasterArray
             Source data block in a RasterArray, with the same CRS, shape & extents as ref_ra.
+        ref_ra : RasterArray
+            Reference data block in a RasterArray.
         kernel_shape : tuple, optional
             Sliding kernel [height, width] in pixels.
 
@@ -256,7 +240,7 @@ class KernelModel:
         -------
         param_ra :RasterArray
             RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second, and optionally
-            R2 for each kernel model in the third band when find_r2==True.
+            R2 for each kernel model in the third band when :attr:`find_r2` is True.
         """
         # adapted from https://www.mathsisfun.com/data/least-squares-regression.html with c=0
         if kernel_shape is None:
@@ -297,14 +281,16 @@ class KernelModel:
 
         return param_ra
 
-    def _fit_gain_blk_offset(self, ref_ra, src_ra, kernel_shape=None):
+    def _fit_gain_blk_offset(
+        self, src_ra: RasterArray, ref_ra: RasterArray, kernel_shape: Tuple[int,int] = None
+    ) -> RasterArray:  # yapf: disable
         """
         Find sliding kernel gains and 'image' (i.e. block) offset, for a band, using opencv convolution.
 
-        ref_ra : RasterArray
-            Reference data block in a RasterArray.
         src_ra : RasterArray
             Source data block in a RasterArray, with the same CRS, shape & extents as ref_ra.
+        ref_ra : RasterArray
+            Reference data block in a RasterArray.
         kernel_shape : tuple, optional
             Sliding kernel [height, width] in pixels.
 
@@ -312,14 +298,14 @@ class KernelModel:
         -------
         param_ra :RasterArray
             RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second, and optionally
-            R2 for each kernel model in the third band when find_r2==True.
+            R2 for each kernel model in the third band when :attr:`find_r2` is True.
         """
         if kernel_shape is None:
             kernel_shape = self._kernel_shape
         kernel_shape = tuple(kernel_shape)  # force to tuple for opencv
 
         # find the source->reference normalisation
-        norm_model = self._fit_block_norm(ref_ra, src_ra)
+        norm_model = self._fit_block_norm(src_ra, ref_ra)
 
         # force src nodata to nan so that operation below remains correctly masked
         src_ra.nodata = RasterArray.default_nodata
@@ -328,21 +314,23 @@ class KernelModel:
         src_ra.array = (src_ra.array * norm_model[0]) + norm_model[1]
 
         # find gains for normalised source
-        param_ra = self._fit_gain(ref_ra, src_ra, kernel_shape=kernel_shape)
+        param_ra = self._fit_gain(src_ra, ref_ra, kernel_shape=kernel_shape)
 
         # incorporate the normalisation model in the parameter RasterArray
         param_ra.array[1] = param_ra.array[0] * norm_model[1]
         param_ra.array[0] *= norm_model[0]
         return param_ra
 
-    def _fit_gain_offset(self, ref_ra, src_ra, kernel_shape=None):
+    def _fit_gain_offset(
+        self, src_ra: RasterArray, ref_ra: RasterArray, kernel_shape: Tuple[int, int] = None
+    ) -> RasterArray:  # yapf: disable
         """
         Find sliding kernel full linear model for a band using opencv convolution.
 
-        ref_ra : RasterArray
-            Reference data block in a RasterArray.
         src_ra : RasterArray
             Source data block in a RasterArray, with the same CRS, shape & extents as ref_ra.
+        ref_ra : RasterArray
+            Reference data block in a RasterArray.
         kernel_shape : tuple, optional
             Sliding kernel [height, width] in pixels.
 
@@ -350,7 +338,7 @@ class KernelModel:
         -------
         param_ra :RasterArray
             RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second, and optionally
-            R2 for each kernel model in the third band when find_r2==True.
+            R2 for each kernel model in the third band when :attr:`find_r2` is True.
         """
         # Least squares formulae adapted from https://www.mathsisfun.com/data/least-squares-regression.html
         if kernel_shape is None:
@@ -414,9 +402,9 @@ class KernelModel:
 
         return param_ra
 
-    def _full_coverage_mask(self, in_mask_ra, param_ra):
+    def _full_coverage_mask(self, in_mask_ra: RasterArray, param_ra: RasterArray) -> RasterArray:
         """
-        Helper function to create a full coverage mask i.e. a mask of output pixels fully covered by source/reference
+        Utility function to create a full coverage mask i.e. a mask of output pixels fully covered by source/reference
         data, sliding (model) kernels, and resampling kernels.
 
         Note: that this is a strict approach that avoids any kind of partial coverage.
@@ -426,8 +414,9 @@ class KernelModel:
         in_mask_ra: RasterArray
             An initial mask of valid source/reference pixels, as a RasterArray with dtype=='uint8'.
         param_ra: RasterArray
-            A parameter RasterArray as returned by fit() i.e. a RasterArray in the CRS and grid corresponding to the
-            'proc_crs' attribute, whose mask corresponds to the combined reference & source masks.
+            A parameter RasterArray as returned by :meth:`fit` i.e. a RasterArray in the CRS and grid corresponding
+            to :attr:`proc_crs`, whose mask corresponds to the combined reference & source masks.
+
         Returns
         -------
         mask_ra: RasterArray
@@ -449,16 +438,16 @@ class KernelModel:
         mask_ra.array = cv.erode(mask, se, borderType=cv.BORDER_CONSTANT, borderValue=0)
         return mask_ra
 
-    def fit(self, ref_ra, src_ra, kernel_shape=None):
+    def fit(self, src_ra: RasterArray, ref_ra: RasterArray, kernel_shape: Tuple[int, int] = None) -> RasterArray:
         """
         Fit sliding kernel models to reference and source blocks.
 
         Parameters
         ----------
-        ref_ra : RasterArray
-            Reference data block in a RasterArray.
         src_ra : RasterArray
             Source data block in a RasterArray, with the same CRS, shape & extents as ref_ra.
+        ref_ra : RasterArray
+            Reference data block in a RasterArray.
         kernel_shape : tuple, optional
             Sliding kernel [height, width] in pixels.
 
@@ -466,7 +455,7 @@ class KernelModel:
         -------
         param_ra :RasterArray
             RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second, and optionally
-            R2 for each kernel model in the third band when find_r2==True.
+            R2 for each kernel model in the third band when :attr:`find_r2` is True.
         """
         # TODO : include a CRS comparison below i.e. one that is faster that rasterio's current implementation
         if ((ref_ra.transform != src_ra.transform) or (ref_ra.shape != src_ra.shape)):
@@ -477,15 +466,15 @@ class KernelModel:
         kernel_shape = tuple(kernel_shape)  # force to tuple for opencv
 
         if self._model == Model.gain:
-            param_ra = self._fit_gain(ref_ra, src_ra, kernel_shape=kernel_shape)
+            param_ra = self._fit_gain(src_ra, ref_ra, kernel_shape=kernel_shape)
         elif self._model == Model.gain_blk_offset:
-            param_ra = self._fit_gain_blk_offset(ref_ra, src_ra, kernel_shape=kernel_shape)
+            param_ra = self._fit_gain_blk_offset(src_ra, ref_ra, kernel_shape=kernel_shape)
         else:
-            param_ra = self._fit_gain_offset(ref_ra, src_ra, kernel_shape=kernel_shape)
+            param_ra = self._fit_gain_offset(src_ra, ref_ra, kernel_shape=kernel_shape)
 
         return param_ra
 
-    def apply(self, src_ra, param_ra):
+    def apply(self, src_ra: RasterArray, param_ra: RasterArray) -> RasterArray:
         """
         Apply kernel models to a source block.
 
@@ -499,14 +488,14 @@ class KernelModel:
 
         Returns
         -------
-        out_ra :RasterArray
+        corr_ra :RasterArray
             Corrected block in a RasterArray.
         """
         if ((param_ra.transform != src_ra.transform) or (param_ra.shape != src_ra.shape)):
             raise ValueError("'param_ra' and 'src_ra' must have the same CRS, transform and shape")
-        out_array = (param_ra.array[0] * src_ra.array) + param_ra.array[1]
-        out_ra = RasterArray.from_profile(out_array, param_ra.profile)
-        return out_ra
+        corr_array = (param_ra.array[0] * src_ra.array) + param_ra.array[1]
+        corr_ra = RasterArray.from_profile(corr_array, param_ra.profile)
+        return corr_ra
 
 
 class RefSpaceModel(KernelModel):
@@ -519,30 +508,30 @@ class RefSpaceModel(KernelModel):
     Recommended for the most common use case where the reference image has a lower resolution than the source image.
     """
 
-    def fit(self, ref_ra, src_ra, **kwargs):
+    def fit(self, src_ra: RasterArray, ref_ra: RasterArray) -> RasterArray:
         """
         Fit sliding kernel models to reference and source blocks.
 
         Parameters
         ----------
-        ref_ra : RasterArray
-            Reference data block in a RasterArray.
         src_ra : RasterArray
             Source data block in a RasterArray.  The src_ra bounds should that contain those of ref_ra.
             Note that in the interests of speed, this is assumed and not checked for.
+        ref_ra : RasterArray
+            Reference data block in a RasterArray.
 
         Returns
         -------
         param_ra :RasterArray
             RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second, and optionally
-            R2 for each kernel model in the third band when find_r2==True.
+            R2 for each kernel model in the third band when :attr:`find_r2` is True.
         """
         # choose resampling method based on whether we are up- or downsampling
         resampling = self._get_resampling(src_ra.res, ref_ra.res)
         # downsample src_ra to reference CRS and grid
         src_ds_ra = src_ra.reproject(**ref_ra.proj_profile, resampling=resampling)
         # call base class fit with reference and source RasterArrays in the reference CRS & grid
-        return KernelModel.fit(self, ref_ra, src_ds_ra, kernel_shape=self._kernel_shape)
+        return KernelModel.fit(self, src_ds_ra, ref_ra, kernel_shape=self._kernel_shape)
 
     def apply(self, src_ra, param_ra):
         """
@@ -593,23 +582,23 @@ class SrcSpaceModel(KernelModel):
     Recommended for the unusual use case where the source image has a lower resolution than the reference image.
     """
 
-    def fit(self, ref_ra, src_ra, **kwargs):
+    def fit(self, src_ra: RasterArray, ref_ra: RasterArray) -> RasterArray:
         """
         Fit sliding kernel models to reference and source blocks.
 
         Parameters
         ----------
-        ref_ra : RasterArray
-            Reference data block in a RasterArray.
         src_ra : RasterArray
             Source data block in a RasterArray.  The ref_ra bounds should contain those of src_ra.
             Note that in the interests of speed, this is assumed and not checked for.
+        ref_ra : RasterArray
+            Reference data block in a RasterArray.
 
         Returns
         -------
         param_ra :RasterArray
             RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second, and optionally
-            R2 for each kernel model in the third band when find_r2==True.
+            R2 for each kernel model in the third band when :attr:`find_r2` is True.
         """
         # choose resampling method based on whether we are up- or downsampling
         resampling = self._get_resampling(ref_ra.res, src_ra.res)
@@ -618,7 +607,7 @@ class SrcSpaceModel(KernelModel):
 
         _src_ra = src_ra.copy()  # copy the source to avoid in-place changes in fit() below
         # call base class fit with source and parameter RasterArrays in the source CRS & grid
-        param_ra = KernelModel.fit(self, ref_us_ra, _src_ra, kernel_shape=self._kernel_shape)
+        param_ra = KernelModel.fit(self, _src_ra, ref_us_ra, kernel_shape=self._kernel_shape)
 
         if self._mask_partial:
             # remove r2 band from param masking
