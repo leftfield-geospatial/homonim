@@ -59,9 +59,8 @@ class RasterFuse(RasterPairReader):
             pixel boundary.  The reference image should have at least as many bands as the source, and the
             ordering of the source and reference bands should match.
         proc_crs: homonim.enums.ProcCrs, optional
-            The initial proc_crs setting, specifying which of the source/reference image spaces should be used for
-            estimating correction parameterS.  See :class:`~homonim.enums.ProcCrs` for details. If
-            proc_crs=ProcCrs.auto (recommended), the lowest resolution image space will be used.
+            A :class:`ProcCrs` instance specifying which of the source/reference image spaces should be used for
+            estimating correction parameters.  See the :class:`~homonim.enums.ProcCrs` documentation for details.
         """
         RasterPairReader.__init__(self, src_filename, ref_filename, proc_crs=proc_crs)
         self._write_lock = threading.Lock()
@@ -233,6 +232,8 @@ class RasterFuse(RasterPairReader):
             raise FileExistsError(
                 f"Parameter image file exists and won't be overwritten without the `overwrite` option: {param_filename}"
             )
+        # TODO  test speed of process on full res NGI imagery
+        # rio_env = rio.Env(GDAL_NUM_THREADS='ALL_CPUs').__enter__()
         out_im = rio.open(corr_filename, 'w', **self._merge_corr_profile(out_profile))
         param_im = rio.open(param_filename, 'w', **self._merge_param_profile(out_profile)) if param_filename else None
         yield (out_im, param_im)
@@ -247,6 +248,7 @@ class RasterFuse(RasterPairReader):
             if build_ovw:
                 self._build_overviews(param_im)
             param_im.close()
+        # rio_env.__exit__()
 
     def _process_block(
         self, block_pair: BlockPair, model: KernelModel, corr_im: DatasetWriter, param_im: DatasetWriter = None,

@@ -38,7 +38,12 @@ class Model(str, Enum):
 
 
 class ProcCrs(str, Enum):
-    """ Enumeration for the processing space (image co-ordinate system and resolution in which to perform processing). """
+    """
+     Enumeration for the CRS in which to process images.
+     """
     auto = 'auto'
+    """ Lowest resolution of the source and reference image CRS's (recommended). """
     src = 'src'
+    """ Source image CRS. """
     ref = 'ref'
+    """ Reference image CRS. """

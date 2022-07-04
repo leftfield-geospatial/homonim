@@ -72,10 +72,9 @@ class RasterPairReader:
             pixel boundary.  The reference image should have at least as many bands as the source, and the
             ordering of the source and reference bands should match.
         proc_crs: homonim.enums.ProcCrs, optional
-            The initial proc_crs setting, specifying which of the source/reference image spaces should be used for
-            processing.  See :class:`~homonim.enums.ProcCrs` for details. If proc_crs=ProcCrs.auto (recommended), the
-            lowest resolution image space will be used.  Source and reference blocks are constructed so that
-            re-projections to and from the ``proc_crs`` CRS will not lose valid pixels.
+        proc_crs: homonim.enums.ProcCrs, optional
+            A :class:`ProcCrs` instance specifying which of the source/reference image spaces should be used for
+            processing.  See the :class:`~homonim.enums.ProcCrs` documentation for details.
         """
         self._src_filename = pathlib.Path(src_filename)
         self._ref_filename = pathlib.Path(ref_filename)
