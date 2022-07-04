@@ -87,7 +87,7 @@ def test_fuse(
     ref_file = request.getfixturevalue(ref_file)
     src_file_str = ' '.join([str(fn) for fn in src_files])
     post_fix = utils.create_out_postfix(exp_proc_crs, method, kernel_shape, RasterFuse.create_out_profile()['driver'])
-    homo_files = [tmp_path.joinpath(src_file.stem + post_fix) for src_file in src_files]
+    corr_files = [tmp_path.joinpath(src_file.stem + post_fix) for src_file in src_files]
 
     cli_str = (
         f'fuse -m {method.value} -k {kernel_shape[0]} {kernel_shape[1]} -od {tmp_path} -pc {proc_crs.value}'
@@ -97,35 +97,35 @@ def test_fuse(
         cli_str += ' --mask-partial'
     result = runner.invoke(cli, cli_str.split())
     assert (result.exit_code == 0)
-    assert all([homo_file.exists() for homo_file in homo_files])
+    assert all([corr_file.exists() for corr_file in corr_files])
 
-    for (src_file, homo_file) in zip(src_files, homo_files):
-        # test homo_file improves on src_file (by comparing both to ref_file)
+    for (src_file, corr_file) in zip(src_files, corr_files):
+        # test corr_file improves on src_file (by comparing both to ref_file)
         src_compare = RasterCompare(src_file, ref_file, proc_crs=proc_crs)
         src_res = src_compare.compare()
-        homo_compare = RasterCompare(homo_file, ref_file, proc_crs=proc_crs)
-        homo_res = homo_compare.compare()
+        corr_compare = RasterCompare(corr_file, ref_file, proc_crs=proc_crs)
+        corr_res = corr_compare.compare()
         for band_key in src_res.keys():
-            assert (homo_res[band_key]['r2'] > src_res[band_key]['r2'])
-            assert (homo_res[band_key]['RMSE'] < src_res[band_key]['RMSE'])
+            assert (corr_res[band_key]['r2'] > src_res[band_key]['r2'])
+            assert (corr_res[band_key]['RMSE'] < src_res[band_key]['RMSE'])
 
-        # test homo_file mask
-        with rio.open(src_file, 'r') as src_ds, rio.open(homo_file, 'r') as homo_ds:
+        # test corr_file mask
+        with rio.open(src_file, 'r') as src_ds, rio.open(corr_file, 'r') as corr_ds:
             src_mask = src_ds.dataset_mask().astype('bool', copy=False)
-            homo_mask = homo_ds.dataset_mask().astype('bool', copy=False)
+            corr_mask = corr_ds.dataset_mask().astype('bool', copy=False)
             if not mask_partial:
                 # test src and homo masks are identical
-                assert (homo_res['Mean']['N'] == src_res['Mean']['N'])
-                assert (homo_mask == src_mask).all()
+                assert (corr_res['Mean']['N'] == src_res['Mean']['N'])
+                assert (corr_mask == src_mask).all()
             else:
                 # test homo mask is smaller than src mask
-                assert (homo_res['Mean']['N'] < src_res['Mean']['N'])
-                assert (homo_mask.sum() > 0)
-                assert (homo_mask.sum() < src_mask.sum())
-                assert (src_mask[homo_mask].all())
+                assert (corr_res['Mean']['N'] < src_res['Mean']['N'])
+                assert (corr_mask.sum() > 0)
+                assert (corr_mask.sum() < src_mask.sum())
+                assert (src_mask[corr_mask].all())
                 # test homo mask consists of one blob
-                homo_mask_shapes = list(shapes(homo_mask.astype('uint8', copy=False), mask=homo_mask, connectivity=8))
-                assert (len(homo_mask_shapes) == 1)
+                corr_mask_shapes = list(shapes(corr_mask.astype('uint8', copy=False), mask=corr_mask, connectivity=8))
+                assert (len(corr_mask_shapes) == 1)
 
 
 ##

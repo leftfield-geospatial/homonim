@@ -14,8 +14,9 @@ RasterFuse
 .. autosummary::
     :toctree: _generated
 
+    ~RasterFuse.create_config
+    ~RasterFuse.create_out_profile
     ~RasterFuse.process
-    ~RasterFuse.build_overviews
 
 
 .. rubric:: Attributes
@@ -23,12 +24,8 @@ RasterFuse
 .. autosummary::
     :toctree: _generated
 
-    ~RasterFuse.method
-    ~RasterFuse.kernel_shape
     ~RasterFuse.proc_crs
     ~RasterFuse.closed
-    ~RasterFuse.homo_filename
-    ~RasterFuse.param_filename
 
 
 RasterCompare

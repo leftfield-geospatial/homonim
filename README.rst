@@ -68,7 +68,7 @@ Download the ``homonim`` github repository to get the test imagery. If you have 
 Alternatively, download it from `here <https://github.com/dugalh/homonim/archive/refs/heads/main.zip>`__, extract the
 zip archive and rename the *homonim-main* directory to *homonim*.
 
-Using the ``gain-blk-offset`` method and a 5 x 5 pixel kernel, homogenise the aerial images with the Sentinel-2
+Using the ``gain-blk-offset`` method and a 5 x 5 pixel kernel, correct the aerial images with the Sentinel-2
 reference.
 
 .. code:: shell
@@ -103,8 +103,8 @@ Terminology
 
 ``homonim`` is shorthand for *homogenise image* and is a reference to `the paper <https://www.researchgate
 .net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data>`_ on which
-it is based.  The terms *correction* or *surface reflectance correction* are used to describe the method in the
-documentation, as these are commonly understood.
+it is based.  The more commonly understood terms *correction* or *surface reflectance correction* are used to describe
+the method in the documentation.
 
 Credits
 -------

@@ -53,8 +53,8 @@ jobs:
         run: |
           pwd
           ls -R
-          mkdir ./data/test_example/homogenised/
+          mkdir ./data/test_example/corrected/
           homonim fuse --help
-          homonim fuse -m gain-blk-offset -k 5 5 -od ./data/test_example/homogenised -o ./data/test_example/source/3324c_2015_1004_05_0182_RGB.tif  ./data/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif
-          ls ./data/test_example/homogenised/*
-          test -f ./data/test_example/homogenised/3324c_2015_1004_05_0182_RGB_HOMO_cREF_mGAIN-BLK-OFFSET_k5_5.tif && echo "OK"
+          homonim fuse -m gain-blk-offset -k 5 5 -od ./data/test_example/corrected -o ./data/test_example/source/3324c_2015_1004_05_0182_RGB.tif  ./data/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif
+          ls ./data/test_example/corrected/*
+          test -f ./data/test_example/corrected/3324c_2015_1004_05_0182_RGB_FUSE_cREF_mGAIN-BLK-OFFSET_k5_5.tif && echo "OK"

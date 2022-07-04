@@ -78,8 +78,7 @@ class RasterPairReader:
         """
         self._src_filename = pathlib.Path(src_filename)
         self._ref_filename = pathlib.Path(ref_filename)
-        if not isinstance(proc_crs, ProcCrs):
-            raise ValueError("'proc_crs' must be an instance of homonim.enums.ProcCrs")
+        proc_crs = ProcCrs(proc_crs)
         self._proc_crs = proc_crs
 
         self._env = None

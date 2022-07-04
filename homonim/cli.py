@@ -414,33 +414,33 @@ def fuse(
         raise click.BadParameter(str(ex))
 
     # build configuration dictionaries for RasterFuse
-    fuse_config = _update_existing_keys(RasterFuse.create_config(), **kwargs)
-    model_config = _update_existing_keys(KernelModel.create_config(), **kwargs)
+    block_config = _update_existing_keys(RasterFuse.create_config(), **kwargs)
+    method_config = _update_existing_keys(KernelModel.create_config(), **kwargs)
     out_profile = _update_existing_keys(RasterFuse.create_out_profile(), **kwargs)
-    config = dict(fuse_config=fuse_config, model_config=model_config, out_profile=out_profile)
+    config = dict(block_config=block_config, method_config=method_config, out_profile=out_profile)
     comp_files = []
 
-    # iterate over and homogenise source file(s)
+    # iterate over and correct source file(s)
     try:
         for src_filename in src_file:
             out_path = pathlib.Path(out_dir) if out_dir is not None else src_filename.parent
             logger.info(f'\nCorrecting {src_filename.name}')
-            with RasterFuse(src_filename, ref_file, proc_crs=ProcCrs(proc_crs)) as raster_fuse:
+            with RasterFuse(src_filename, ref_file, proc_crs=proc_crs) as raster_fuse:
                 # construct output filenames
                 post_fix = utils.create_out_postfix(
                     raster_fuse.proc_crs, method=method, kernel_shape=kernel_shape, driver=out_profile['driver'],
                 )
-                out_filename = out_path.joinpath(src_filename.stem + post_fix)
-                param_filename = utils.create_param_filename(out_filename) if param_image else None
+                corr_filename = out_path.joinpath(src_filename.stem + post_fix)
+                param_filename = utils.create_param_filename(corr_filename) if param_image else None
 
                 start_time = timer()
                 raster_fuse.process(
-                    out_filename, Method(method), kernel_shape, param_filename=param_filename, build_ovw=build_ovw,
+                    corr_filename, Method(method), kernel_shape, param_filename=param_filename, build_ovw=build_ovw,
                     overwrite=overwrite, **config,
                 )
 
             logger.info(f'Completed in {timer() - start_time:.2f} secs')
-            comp_files += [src_filename, out_filename]  # build a list of files to pass to compare
+            comp_files += [src_filename, corr_filename]  # build a list of files to pass to compare
 
         # compare source and corrected files with reference (invokes compare command with relevant parameters)
         if comp_ref_file:
