@@ -60,8 +60,8 @@ class RasterPairReader:
         """
         A thread-safe class for reading matching blocks from a source and reference image pair.
 
-        Images are divided into (optionally overlapping) blocks to satisfy a maximum block memory limit.  Blocks extents
-        are constructed so that re-projections between source and reference do not lose valid data.
+        Images are divided into (optionally overlapping) blocks that satisfy a maximum block memory limit.  Blocks
+        extents are constructed so that re-projections between source and reference do not lose valid data.
 
         Parameters
         ----------
@@ -72,9 +72,8 @@ class RasterPairReader:
             pixel boundary.  The reference image should have at least as many bands as the source, and the
             ordering of the source and reference bands should match.
         proc_crs: homonim.enums.ProcCrs, optional
-        proc_crs: homonim.enums.ProcCrs, optional
-            A :class:`ProcCrs` instance specifying which of the source/reference image spaces should be used for
-            processing.  See the :class:`~homonim.enums.ProcCrs` documentation for details.
+            :class:`~homonim.enums.ProcCrs` instance specifying which of the source/reference image spaces should be
+            used for estimating correction parameters.
         """
         self._src_filename = pathlib.Path(src_filename)
         self._ref_filename = pathlib.Path(ref_filename)
@@ -114,14 +113,13 @@ class RasterPairReader:
     @property
     def proc_crs(self) -> ProcCrs:
         """
-        Which of the source/reference image CRS's is selected for processing.  See :class:`homonim.enums.ProcCrs` for a
-        description of possible values.
+        Which image of the source and reference image CRSs is selected for processing.
         """
         return self._proc_crs
 
     @property
     def closed(self) -> bool:
-        """ Are both source and refernce images closed. """
+        """ Are both source and reference images closed. """
         return not self._src_im or not self._ref_im or self._src_im.closed or self._ref_im.closed
 
     @staticmethod
@@ -344,7 +342,7 @@ class RasterPairReader:
 
         Parameters
         ----------
-        overlap: tuple
+        overlap: tuple of int
             Block overlap (rows, columns) in pixels of the :attr:`proc_crs` image.
         max_block_mem: float
             Maximum allowable block size in MB. The image is divided into 2**n blocks with n the smallest number

@@ -20,7 +20,7 @@ from enum import Enum
 
 
 class Model(str, Enum):
-    """ Enumeration for the surface reflectance correction model. """
+    """ Surface reflectance correction model. """
     gain = 'gain'
     """ 
     Gain-only model, suitable for haze-free and zero offset images (i.e. images where a surface reflectance of 
@@ -39,8 +39,8 @@ class Model(str, Enum):
 
 class ProcCrs(str, Enum):
     """
-     Enumeration for the CRS in which to process images.
-     """
+    CRS in which to process images.
+    """
     auto = 'auto'
     """ Lowest resolution of the source and reference image CRS's (recommended). """
     src = 'src'

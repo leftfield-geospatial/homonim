@@ -51,7 +51,7 @@ class KernelModel:
         kernel_shape: tuple
             The (height, width) of the kernel in pixels.
         find_r2: bool, optional
-            Whether to calculate R2 (coefficient of determinsation) for each kernel model, and include in
+            Whether to calculate *R*\ :sup:`2` (coefficient of determination) for each kernel model, and include in
             parameter arrays.
         kwargs:
             Optional configuration arguments.  See :meth:`KernelModel.create_config` for keys and defaults values.
@@ -78,7 +78,7 @@ class KernelModel:
 
     @property
     def find_r2(self) -> bool:
-        """ Whether to create and incude R2 (coefficient of determinsation) in parameter arrays. """
+        """ Whether to create and include R2 (coefficient of determinsation) in parameter arrays. """
         return self._find_r2
 
     @staticmethod
@@ -94,18 +94,18 @@ class KernelModel:
         Parameters
         ----------
         r2_inpaint_thresh: float, optional
-            The R2 (coefficient of determination) threshold below which to `in-paint` kernel model parameters from
-            surrounding areas (applies to :attr:`model` == :attr:`~homonim.enums.Model.gain_offset` only).  For pixels
-            where the model gives a poor approximation to the data (this can occur in e.g. shadowed areas,
+            The *R*\ :sup:`2` (coefficient of determination) threshold below which to `in-paint` kernel model parameters
+            from surrounding areas (applies to :attr:`model` == :attr:`~homonim.enums.Model.gain_offset` only).  For
+            pixels where the model gives a poor approximation to the data (this can occur in e.g. shadowed areas,
             areas where there is poor source-reference co-registration, or areas where there has been land cover change
             between the source and reference images), model offsets are interpolated from surrounding areas, and
             gains re-estimated.  It can be set to ``None`` to turn off in-painting.
         mask_partial: bool, optional
             Mask output pixels not produced by full kernel or source/reference image coverage.  Useful for ensuring
             strict model validity, and reducing seam-lines between overlapping images.
-        downsampling: rasterio.enums.Resampling
+        downsampling: rasterio.enums.Resampling, optional
             The resampling method to use when downsampling.
-        upsampling: rasterio.enums.Resampling
+        upsampling: rasterio.enums.Resampling, optional
             The resampling method to use when upsampling.
 
         Returns
@@ -407,7 +407,7 @@ class KernelModel:
         -------
         param_ra :RasterArray
             RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second, and optionally
-            R2 for each kernel model in the third band when :attr:`find_r2` is True.
+            *R*\ :sup:`2` for each kernel model in the third band when :attr:`find_r2` is True.
         """
         # TODO : include a CRS comparison below i.e. one that is faster that rasterio's current implementation
         if ((ref_ra.transform != src_ra.transform) or (ref_ra.shape != src_ra.shape)):
