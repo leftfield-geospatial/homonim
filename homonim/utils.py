@@ -20,6 +20,7 @@
 import logging
 import pathlib
 from multiprocessing import cpu_count
+from typing import Tuple
 
 import numpy as np
 import rasterio as rio
@@ -84,7 +85,7 @@ def round_window_to_grid(win):
     return Window(col_off=col_range[0], row_off=row_range[0], width=np.diff(col_range)[0], height=np.diff(row_range)[0])
 
 
-def validate_kernel_shape(kernel_shape, model=Model.gain_blk_offset):
+def validate_kernel_shape(kernel_shape: Tuple[int, int], model=Model.gain_blk_offset) -> Tuple[int, int]:
     """
     Check a kernel_shape (height, width) tuple for validity.  Raises ValueError if kernel_shape is invalid.
 
@@ -97,7 +98,7 @@ def validate_kernel_shape(kernel_shape, model=Model.gain_blk_offset):
 
     Returns
     -------
-    kernel_shape: numpy.array
+    kernel_shape: tuple
         The validated kernel_shape as a numpy array.
     """
     kernel_shape = np.array(kernel_shape).astype(int)
@@ -107,7 +108,7 @@ def validate_kernel_shape(kernel_shape, model=Model.gain_blk_offset):
         raise ValueError('`kernel_shape` area should contain at least 25 elements for the gain-offset model.')
     if not np.all(kernel_shape >= 1):
         raise ValueError('`kernel_shape` must be a minimum of one in both dimensions.')
-    return kernel_shape
+    return tuple(kernel_shape)
 
 
 def overlap_for_kernel(kernel_shape):
