@@ -58,8 +58,7 @@ class BlockPair(NamedTuple):
 class RasterPairReader:
     def __init__(self, src_filename, ref_filename, proc_crs=ProcCrs.auto):
         """
-        A context manager class for reading matching, and optionally overlapping blocks from a source and
-        reference image pair.
+        Class for reading matching, and optionally overlapping, blocks from a source and reference image pair.
 
         Parameters
         ----------
@@ -67,7 +66,7 @@ class RasterPairReader:
             Path to the source image file.
         ref_filename: str, pathlib.Path
             Path to the reference image file.  The extents of this image should cover the source with at least a 2
-            pixel boundary.  The reference image should have at least as many bands as the source, and the
+            pixel border.  The reference image should have at least as many bands as the source, and the
             ordering of the source and reference bands should match.
         proc_crs: homonim.enums.ProcCrs, optional
             :class:`~homonim.enums.ProcCrs` instance specifying which of the source/reference image spaces will be
@@ -280,9 +279,11 @@ class RasterPairReader:
         src_filename: pathlib.Path, ref_filename: pathlib.Path, proc_crs: ProcCrs = ProcCrs.auto
     ) -> ProcCrs:
         """
-        Resolve a :class:`~homonim.enums.ProcCrs` instance from :attr:`~homonim.enums.ProcCrs.auto` to the lowest
-        resolution CRS of the supplied source and reference image pair.  If it is already resolved, then warn if it
-        does not correspond to the lowest resolution CRS of the pair.
+        Resolve a :class:`~homonim.enums.ProcCrs` instance.
+
+        The :class:`~homonim.enums.ProcCrs` instance is resolved from :attr:`~homonim.enums.ProcCrs.auto` to the lowest
+        resolution CRS of the supplied source and reference images.  If the :class:`~homonim.enums.ProcCrs` instance is
+        already resolved, and doesn't correspond to the lowest resolution CRS, then a warning is issued.
 
         Parameters
         ----------
@@ -344,8 +345,9 @@ class RasterPairReader:
         Parameters
         ----------
         block_pair: BlockPair
-            BlockPair named tuple, as returned by :meth:`block_pairs` that specifies the :attr:`BlockPair.src_in_block`
-            and :attr:`BlockPair.ref_in_block` source and reference windows to be read.
+            :class:`BlockPair` named tuple, specifying the :attr:`BlockPair.src_in_block` source window, and
+            :attr:`BlockPair.ref_in_block` reference window to read.  This :class:`BlockPair` instance is
+            typically obtained from :meth:`block_pairs`.
 
         Returns
         -------
@@ -375,9 +377,9 @@ class RasterPairReader:
         overlap: tuple of int
             Block overlap (rows, columns) in pixels of the :attr:`proc_crs` image.
         max_block_mem: float
-            Maximum allowable block size in MB. The image is divided into 2**n blocks with n the smallest number
-            where max_block_mem is satisfied.  If ``max_block_mem==float('inf')``, the block shape will be set to the
-            encompass full extent of the source image.
+            Maximum allowable block size in MB. The image is divided into 2\ :sup:`n` blocks with n the smallest number
+            where ``max_block_mem`` is satisfied.  If ``max_block_mem`` is `float('inf')`, the block shape will be set
+            to the encompass full extent of the source image.
 
         Yields
         -------

@@ -52,7 +52,7 @@ class RasterFuse(RasterPairReader):
             Path to the source image file.
         ref_filename: str, pathlib.Path
             Path to the reference image file.  The extents of this image should cover the source with at least a 2
-            pixel boundary.  The reference image should have at least as many bands as the source, and the
+            pixel border.  The reference image should have at least as many bands as the source, and the
             ordering of the source and reference bands should match.
         proc_crs: homonim.enums.ProcCrs, optional
             :class:`~homonim.enums.ProcCrs` instance specifying which of the source/reference image spaces should be
