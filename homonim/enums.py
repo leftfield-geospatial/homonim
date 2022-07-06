@@ -28,7 +28,7 @@ class Model(str, Enum):
     """
     gain_blk_offset = 'gain-blk-offset'
     """ 
-    Gain-only model applied to offset normalised image blocks.  Suitable for most image combinations.
+    Gain-only model applied to offset normalised image blocks.  Suitable for most source / reference combinations.
     """
     gain_offset = 'gain-offset'
     """
@@ -39,7 +39,7 @@ class Model(str, Enum):
 
 class ProcCrs(str, Enum):
     """
-    CRS in which to process images.
+    CRS in which images will be processed.
     """
     auto = 'auto'
     """ Lowest resolution of the source and reference image CRS's (recommended). """

@@ -57,8 +57,8 @@ class RasterFuse(RasterPairReader):
         proc_crs: homonim.enums.ProcCrs, optional
             :class:`~homonim.enums.ProcCrs` instance specifying which of the source/reference image spaces should be
             used for estimating correction parameters.  In most cases, it can be left as the default of
-            :attr:`~homonim.enums.ProcCrs.auto`,  where it will be resolved to the refer to lowest
-            resolution of the source and reference image CRS's.
+            :attr:`~homonim.enums.ProcCrs.auto`,  where it will be resolved to lowest resolution of the source and
+            reference image CRS's.
         """
         RasterPairReader.__init__(self, src_filename, ref_filename, proc_crs=proc_crs)
         self._corr_lock = threading.Lock()
@@ -73,9 +73,10 @@ class RasterFuse(RasterPairReader):
         Parameters
         ----------
         threads: int, optional
-            Number of image blocks to process concurrently.
+            Number of image blocks to process concurrently.  A maximum of the number of processors on your
+            system is allowed.  Increasing this number will increase the memory required for processing.
         max_block_mem: float, optional
-            Maximum size of on image block in megabytes. Note that the total memory consumed by a thread is
+            Maximum size of an image block in megabytes. Note that the total memory consumed by a thread is
             proportional to, but a number of times larger than this number.
 
         Returns
@@ -83,7 +84,7 @@ class RasterFuse(RasterPairReader):
         dict
             Block processing configuration dictionary.
         """
-        return dict(threads=threads, max_block_mem=max_block_mem)
+        return dict(threads=utils.validate_threads(threads), max_block_mem=max_block_mem)
 
     @staticmethod
     def create_out_profile(
@@ -93,7 +94,7 @@ class RasterFuse(RasterPairReader):
         creation_options: Dict = None
     )->Dict: # yapf: disable
         """
-        Utility method to create a rasterio image profile for the output image(s) that can be passed to
+        Utility method to create a `rasterio` image profile for the output image(s) that can be passed to
         :meth:`RasterFuse.process`.  Without arguments, the default profile is returned.
 
         Parameters
@@ -102,17 +103,17 @@ class RasterFuse(RasterPairReader):
             Output format driver.  See the `GDAL docs <https://gdal.org/drivers/raster/index.html>`_ for
             available options.
         dtype: str, optional
-            Output image data type.
+            Output image data type.  One of: uint8|uint16|int16|uint32|int32|float32|float64.
         nodata: float, optional
             Output image nodata value.
         creation_options: dict, optional
             Driver specific creation options.  See the `GDAL docs <https://gdal.org/drivers/raster/index.html>`_ for
-            possible keys.
+            available keys and values.
 
         Returns
         -------
         dict
-            rasterio image profile for output images.
+            `rasterio` image profile for output images.
         """
         creation_options = creation_options or dict(
             tiled=True, blockxsize=512, blockysize=512, compress='deflate', interleave='band', photometric=None
@@ -298,7 +299,7 @@ class RasterFuse(RasterPairReader):
         corr_filename: str, Path
             Path to the corrected file to create.
         model: homonim.enums.Model
-            The surface reflectance correction model to use.
+            The surface reflectance correction model to use.  See :class:`~homonim.enums.Model` for details.
         kernel_shape: tuple of int
             The (height, width) of the kernel in pixels of the :attr:`proc_crs` image (the lowest resolution
             image, if :attr:`proc_crs` is :attr:`~homonim.enums.ProcCrs.auto`).

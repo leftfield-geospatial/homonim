@@ -111,7 +111,7 @@ class RasterPairReader:
 
     @property
     def proc_crs(self) -> ProcCrs:
-        """ Which of the source and reference image CRS's is to be used for processing. """
+        """ Which of the source and reference image CRS's will be used for processing. """
         return self._proc_crs
 
     @property
@@ -177,10 +177,11 @@ class RasterPairReader:
         src_im: rasterio.DatasetReader, ref_im: rasterio.DatasetReader, proc_crs: ProcCrs = ProcCrs.auto
     ) -> ProcCrs:
         """
-        Resolve proc_crs from ProcCrs.auto to the lowest resolution of the source and reference image pair.  If it is
-        already resolved, then warn if it does not correspond to the lowest resolution image of the pair.
+        Resolve a :class:`~homonim.enums.ProcCrs` instance.
+        The :class:`~homonim.enums.ProcCrs` instance is resolved from :attr:`~homonim.enums.ProcCrs.auto` to the lowest
+        resolution CRS of the supplied source and reference images.  If the :class:`~homonim.enums.ProcCrs` instance is
+        already resolved, and doesn't correspond to the lowest resolution CRS, then a warning is issued.
         """
-
         # compare source and reference resolutions
         src_pixel_smaller = np.prod(np.abs(src_im.res)) <= np.prod(np.abs(ref_im.res))
         cmp_str = 'smaller' if src_pixel_smaller else 'larger'
@@ -203,6 +204,38 @@ class RasterPairReader:
             )
         return proc_crs
 
+    @staticmethod
+    def resolve_proc_crs(
+        src_filename: pathlib.Path, ref_filename: pathlib.Path, proc_crs: ProcCrs = ProcCrs.auto
+    ) -> ProcCrs:
+        """
+        Resolve a :class:`~homonim.enums.ProcCrs` instance.
+
+        The :class:`~homonim.enums.ProcCrs` instance is resolved from :attr:`~homonim.enums.ProcCrs.auto` to the lowest
+        resolution CRS of the supplied source and reference images.  If the :class:`~homonim.enums.ProcCrs` instance is
+        already resolved, and doesn't correspond to the lowest resolution CRS, then a warning is issued.
+
+        Parameters
+        ----------
+        src_filename: str, pathlib.Path
+            Path to the source image file.
+        ref_filename: str, pathlib.Path
+            Path to the reference image file.
+        proc_crs: homonim.enums.ProcCrs, optional
+            :class:`~homonim.enums.ProcCrs` instance to resolve.
+
+        Returns
+        -------
+        ProcCrs
+            A :class:`~homonim.enums.ProcCrs` instance resolved to either :attr:`~homonim.enums.ProcCrs.src` or
+            :attr:`~homonim.enums.ProcCrs.ref`.
+        """
+        with rio.open(src_filename, 'r') as src_im, rio.open(ref_filename, 'r') as ref_im:
+            with (
+                WarpedVRT(ref_im, crs=src_im.crs, resampling=Resampling.bilinear)
+                if src_im.crs.to_proj4() != ref_im.crs.to_proj4() else ref_im
+            ) as ref_im:
+                return RasterPairReader._resolve_proc_crs(src_im, ref_im, proc_crs=proc_crs)
 
     def _auto_block_shape(self, max_block_mem: float = np.inf):
         """ Find a block shape that satisfies max_block_mem. """
@@ -273,39 +306,6 @@ class RasterPairReader:
             raise errors.IoError(
                 f'The raster pair has not been opened: {self._src_filename.name} and {self._ref_filename.name}'
             )
-
-    @staticmethod
-    def resolve_proc_crs(
-        src_filename: pathlib.Path, ref_filename: pathlib.Path, proc_crs: ProcCrs = ProcCrs.auto
-    ) -> ProcCrs:
-        """
-        Resolve a :class:`~homonim.enums.ProcCrs` instance.
-
-        The :class:`~homonim.enums.ProcCrs` instance is resolved from :attr:`~homonim.enums.ProcCrs.auto` to the lowest
-        resolution CRS of the supplied source and reference images.  If the :class:`~homonim.enums.ProcCrs` instance is
-        already resolved, and doesn't correspond to the lowest resolution CRS, then a warning is issued.
-
-        Parameters
-        ----------
-        src_filename: str, pathlib.Path
-            Path to the source image file.
-        ref_filename: str, pathlib.Path
-            Path to the reference image file.
-        proc_crs: homonim.enums.ProcCrs, optional
-            :class:`~homonim.enums.ProcCrs` instance to resolve.
-
-        Returns
-        -------
-        ProcCrs
-            A :class:`~homonim.enums.ProcCrs` instance resolved to either :attr:`~homonim.enums.ProcCrs.src` or
-            :attr:`~homonim.enums.ProcCrs.ref`.
-        """
-        with rio.open(src_filename, 'r') as src_im, rio.open(ref_filename, 'r') as ref_im:
-            with (
-                WarpedVRT(ref_im, crs=src_im.crs, resampling=Resampling.bilinear)
-                if src_im.crs.to_proj4() != ref_im.crs.to_proj4() else ref_im
-            ) as ref_im:
-                return RasterPairReader._resolve_proc_crs(src_im, ref_im, proc_crs=proc_crs)
 
     def open(self):
         """ Open the source and reference images for reading. """

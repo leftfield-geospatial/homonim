@@ -88,18 +88,17 @@ class KernelModel:
     ) -> Dict:
         """
         Utility method to create a KernelModel configuration dictionary that can be passed to
-        :meth:`KernelModel.__init__` and :meth:`RasterFuse.process`.  Without arguments, the default configuration
-        values are returned.
+        :meth:`KernelModel.__init__` and :meth:`homonim.RasterFuse.process`.  Without arguments, the default
+        configuration values are returned.
 
         Parameters
         ----------
         r2_inpaint_thresh: float, optional
             The *R*\ :sup:`2` (coefficient of determination) threshold below which to `in-paint` kernel model parameters
             from surrounding areas (applies to :attr:`model` == :attr:`~homonim.enums.Model.gain_offset` only).  For
-            pixels where the model gives a poor approximation to the data (this can occur in e.g. shadowed areas,
-            areas where there is poor source-reference co-registration, or areas where there has been land cover change
-            between the source and reference images), model offsets are interpolated from surrounding areas, and
-            gains re-estimated.  It can be set to ``None`` to turn off in-painting.
+            pixels where the model gives a poor approximation to the data (this can in areas where source and reference
+            differ due to e.g. shadowing, land cover changes etc), model offsets are interpolated from surrounding
+            areas, and gains re-estimated.  Set ``r2_inpaint_thresh`` to `None` to turn off in-painting.
         mask_partial: bool, optional
             Mask output pixels not produced by full kernel or source/reference image coverage.  Useful for ensuring
             strict model validity, and reducing seam-lines between overlapping images.
