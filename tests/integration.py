@@ -101,10 +101,10 @@ def test_fuse(
 
     for (src_file, corr_file) in zip(src_files, corr_files):
         # test corr_file improves on src_file (by comparing both to ref_file)
-        src_compare = RasterCompare(src_file, ref_file, proc_crs=proc_crs)
-        src_res = src_compare.compare()
-        corr_compare = RasterCompare(corr_file, ref_file, proc_crs=proc_crs)
-        corr_res = corr_compare.compare()
+        with RasterCompare(src_file, ref_file, proc_crs=proc_crs) as src_compare:
+            src_res = src_compare.compare()
+        with RasterCompare(corr_file, ref_file, proc_crs=proc_crs) as corr_compare:
+            corr_res = corr_compare.compare()
         for band_key in src_res.keys():
             assert (corr_res[band_key]['r2'] > src_res[band_key]['r2'])
             assert (corr_res[band_key]['RMSE'] < src_res[band_key]['RMSE'])

@@ -129,18 +129,17 @@ def test_block_pair_continuity(src_file, ref_file, proc_crs, blk_overlap, max_bl
 
     with raster_pair:
         # Create lists of compare_blocks() parameters for each block in a BlockPair.
-        # NOTE: the non-proc_crs *in_block may overlap more than ``overlap`, otherwise *in_block's should overlap by
-        # exactly blk_overlap, and *out_blocks should be exactly adjacent.  For the previous sentence to hold,
-        # max_block_mem, and blk_overlap should be such that the block shape > 2*overlap.  Hence, in the parameterize
-        # list above, there are smaller blk_overlap's for smaller max_block_mem's.
+        # NOTE: the <'other' crs>_in_block may overlap more than ``overlap`, otherwise <proc_crs>_in_block's should
+        # overlap by exactly blk_overlap, and *out_blocks should be exactly adjacent.  max_block_mem, and blk_overlap
+        # should however be chosen to give a block shape > 2*overlap.
         block_keys = ['src_in_block', 'ref_in_block', 'src_out_block', 'ref_out_block']
         # *in_blocks overlap, *out_blocks don't
         overlaps = [blk_overlap, blk_overlap, (0, 0), (0, 0)]
         if raster_pair.proc_crs == ProcCrs.ref:
-            # the src_in_block can overlap by more than blk_overlap, the rest should be exact
+            # the src_in_block can overlap by more than blk_overlap, the other blocks should be exact
             compares = [np.less_equal, np.equal, np.equal, np.equal]
         else:
-            # the ref_in_block can overlap by more than blk_overlap, the rest should be exact
+            # the ref_in_block can overlap by more than blk_overlap, the other blocks should be exact
             compares = [np.equal, np.less_equal, np.equal, np.equal]
         block_pairs = list(raster_pair.block_pairs(overlap=blk_overlap, max_block_mem=max_block_mem))
         prev_block_pair = block_pairs[0]
