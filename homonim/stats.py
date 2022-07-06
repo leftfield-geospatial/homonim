@@ -35,7 +35,7 @@ from homonim.enums import Model
 
 logger = logging.getLogger(__name__)
 
-
+# TODO: make it clear here, and in compare what is R2 coeff of det, and PCC
 class ParamStats:
     """ Class to find statistics of a parameter image. """
     default_config = dict(threads=cpu_count() - 1)

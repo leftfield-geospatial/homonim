@@ -48,15 +48,17 @@ class RasterFuse(RasterPairReader):
 
         Parameters
         ----------
-        src_filename: str, Path
+        src_filename: str, pathlib.Path
             Path to the source image file.
-        ref_filename: str, Path
+        ref_filename: str, pathlib.Path
             Path to the reference image file.  The extents of this image should cover the source with at least a 2
             pixel boundary.  The reference image should have at least as many bands as the source, and the
             ordering of the source and reference bands should match.
         proc_crs: homonim.enums.ProcCrs, optional
             :class:`~homonim.enums.ProcCrs` instance specifying which of the source/reference image spaces should be
-            used for estimating correction parameters.
+            used for estimating correction parameters.  In most cases, it can be left as the default of
+            :attr:`~homonim.enums.ProcCrs.auto`,  where it will be resolved to the refer to lowest
+            resolution of the source and reference image CRS's.
         """
         RasterPairReader.__init__(self, src_filename, ref_filename, proc_crs=proc_crs)
         self._corr_lock = threading.Lock()
@@ -237,18 +239,19 @@ class RasterFuse(RasterPairReader):
         # TODO test speed of process on full res NGI imagery
         out_im = rio.open(corr_filename, 'w', **self._merge_corr_profile(out_profile))
         param_im = rio.open(param_filename, 'w', **self._merge_param_profile(out_profile)) if param_filename else None
-        yield (out_im, param_im)
-
-        # exit
-        self._set_corr_metadata(out_im, **kwargs)
-        if build_ovw:
-            self._build_overviews(out_im)
-        out_im.close()
-        if param_im:
-            self._set_param_metadata(param_im, **kwargs)
+        try:
+            yield (out_im, param_im)
+        finally:
+            # exit
+            self._set_corr_metadata(out_im, **kwargs)
             if build_ovw:
-                self._build_overviews(param_im)
-            param_im.close()
+                self._build_overviews(out_im)
+            out_im.close()
+            if param_im:
+                self._set_param_metadata(param_im, **kwargs)
+                if build_ovw:
+                    self._build_overviews(param_im)
+                param_im.close()
 
     def _process_block(
         self, block_pair: BlockPair, model: KernelModel, corr_im: DatasetWriter, param_im: DatasetWriter = None,
