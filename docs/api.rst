@@ -4,7 +4,7 @@ API
 RasterFuse
 ----------
 
-.. currentmodule:: homonim.fuse
+.. currentmodule:: homonim
 
 .. autoclass:: RasterFuse
     :special-members: __init__
@@ -31,7 +31,7 @@ RasterFuse
 RasterCompare
 -------------
 
-.. currentmodule:: homonim.compare
+.. currentmodule:: homonim
 
 .. autoclass:: RasterCompare
     :special-members: __init__
@@ -54,7 +54,7 @@ RasterCompare
 ParamStats
 ----------
 
-.. currentmodule:: homonim.stats
+.. currentmodule:: homonim
 
 .. autoclass:: ParamStats
     :special-members: __init__
@@ -87,8 +87,6 @@ KernelModel.create_config
 
 .. automethod:: KernelModel.create_config
 
-
-
 enums
 -----
 
@@ -107,3 +105,12 @@ ProcCrs
 
 .. autoclass:: ProcCrs
     :members:
+
+Testing
+-------
+
+.. currentmodule:: homonim.raster_pair
+
+.. autoclass:: RasterPairReader
+    :members:
+
