@@ -19,7 +19,6 @@
 import logging
 import pathlib
 import threading
-from collections import namedtuple
 from itertools import product
 from typing import Tuple, NamedTuple
 from contextlib import ExitStack
