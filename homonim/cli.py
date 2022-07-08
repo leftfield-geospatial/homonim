@@ -463,6 +463,7 @@ cli.add_command(fuse)
 )
 @ref_file_arg
 @output_option
+# TODO: add new config params: threads, max_block_mem, up/downsampling
 def compare(src_file: Tuple[pathlib.Path,], ref_file: pathlib.Path, output: pathlib.Path):
     """
     Compare image(s) with a reference.
@@ -486,38 +487,34 @@ def compare(src_file: Tuple[pathlib.Path,], ref_file: pathlib.Path, output: path
     """
 
     try:
-        res_dict = {}
+        stats_dict = {}
         # iterate over source files, comparing with reference
         for src_filename in src_file:
             logger.info(f'\nComparing {src_filename.name}')
             start_time = timer()
-            with RasterCompare(src_filename, ref_file, proc_crs=ProcCrs.auto) as cmp:
-                res_dict[str(src_filename)] = cmp.compare()
+            with RasterCompare(src_filename, ref_file, proc_crs=ProcCrs.auto) as raster_compare:
+                stats_dict[str(src_filename)] = raster_compare.compare()
             logger.info(f'Completed in {timer() - start_time:.2f} secs')
 
         # print a key for the following tables
-        logger.info(f'\n\n{cmp.stats_key}')
+        logger.info(f'\n\n{raster_compare.schema_table}')
 
-        # print a results table per source file
-        summary_dict = {}
-        for src_file, _res_dict in res_dict.items():
-            res_df = pd.DataFrame.from_dict(_res_dict, orient='index')
-            res_str = res_df.to_string(float_format='{:.2f}'.format, index=True, justify='center', index_names=False)
-            logger.info(f'\n\n{src_file}:\n\n{res_str}')
-            summary_dict[src_file] = _res_dict['Mean']
+        # print a results table per source image file
+        summ_list = []
+        for src_filename, im_stats_list in stats_dict.items():
+            logger.info(f'\n\n{str(src_filename)}:\n\n{raster_compare.stats_table(im_stats_list)}')
+            mean_dict = im_stats_list[-1].copy()
+            mean_dict.pop('band')
+            summ_list.append(dict(file=pathlib.Path(src_filename).name, **mean_dict))
 
         # print a summary results table comparing all source files
-        if len(summary_dict) > 1:
-            summ_df = pd.DataFrame.from_dict(summary_dict, orient='index')
-            summ_df = summ_df.rename(columns=dict(zip(summ_df.columns, ('Mean ' + summ_df.columns))))
-            summ_df.insert(0, 'File', [pathlib.Path(fn).name for fn in summ_df.index])
-            summ_str = summ_df.to_string(float_format='{:.2f}'.format, index=False, justify='center', index_names=False)
-            logger.info(f'\n\nSummary over bands:\n\n{summ_str}')
+        if len(summ_list) > 1:
+            logger.info(f'\n\nSummary over bands:\n\n{raster_compare.stats_table(summ_list)}')
 
         if output is not None:
-            res_dict['Reference'] = ref_file.stem
+            stats_dict['Reference'] = str(ref_file)
             with open(output, 'w') as file:
-                json.dump(res_dict, file)
+                json.dump(stats_dict, file)
 
     except Exception:
         logger.exception('Exception caught during processing')
