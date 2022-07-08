@@ -20,22 +20,33 @@
 import concurrent.futures
 import logging
 import threading
-from pathlib import Path
-from collections import OrderedDict
 from multiprocessing import cpu_count
-from typing import Union, Dict, List, Tuple
+from pathlib import Path
+from typing import Dict, List, Tuple
 
 import numpy as np
-import pandas as pd
-from rasterio.warp import Resampling
-from tqdm import tqdm
-
 from homonim import utils
 from homonim.enums import ProcCrs
-from homonim.raster_pair import RasterPairReader, BlockPair
-from homonim.raster_pair import RasterArray
+from homonim.raster_pair import RasterPairReader, BlockPair, RasterArray
+from rasterio.warp import Resampling
+from tabulate import TableFormat, Line, DataRow, tabulate
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
+tabulate.MIN_PADDING = 0
+
+##
+# tabulate format for comparison stats
+_table_fmt = TableFormat(
+    lineabove=Line("", "-", " ", ""),
+    linebelowheader=Line("", "-", " ", ""),
+    linebetweenrows=None,
+    linebelow=Line("", "-", " ", ""),
+    headerrow=DataRow("", " ", ""),
+    datarow=DataRow("", " ", ""),
+    padding=0,
+    with_header_hide=["lineabove", "linebelow"]
+)  # yapf: disable
 
 
 class Accumulator:
@@ -85,31 +96,17 @@ class RasterCompare(RasterPairReader):
         self._lock = threading.Lock()
 
     """ dict specifying stats labels and functions. """
-    _schema = [
-        dict(
-            ABBREV='r2',
-            DESCRIPTION='Pearson\'s correlation coefficient',
-        ),
-        dict(
-            ABBREV='RMSE',
-            DESCRIPTION='Root Mean Square Error',
-        ),
-        dict(
-            ABBREV='rRMSE',
-            DESCRIPTION='Relative RMSE (RMSE/mean(ref))',
-        ),
-        dict(
-            ABBREV='N',
-            DESCRIPTION='Number of pixels',
-        )
-    ] # yapf: disable
+    schema = dict(
+        r2=dict(ABBREV='r\N{SUPERSCRIPT TWO}', DESCRIPTION='Pearson\'s correlation coefficient squared',),
+        RMSE=dict(ABBREV='RMSE', DESCRIPTION='Root Mean Square Error',),
+        rRMSE=dict(ABBREV='rRMSE', DESCRIPTION='Relative RMSE (RMSE/mean(ref))',),
+        N=dict(ABBREV='N', DESCRIPTION='Number of pixels',)
+    )  # yapf: disable
 
     @property
-    def stats_key(self):
-        """
-        Returns a string of abbreviations and corresponding descriptions for the statistics returned by compare().
-        """
-        return pd.DataFrame(self._schema)[['ABBREV', 'DESCRIPTION']].to_string(index=False, justify='right')
+    def schema_table(self) -> str:
+        """ Descriptions of the statistics returned by :attr:`RasterCompare.compare` as a printable table string. """
+        return tabulate(self.schema.values(), headers='keys', tablefmt=_table_fmt)
 
     @staticmethod
     def create_config(
@@ -153,10 +150,11 @@ class RasterCompare(RasterPairReader):
         def get_band_stats(
             src_sum: float = 0, ref_sum: float = 0, src2_sum: float = 0, ref2_sum: float = 0, src_ref_sum: float = 0,
             res2_sum: float = 0, mask_sum: float = 0
-        ) -> Dict:
+        ) -> List[Dict]:
 
             # find PCC using the 3rd equation down at
             # https://en.wikipedia.org/wiki/Pearson_correlation_coefficient#For_a_sample
+            # TODO: incorporate stats defs in schema as they were
             src_mean = src_sum / mask_sum
             ref_mean = ref_sum / mask_sum
             pcc_num = src_ref_sum - (mask_sum * src_mean * ref_mean)
@@ -170,7 +168,7 @@ class RasterCompare(RasterPairReader):
             rrmse = rmse / ref_mean
             return dict(r2=pcc**2, RMSE=rmse, rRMSE=rrmse, N=int(mask_sum))
 
-        image_stats = {}
+        image_stats = []
         sum_over_bands = None
         for band_i, band_sum_dict in enumerate(image_sums):
             band_stats = get_band_stats(**band_sum_dict)
@@ -179,19 +177,42 @@ class RasterCompare(RasterPairReader):
                 self.src_im.descriptions[self.src_bands[band_i] - 1] or
                 f'Band {band_i + 1}'
             ) # yapf: disable
-            image_stats[band_desc] = band_stats
-            if sum_over_bands is None:
-                # initialise
-                sum_over_bands = dict(**band_stats)
-            else:
-                sum_over_bands = {k: sum_over_bands[k] + v for k, v in band_stats.items()}
-        image_stats['Mean'] = {
+            image_stats.append(dict(band=band_desc, **band_stats))
+            sum_over_bands = (
+                dict(**band_stats) if sum_over_bands is None else {
+                    k: sum_over_bands[k] + v for k, v in band_stats.items()
+                }
+            )  # yapf: disable
+
+        mean_stats = {
             k: int(v / len(image_sums)) if isinstance(v, int) else (v / len(image_sums))
             for k, v in sum_over_bands.items()
         }  # yapf: disable
+        image_stats.append(dict(band='Mean', **mean_stats))
         return image_stats
 
-    def compare(self, **kwargs) -> Dict[str, Dict]:
+    def stats_table(self, stats_list: List[Dict]):
+        """
+        Create a printable table string of the provided comparison statistics, as returned by
+        :meth:`RasterCompare.compare`.
+
+        Parameters
+        ----------
+        stats_list: list of dict
+            Comparison statistics to tabulate.
+
+        Returns
+        -------
+        str
+            A printable table string of the comparison statistics.
+        """
+        headers = {
+            k: self.schema[k]['ABBREV'] if k in self.schema else str.capitalize(k)
+            for k in  list(stats_list[0].keys())
+        }  # yapf: disable
+        return tabulate(stats_list, headers=headers, floatfmt='.3f', stralign='right', tablefmt=_table_fmt)
+
+    def compare(self, **kwargs) -> List[Dict]:
         """
         Statistically compare source and reference images, displaying and returning results.
 
@@ -203,7 +224,7 @@ class RasterCompare(RasterPairReader):
 
         Returns
         -------
-        dict of dict
+        list of dict
             A dictionary representing the comparison results.
         """
         self._assert_open()
