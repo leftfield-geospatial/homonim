@@ -20,6 +20,7 @@ import json
 
 import numpy as np
 import pytest
+from typing import List, Dict, Union
 
 from homonim.cli import cli
 from homonim.compare import RasterCompare
@@ -27,23 +28,23 @@ from homonim.enums import ProcCrs
 from tests.conftest import str_contain_nos
 
 
-def _test_identical_compare_dict(res_dict):
-    """ Helper function to run tests on a compare results dictionary, where the compare was between identical images. """
-    assert (len(res_dict) == 4)
-    assert ('Mean' in res_dict)
-    band_dict = res_dict.copy()
-    band_dict.pop('Mean')
-    r2 = np.array([stats_dict['r2'] for stats_dict in band_dict.values()])
-    RMSE = np.array([stats_dict['RMSE'] for stats_dict in band_dict.values()])
-    rRMSE = np.array([stats_dict['rRMSE'] for stats_dict in band_dict.values()])
-    N = np.array([stats_dict['N'] for stats_dict in band_dict.values()])
+def _test_identical_compare_dict(res_list: List):
+    """ Helper function to run tests on a compare results list, where the compare was between identical images. """
+    assert (len(res_list) == 4)
+    bands = [res_item['band'] for res_item in res_list]
+    assert (bands[-1] == 'Mean')
+    band_list = res_list[:-1]
+    r2 = np.array([res_item['r2'] for res_item in band_list])
+    RMSE = np.array([res_item['RMSE'] for res_item in band_list])
+    rRMSE = np.array([res_item['rRMSE'] for res_item in band_list])
+    N = np.array([res_item['N'] for res_item in band_list])
     assert (r2 == pytest.approx(1))
     assert (RMSE == pytest.approx(0))
     assert (rRMSE == pytest.approx(0))
     assert (N == N[0]).all()
-    assert (res_dict['Mean']['r2'] == pytest.approx(1))
-    assert (res_dict['Mean']['RMSE'] == pytest.approx(0))
-    assert (res_dict['Mean']['rRMSE'] == pytest.approx(0))
+    assert (res_list[-1]['r2'] == pytest.approx(1))
+    assert (res_list[-1]['RMSE'] == pytest.approx(0))
+    assert (res_list[-1]['rRMSE'] == pytest.approx(0))
 
 
 @pytest.mark.parametrize(
@@ -94,10 +95,10 @@ def test_cli(runner, float_50cm_rgb_file, float_100cm_rgb_file):
     cli_str = f'compare {src_file} {ref_file}'
     result = runner.invoke(cli, cli_str.split())
     assert (result.exit_code == 0)
-    res_str = """Band 1 1.00  0.00  0.00   144
-Band 2 1.00  0.00  0.00   144
-Band 3 1.00  0.00  0.00   144
-Mean   1.00  0.00  0.00   144"""
+    res_str = """Band 1 1.000  0.000  0.000   144
+Band 2 1.000  0.000  0.000   144
+Band 3 1.000  0.000  0.000   144
+Mean   1.000  0.000  0.000   144"""
     assert (str_contain_nos(res_str, result.output))
 
 
