@@ -113,7 +113,6 @@ class RasterCompare(RasterPairReader):
         dict
             Configuration dictionary.
         """
-        # TODO: there is overlap with RasterFuse and KernelModel create_config.  can we re-use?
         return dict(
             threads=utils.validate_threads(threads), max_block_mem=max_block_mem, downsampling=downsampling,
             upsampling=upsampling,
@@ -224,8 +223,6 @@ class RasterCompare(RasterPairReader):
                 resampling = self._get_resampling(ref_ra.res, src_ra.res, **kwargs)
                 ref_ra = ref_ra.reproject(**src_ra.proj_profile, resampling=resampling)
 
-            # TODO: there is possible double accounting here, as we are summing the *in_blocks, which could overlap
-            #  in the 'other' CRS.  We reproject to proc_crs though, so does this get rid of any overlap?
             def get_block_sums(src_ra: RasterArray, ref_ra: RasterArray):
                 """ Return block sums of source, source**2, reference, etc. """
                 src_array = src_ra.array

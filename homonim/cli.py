@@ -447,7 +447,8 @@ def fuse(
         # compare source and corrected files with reference (invokes compare command with relevant parameters)
         if comp_ref_file:
             comp_file = ref_file if str(comp_ref_file) == 'ref' else comp_ref_file
-            ctx.invoke(compare, src_file=comp_files, ref_file=comp_file)
+            comp_cfg = {k: kwargs[k] for k, v in RasterCompare.create_config().items() if k in kwargs}
+            ctx.invoke(compare, src_file=comp_files, ref_file=comp_file, **comp_cfg)
 
     except Exception:
         logger.exception('Exception caught during processing.')  # log exception info
