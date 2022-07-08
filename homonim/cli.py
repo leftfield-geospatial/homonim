@@ -31,15 +31,16 @@ import cloup
 import rasterio as rio
 import yaml
 from click.core import ParameterSource
+from rasterio.warp import SUPPORTED_RESAMPLING
+from tabulate import tabulate
 from homonim import utils, version
-from homonim.compare import RasterCompare
+from homonim.compare import RasterCompare, _table_fmt
 from homonim.enums import ProcCrs, Model
 from homonim.errors import ImageFormatError
 from homonim.fuse import RasterFuse
 from homonim.kernel_model import KernelModel
 from homonim.raster_array import RasterArray
 from homonim.stats import ParamStats
-from rasterio.warp import SUPPORTED_RESAMPLING
 
 logger = logging.getLogger(__name__)
 
@@ -213,6 +214,24 @@ threads_option = click.option(
     '-t', '--threads', type=click.INT, default=RasterFuse.create_config()['threads'], show_default=True,
     callback=_threads_cb, help=f'Number of image blocks to process concurrently (0 = use all cpus).'
 )
+max_block_mem_option = click.option(
+    '-mbm', '--max-block-mem', type=click.FLOAT, default=RasterFuse.create_config()['max_block_mem'],
+    show_default=True, help='Maximum image block size in megabytes (0 = block corresponds to the whole image).'
+)
+downsampling_option = click.option(
+    '-ds', '--downsampling', type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
+    default=KernelModel.create_config()['downsampling'].name, show_default=True,
+    help='Resampling method for re-projecting from high to low resolution.  See the `rasterio docs '
+         '<https://rasterio.readthedocs.io/en/latest/api/rasterio.enums.html#rasterio.enums.Resampling>`_ for '
+         'details.'
+)
+upsampling_option = click.option(
+    '-us', '--upsampling', type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
+    default=KernelModel.create_config()['upsampling'].name, show_default=True,
+    help='Resampling method for re-projecting from low to high resolution.  See the `rasterio docs '
+         '<https://rasterio.readthedocs.io/en/latest/api/rasterio.enums.html#rasterio.enums.Resampling>`_ for '
+         'details.'
+)
 output_option = click.option(
     '-op', '--output', type=click.Path(exists=False, dir_okay=False, writable=True, path_type=pathlib.Path),
     help='Write results to this json file.'
@@ -304,25 +323,12 @@ def cli(verbose, quiet):
         default=KernelModel.create_config()['mask_partial'], show_default=True,
         help=f'Mask output pixels produced from partial kernel, or source / reference, image coverage.'
     ),
-    threads_option,  # yapf: disable
-    click.option(
-        '-mbm', '--max-block-mem', type=click.FLOAT, default=RasterFuse.create_config()['max_block_mem'],
-        show_default=True, help='Maximum image block size in megabytes (0 = block corresponds to the whole image).'
-    ),
-    click.option(
-        '-ds', '--downsampling', type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
-        default=KernelModel.create_config()['downsampling'].name, show_default=True,
-        help='Resampling method for re-projecting from high to low resolution.  See the `rasterio docs '
-        '<https://rasterio.readthedocs.io/en/latest/api/rasterio.enums.html#rasterio.enums.Resampling>`_ for '
-        'details.'
-    ),
-    click.option(
-        '-us', '--upsampling', type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
-        default=KernelModel.create_config()['upsampling'].name, show_default=True,
-        help='Resampling method for re-projecting from low to high resolution.  See the `rasterio docs '
-        '<https://rasterio.readthedocs.io/en/latest/api/rasterio.enums.html#rasterio.enums.Resampling>`_ for '
-        'details.'
-    ),
+    # yapf: disable
+    threads_option,
+    max_block_mem_option,
+    downsampling_option,
+    upsampling_option,
+    # yapf: enable
     click.option(
         '-rit', '--r2-inpaint-thresh', type=click.FloatRange(min=0, max=1),
         default=KernelModel.create_config()['r2_inpaint_thresh'], show_default=True, metavar='FLOAT 0-1',
@@ -458,9 +464,19 @@ cli.add_command(fuse)
     help='Path(s) to image(s) to compare with :option:`REFERENCE`.'
 )
 @ref_file_arg
-@output_option
+@cloup.option_group(
+    "Standard options",
+    output_option,
+)
+@cloup.option_group(
+    "Advanced options",
+    threads_option,
+    max_block_mem_option,
+    downsampling_option,
+    upsampling_option,
+)
 # TODO: add new config params: threads, max_block_mem, up/downsampling
-def compare(src_file: Tuple[pathlib.Path, ], ref_file: pathlib.Path, output: pathlib.Path):
+def compare(src_file: Tuple[pathlib.Path, ], ref_file: pathlib.Path, output: pathlib.Path, **kwargs):
     """
     Compare image(s) with a reference.
 
@@ -482,6 +498,8 @@ def compare(src_file: Tuple[pathlib.Path, ], ref_file: pathlib.Path, output: pat
         homonim compare source.tif corrected.tif reference.tif
     """
 
+    # build configuration dictionary
+    config = RasterCompare.create_config(**kwargs)
     try:
         stats_dict = {}
         # iterate over source files, comparing with reference
@@ -489,7 +507,7 @@ def compare(src_file: Tuple[pathlib.Path, ], ref_file: pathlib.Path, output: pat
             logger.info(f'\nComparing {src_filename.name}')
             start_time = timer()
             with RasterCompare(src_filename, ref_file, proc_crs=ProcCrs.auto) as raster_compare:
-                stats_dict[str(src_filename)] = raster_compare.compare()
+                stats_dict[str(src_filename)] = raster_compare.compare(**config)
             logger.info(f'Completed in {timer() - start_time:.2f} secs')
 
         # print a key for the following tables
@@ -551,12 +569,10 @@ def stats(param_file: pathlib.Path, output: pathlib.Path):
 
             logger.info(f'\n{pathlib.Path(param_filename).name}:\n')
             logger.info(param_meta)
-            # format the statistics as a dataframe to get printable string
-            param_df = pd.DataFrame.from_dict(param_dict, orient='index')
-            param_str = param_df.to_string(
-                float_format='{:.2f}'.format, index=True, justify='center', index_names=False
-            )
-            logger.info(f'Stats:\n{param_str}')
+            # format the statistics as a table string
+            table_list = [dict(Band=k, **v) for k, v in param_dict.items()]
+            table_str = tabulate(table_list, headers='keys', floatfmt='.3f', stralign='right', tablefmt=_table_fmt)
+            logger.info(f'Stats:\n{table_str}')
 
         if output is not None:
             with open(output, 'w') as file:
