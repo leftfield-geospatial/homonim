@@ -49,37 +49,11 @@ _table_fmt = TableFormat(
 )  # yapf: disable
 
 
-class Accumulator:
-
-    def __init__(self):
-        self.src_sum: float = 0
-        self.ref_sum: float = 0
-        self.src2_sum: float = 0
-        self.ref2_sum: float = 0
-        self.src_ref_sum: float = 0
-        self.mask_sum: float = 0
-
-    def add(self, src_ra: RasterArray, ref_ra: RasterArray):
-        src_array = src_ra.array
-        ref_array = ref_ra.array
-        mask = ref_ra.mask & src_ra.mask
-        src_array[~mask] = 0
-        ref_array[~mask] = 0
-        self.src_sum += src_array.sum()
-        self.ref_sum += ref_array.sum()
-        self.src2_sum += (src_array ** 2).sum()
-        self.ref2_sum += (ref_array ** 2).sum()
-        self.src_ref += (src_array * ref_array).sum()
-
-
 class RasterCompare(RasterPairReader):
-    """ Class to statistically compare an image against a reference. """
 
-    # TODO: should we call the source image, an input image and change ProcCrs.src to make it clear that this can
-    #  compare corrected images too?
     def __init__(self, src_filename: Path, ref_filename: Path, proc_crs: ProcCrs = ProcCrs.auto):
         """
-        A class to statistically compare source and reference images.
+        Class to statistically compare source and reference images.
 
         Parameters
         ----------
@@ -98,22 +72,23 @@ class RasterCompare(RasterPairReader):
         RasterPairReader.__init__(self, src_filename, ref_filename, proc_crs=proc_crs)
         self._lock = threading.Lock()
 
-    """ dict specifying stats labels and functions. """
     schema = dict(
-        r2=dict(ABBREV='r\N{SUPERSCRIPT TWO}', DESCRIPTION='Pearson\'s correlation coefficient squared', ),
-        RMSE=dict(ABBREV='RMSE', DESCRIPTION='Root Mean Square Error', ),
-        rRMSE=dict(ABBREV='rRMSE', DESCRIPTION='Relative RMSE (RMSE/mean(ref))', ),
-        N=dict(ABBREV='N', DESCRIPTION='Number of pixels', )
+        r2=dict(abbrev='r\N{SUPERSCRIPT TWO}', description='Pearson\'s correlation coefficient squared', ),
+        RMSE=dict(abbrev='RMSE', description='Root Mean Square Error', ),
+        rRMSE=dict(abbrev='rRMSE', description='Relative RMSE (RMSE/mean(ref))', ),
+        N=dict(abbrev='N', description='Number of pixels', )
     )  # yapf: disable
+    """ Dictionary describing the statistics returned by :attr:`RasterCompare.compare`. """
 
     @property
     def schema_table(self) -> str:
-        """ Descriptions of the statistics returned by :attr:`RasterCompare.compare` as a printable table string. """
-        return tabulate(self.schema.values(), headers='keys', tablefmt=_table_fmt)
+        """ A printable table that describes the statistics returned by :attr:`RasterCompare.compare`. """
+        headers = {key: key.upper() for key in list(self.schema.values())[0].keys()}
+        return tabulate(self.schema.values(), headers=headers, tablefmt=_table_fmt)
 
     @staticmethod
     def create_config(
-        threads: int = cpu_count(), max_block_mem: float = 100, downsampling: Resampling = Resampling.average,
+        threads: int = 0, max_block_mem: float = 100, downsampling: Resampling = Resampling.average,
         upsampling: Resampling = Resampling.cubic_spline,
     ) -> Dict:
         """
@@ -145,11 +120,15 @@ class RasterCompare(RasterPairReader):
         )
 
     def _get_resampling(self, from_res: Tuple[float, float], to_res: Tuple[float, float], **kwargs):
-        """ Return the resampling method for re-projecting from resolution `from_res` to resolution `to_res`. """
+        """
+        Utility method to return the resampling method for re-projecting from resolution `from_res` to resolution
+        `to_res`.
+        """
         config = self.create_config(**kwargs)
         return config['downsampling'] if np.prod(np.abs(from_res)) <= np.prod(np.abs(to_res)) else config['upsampling']
 
-    def _get_image_stats(self, image_sums: List):
+    def _get_image_stats(self, image_sums: List[Dict]) -> List[Dict]:
+        """ Find the image comparison statistics, given src, ref, src**2 etc summations over blocks. """
 
         def get_band_stats(
             src_sum: float = 0, ref_sum: float = 0, src2_sum: float = 0, ref2_sum: float = 0, src_ref_sum: float = 0,
@@ -210,7 +189,7 @@ class RasterCompare(RasterPairReader):
             A printable table string of the comparison statistics.
         """
         headers = {
-            k: self.schema[k]['ABBREV'] if k in self.schema else str.capitalize(k)
+            k: self.schema[k]['abbrev'] if k in self.schema else str.capitalize(k)
             for k in list(stats_list[0].keys())
         }  # yapf: disable
         return tabulate(stats_list, headers=headers, floatfmt='.3f', stralign='right', tablefmt=_table_fmt)
@@ -235,7 +214,7 @@ class RasterCompare(RasterPairReader):
         image_sums = [None] * len(self.src_bands)
 
         def accum_block(block_pair: BlockPair):
-            """ Thread-safe function to accumulate statistics for a source-reference block pair.  """
+            """ Thread-safe function to accumulate image statistics, given a source-reference block pair.  """
             src_ra, ref_ra = self.read(block_pair)  # read src and ref bands
             # re-project into proc_crs
             if self.proc_crs == ProcCrs.ref:
@@ -245,10 +224,10 @@ class RasterCompare(RasterPairReader):
                 resampling = self._get_resampling(ref_ra.res, src_ra.res, **kwargs)
                 ref_ra = ref_ra.reproject(**src_ra.proj_profile, resampling=resampling)
 
-            # get the sums for this block
             # TODO: there is possible double accounting here, as we are summing the *in_blocks, which could overlap
             #  in the 'other' CRS.  We reproject to proc_crs though, so does this get rid of any overlap?
             def get_block_sums(src_ra: RasterArray, ref_ra: RasterArray):
+                """ Return block sums of source, source**2, reference, etc. """
                 src_array = src_ra.array
                 ref_array = ref_ra.array
                 mask = ref_ra.mask & src_ra.mask
@@ -260,13 +239,15 @@ class RasterCompare(RasterPairReader):
                     res2_sum=((ref_array - src_array) ** 2).sum(), mask_sum=mask.sum()
                 )
 
+            # get the sums for this block
             block_sums_dict = get_block_sums(src_ra, ref_ra)
             with self._lock:
+                # accumulate sums for the image
                 if image_sums[block_pair.band_i] is None:
                     # initialise
                     image_sums[block_pair.band_i] = block_sums_dict
                 else:
-                    # add the block sums to the totals for the band
+                    # add the block sums to the totals for the block's band
                     image_sums[block_pair.band_i] = {
                         k: image_sums[block_pair.band_i][k] + v for k, v in block_sums_dict.items()
                     }  # yapf: disable
@@ -278,7 +259,7 @@ class RasterCompare(RasterPairReader):
             ]  # yapf: disable
 
             # wait for threads, get results and raise any thread generated exceptions
-            bar_format = '{l_bar}{bar}|{n_fmt}/{total_fmt} bands [{elapsed}<{remaining}]'
+            bar_format = '{l_bar}{bar}|{n_fmt}/{total_fmt} blocks [{elapsed}<{remaining}]'
             for future in tqdm(concurrent.futures.as_completed(futures), bar_format=bar_format, total=len(futures)):
                 future.result()
 
