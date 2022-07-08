@@ -56,7 +56,6 @@ class KernelModel:
         kwargs:
             Optional configuration arguments.  See :meth:`KernelModel.create_config` for keys and defaults values.
         """
-        # TODO: add model & kernel_shape into kwargs?
         self._model = Model(model)
         self._kernel_shape = utils.validate_kernel_shape(kernel_shape, model=model)
         self._find_r2 = find_r2

@@ -14,7 +14,8 @@ RasterFuse
 .. autosummary::
     :toctree: _generated
 
-    ~RasterFuse.create_config
+    ~RasterFuse.create_model_config
+    ~RasterFuse.create_block_config
     ~RasterFuse.create_out_profile
     ~RasterFuse.process
 
@@ -78,19 +79,6 @@ ParamStats
 
     ~ParamStats.metadata
 
-BlockPair
-----------
-.. currentmodule:: homonim.raster_pair
-
-.. autoclass:: BlockPair
-    :members:
-
-
-KernelModel.create_config
--------------------------
-.. currentmodule:: homonim.kernel_model
-
-.. automethod:: KernelModel.create_config
 
 enums
 -----

@@ -89,7 +89,7 @@ def test_basic_fusion(src_file, ref_file, model, kernel_shape, max_block_mem, tm
     """ Test fusion output with different src/ref images, and model etc combinations. """
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
-    block_config = RasterFuse.create_config(max_block_mem=max_block_mem)
+    block_config = RasterFuse.create_block_config(max_block_mem=max_block_mem)
     corr_filename = tmp_path.joinpath('corrected.tif')
     raster_fuse = RasterFuse(src_file, ref_file)
     with raster_fuse:
@@ -195,8 +195,8 @@ def test_mask_partial(src_file, ref_file, tmp_path, kernel_shape, proc_crs, mask
     """ Test partial masking with multiple image blocks. """
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
-    model_config = KernelModel.create_config(mask_partial=mask_partial)
-    block_config = RasterFuse.create_config(max_block_mem=1.e-1)
+    model_config = RasterFuse.create_model_config(mask_partial=mask_partial)
+    block_config = RasterFuse.create_block_config(max_block_mem=1.e-1)
     corr_file = tmp_path.joinpath('corrected.tif')
     raster_fuse = RasterFuse(src_file, ref_file, proc_crs=proc_crs)
     with raster_fuse:
@@ -266,7 +266,7 @@ def test_corr_filename(tmp_path, float_50cm_ref_file):
 
 def test_single_thread(tmp_path, float_50cm_ref_file):
     """ Test single-threaded processing creates a corrected file. """
-    block_config = RasterFuse.create_config(threads=1)
+    block_config = RasterFuse.create_block_config(threads=1)
     corr_filename = tmp_path.joinpath('corrected.tif')
     raster_fuse = RasterFuse(float_50cm_ref_file, float_50cm_ref_file)
     with raster_fuse:
@@ -300,7 +300,7 @@ def test_tags(tmp_path, float_50cm_ref_file):
     model = Model.gain_blk_offset
     kernel_shape = (3, 3)
     proc_crs = ProcCrs.ref
-    block_config = RasterFuse.create_config()
+    block_config = RasterFuse.create_block_config()
     raster_fuse = RasterFuse(float_50cm_ref_file, float_50cm_ref_file, proc_crs=proc_crs)
     corr_filename = tmp_path.joinpath('corrected.tif')
     param_filename = utils.create_param_filename(corr_filename)
@@ -317,7 +317,7 @@ def test_tags(tmp_path, float_50cm_ref_file):
             {
                 'FUSE_SRC_FILE', 'FUSE_REF_FILE', 'FUSE_MODEL', 'FUSE_KERNEL_SHAPE', 'FUSE_PROC_CRS',
                 'FUSE_MAX_BLOCK_MEM', 'FUSE_THREADS',
-                *{f'FUSE_{k.upper()}' for k in KernelModel.create_config().keys()},
+                *{f'FUSE_{k.upper()}' for k in RasterFuse.create_model_config().keys()},
             } <= set(tags)
         )
         assert (tags['FUSE_SRC_FILE'] == float_50cm_ref_file.name)
@@ -325,7 +325,7 @@ def test_tags(tmp_path, float_50cm_ref_file):
         assert (tags['FUSE_MODEL'] == str(model.name))
         assert (tags['FUSE_PROC_CRS'] == str(proc_crs.name))
         assert (tags['FUSE_KERNEL_SHAPE'] == str(kernel_shape))
-        for key,val in KernelModel.create_config().items():
+        for key,val in RasterFuse.create_model_config().items():
             assert (tags[f'FUSE_{key.upper()}'] == val.name if hasattr(val, 'name') else str(val))
         assert (yaml.safe_load(tags['FUSE_MAX_BLOCK_MEM']) == block_config['max_block_mem'])
         assert (yaml.safe_load(tags['FUSE_THREADS']) == block_config['threads'])

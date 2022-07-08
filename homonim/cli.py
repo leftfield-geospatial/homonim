@@ -211,23 +211,23 @@ ref_file_arg = cloup.argument(
     help='Path to a reference image.'
 )
 threads_option = click.option(
-    '-t', '--threads', type=click.INT, default=RasterFuse.create_config()['threads'], show_default=True,
+    '-t', '--threads', type=click.INT, default=RasterFuse.create_block_config()['threads'], show_default=True,
     callback=_threads_cb, help=f'Number of image blocks to process concurrently (0 = use all cpus).'
 )
 max_block_mem_option = click.option(
-    '-mbm', '--max-block-mem', type=click.FLOAT, default=RasterFuse.create_config()['max_block_mem'],
+    '-mbm', '--max-block-mem', type=click.FLOAT, default=RasterFuse.create_block_config()['max_block_mem'],
     show_default=True, help='Maximum image block size in megabytes (0 = block corresponds to the whole image).'
 )
 downsampling_option = click.option(
     '-ds', '--downsampling', type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
-    default=KernelModel.create_config()['downsampling'].name, show_default=True,
+    default=RasterFuse.create_model_config()['downsampling'].name, show_default=True,
     help='Resampling method for re-projecting from high to low resolution.  See the `rasterio docs '
          '<https://rasterio.readthedocs.io/en/latest/api/rasterio.enums.html#rasterio.enums.Resampling>`_ for '
          'details.'
 )
 upsampling_option = click.option(
     '-us', '--upsampling', type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
-    default=KernelModel.create_config()['upsampling'].name, show_default=True,
+    default=RasterFuse.create_model_config()['upsampling'].name, show_default=True,
     help='Resampling method for re-projecting from low to high resolution.  See the `rasterio docs '
          '<https://rasterio.readthedocs.io/en/latest/api/rasterio.enums.html#rasterio.enums.Resampling>`_ for '
          'details.'
@@ -320,7 +320,7 @@ def cli(verbose, quiet):
     ),
     click.option(
         '-mp/-nmp', '--mask-partial/--no-mask-partial', type=click.BOOL,
-        default=KernelModel.create_config()['mask_partial'], show_default=True,
+        default=RasterFuse.create_model_config()['mask_partial'], show_default=True,
         help=f'Mask output pixels produced from partial kernel, or source / reference, image coverage.'
     ),
     # yapf: disable
@@ -331,7 +331,7 @@ def cli(verbose, quiet):
     # yapf: enable
     click.option(
         '-rit', '--r2-inpaint-thresh', type=click.FloatRange(min=0, max=1),
-        default=KernelModel.create_config()['r2_inpaint_thresh'], show_default=True, metavar='FLOAT 0-1',
+        default=RasterFuse.create_model_config()['r2_inpaint_thresh'], show_default=True, metavar='FLOAT 0-1',
         help='R\N{SUPERSCRIPT TWO} threshold below which to inpaint model parameters from surrounding areas '
         '(0 = turn off inpainting). Valid for `gain-offset` :option:`--model` only.'
     ),
@@ -416,8 +416,8 @@ def fuse(
         raise click.BadParameter(str(ex))
 
     # build configuration dictionaries for RasterFuse
-    block_config = _update_existing_keys(RasterFuse.create_config(), **kwargs)
-    model_config = _update_existing_keys(KernelModel.create_config(), **kwargs)
+    block_config = _update_existing_keys(RasterFuse.create_block_config(), **kwargs)
+    model_config = _update_existing_keys(RasterFuse.create_model_config(), **kwargs)
     out_profile = _update_existing_keys(RasterFuse.create_out_profile(), **kwargs)
     config = dict(block_config=block_config, model_config=model_config, out_profile=out_profile)
     comp_files = []
@@ -448,7 +448,7 @@ def fuse(
         if comp_ref_file:
             comp_file = ref_file if str(comp_ref_file) == 'ref' else comp_ref_file
             comp_cfg = {k: kwargs[k] for k, v in RasterCompare.create_config().items() if k in kwargs}
-            ctx.invoke(compare, src_file=comp_files, ref_file=comp_file, **comp_cfg)
+            ctx.invoke(compare, src_file=comp_files, ref_file=comp_file, proc_crs=proc_crs, **comp_cfg)
 
     except Exception:
         logger.exception('Exception caught during processing.')  # log exception info
@@ -475,9 +475,21 @@ cli.add_command(fuse)
     max_block_mem_option,
     downsampling_option,
     upsampling_option,
+    click.option(
+        '-pc', '--proc-crs', type=click.Choice([pc.value for pc in ProcCrs], case_sensitive=False),
+        default=ProcCrs.auto.value, show_default=True,
+        help="""The image CRS in which to compare images. 
+    \b
+
+    - `auto`: lowest resolution of the source and reference CRS's (recommended). 
+    - `src`: source image CRS. 
+    - `ref`: reference image CRS.
+    """
+    ),
 )
-# TODO: add new config params: threads, max_block_mem, up/downsampling
-def compare(src_file: Tuple[pathlib.Path, ], ref_file: pathlib.Path, output: pathlib.Path, **kwargs):
+def compare(
+    src_file: Tuple[pathlib.Path, ], ref_file: pathlib.Path, output: pathlib.Path, proc_crs: ProcCrs, **kwargs
+):
     """
     Compare image(s) with a reference.
 
@@ -507,7 +519,7 @@ def compare(src_file: Tuple[pathlib.Path, ], ref_file: pathlib.Path, output: pat
         for src_filename in src_file:
             logger.info(f'\nComparing {src_filename.name}')
             start_time = timer()
-            with RasterCompare(src_filename, ref_file, proc_crs=ProcCrs.auto) as raster_compare:
+            with RasterCompare(src_filename, ref_file, proc_crs=proc_crs) as raster_compare:
                 stats_dict[str(src_filename)] = raster_compare.compare(**config)
             logger.info(f'Completed in {timer() - start_time:.2f} secs')
 

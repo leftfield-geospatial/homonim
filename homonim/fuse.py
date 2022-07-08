@@ -65,11 +65,13 @@ class RasterFuse(RasterPairReader):
         self._corr_lock = threading.Lock()
         self._param_lock = threading.Lock()
 
+    create_model_config = KernelModel.create_config
+
     @staticmethod
-    def create_config(threads: int = 0, max_block_mem: float = 100) -> Dict:
+    def create_block_config(threads: int = 0, max_block_mem: float = 100) -> Dict:
         """
-        Utility method to create a RasterFuse configuration dictionary that can be passed to :meth:`RasterFuse.process`.
-        Without arguments, the default configuration is returned.
+        Utility method to create a block processing configuration dictionary that can be passed to
+        :meth:`RasterFuse.process`.  Without arguments, the default configuration is returned.
 
         Parameters
         ----------
@@ -238,7 +240,6 @@ class RasterFuse(RasterPairReader):
             raise FileExistsError(
                 f"Parameter image file exists and won't be overwritten without the `overwrite` option: {param_filename}"
             )
-        # TODO test speed of process on full res NGI imagery
         out_im = rio.open(corr_filename, 'w', **self._merge_corr_profile(out_profile))
         param_im = rio.open(param_filename, 'w', **self._merge_param_profile(out_profile)) if param_filename else None
         try:
@@ -313,12 +314,12 @@ class RasterFuse(RasterPairReader):
             Overwrite the output image(s) if they exist.
         model_config: dict, optional
             Configuration dictionary for the correction model.  See
-            :meth:`homonim.kernel_model.KernelModel.create_config` for possible keys and default values.
+            :meth:`create_model_config` for possible keys and default values.
         out_profile: dict, optional
             Configuration dictionary for the output image(s).   See :meth:`~RasterFuse.create_out_profile` for
             possible keys and default values.
         block_config: dict, optional
-            Configuration dictionary for block processing.  See :meth:`~RasterFuse.create_config` for possible keys and
+            Configuration dictionary for block processing.  See :meth:`~RasterFuse.create_block_config` for possible keys and
             default values.
         """
         self._assert_open()
@@ -328,8 +329,8 @@ class RasterFuse(RasterPairReader):
         kernel_shape = tuple(utils.validate_kernel_shape(kernel_shape, model=model))
         overlap = utils.overlap_for_kernel(kernel_shape)
         out_profile = self.create_out_profile(**(out_profile or {}))
-        model_config = KernelModel.create_config(**(model_config or {}))
-        block_config = RasterFuse.create_config(**(block_config or {}))
+        model_config = RasterFuse.create_model_config(**(model_config or {}))
+        block_config = RasterFuse.create_block_config(**(block_config or {}))
 
         # create the KernelModel according to proc_crs
         model_cls = SrcSpaceModel if self.proc_crs == ProcCrs.src else RefSpaceModel
