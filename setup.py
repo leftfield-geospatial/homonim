@@ -35,13 +35,12 @@ from setuptools import setup, find_packages
 
 this_directory = Path(__file__).parent
 long_description = (this_directory / 'README.rst').read_text()
-version = {}
-with open('homonim/version.py') as fp:
-    exec(fp.read(), version)
+sys.path[0:0] = ['homonim']
+from version import __version__
 
 setup(
     name='homonim',
-    version=version['__version__'],
+    version=__version__,
     description='Correct aerial and satellite imagery to approximate surface reflectance.',
     long_description=long_description,
     long_description_content_type='text/markdown',
@@ -54,11 +53,11 @@ setup(
         'numpy>=1.19',
         'rasterio>=1.1',
         'opencv-python-headless>=4.5',
-        'pandas>=1.1',
         'click>=8',
         'tqdm>=4.6',
         'pyyaml>=5.4',
         'cloup>=0.15',
+        'tabulate>=0.8',
     ],
     python_requires='>=3.6',
     classifiers=[

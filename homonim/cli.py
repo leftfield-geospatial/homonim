@@ -29,7 +29,6 @@ from typing import Union, Tuple, Dict
 
 import click
 import cloup
-import pandas as pd
 import rasterio as rio
 import yaml
 from click.core import ParameterSource
