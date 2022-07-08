@@ -19,9 +19,9 @@
 import logging
 import pathlib
 import threading
+from contextlib import ExitStack
 from itertools import product
 from typing import Tuple, NamedTuple
-from contextlib import ExitStack
 
 import numpy as np
 import rasterio
@@ -31,12 +31,12 @@ from rasterio.vrt import WarpedVRT
 from rasterio.warp import Resampling
 from rasterio.windows import Window
 from tqdm.contrib.logging import logging_redirect_tqdm
-
 from homonim import errors, utils
 from homonim.enums import ProcCrs
 from homonim.raster_array import RasterArray
 
 logger = logging.getLogger(__name__)
+
 
 class BlockPair(NamedTuple):
     """ A set of matching block windows for a source-reference image pair. """
@@ -55,6 +55,7 @@ class BlockPair(NamedTuple):
 
 
 class RasterPairReader:
+
     def __init__(self, src_filename, ref_filename, proc_crs=ProcCrs.auto):
         """
         Class for reading matching, and optionally overlapping, blocks from a source and reference image pair.
@@ -194,7 +195,7 @@ class RasterPairReader:
         elif (
             (proc_crs == ProcCrs.src and src_pixel_smaller) or
             (proc_crs == ProcCrs.ref and not src_pixel_smaller)
-        ): # yapf: disable
+        ):  # yapf: disable
             # warn if the proc_crs value does not correspond to the lowest resolution of the source and
             # reference images
             rec_crs_str = ProcCrs.ref if src_pixel_smaller else ProcCrs.src
@@ -233,7 +234,7 @@ class RasterPairReader:
             with (
                 WarpedVRT(ref_im, crs=src_im.crs, resampling=Resampling.bilinear)
                 if src_im.crs.to_proj4() != ref_im.crs.to_proj4() else ref_im
-            ) as ref_im:
+            ) as ref_im:  # yapf: disable
                 return RasterPairReader._resolve_proc_crs(src_im, ref_im, proc_crs=proc_crs)
 
     def _auto_block_shape(self, max_block_mem: float = np.inf):

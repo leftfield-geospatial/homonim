@@ -17,7 +17,6 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
-import inspect
 import json
 import logging
 import math
@@ -25,7 +24,7 @@ import pathlib
 import re
 import sys
 from timeit import default_timer as timer
-from typing import Union, Tuple, Dict
+from typing import Tuple, Dict
 
 import click
 import cloup
@@ -38,8 +37,8 @@ from homonim.enums import ProcCrs, Model
 from homonim.errors import ImageFormatError
 from homonim.fuse import RasterFuse
 from homonim.kernel_model import KernelModel
-from homonim.stats import ParamStats
 from homonim.raster_array import RasterArray
+from homonim.stats import ParamStats
 from rasterio.warp import SUPPORTED_RESAMPLING
 
 logger = logging.getLogger(__name__)
@@ -72,7 +71,7 @@ class HomonimCommand(cloup.Command):
             '``(.*?)``': '\g<1>',  # convert from RST '``literal``' to 'literal'
             ':option:`(.*?)( <.*?>)?`': '\g<1>',  # convert ':option:`--name <group-command --name>`' to '--name'
             ':option:`(.*?)`': '\g<1>',  # convert ':option:`--name`' to '--name'
-        } # yapf: disable
+        }  # yapf: disable
 
         def reformat_text(text: str, width: int, **kwargs):
             for sub_key, sub_value in sub_strings.items():
@@ -218,7 +217,6 @@ output_option = click.option(
     '-op', '--output', type=click.Path(exists=False, dir_okay=False, writable=True, path_type=pathlib.Path),
     help='Write results to this json file.'
 )
-
 """ cloup context settings to print help in 'linear' layout with heading/option emphasis. """
 context_settings = cloup.Context.settings(
     formatter_settings=cloup.HelpFormatter.settings(
@@ -228,7 +226,8 @@ context_settings = cloup.Context.settings(
             col1=cloup.Style(fg='bright_white'),
         )
     )
-) # yapf: disable
+)  # yapf: disable
+
 
 # define the click CLI
 @cloup.group(context_settings=context_settings)
@@ -263,7 +262,7 @@ def cli(verbose, quiet):
         - `gain-blk-offset`: gain-only model applied to offset normalised image blocks.
         - `gain-offset`: gain and offset model.
         """,
-    ),
+    ),  # yapf: disable
     click.option(
         '-k', '--kernel-shape', type=click.Tuple([click.INT, click.INT]), nargs=2, default=(5, 5), show_default=True,
         metavar='HEIGHT WIDTH', help='Kernel height and width in pixels of the :option:`--proc-crs` image.'
@@ -277,11 +276,10 @@ def cli(verbose, quiet):
         help='Overwrite existing output file(s).'
     ),
     click.option(
-        '-cmp', '--compare', 'comp_ref_file', metavar='FILE', type=click.Path(dir_okay=False,
-            path_type=pathlib.Path), is_flag=False,
-        flag_value='ref', default=None, callback=_compare_cb,
+        '-cmp', '--compare', 'comp_ref_file', metavar='FILE', type=click.Path(dir_okay=False, path_type=pathlib.Path),
+        is_flag=False, flag_value='ref', default=None, callback=_compare_cb,
         help='Compare source and corrected images with this reference image.  If no ``FILE`` value is given, source '
-             'and corrected images are compared with :option:`REFERENCE`.'
+        'and corrected images are compared with :option:`REFERENCE`.'
     ),
     click.option(
         '-bo/-nbo', '--build-ovw/--no-build-ovw', type=click.BOOL, default=True, show_default=True,
@@ -299,14 +297,14 @@ def cli(verbose, quiet):
     click.option(
         '-pi/-npi', '--param-image/--no-param-image', type=click.BOOL, default=False, show_default=True,
         help=f'Write the  model parameters and R\N{SUPERSCRIPT TWO} values for each corrected image into a parameter '
-             f'image file.'
+        f'image file.'
     ),
     click.option(
         '-mp/-nmp', '--mask-partial/--no-mask-partial', type=click.BOOL,
         default=KernelModel.create_config()['mask_partial'], show_default=True,
         help=f'Mask output pixels produced from partial kernel, or source / reference, image coverage.'
     ),
-    threads_option,
+    threads_option,  # yapf: disable
     click.option(
         '-mbm', '--max-block-mem', type=click.FLOAT, default=RasterFuse.create_config()['max_block_mem'],
         show_default=True, help='Maximum image block size in megabytes (0 = block corresponds to the whole image).'
@@ -315,15 +313,15 @@ def cli(verbose, quiet):
         '-ds', '--downsampling', type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
         default=KernelModel.create_config()['downsampling'].name, show_default=True,
         help='Resampling method for re-projecting from high to low resolution.  See the `rasterio docs '
-             '<https://rasterio.readthedocs.io/en/latest/api/rasterio.enums.html#rasterio.enums.Resampling>`_ for '
-             'details.'
+        '<https://rasterio.readthedocs.io/en/latest/api/rasterio.enums.html#rasterio.enums.Resampling>`_ for '
+        'details.'
     ),
     click.option(
         '-us', '--upsampling', type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
         default=KernelModel.create_config()['upsampling'].name, show_default=True,
         help='Resampling method for re-projecting from low to high resolution.  See the `rasterio docs '
-             '<https://rasterio.readthedocs.io/en/latest/api/rasterio.enums.html#rasterio.enums.Resampling>`_ for '
-             'details.'
+        '<https://rasterio.readthedocs.io/en/latest/api/rasterio.enums.html#rasterio.enums.Resampling>`_ for '
+        'details.'
     ),
     click.option(
         '-rit', '--r2-inpaint-thresh', type=click.FloatRange(min=0, max=1),
@@ -346,32 +344,31 @@ def cli(verbose, quiet):
         '--driver', type=click.Choice(set(rio.drivers.raster_driver_extensions().values()), case_sensitive=False),
         default=RasterFuse.create_out_profile()['driver'], show_default=True, metavar='TEXT',
         help='Output image format driver.  See the `GDAL docs <https://gdal.org/drivers/raster/index.html>`_ for '
-             'details.'
+        'details.'
     ),
     click.option(
         '--dtype', type=click.Choice(list(rio.dtypes.dtype_fwd.values())[1:8], case_sensitive=False),
         default=RasterFuse.create_out_profile()['dtype'], show_default=True,
         help=f'Output image data type.  Valid for corrected images only, parameter images always use '
-             f'{RasterArray.default_dtype}.'
+        f'{RasterArray.default_dtype}.'
     ),
     click.option(
         '--nodata', 'nodata', type=click.STRING, callback=_nodata_cb, metavar='[NUMBER|null|nan]',
         default=RasterFuse.create_out_profile()['nodata'], show_default=True,
         help=f'Output image nodata value.  Valid for corrected images only, parameter images always use '
-             f'{RasterArray.default_nodata}.'
+        f'{RasterArray.default_nodata}.'
     ),
     click.option(
-        '-co', '--creation-options', metavar='NAME=VALUE', multiple=True, default=(),
-        callback=_creation_options_cb,
+        '-co', '--creation-options', metavar='NAME=VALUE', multiple=True, default=(), callback=_creation_options_cb,
         help='Driver specific image creation option(s) for the output image(s).  See the `GDAL docs '
-             '<https://gdal.org/drivers/raster/index.html>`_ for details.'
+        '<https://gdal.org/drivers/raster/index.html>`_ for details.'
     ),
 )
 @click.pass_context
 def fuse(
-    ctx: click.Context, src_file: Tuple[pathlib.Path,], ref_file: pathlib.Path, model: Model,
-    kernel_shape: Tuple[int, int], out_dir: pathlib.Path, overwrite: bool, comp_ref_file: pathlib.Path,
-    build_ovw: bool, proc_crs: ProcCrs, conf: pathlib.Path, param_image: bool, **kwargs
+    ctx: click.Context, src_file: Tuple[pathlib.Path, ], ref_file: pathlib.Path, model: Model,
+    kernel_shape: Tuple[int, int], out_dir: pathlib.Path, overwrite: bool, comp_ref_file: pathlib.Path, build_ovw: bool,
+    proc_crs: ProcCrs, conf: pathlib.Path, param_image: bool, **kwargs
 ):
     # @formatter:off
     """
@@ -463,7 +460,7 @@ cli.add_command(fuse)
 @ref_file_arg
 @output_option
 # TODO: add new config params: threads, max_block_mem, up/downsampling
-def compare(src_file: Tuple[pathlib.Path,], ref_file: pathlib.Path, output: pathlib.Path):
+def compare(src_file: Tuple[pathlib.Path, ], ref_file: pathlib.Path, output: pathlib.Path):
     """
     Compare image(s) with a reference.
 

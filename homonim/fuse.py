@@ -21,25 +21,26 @@ import multiprocessing
 import threading
 from concurrent import futures
 from contextlib import contextmanager
-from typing import Tuple, Dict, Union, Optional
 from pathlib import Path
+from typing import Tuple, Dict, Union
 
 import numpy as np
 import rasterio as rio
-from rasterio.io import DatasetWriter
-from rasterio.enums import Resampling
-from tqdm import tqdm
-
 from homonim import utils
 from homonim.enums import Model, ProcCrs
 from homonim.errors import IoError
 from homonim.kernel_model import KernelModel, RefSpaceModel, SrcSpaceModel
 from homonim.raster_array import RasterArray
 from homonim.raster_pair import RasterPairReader, BlockPair
+from rasterio.enums import Resampling
+from rasterio.io import DatasetWriter
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
+
 class RasterFuse(RasterPairReader):
+
     def __init__(
         self, src_filename: Union[Path, str], ref_filename: Union[Path, str], proc_crs: ProcCrs = ProcCrs.auto,
     ):
@@ -92,7 +93,7 @@ class RasterFuse(RasterPairReader):
         dtype: str = RasterArray.default_dtype,
         nodata: float = RasterArray.default_nodata,
         creation_options: Dict = None
-    )->Dict: # yapf: disable
+    ) -> Dict:  # yapf: disable
         """
         Utility method to create a `rasterio` image profile for the output image(s) that can be passed to
         :meth:`RasterFuse.process`.  Without arguments, the default profile is returned.
@@ -145,7 +146,7 @@ class RasterFuse(RasterPairReader):
         corr_profile['count'] = len(self.src_bands)
         return corr_profile
 
-    def _merge_param_profile(self, out_profile: Dict=None) -> Dict:
+    def _merge_param_profile(self, out_profile: Dict = None) -> Dict:
         """
         Create a rasterio profile for the parameter image, using a merge of the ``proc_crs`` image profile,
         and ``out_profile`` as a starting point.
@@ -216,8 +217,8 @@ class RasterFuse(RasterPairReader):
 
     @contextmanager
     def _out_files(
-        self, corr_filename:Union[Path, str], param_filename: Union[Path, str] = None,
-        out_profile: Dict = None, overwrite: bool = False, build_ovw:bool = False, **kwargs
+        self, corr_filename: Union[Path, str], param_filename: Union[Path, str] = None, out_profile: Dict = None,
+        overwrite: bool = False, build_ovw: bool = False, **kwargs
     ):
         """
         Internal context manager to handle the corrected, and optional parameter, output file(s).
@@ -344,7 +345,7 @@ class RasterFuse(RasterPairReader):
         with self._out_files(
             corr_filename, param_filename=param_filename, out_profile=out_profile, overwrite=overwrite,
             build_ovw=build_ovw, model=model_type, kernel_shape=kernel_shape, **model_config, **block_config
-        ) as (out_im, param_im):
+        ) as (out_im, param_im):  # yapf: disable
             if block_config['threads'] == 1:
                 # correct blocks consecutively in the main thread (useful for profiling)
                 block_pairs = [block_pair for block_pair in self.block_pairs(**block_pair_args)]
@@ -362,5 +363,5 @@ class RasterFuse(RasterPairReader):
                     # wait for threads in order of completion, and raise any thread generated exceptions
                     for future in tqdm(
                         futures.as_completed(proc_futures), bar_format=bar_format, total=len(proc_futures)
-                    ): # yapf: disable
+                    ):  # yapf: disable
                         future.result()
