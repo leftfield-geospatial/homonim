@@ -65,16 +65,15 @@ def test_cli(runner, param_file):
     assert (result.exit_code == 0)
     assert (param_file.name in result.output)
 
-    res_str = """Mean  Std   Min  Max  Inpaint (%)
-B1_GAIN    1.00 0.00  1.00 1.00      NaN    
-B2_GAIN    1.00 0.00  1.00 1.00      NaN    
-B3_GAIN    1.00 0.00  1.00 1.00      NaN    
-B1_OFFSET -0.00 0.00 -0.00 0.00      NaN    
-B2_OFFSET -0.00 0.00 -0.00 0.00      NaN    
-B3_OFFSET -0.00 0.00 -0.00 0.00      NaN    
-B1_R2      1.00 0.00  1.00 1.00     0.00    
-B2_R2      1.00 0.00  1.00 1.00     0.00    
-B3_R2      1.00 0.00  1.00 1.00     0.00"""
+    res_str = """B1_GAIN    1.000 0.000  1.000 1.000          
+    B2_GAIN    1.000 0.000  1.000 1.000          
+    B3_GAIN    1.000 0.000  1.000 1.000          
+    B1_OFFSET -0.000 0.000 -0.001 0.000          
+    B2_OFFSET -0.000 0.000 -0.001 0.000          
+    B3_OFFSET -0.000 0.000 -0.001 0.000          
+    B1_R2      1.000 0.000  1.000 1.000     0.000    
+    B2_R2      1.000 0.000  1.000 1.000     0.000    
+    B3_R2      1.000 0.000  1.000 1.000     0.000"""
     assert (str_contain_nos(res_str, result.output))
 
 

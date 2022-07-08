@@ -66,7 +66,7 @@ class RasterFuse(RasterPairReader):
         self._param_lock = threading.Lock()
 
     @staticmethod
-    def create_config(threads: int = multiprocessing.cpu_count(), max_block_mem: float = 100) -> Dict:
+    def create_config(threads: int = 0, max_block_mem: float = 100) -> Dict:
         """
         Utility method to create a RasterFuse configuration dictionary that can be passed to :meth:`RasterFuse.process`.
         Without arguments, the default configuration is returned.
@@ -330,7 +330,6 @@ class RasterFuse(RasterPairReader):
         out_profile = self.create_out_profile(**(out_profile or {}))
         model_config = KernelModel.create_config(**(model_config or {}))
         block_config = RasterFuse.create_config(**(block_config or {}))
-        block_config['threads'] = utils.validate_threads(block_config['threads'])
 
         # create the KernelModel according to proc_crs
         model_cls = SrcSpaceModel if self.proc_crs == ProcCrs.src else RefSpaceModel
