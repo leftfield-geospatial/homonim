@@ -187,7 +187,7 @@ def test_cli__adv_options(tmp_path, runner, float_50cm_src_file, float_100cm_ref
     out_file_def = tmp_path.joinpath('compare_defaults.json')
     out_file_adv = tmp_path.joinpath('compare_adv.json')
     cli_str_def = f'compare {src_file} {ref_file} --output {out_file_def}'
-    cli_str_adv = f"""compare --threads 1 --max-block-mem 1e-3 --downsampling bilinear {src_file} {ref_file}  
+    cli_str_adv = f"""compare --threads 1 --max-block-mem 1e-3 --downsampling bilinear -pc ref {src_file} {ref_file}  
     --output {out_file_adv}"""
     stats_list = []
     for cli_str, out_file in zip([cli_str_def, cli_str_adv], [out_file_def, out_file_adv]):
