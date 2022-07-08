@@ -42,14 +42,19 @@ RasterCompare
     :toctree: _generated
 
     ~RasterCompare.compare
+    ~RasterCompare.create_config
+    ~RasterCompare.stats_table
 
 .. rubric:: Attributes
 
 .. autosummary::
     :toctree: _generated
 
+    ~RasterCompare.schema
+    ~RasterCompare.schema_table
     ~RasterCompare.proc_crs
-    ~RasterCompare.stats_key
+    ~RasterFuse.closed
+
 
 ParamStats
 ----------
