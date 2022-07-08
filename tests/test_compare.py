@@ -126,6 +126,20 @@ def test_api__max_block_mem(src_file:str, ref_file:str, request):
             assert stats_dict_band[k] == pytest.approx(stats_dict_block[k], rel=1e-5)
 
 
+def test_api__proc_crs(float_45cm_src_file, float_100cm_ref_file, float_100cm_src_file, float_45cm_ref_file):
+    """ Test changing proc_crs togther with src<->ref files gives same results. """
+    with RasterCompare(float_45cm_src_file, float_100cm_ref_file, proc_crs=ProcCrs.ref) as raster_compare:
+        stats_list_ref = raster_compare.compare()    # compare by band
+    assert (len(stats_list_ref) == 2)
+    with RasterCompare(float_100cm_src_file, float_45cm_ref_file, proc_crs=ProcCrs.src) as raster_compare:
+        stats_list_src = raster_compare.compare()    # compare by band
+    assert (len(stats_list_src) == 2)
+    # test ProcCrs.ref and ProcCrs.src results are approx the same
+    for stats_dict_ref, stats_dict_src in zip(stats_list_ref, stats_list_src):
+        for k in stats_dict_ref.keys():
+            assert stats_dict_ref[k] == pytest.approx(stats_dict_src[k], rel=1e-3)
+
+
 def test_cli(runner, float_50cm_rgb_file, float_100cm_rgb_file):
     """ Test compare CLI with known outputs. """
     ref_file = float_100cm_rgb_file
