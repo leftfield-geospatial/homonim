@@ -118,8 +118,11 @@ class RasterFuse(RasterPairReader):
         dict
             `rasterio` image profile for output images.
         """
+        # TODO: test effect of photometric=None on full size NGI files with ProcCrs.src param im (is bigtiff
+        #  necessary then?).  Also test ovw compress with / w/o compress_overview
         creation_options = creation_options or dict(
-            tiled=True, blockxsize=512, blockysize=512, compress='deflate', interleave='band', photometric=None
+            tiled=True, blockxsize=512, blockysize=512, compress='deflate', interleave='band', photometric=None,
+            bigtiff='if_safer', compress_overview='auto',
         )
         return dict(driver=driver, dtype=dtype, nodata=nodata, creation_options=creation_options)
 
@@ -143,7 +146,7 @@ class RasterFuse(RasterPairReader):
         """
         Return a rasterio profile for the corrected image, by merging the source image profile with ``out_profile``.
         """
-        out_profile = self.create_out_profile(**out_profile)
+        out_profile = self.create_out_profile(**(out_profile or {}))
         corr_profile = utils.combine_profiles(self.src_im.profile, out_profile)
         corr_profile['count'] = len(self.src_bands)
         return corr_profile
@@ -157,6 +160,7 @@ class RasterFuse(RasterPairReader):
             init_profile = self.ref_im.profile
         else:
             init_profile = self.src_im.profile
+        out_profile = self.create_out_profile(**(out_profile or {}))
         param_profile = utils.combine_profiles(init_profile, out_profile)
         # force dtype and nodata to defaults
         param_profile.update(
@@ -328,7 +332,6 @@ class RasterFuse(RasterPairReader):
         model_type = Model(model)
         kernel_shape = tuple(utils.validate_kernel_shape(kernel_shape, model=model))
         overlap = utils.overlap_for_kernel(kernel_shape)
-        out_profile = self.create_out_profile(**(out_profile or {}))
         model_config = RasterFuse.create_model_config(**(model_config or {}))
         block_config = RasterFuse.create_block_config(**(block_config or {}))
 
@@ -362,6 +365,7 @@ class RasterFuse(RasterPairReader):
 
                     # wait for threads in order of completion, and raise any thread generated exceptions
                     for future in tqdm(
-                        futures.as_completed(proc_futures), bar_format=bar_format, total=len(proc_futures)
+                        futures.as_completed(proc_futures), bar_format=bar_format, total=len(proc_futures),
+                        dynamic_ncols=True,
                     ):  # yapf: disable
                         future.result()
