@@ -572,9 +572,9 @@ def stats(param_file: pathlib.Path, output: pathlib.Path):
         # process parameter file(s), storing results
         for param_filename in param_file:
             logger.info(f'\nProcessing {param_filename.name}')
-            param_stats = ParamStats(param_filename)
-            stats_dict[str(param_filename)] = param_stats.stats()
-            meta_dict[str(param_filename)] = param_stats.metadata
+            with ParamStats(param_filename) as param_stats:
+                stats_dict[str(param_filename)] = param_stats.stats()
+                meta_dict[str(param_filename)] = param_stats.metadata
 
         # iterate over stored result(s) and print
         for param_filename, param_dict in stats_dict.items():

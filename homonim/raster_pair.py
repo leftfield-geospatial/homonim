@@ -131,6 +131,7 @@ class RasterPairReader:
                     f'Could not read image {im.name}.  JPEG compression with NBITS==12 is not supported, '
                     f'you probably need to recompress this image.'
                 )
+            # TODO: test if we can read 12bit jpegs with gdal >=3.4 see https://gdal.org/drivers/raster/gtiff.html#creation-options
             else:
                 raise ex
 

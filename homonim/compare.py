@@ -228,12 +228,12 @@ class RasterCompare(RasterPairReader):
             src_array[~mask] = 0
             ref_array[~mask] = 0
             # find the required sums and return
-            band_sums_dict = dict(
+            block_sums_dict = dict(
                 src_sum=src_array.sum(), ref_sum=ref_array.sum(), src2_sum=(src_array ** 2).sum(),
                 ref2_sum=(ref_array ** 2).sum(), src_ref_sum=(src_array * ref_array).sum(),
                 res2_sum=((ref_array - src_array) ** 2).sum(), mask_sum=mask.sum()
             )
-            return band_sums_dict, block_pair
+            return block_sums_dict, block_pair
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=config['threads']) as executor:
             # read and sum image blocks in threads

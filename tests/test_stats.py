@@ -31,12 +31,12 @@ def _test_vals(param_stats):
     """ "Helper function to test statistics against known values for param_file (i.e. gain=1, offset=0, r2=1). """
     assert len(param_stats) == 9
     for band_name, band_stats in param_stats.items():
-        assert ({'Mean', 'Std', 'Min', 'Max'} <= set(band_stats.keys()))
+        assert ({'mean', 'std', 'min', 'max'} <= set(band_stats.keys()))
 
     exp_param_stats_list = (
-        3 * [{'Mean': 1, 'Std': 0, 'Min': 1, 'Max': 1}] +  # gains
-        3 * [{'Mean': 0, 'Std': 0, 'Min': 0, 'Max': 0}] +  # offsets
-        3 * [{'Mean': 1, 'Std': 0, 'Min': 1, 'Max': 1, 'Inpaint (%)': 0}]   # r2
+        3 * [{'mean': 1, 'std': 0, 'min': 1, 'max': 1}] +  # gains
+        3 * [{'mean': 0, 'std': 0, 'min': 0, 'max': 0}] +  # offsets
+        3 * [{'mean': 1, 'std': 0, 'min': 1, 'max': 1, 'inpaint_%': 0}]   # r2
     )  # yapf: disable
 
     for param_band_stats, exp_param_band_stats in zip(param_stats.values(), exp_param_stats_list):
@@ -46,9 +46,9 @@ def _test_vals(param_stats):
 
 def test_api(param_file):
     """ Test ParamStats creation and execution. """
-    stats = ParamStats(param_file)
-    assert (len(stats.metadata) > 0)
-    param_stats = stats.stats()
+    with ParamStats(param_file) as stats:
+        assert (len(stats.metadata) > 0)
+        param_stats = stats.stats()
     _test_vals(param_stats)
 
 
