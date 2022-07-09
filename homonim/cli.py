@@ -216,7 +216,7 @@ threads_option = click.option(
 )
 max_block_mem_option = click.option(
     '-mbm', '--max-block-mem', type=click.FLOAT, default=RasterFuse.create_block_config()['max_block_mem'],
-    show_default=True, help='Maximum image block size in megabytes (0 = block corresponds to the whole image).'
+    show_default=True, help='Maximum image block size in megabytes (0 = block corresponds to a whole band).'
 )
 downsampling_option = click.option(
     '-ds', '--downsampling', type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),

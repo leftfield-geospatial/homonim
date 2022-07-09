@@ -42,12 +42,12 @@ class ParamStats:
 
     def __init__(self, param_filename, threads=default_config['threads']):
         """
-        Construct the ParamStats object
+        Class to calculate the statistics of a parameter image.
 
         Parameters
         ----------
         param_filename: pathlib.Path, str
-            Path to the parameter image file
+            Path to the parameter image file, as produced by :meth:`homonim.fuse.RasterFuse.process` with
         threads: int, optional
             The number of threads to use for concurrent processing of bands (requires more memory).  0 = use all cpus.
         """

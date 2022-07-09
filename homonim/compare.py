@@ -88,7 +88,7 @@ class RasterCompare(RasterPairReader):
 
     @staticmethod
     def create_config(
-        threads: int = 0, max_block_mem: float = 100, downsampling: Resampling = Resampling.average,
+        threads: int = 0, max_block_mem: float = 512, downsampling: Resampling = Resampling.average,
         upsampling: Resampling = Resampling.cubic_spline,
     ) -> Dict:
         """
@@ -127,12 +127,13 @@ class RasterCompare(RasterPairReader):
         return config['downsampling'] if np.prod(np.abs(from_res)) <= np.prod(np.abs(to_res)) else config['upsampling']
 
     def _get_image_stats(self, image_sums: List[Dict]) -> List[Dict]:
-        """ Find the image comparison statistics, given src, ref, src**2 etc summations over blocks. """
+        """ Return the comparison statistics for each band, given src, ref, src**2 etc band sums. """
 
         def get_band_stats(
             src_sum: float = 0, ref_sum: float = 0, src2_sum: float = 0, ref2_sum: float = 0, src_ref_sum: float = 0,
             res2_sum: float = 0, mask_sum: float = 0
         ) -> List[Dict]:
+            """ Return the comparison statistics for a band, given the source, reference etc sums. """
             # find PCC using the 3rd equation down at
             # https://en.wikipedia.org/wiki/Pearson_correlation_coefficient#For_a_sample
             # TODO: incorporate stats defs in schema as they were
@@ -150,7 +151,7 @@ class RasterCompare(RasterPairReader):
             return dict(r2=pcc ** 2, RMSE=rmse, rRMSE=rrmse, N=int(mask_sum))
 
         image_stats = []
-        sum_over_bands = None
+        sum_over_bands = {}
         for band_i, band_sum_dict in enumerate(image_sums):
             band_stats = get_band_stats(**band_sum_dict)
             band_desc = (
@@ -159,33 +160,30 @@ class RasterCompare(RasterPairReader):
                 f'Band {band_i + 1}'
             )  # yapf: disable
             image_stats.append(dict(band=band_desc, **band_stats))
-            sum_over_bands = (
-                dict(**band_stats) if sum_over_bands is None else {
-                    k: sum_over_bands[k] + v for k, v in band_stats.items()
-                }
-            )  # yapf: disable
+            sum_over_bands = {k: sum_over_bands.get(k, 0) + v for k, v in band_stats.items()}
 
+        # find mean of each statistic over the bands, retaining int types
         mean_stats = {
             k: int(v / len(image_sums)) if isinstance(v, int) else (v / len(image_sums))
             for k, v in sum_over_bands.items()
         }  # yapf: disable
+        # add the means to the list of band
         image_stats.append(dict(band='Mean', **mean_stats))
         return image_stats
 
     def stats_table(self, stats_list: List[Dict]):
         """
-        Create a printable table string of the provided comparison statistics, as returned by
-        :meth:`RasterCompare.compare`.
+        Return a table string of the provided comparison statistics.
 
         Parameters
         ----------
         stats_list: list of dict
-            Comparison statistics to tabulate.
+            Comparison statistics to tabulate, as returned by :meth:`RasterCompare.compare`.
 
         Returns
         -------
         str
-            A printable table string of the comparison statistics.
+            A table string.
         """
         headers = {
             k: self.schema[k]['abbrev'] if k in self.schema else str.capitalize(k)
@@ -210,12 +208,12 @@ class RasterCompare(RasterPairReader):
         """
         self._assert_open()
         config = self.create_config(**kwargs)
-        image_sums = [None] * len(self.src_bands)
 
-        def accum_block(block_pair: BlockPair):
-            """ Thread-safe function to accumulate image statistics, given a source-reference block pair.  """
-            src_ra, ref_ra = self.read(block_pair)  # read src and ref bands
-            # re-project into proc_crs
+        def get_block_sums(block_pair: BlockPair):
+            """ Thread-safe function to accumulate source/reference block sums over the image.  """
+            src_ra, ref_ra = self.read(block_pair)  # read src and ref blocks
+
+            # re-project so that both source and refernce are in proc_crs
             if self.proc_crs == ProcCrs.ref:
                 resampling = self._get_resampling(src_ra.res, ref_ra.res, **kwargs)
                 src_ra = src_ra.reproject(**ref_ra.proj_profile, resampling=resampling)
@@ -223,41 +221,36 @@ class RasterCompare(RasterPairReader):
                 resampling = self._get_resampling(ref_ra.res, src_ra.res, **kwargs)
                 ref_ra = ref_ra.reproject(**src_ra.proj_profile, resampling=resampling)
 
-            def get_block_sums(src_ra: RasterArray, ref_ra: RasterArray):
-                """ Return block sums of source, source**2, reference, etc. """
-                src_array = src_ra.array
-                ref_array = ref_ra.array
-                mask = ref_ra.mask & src_ra.mask
-                src_array[~mask] = 0
-                ref_array[~mask] = 0
-                return dict(
-                    src_sum=src_array.sum(), ref_sum=ref_array.sum(), src2_sum=(src_array ** 2).sum(),
-                    ref2_sum=(ref_array ** 2).sum(), src_ref_sum=(src_array * ref_array).sum(),
-                    res2_sum=((ref_array - src_array) ** 2).sum(), mask_sum=mask.sum()
-                )
-
-            # get the sums for this block
-            block_sums_dict = get_block_sums(src_ra, ref_ra)
-            with self._lock:
-                # accumulate sums for the image
-                if image_sums[block_pair.band_i] is None:
-                    # initialise
-                    image_sums[block_pair.band_i] = block_sums_dict
-                else:
-                    # add the block sums to the totals for the block's band
-                    image_sums[block_pair.band_i] = {
-                        k: image_sums[block_pair.band_i][k] + v for k, v in block_sums_dict.items()
-                    }  # yapf: disable
+            # mask invalid pixels so they don't contribute to sums
+            src_array = src_ra.array
+            ref_array = ref_ra.array
+            mask = ref_ra.mask & src_ra.mask
+            src_array[~mask] = 0
+            ref_array[~mask] = 0
+            # find the required sums and return
+            band_sums_dict = dict(
+                src_sum=src_array.sum(), ref_sum=ref_array.sum(), src2_sum=(src_array ** 2).sum(),
+                ref2_sum=(ref_array ** 2).sum(), src_ref_sum=(src_array * ref_array).sum(),
+                res2_sum=((ref_array - src_array) ** 2).sum(), mask_sum=mask.sum()
+            )
+            return band_sums_dict, block_pair
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=config['threads']) as executor:
+            # read and sum image blocks in threads
             futures = [
-                executor.submit(accum_block, block_pair)
+                executor.submit(get_block_sums, block_pair)
                 for block_pair in self.block_pairs(max_block_mem=config['max_block_mem'])
             ]  # yapf: disable
 
-            # wait for threads, get results and raise any thread generated exceptions
+            # wait for threads
+            image_sums = [{}] * len(self.src_bands)
             bar_format = '{l_bar}{bar}|{n_fmt}/{total_fmt} blocks [{elapsed}<{remaining}]'
             for future in tqdm(concurrent.futures.as_completed(futures), bar_format=bar_format, total=len(futures)):
-                future.result()
+                # get block sums and accumulate over the image
+                block_sums_dict, block_pair = future.result()
+                image_sums[block_pair.band_i] = (
+                    {k: image_sums[block_pair.band_i].get(k, 0) + v for k, v in block_sums_dict.items()}
+                )  # yapf: disable
 
+        # find the comparison statistics from the accumulated block sums, and return
         return self._get_image_stats(image_sums)
