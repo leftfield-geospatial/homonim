@@ -389,7 +389,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         kwargs: optional
                 Arguments to passed through the dataset's write() method.
         """
-        if not np.all(self.res == rio_dataset.res):
+        if not np.all(np.abs(self.res) == np.abs(rio_dataset.res)):
             raise ImageFormatError(
                 f'The dataset resolution does not match that of the RasterArray. '
                 f'Dataset res: {rio_dataset.res}, RasterArray res: {self.res}'
