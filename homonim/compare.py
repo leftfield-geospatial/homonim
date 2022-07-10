@@ -29,24 +29,10 @@ from homonim import utils
 from homonim.enums import ProcCrs
 from homonim.raster_pair import RasterPairReader, BlockPair, RasterArray
 from rasterio.warp import Resampling
-from tabulate import TableFormat, Line, DataRow, tabulate
+from tabulate import tabulate
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
-tabulate.MIN_PADDING = 0
-
-##
-# tabulate format for comparison stats
-_table_fmt = TableFormat(
-    lineabove=Line("", "-", " ", ""),
-    linebelowheader=Line("", "-", " ", ""),
-    linebetweenrows=None,
-    linebelow=Line("", "-", " ", ""),
-    headerrow=DataRow("", " ", ""),
-    datarow=DataRow("", " ", ""),
-    padding=0,
-    with_header_hide=["lineabove", "linebelow"]
-)  # yapf: disable
 
 
 class RasterCompare(RasterPairReader):
@@ -84,7 +70,7 @@ class RasterCompare(RasterPairReader):
     def schema_table(self) -> str:
         """ A printable table that describes the statistics returned by :attr:`RasterCompare.compare`. """
         headers = {key: key.upper() for key in list(self.schema.values())[0].keys()}
-        return tabulate(self.schema.values(), headers=headers, tablefmt=_table_fmt)
+        return tabulate(self.schema.values(), headers=headers, tablefmt=utils.table_format)
 
     @staticmethod
     def create_config(
@@ -189,7 +175,7 @@ class RasterCompare(RasterPairReader):
             k: self.schema[k]['abbrev'] if k in self.schema else str.capitalize(k)
             for k in list(stats_list[0].keys())
         }  # yapf: disable
-        return tabulate(stats_list, headers=headers, floatfmt='.3f', stralign='right', tablefmt=_table_fmt)
+        return tabulate(stats_list, headers=headers, floatfmt='.3f', stralign='right', tablefmt=utils.table_format)
 
     def compare(self, **kwargs) -> List[Dict]:
         """
@@ -243,9 +229,11 @@ class RasterCompare(RasterPairReader):
             ]  # yapf: disable
 
             # wait for threads
-            image_sums = [{}] * len(self.src_bands)
+            image_sums = [{} for i in range(self.src_bands)]
             bar_format = '{l_bar}{bar}|{n_fmt}/{total_fmt} blocks [{elapsed}<{remaining}]'
-            for future in tqdm(concurrent.futures.as_completed(futures), bar_format=bar_format, total=len(futures)):
+            for future in tqdm(
+                concurrent.futures.as_completed(futures), bar_format=bar_format, total=len(futures), dynamic_ncols=True,
+            ):
                 # get block sums and accumulate over the image
                 block_sums_dict, block_pair = future.result()
                 image_sums[block_pair.band_i] = (

@@ -34,7 +34,7 @@ from click.core import ParameterSource
 from rasterio.warp import SUPPORTED_RESAMPLING
 from tabulate import tabulate
 from homonim import utils, version
-from homonim.compare import RasterCompare, _table_fmt
+from homonim.compare import RasterCompare
 from homonim.enums import ProcCrs, Model
 from homonim.errors import ImageFormatError
 from homonim.fuse import RasterFuse
@@ -578,14 +578,9 @@ def stats(param_file: pathlib.Path, output: pathlib.Path):
 
         # iterate over stored result(s) and print
         for param_filename, param_dict in stats_dict.items():
-            param_meta = meta_dict[param_filename]
-
             logger.info(f'\n{pathlib.Path(param_filename).name}:\n')
-            logger.info(param_meta)
-            # format the statistics as a table string
-            table_list = [dict(Band=k, **v) for k, v in param_dict.items()]
-            table_str = tabulate(table_list, headers='keys', floatfmt='.3f', stralign='right', tablefmt=_table_fmt)
-            logger.info(f'Stats:\n{table_str}')
+            logger.info(meta_dict[param_filename])
+            logger.info(f'Stats:\n\n{ParamStats.stats_table(stats_dict[param_filename])}\n')
 
         if output is not None:
             with open(output, 'w') as file:

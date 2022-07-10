@@ -214,7 +214,8 @@ class RasterFuse(RasterPairReader):
             ref_bi = self.ref_bands[bi]
             ref_descr = self.ref_im.descriptions[ref_bi - 1] or f'B{ref_bi}'
             ref_meta_dict = self.ref_im.tags(ref_bi)
-            for param_i, param_name in zip(range(bi, im.count, num_src_bands), ['GAIN', 'OFFSET', 'R2']):
+            param_names = ['GAIN', 'OFFSET', 'R\N{SUPERSCRIPT TWO}']
+            for param_i, param_name in zip(range(bi, im.count, num_src_bands), param_names):
                 im.set_band_description(param_i + 1, f'{ref_descr}_{param_name}')
                 param_meta_dict = {
                     k: f'{v.upper()} {param_name}' for k, v in ref_meta_dict.items() if k in ['ABBREV', 'ID', 'NAME']
@@ -369,3 +370,4 @@ class RasterFuse(RasterPairReader):
                         dynamic_ncols=True,
                     ):  # yapf: disable
                         future.result()
+

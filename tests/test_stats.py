@@ -30,16 +30,16 @@ from tests.conftest import str_contain_nos
 def _test_vals(param_stats):
     """ "Helper function to test statistics against known values for param_file (i.e. gain=1, offset=0, r2=1). """
     assert len(param_stats) == 9
-    for band_name, band_stats in param_stats.items():
-        assert ({'mean', 'std', 'min', 'max'} <= set(band_stats.keys()))
+    for band_stats in param_stats:
+        assert ({'band', 'mean', 'std', 'min', 'max'} <= set(band_stats.keys()))
 
     exp_param_stats_list = (
         3 * [{'mean': 1, 'std': 0, 'min': 1, 'max': 1}] +  # gains
         3 * [{'mean': 0, 'std': 0, 'min': 0, 'max': 0}] +  # offsets
-        3 * [{'mean': 1, 'std': 0, 'min': 1, 'max': 1, 'inpaint_%': 0}]   # r2
+        3 * [{'mean': 1, 'std': 0, 'min': 1, 'max': 1, 'inpaint_p': 0}]   # r2
     )  # yapf: disable
 
-    for param_band_stats, exp_param_band_stats in zip(param_stats.values(), exp_param_stats_list):
+    for param_band_stats, exp_param_band_stats in zip(param_stats, exp_param_stats_list):
         for k, v in exp_param_band_stats.items():
             assert (param_band_stats[k] == pytest.approx(exp_param_band_stats[k], abs=1e-2))
 
