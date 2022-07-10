@@ -70,7 +70,7 @@ class ParamStats:
 
     @property
     def metadata(self):
-        """ A printable list of parameter metadata. """
+        """ Printable list of parameter metadata. """
         res_str = (
             f'Model: {self._model}\n'
             f'Kernel shape: {self._tags["FUSE_KERNEL_SHAPE"]}\n'
@@ -80,6 +80,24 @@ class ParamStats:
         if self._model == 'gain-offset':
             res_str += f'R\N{SUPERSCRIPT TWO} inpaint threshold: {self._r2_inpaint_thresh}\n'
         return res_str
+
+    schema = dict(
+        band=dict(abbrev='Band'),
+        mean=dict(abbrev='Mean'),
+        std=dict(abbrev='Std.'),
+        min=dict(abbrev='Min.'),
+        max=dict(abbrev='Max.'),
+        inpaint_p=dict(abbrev='Inpaint (%)', description='Portion of inpainted pixels (%).'),
+    )  # yapf: disable
+    """ Dictionary describing the statistics returned by :attr:`ParamStats.stats`. """
+
+    @property
+    def schema_table(self) -> str:
+        """ Printable table describing statistics returned by :attr:`ParamStats.stats`. """
+        schema_list = [v for k, v in self.schema.items() if 'description' in v]
+        schema_list.append(dict(abbrev='*_R\N{SUPERSCRIPT TWO}', description='Coefficient of determination.'))
+        headers = {k: k.upper() for k in schema_list[0].keys()}
+        return tabulate(schema_list, headers=headers, tablefmt=utils.table_format)
 
     @staticmethod
     def stats_table(stats_list: List[Dict]):
@@ -96,7 +114,7 @@ class ParamStats:
         str
             A table string.
         """
-        headers = dict(band='Band', mean='Mean', std='Std.', min='Min', max='Max', inpaint_p='Inpaint (%)')
+        headers = {k: v['abbrev'] for k, v in ParamStats.schema.items() if k in stats_list[-1]}
         return tabulate(stats_list, headers=headers, floatfmt='.3f', stralign='right', tablefmt=utils.table_format)
 
     def __enter__(self):

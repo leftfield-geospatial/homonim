@@ -78,6 +78,8 @@ ParamStats
 .. autosummary::
     :toctree: _generated
 
+    ~ParamStats.schema
+    ~ParamStats.schema_table
     ~ParamStats.metadata
     ~ParamStats.closed
 

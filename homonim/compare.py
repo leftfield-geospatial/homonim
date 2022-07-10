@@ -68,7 +68,7 @@ class RasterCompare(RasterPairReader):
 
     @property
     def schema_table(self) -> str:
-        """ A printable table that describes the statistics returned by :attr:`RasterCompare.compare`. """
+        """ Printable table describing statistics returned by :attr:`RasterCompare.compare`. """
         headers = {key: key.upper() for key in list(self.schema.values())[0].keys()}
         return tabulate(self.schema.values(), headers=headers, tablefmt=utils.table_format)
 

@@ -576,6 +576,9 @@ def stats(param_file: pathlib.Path, output: pathlib.Path):
                 stats_dict[str(param_filename)] = param_stats.stats()
                 meta_dict[str(param_filename)] = param_stats.metadata
 
+        # print a key for the following tables
+        logger.info(f'\nKey:\n\n{param_stats.schema_table}')
+
         # iterate over stored result(s) and print
         for param_filename, param_dict in stats_dict.items():
             logger.info(f'\n{pathlib.Path(param_filename).name}:\n')
