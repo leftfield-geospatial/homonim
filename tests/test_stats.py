@@ -28,7 +28,7 @@ from tests.conftest import str_contain_nos
 
 
 def _test_vals(param_stats):
-    """ "Helper function to test statistics against known values for param_file (i.e. gain=1, offset=0, r2=1). """
+    """ Helper function to test statistics against known values for param_file (i.e. gain=1, offset=0, r2=1). """
     assert len(param_stats) == 9
     for band_stats in param_stats:
         assert ({'band', 'mean', 'std', 'min', 'max'} <= set(band_stats.keys()))

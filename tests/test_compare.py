@@ -63,24 +63,6 @@ def test_api(src_file, ref_file, request):
     _test_identical_compare_dict(res_dict)
 
 
-@pytest.mark.parametrize(
-    'src_file, ref_file, proc_crs, exp_proc_crs', [
-        ('float_50cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, ProcCrs.ref),
-        ('float_50cm_src_file', 'float_100cm_ref_file', ProcCrs.src, ProcCrs.src),
-        ('float_100cm_src_file', 'float_50cm_ref_file', ProcCrs.auto, ProcCrs.src),
-        ('float_100cm_src_file', 'float_50cm_ref_file', ProcCrs.ref, ProcCrs.ref),
-    ]
-)  # yapf:disable
-def test_api__proc_crs(src_file, ref_file, proc_crs, exp_proc_crs, request):
-    """ Test resolution and forcing of the proc_crs parameter with different combinations of src/ref images. """
-    src_file = request.getfixturevalue(src_file)
-    ref_file = request.getfixturevalue(ref_file)
-    with RasterCompare(src_file, ref_file, proc_crs=proc_crs) as compare:
-        assert (compare.proc_crs == exp_proc_crs)
-        res_dict = compare.compare()
-    assert (len(res_dict) == 2)
-
-
 def test_api__thread(float_45cm_src_file, float_100cm_ref_file):
     """ Test compasison results remain the same with different `threads` configurations. """
     with RasterCompare(float_45cm_src_file, float_100cm_ref_file) as raster_compare:
@@ -119,7 +101,7 @@ def test_api__resampling(src_file: str, ref_file: str, proc_crs: ProcCrs, config
     ]
 )  # yapf:disable
 def test_api__max_block_mem(src_file:str, ref_file:str, request):
-    """ Test changing the number and shape of blocks (i.e. max_block_mem) generates the same comparison results. """
+    """ Test changing the number and shape of blocks (i.e. max_block_mem) gives the same comparison results. """
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
     with RasterCompare(src_file, ref_file) as compare:
@@ -140,11 +122,11 @@ def test_api__proc_crs(float_45cm_src_file, float_100cm_ref_file, float_100cm_sr
     """
     with RasterCompare(float_45cm_src_file, float_100cm_ref_file, proc_crs=ProcCrs.ref) as raster_compare:
         stats_list_ref = raster_compare.compare()    # compare by band
-    assert (raster_compare.proc_crs == ProcCrs.ref)
+        assert (raster_compare.proc_crs == ProcCrs.ref)
     assert (len(stats_list_ref) == 2)
     with RasterCompare(float_100cm_src_file, float_45cm_ref_file, proc_crs=ProcCrs.src) as raster_compare:
         stats_list_src = raster_compare.compare()    # compare by band
-    assert (raster_compare.proc_crs == ProcCrs.src)
+        assert (raster_compare.proc_crs == ProcCrs.src)
     assert (len(stats_list_src) == 2)
     # test ProcCrs.ref and ProcCrs.src results are approx the same
     for stats_dict_ref, stats_dict_src in zip(stats_list_ref, stats_list_src):

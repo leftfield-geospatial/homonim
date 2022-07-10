@@ -30,35 +30,35 @@ from homonim.fuse import RasterFuse
 # TODO: move these files into test directory...
 @pytest.fixture()
 def modis_ref_file():
-    return root_path.joinpath(r'data/test_example/reference/MODIS-006-MCD43A4-2015_09_15_B143.tif')
+    return root_path.joinpath(r'tests/data/reference/MODIS-006-MCD43A4-2015_09_15_B143.tif')
 
 
 @pytest.fixture()
 def landsat_ref_file():
-    return root_path.joinpath(r'data/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif')
+    return root_path.joinpath(r'tests/data/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif')
 
 
 @pytest.fixture()
 def s2_ref_file():
     return root_path.joinpath(
-        r'data/test_example/reference/COPERNICUS-S2-20151003T075826_20151003T082014_T35HKC_B432_Byte.tif'
+        r'tests/data/reference/COPERNICUS-S2-20151003T075826_20151003T082014_T35HKC_B432_Byte.tif'
     )
 
 
 @pytest.fixture()
 def landsat_src_file():
-    return root_path.joinpath(r'data/test_example/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.vrt')
+    return root_path.joinpath(r'tests/data/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.vrt')
 
 
 @pytest.fixture()
 def ngi_src_files():
-    source_root = root_path.joinpath('data/test_example/source/')
+    source_root = root_path.joinpath('tests/data/source/')
     return [fn for fn in source_root.glob('3324c_2015_*_RGB.tif')]
 
 
 @pytest.fixture()
 def ngi_src_file():
-    return root_path.joinpath(r'data/test_example/source/3324c_2015_1004_05_0182_RGB.tif')
+    return root_path.joinpath(r'tests/data/source/3324c_2015_1004_05_0182_RGB.tif')
 
 
 @pytest.mark.parametrize(

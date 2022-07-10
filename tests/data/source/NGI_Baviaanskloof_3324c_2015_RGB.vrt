@@ -1,0 +1,164 @@
+<VRTDataset rasterXSize="1326" rasterYSize="2266">
+  <SRS dataAxisToSRSAxisMapping="1,2">PROJCS["unnamed",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",25],PARAMETER["scale_factor",1],PARAMETER["false_easting",0],PARAMETER["false_northing",0],UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["Easting",EAST],AXIS["Northing",NORTH]]</SRS>
+  <GeoTransform> -5.9703572983482431e+04,  5.0000000000000000e+00,  0.0000000000000000e+00, -3.7238378048744886e+06,  0.0000000000000000e+00, -5.0000000000000000e+00</GeoTransform>
+  <VRTRasterBand dataType="Byte" band="1">
+    <Metadata>
+      <MDI key="STATISTICS_APPROXIMATE">YES</MDI>
+      <MDI key="STATISTICS_MAXIMUM">255</MDI>
+      <MDI key="STATISTICS_MEAN">121.21554323605</MDI>
+      <MDI key="STATISTICS_MINIMUM">49</MDI>
+      <MDI key="STATISTICS_STDDEV">37.890887358486</MDI>
+      <MDI key="STATISTICS_VALID_PERCENT">88.23</MDI>
+    </Metadata>
+    <NoDataValue>0</NoDataValue>
+    <ColorInterp>Gray</ColorInterp>
+    <Histograms>
+      <HistItem>
+        <HistMin>48.5024154589372</HistMin>
+        <HistMax>255.4975845410628</HistMax>
+        <BucketCount>207</BucketCount>
+        <IncludeOutOfRange>0</IncludeOutOfRange>
+        <Approximate>1</Approximate>
+        <HistCounts>1|19|48|76|172|282|405|663|1213|1696|1987|2530|2287|2077|1632|1725|1571|1666|1421|1489|1386|1378|1284|1153|1176|1090|1110|1013|1151|1090|1067|994|1089|1085|1042|1009|1185|1201|1342|1366|1257|1459|1459|1572|1545|1633|1708|1683|1524|1720|1734|1637|1502|1611|1696|1622|1637|1461|1643|1591|1582|1450|1566|1503|1634|1390|1554|1534|1552|1338|1533|1612|1637|1777|1555|1830|1854|1790|1686|1824|1795|1985|1819|1954|1949|2048|1921|2208|2224|2265|2323|2116|2443|2736|2459|2302|2524|2368|2307|2029|2223|2289|2146|1901|1892|1785|1668|1667|1396|1501|1398|1370|1193|1309|1259|1158|1051|1019|1019|887|809|842|831|802|778|706|772|721|653|589|628|615|557|471|521|474|433|401|403|401|376|299|284|316|271|290|224|214|218|228|164|201|168|165|138|133|157|153|140|96|126|118|105|94|98|105|103|88|91|91|63|73|74|64|60|63|52|76|38|54|46|51|43|40|42|46|47|43|29|42|34|23|21|30|16|32|32|16|25|22|24|13|11|14|10|11|278</HistCounts>
+      </HistItem>
+    </Histograms>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">3324c_2015_1004_05_0182_RGB.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="805" RasterYSize="1421" DataType="Byte" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="805" ySize="1421" />
+      <DstRect xOff="514.824764258158" yOff="13.8002595311031" xSize="805" ySize="1421" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">3324c_2015_1004_05_0184_RGB.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="806" RasterYSize="1421" DataType="Byte" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="806" ySize="1421" />
+      <DstRect xOff="0" yOff="0" xSize="806" ySize="1421" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">3324c_2015_1004_06_0251_RGB.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="792" RasterYSize="1406" DataType="Byte" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="792" ySize="1406" />
+      <DstRect xOff="5.86698027474049" yOff="859.920428828616" xSize="792" ySize="1406" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">3324c_2015_1004_06_0253_RGB.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="795" RasterYSize="1411" DataType="Byte" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="795" ySize="1411" />
+      <DstRect xOff="530.50469977883" yOff="813.597939170524" xSize="795" ySize="1411" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="2">
+    <Metadata>
+      <MDI key="STATISTICS_APPROXIMATE">YES</MDI>
+      <MDI key="STATISTICS_MAXIMUM">255</MDI>
+      <MDI key="STATISTICS_MEAN">123.87373764702</MDI>
+      <MDI key="STATISTICS_MINIMUM">52</MDI>
+      <MDI key="STATISTICS_STDDEV">35.365642163346</MDI>
+      <MDI key="STATISTICS_VALID_PERCENT">88.23</MDI>
+    </Metadata>
+    <NoDataValue>0</NoDataValue>
+    <Histograms>
+      <HistItem>
+        <HistMin>51.50245098039215</HistMin>
+        <HistMax>255.4975490196078</HistMax>
+        <BucketCount>204</BucketCount>
+        <IncludeOutOfRange>0</IncludeOutOfRange>
+        <Approximate>1</Approximate>
+        <HistCounts>1|19|43|61|120|193|262|324|528|711|1049|1313|1920|2312|2587|1950|1811|1722|1599|1495|1403|1393|1408|1309|1088|1237|1136|1090|955|1049|1120|1003|983|1004|1033|1080|1160|1115|1227|1302|1330|1294|1393|1459|1501|1417|1477|1537|1460|1525|1545|1601|1612|1638|1458|1603|1725|1667|1627|1692|1757|1788|1689|1837|1823|1866|1708|1863|1945|1921|1806|1752|1832|1890|1842|1822|2325|2202|2018|1961|2215|2339|2548|2555|2518|2608|2398|2423|2198|2371|2344|2319|2146|2310|2344|2415|2270|2382|2251|2169|1959|2013|1952|1823|1911|1589|1692|1668|1586|1408|1469|1428|1362|1180|1242|1210|1083|968|1028|965|803|877|648|718|669|610|532|575|607|492|465|463|456|446|358|382|356|300|314|263|282|268|270|211|229|185|179|157|162|148|159|120|119|111|140|112|101|108|101|102|89|92|85|79|66|66|68|49|48|58|60|51|48|43|50|50|33|43|28|35|23|34|27|25|29|22|13|23|12|13|17|15|17|11|18|9|9|9|7|7|5|9|5|211</HistCounts>
+      </HistItem>
+    </Histograms>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">3324c_2015_1004_05_0182_RGB.tif</SourceFilename>
+      <SourceBand>2</SourceBand>
+      <SourceProperties RasterXSize="805" RasterYSize="1421" DataType="Byte" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="805" ySize="1421" />
+      <DstRect xOff="514.824764258158" yOff="13.8002595311031" xSize="805" ySize="1421" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">3324c_2015_1004_05_0184_RGB.tif</SourceFilename>
+      <SourceBand>2</SourceBand>
+      <SourceProperties RasterXSize="806" RasterYSize="1421" DataType="Byte" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="806" ySize="1421" />
+      <DstRect xOff="0" yOff="0" xSize="806" ySize="1421" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">3324c_2015_1004_06_0251_RGB.tif</SourceFilename>
+      <SourceBand>2</SourceBand>
+      <SourceProperties RasterXSize="792" RasterYSize="1406" DataType="Byte" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="792" ySize="1406" />
+      <DstRect xOff="5.86698027474049" yOff="859.920428828616" xSize="792" ySize="1406" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">3324c_2015_1004_06_0253_RGB.tif</SourceFilename>
+      <SourceBand>2</SourceBand>
+      <SourceProperties RasterXSize="795" RasterYSize="1411" DataType="Byte" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="795" ySize="1411" />
+      <DstRect xOff="530.50469977883" yOff="813.597939170524" xSize="795" ySize="1411" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="3">
+    <Metadata>
+      <MDI key="STATISTICS_APPROXIMATE">YES</MDI>
+      <MDI key="STATISTICS_MAXIMUM">255</MDI>
+      <MDI key="STATISTICS_MEAN">121.44285777531</MDI>
+      <MDI key="STATISTICS_MINIMUM">62</MDI>
+      <MDI key="STATISTICS_STDDEV">26.106242954576</MDI>
+      <MDI key="STATISTICS_VALID_PERCENT">88.23</MDI>
+    </Metadata>
+    <NoDataValue>0</NoDataValue>
+    <Histograms>
+      <HistItem>
+        <HistMin>61.50257731958763</HistMin>
+        <HistMax>255.4974226804124</HistMax>
+        <BucketCount>194</BucketCount>
+        <IncludeOutOfRange>0</IncludeOutOfRange>
+        <Approximate>1</Approximate>
+        <HistCounts>1|0|0|0|1|2|3|12|49|112|169|258|290|377|455|614|830|993|1150|1551|1853|2085|2218|2790|2835|2953|3102|2920|2884|2602|2385|2065|2242|2112|2091|1968|2125|2238|2208|1996|2225|2380|2463|2366|2349|2447|2397|2486|2194|2538|2503|2385|2150|2327|2182|2477|2376|2236|2125|2250|2093|2192|2479|2502|2562|2371|2710|2893|2859|2712|3000|3049|3049|2825|3042|3020|2992|2909|2633|2783|2607|2699|2213|2362|2281|2245|1992|2219|2041|1732|1620|1497|1503|1355|1355|1154|1229|1239|1064|949|963|825|754|669|669|604|530|491|478|434|457|364|322|333|270|263|241|239|213|181|158|155|150|146|121|140|102|120|103|104|65|65|88|54|58|55|56|53|47|49|39|41|30|36|37|34|26|20|16|17|15|14|14|21|17|6|12|14|11|13|9|6|11|5|5|11|7|5|6|9|14|4|5|7|5|1|5|1|4|7|5|0|2|2|1|2|1|3|1|1|2|3|1|92</HistCounts>
+      </HistItem>
+    </Histograms>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">3324c_2015_1004_05_0182_RGB.tif</SourceFilename>
+      <SourceBand>3</SourceBand>
+      <SourceProperties RasterXSize="805" RasterYSize="1421" DataType="Byte" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="805" ySize="1421" />
+      <DstRect xOff="514.824764258158" yOff="13.8002595311031" xSize="805" ySize="1421" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">3324c_2015_1004_05_0184_RGB.tif</SourceFilename>
+      <SourceBand>3</SourceBand>
+      <SourceProperties RasterXSize="806" RasterYSize="1421" DataType="Byte" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="806" ySize="1421" />
+      <DstRect xOff="0" yOff="0" xSize="806" ySize="1421" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">3324c_2015_1004_06_0251_RGB.tif</SourceFilename>
+      <SourceBand>3</SourceBand>
+      <SourceProperties RasterXSize="792" RasterYSize="1406" DataType="Byte" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="792" ySize="1406" />
+      <DstRect xOff="5.86698027474049" yOff="859.920428828616" xSize="792" ySize="1406" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">3324c_2015_1004_06_0253_RGB.tif</SourceFilename>
+      <SourceBand>3</SourceBand>
+      <SourceProperties RasterXSize="795" RasterYSize="1411" DataType="Byte" BlockXSize="256" BlockYSize="256" />
+      <SrcRect xOff="0" yOff="0" xSize="795" ySize="1411" />
+      <DstRect xOff="530.50469977883" yOff="813.597939170524" xSize="795" ySize="1411" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+</VRTDataset>

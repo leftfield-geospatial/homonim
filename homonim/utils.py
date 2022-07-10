@@ -246,7 +246,8 @@ def combine_profiles(in_profile, config_profile):
             if isinstance(other_value, dict):
                 # flatten the driver specific nested dict into the root dict
                 nested_update(self_dict, other_value)
-            elif other_value is not None:
+            # elif other_value is not None:
+            else:
                 self_dict[other_key] = other_value
         return self_dict
 
