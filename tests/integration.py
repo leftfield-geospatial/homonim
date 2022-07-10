@@ -27,7 +27,6 @@ from homonim.compare import RasterCompare
 from homonim.enums import ProcCrs, Model
 from homonim.fuse import RasterFuse
 
-# TODO: move these files into test directory...
 @pytest.fixture()
 def modis_ref_file():
     return root_path.joinpath(r'tests/data/reference/MODIS-006-MCD43A4-2015_09_15_B143.tif')
@@ -105,9 +104,9 @@ def test_fuse(
             src_res = src_compare.compare()
         with RasterCompare(corr_file, ref_file, proc_crs=proc_crs) as corr_compare:
             corr_res = corr_compare.compare()
-        for band_key in src_res.keys():
-            assert (corr_res[band_key]['r2'] > src_res[band_key]['r2'])
-            assert (corr_res[band_key]['RMSE'] < src_res[band_key]['RMSE'])
+        for src_dict, corr_dict in zip(src_res, corr_res):
+            assert (corr_dict['r2'] > src_dict['r2'])
+            assert (corr_dict['rmse'] < src_dict['rmse'])
 
         # test corr_file mask
         with rio.open(src_file, 'r') as src_ds, rio.open(corr_file, 'r') as corr_ds:
@@ -115,11 +114,11 @@ def test_fuse(
             corr_mask = corr_ds.dataset_mask().astype('bool', copy=False)
             if not mask_partial:
                 # test src and homo masks are identical
-                assert (corr_res['Mean']['N'] == src_res['Mean']['N'])
+                assert (corr_res[-1]['n'] == src_res[-1]['n'])
                 assert (corr_mask == src_mask).all()
             else:
                 # test homo mask is smaller than src mask
-                assert (corr_res['Mean']['N'] < src_res['Mean']['N'])
+                assert (corr_res[-1]['n'] < src_res[-1]['n'])
                 assert (corr_mask.sum() > 0)
                 assert (corr_mask.sum() < src_mask.sum())
                 assert (src_mask[corr_mask].all())
