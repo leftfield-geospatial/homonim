@@ -36,16 +36,16 @@ def _test_identical_compare_dict(res_list: List):
     assert (bands[-1] == 'Mean')
     band_list = res_list[:-1]
     r2 = np.array([res_item['r2'] for res_item in band_list])
-    RMSE = np.array([res_item['RMSE'] for res_item in band_list])
-    rRMSE = np.array([res_item['rRMSE'] for res_item in band_list])
-    N = np.array([res_item['N'] for res_item in band_list])
+    rmse = np.array([res_item['rmse'] for res_item in band_list])
+    rrmse = np.array([res_item['rrmse'] for res_item in band_list])
+    n = np.array([res_item['n'] for res_item in band_list])
     assert (r2 == pytest.approx(1))
-    assert (RMSE == pytest.approx(0))
-    assert (rRMSE == pytest.approx(0))
-    assert (N == N[0]).all()
+    assert (rmse == pytest.approx(0))
+    assert (rrmse == pytest.approx(0))
+    assert (n == n[0]).all()
     assert (res_list[-1]['r2'] == pytest.approx(1))
-    assert (res_list[-1]['RMSE'] == pytest.approx(0))
-    assert (res_list[-1]['rRMSE'] == pytest.approx(0))
+    assert (res_list[-1]['rmse'] == pytest.approx(0))
+    assert (res_list[-1]['rrmse'] == pytest.approx(0))
 
 
 @pytest.mark.parametrize(

@@ -60,9 +60,9 @@ class RasterCompare(RasterPairReader):
 
     schema = dict(
         r2=dict(abbrev='r\N{SUPERSCRIPT TWO}', description='Pearson\'s correlation coefficient squared', ),
-        RMSE=dict(abbrev='RMSE', description='Root Mean Square Error', ),
-        rRMSE=dict(abbrev='rRMSE', description='Relative RMSE (RMSE/mean(ref))', ),
-        N=dict(abbrev='N', description='Number of pixels', )
+        rmse=dict(abbrev='RMSE', description='Root Mean Square Error', ),
+        rrmse=dict(abbrev='rRMSE', description='Relative RMSE (RMSE/mean(ref))', ),
+        n=dict(abbrev='N', description='Number of pixels', )
     )  # yapf: disable
     """ Dictionary describing the statistics returned by :attr:`RasterCompare.compare`. """
 
@@ -119,7 +119,7 @@ class RasterCompare(RasterPairReader):
         def get_band_stats(
             src_sum: float = 0, ref_sum: float = 0, src2_sum: float = 0, ref2_sum: float = 0, src_ref_sum: float = 0,
             res2_sum: float = 0, mask_sum: float = 0
-        ) -> List[Dict]:
+        ) -> Dict:
             """ Return the comparison statistics for a band, given the source, reference etc sums. """
             # find PCC using the 3rd equation down at
             # https://en.wikipedia.org/wiki/Pearson_correlation_coefficient#For_a_sample
@@ -135,7 +135,7 @@ class RasterCompare(RasterPairReader):
             # find RMSE and rRMSE
             rmse = np.sqrt(res2_sum / mask_sum)
             rrmse = rmse / ref_mean
-            return dict(r2=pcc ** 2, RMSE=rmse, rRMSE=rrmse, N=int(mask_sum))
+            return dict(r2=pcc ** 2, rmse=rmse, rrmse=rrmse, n=int(mask_sum))
 
         image_stats = []
         sum_over_bands = {}
