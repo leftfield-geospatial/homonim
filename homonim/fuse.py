@@ -215,7 +215,7 @@ class RasterFuse(RasterPairReader):
             ref_bi = self.ref_bands[bi]
             ref_descr = self.ref_im.descriptions[ref_bi - 1] or f'B{ref_bi}'
             ref_meta_dict = self.ref_im.tags(ref_bi)
-            param_names = ['GAIN', 'OFFSET', 'R\N{SUPERSCRIPT TWO}']
+            param_names = ['GAIN', 'OFFSET', 'R2']
             for param_i, param_name in zip(range(bi, im.count, num_src_bands), param_names):
                 im.set_band_description(param_i + 1, f'{ref_descr}_{param_name}')
                 param_meta_dict = {

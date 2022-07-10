@@ -95,7 +95,7 @@ class ParamStats:
     def schema_table(self) -> str:
         """ Printable table describing statistics returned by :attr:`ParamStats.stats`. """
         schema_list = [v for k, v in self.schema.items() if 'description' in v]
-        schema_list.append(dict(abbrev='*_R\N{SUPERSCRIPT TWO}', description='Coefficient of determination.'))
+        schema_list.append(dict(abbrev='*_R2', description='R\N{SUPERSCRIPT TWO} coefficient of determination.'))
         headers = {k: k.upper() for k in schema_list[0].keys()}
         return tabulate(schema_list, headers=headers, tablefmt=utils.table_format)
 

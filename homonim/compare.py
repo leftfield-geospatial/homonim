@@ -230,7 +230,7 @@ class RasterCompare(RasterPairReader):
             ]  # yapf: disable
 
             # wait for threads
-            image_sums = [{} for i in range(self.src_bands)]
+            image_sums = [{} for bi in self.src_bands]
             bar_format = '{l_bar}{bar}|{n_fmt}/{total_fmt} blocks [{elapsed}<{remaining}]'
             for future in tqdm(
                 concurrent.futures.as_completed(futures), bar_format=bar_format, total=len(futures), dynamic_ncols=True,
