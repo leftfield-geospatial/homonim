@@ -40,7 +40,7 @@ FuseCliParams = namedtuple('FuseCliParams',
 ) # yapf: disable
 
 
-def str_contain_nos(str1, str2):
+def str_contain_no_space(str1, str2):
     """ Test if str2 contain str1, ignoring case and whitespace. """
     str1 = re.sub(r'\s+', '', str1.lower())
     str2 = re.sub(r'\s+', '', str2.lower())

@@ -18,13 +18,15 @@
 """
 
 import json
-
+import pathlib
 import pytest
+import rasterio as rio
 
+from rasterio.windows import get_data_window
 from homonim.cli import cli
-from homonim.errors import ImageFormatError
+from homonim.errors import ImageFormatError, IoError
 from homonim.stats import ParamStats
-from tests.conftest import str_contain_nos
+from tests.conftest import str_contain_no_space
 
 
 def _test_vals(param_stats):
@@ -44,12 +46,66 @@ def _test_vals(param_stats):
             assert (param_band_stats[k] == pytest.approx(exp_param_band_stats[k], abs=1e-2))
 
 
-def test_api(param_file):
+def test_api__stats(param_file):
     """ Test ParamStats creation and execution. """
     with ParamStats(param_file) as stats:
         assert (len(stats.metadata) > 0)
         param_stats = stats.stats()
     _test_vals(param_stats)
+
+
+def test_api__context(param_file):
+    """ Test ParamStats context management. """
+    stats = ParamStats(param_file)
+    # test ParamStats usage without context entry raises an IoError
+    with pytest.raises(IoError):
+        _ = stats.stats()
+    # test ParamStats.stats usage with context entry is ok, and file is closed on context exit
+    with stats:
+        assert (len(stats.metadata) > 0)
+        _ = stats.stats()
+    assert stats.closed
+
+
+def test_api__tables(param_file):
+    """ Test ParamStats table generation. """
+    with ParamStats(param_file) as stats:
+        assert (len(stats.metadata) > 0)
+        param_stats = stats.stats()
+
+    schema_table = stats.schema_table
+    assert len(schema_table) > 0
+
+    param_table = stats.stats_table(param_stats)
+    assert len(param_table) > 0
+
+    # test stats data are in table
+    for band_stats in param_stats:
+        for k, v in band_stats.items():
+            assert (f'{v:.3f}' in param_table) if isinstance(v, float) else (v in param_table)
+
+    # test stats abbreviations are in table
+    for schema_dict in stats.schema.values():
+        assert schema_dict['abbrev'] in param_table
+
+
+@pytest.mark.parametrize('threads', [1, 0])
+def test_api__threads(param_file: pathlib.Path, threads: int):
+    """ Test ParamStats.stats works multi- and single-threaded. """
+    with ParamStats(param_file) as stats:
+        assert (len(stats.metadata) > 0)
+        param_stats = stats.stats(threads=threads)
+    _test_vals(param_stats)
+
+
+def test_api__data_window(param_file: pathlib.Path):
+    """ Test ParamStats._get_data_window() accumulates block windows correctly. """
+    with rio.open(param_file, 'r') as param_im:
+        mask = param_im.read_masks(indexes=1)
+        data_win = get_data_window(mask, nodata=0)
+
+    with ParamStats(param_file) as stats:
+        assert data_win == stats._get_data_window()
 
 
 def test_api__file_format_error(float_100cm_rgb_file):
@@ -74,7 +130,7 @@ def test_cli(runner, param_file):
     B1_R2      1.000 0.000  1.000 1.000     0.000    
     B2_R2      1.000 0.000  1.000 1.000     0.000    
     B3_R2      1.000 0.000  1.000 1.000     0.000"""
-    assert (str_contain_nos(res_str, result.output))
+    assert (str_contain_no_space(res_str, result.output))
 
 
 def test_cli__out_file(tmp_path, runner, param_file):

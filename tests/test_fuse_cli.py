@@ -27,7 +27,7 @@ from homonim import utils
 from homonim.cli import cli
 from homonim.enums import ProcCrs, Model
 from homonim.fuse import RasterFuse
-from tests.conftest import str_contain_nos
+from tests.conftest import str_contain_no_space
 
 
 @pytest.mark.parametrize(
@@ -127,20 +127,20 @@ def test_compare(runner, float_100cm_ref_file, float_100cm_src_file):
     ------ ----- ------ ------- ---
     Band 1 1.000  0.000   0.000 144
       Mean 1.000  0.000   0.000 144"""
-        assert (str_contain_nos(src_cmp_str, result.output))
+        assert (str_contain_no_space(src_cmp_str, result.output))
 
         corr_cmp_str = """float_100cm_src_FUSE_cREF_mGAIN-BLK-OFFSET_k5_5.tif:
       Band    r²   RMSE   rRMSE   N
     ------ ----- ------ ------- ---
     Band 1 1.000  0.000   0.000 144
       Mean 1.000  0.000   0.000 144"""
-        assert (str_contain_nos(corr_cmp_str, result.output))
+        assert (str_contain_no_space(corr_cmp_str, result.output))
 
         sum_cmp_str =                           """File    r²   RMSE   rRMSE   N
     --------------------------------------------------- ----- ------ ------- ---
                                     float_100cm_src.tif 1.000  0.000   0.000 144
     float_100cm_src_FUSE_cREF_mGAIN-BLK-OFFSET_k5_5.tif 1.000  0.000   0.000 144"""
-        assert (str_contain_nos(sum_cmp_str, result.output))
+        assert (str_contain_no_space(sum_cmp_str, result.output))
 
 
 def test_compare_file_exists_error(runner, float_100cm_ref_file, float_100cm_src_file):

@@ -26,7 +26,7 @@ from typing import List, Dict, Union
 from homonim.cli import cli
 from homonim.compare import RasterCompare
 from homonim.enums import ProcCrs
-from tests.conftest import str_contain_nos
+from tests.conftest import str_contain_no_space
 
 
 def _test_identical_compare_dict(res_list: List):
@@ -146,7 +146,7 @@ def test_cli(runner, float_50cm_rgb_file, float_100cm_rgb_file):
 Band 2 1.000  0.000  0.000   144
 Band 3 1.000  0.000  0.000   144
 Mean   1.000  0.000  0.000   144"""
-    assert (str_contain_nos(res_str, result.output))
+    assert (str_contain_no_space(res_str, result.output))
 
 
 def test_cli__output_file(tmp_path, runner, float_50cm_rgb_file, float_100cm_rgb_file):
