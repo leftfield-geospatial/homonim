@@ -16,6 +16,7 @@
     You should have received a copy of the GNU Affero General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
+import sys
 from pathlib import Path
 
 from setuptools import setup, find_packages
