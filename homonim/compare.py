@@ -86,6 +86,7 @@ class RasterCompare(RasterPairReader):
         threads: int, optional
             Number of image blocks to process concurrently.  A maximum of the number of processors on your
             system is allowed.  Increasing this number will increase the memory required for processing.
+            0 = use all processors.
         max_block_mem: float, optional
             Maximum size of an image block in megabytes. Note that the total memory consumed by a thread is
             proportional to, but a number of times larger than this number.

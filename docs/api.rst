@@ -71,6 +71,7 @@ ParamStats
     :toctree: _generated
 
     ~ParamStats.stats
+    ~ParamStats.stats_table
 
 .. rubric:: Attributes
 
@@ -78,6 +79,7 @@ ParamStats
     :toctree: _generated
 
     ~ParamStats.metadata
+    ~ParamStats.closed
 
 
 enums

@@ -212,7 +212,7 @@ ref_file_arg = cloup.argument(
 )
 threads_option = click.option(
     '-t', '--threads', type=click.INT, default=RasterFuse.create_block_config()['threads'], show_default=True,
-    callback=_threads_cb, help=f'Number of image blocks to process concurrently (0 = use all cpus).'
+    callback=_threads_cb, help=f'Number of image blocks to process concurrently (0 = use all processors).'
 )
 max_block_mem_option = click.option(
     '-mbm', '--max-block-mem', type=click.FLOAT, default=RasterFuse.create_block_config()['max_block_mem'],

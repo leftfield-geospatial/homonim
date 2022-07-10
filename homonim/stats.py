@@ -49,7 +49,8 @@ class ParamStats:
         Parameters
         ----------
         param_filename: pathlib.Path, str
-            Path to the parameter image file, as produced by :meth:`homonim.fuse.RasterFuse.process` with
+            Path to a parameter image file, as created by :meth:`homonim.RasterFuse.process` with a specified
+            ``param_filename`` parameter.  See the :meth:`homonim.RasterFuse.process` documentation for more details.
         """
         self._param_filename = pathlib.Path(param_filename)
 
@@ -69,7 +70,7 @@ class ParamStats:
 
     @property
     def metadata(self):
-        """ A printable string of parameter metadata. """
+        """ A printable list of parameter metadata. """
         res_str = (
             f'Model: {self._model}\n'
             f'Kernel shape: {self._tags["FUSE_KERNEL_SHAPE"]}\n'
@@ -166,17 +167,24 @@ class ParamStats:
             image_stats.append(band_stats)
         return image_stats
 
-    def stats(self, threads: int=cpu_count()) -> Dict[str, Dict]:
+    def stats(self, threads: int=0) -> List[Dict]:
         """
         Find parameter image statistics.
 
+        Parameters
+        ----------
+        threads: int, optional
+            Number of image blocks to process concurrently.  A maximum of the number of processors on your
+            system is allowed.  Increasing this number will increase the memory required for processing.
+            0 = use all processors.
+
         Returns
         -------
-        param_dict: dict[dict]
-            A dictionary representing the results.
+        list of dict
+            A list of parmeter band statistics.
         """
-        threads = utils.validate_threads(threads)
         self._assert_open()
+        threads = utils.validate_threads(threads)
         data_win = self._get_data_window(threads=threads)  # get valid data window
         read_lock = threading.Lock()
 
