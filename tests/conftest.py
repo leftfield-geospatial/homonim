@@ -49,8 +49,14 @@ def str_contain_no_space(str1, str2):
 
 @pytest.fixture
 def param_file():
-    """ Basic parameter image. """
+    """ Basic parameter image (16x16 tiles). """
     return root_path.joinpath('tests/data/parameter/float_100cm_rgb_FUSE_cREF_mGAIN-OFFSET_k5_5_PARAM.tif')
+
+
+@pytest.fixture
+def param_file_tile_10x20():
+    """ Basic parameter image (16x16 tiles). """
+    return root_path.joinpath('tests/data/parameter/float_100cm_rgb_FUSE_cREF_mGAIN-OFFSET_k5_5_PARAM_tile_10x20.tif')
 
 
 @pytest.fixture

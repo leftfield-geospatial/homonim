@@ -22,7 +22,8 @@ import pathlib
 import pytest
 import rasterio as rio
 
-from rasterio.windows import get_data_window
+from rasterio.windows import get_data_window, Window
+from click.testing import CliRunner
 from homonim.cli import cli
 from homonim.errors import ImageFormatError, IoError
 from homonim.stats import ParamStats
@@ -46,8 +47,10 @@ def _test_vals(param_stats):
             assert (param_band_stats[k] == pytest.approx(exp_param_band_stats[k], abs=1e-2))
 
 
-def test_api__stats(param_file):
+@pytest.mark.parametrize('param_file_str', ['param_file', 'param_file_tile_10x20'])
+def test_api__stats(param_file_str: str, request: pytest.FixtureRequest):
     """ Test ParamStats creation and execution. """
+    param_file: pathlib.Path = request.getfixturevalue(param_file_str)
     with ParamStats(param_file) as stats:
         assert (len(stats.metadata) > 0)
         param_stats = stats.stats()
@@ -97,12 +100,15 @@ def test_api__threads(param_file: pathlib.Path, threads: int):
         param_stats = stats.stats(threads=threads)
     _test_vals(param_stats)
 
-
-def test_api__data_window(param_file: pathlib.Path):
+@pytest.mark.parametrize('param_file_str', ['param_file', 'param_file_tile_10x20'])
+def test_api__data_window(param_file_str: str, request: pytest.FixtureRequest):
     """ Test ParamStats._get_data_window() accumulates block windows correctly. """
+    param_file: pathlib.Path = request.getfixturevalue(param_file_str)
     with rio.open(param_file, 'r') as param_im:
         mask = param_im.read_masks(indexes=1)
         data_win = get_data_window(mask, nodata=0)
+        image_win = Window(0, 0, param_im.width, param_im.height)
+        assert data_win != image_win
 
     with ParamStats(param_file) as stats:
         assert data_win == stats._get_data_window()
@@ -113,9 +119,10 @@ def test_api__file_format_error(float_100cm_rgb_file):
     with pytest.raises(ImageFormatError):
         _ = ParamStats(float_100cm_rgb_file)
 
-
-def test_cli(runner, param_file):
+@pytest.mark.parametrize('param_file_str', ['param_file', 'param_file_tile_10x20'])
+def test_cli(runner: CliRunner, param_file_str: str, request: pytest.FixtureRequest):
     """ Test stats cli generates the correct output. """
+    param_file: pathlib.Path = request.getfixturevalue(param_file_str)
     cli_str = f'stats {param_file}'
     result = runner.invoke(cli, cli_str.split())
     assert (result.exit_code == 0)
@@ -171,3 +178,6 @@ def test_cli__file_format_error(runner, float_100cm_rgb_file):
     result = runner.invoke(cli, cli_str.split())
     assert (result.exit_code != 0)
     assert ('Invalid value' in result.output)
+
+##
+

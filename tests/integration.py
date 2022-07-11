@@ -18,14 +18,14 @@
 """
 
 import pytest
+import pathlib
 import rasterio as rio
 from rasterio.features import shapes
+from click.testing import CliRunner
 
-from homonim import root_path, utils
+from homonim import root_path, utils, RasterFuse, RasterCompare, ParamStats, ProcCrs, Model
 from homonim.cli import cli
-from homonim.compare import RasterCompare
-from homonim.enums import ProcCrs, Model
-from homonim.fuse import RasterFuse
+
 
 @pytest.fixture()
 def modis_ref_file():
@@ -76,7 +76,7 @@ def ngi_src_file():
         ('ngi_src_files', 's2_ref_file', Model.gain_offset, (31, 31), ProcCrs.src, True, ProcCrs.src),
     ]
 )
-def test_fuse(
+def test_fuse_compare(
     tmp_path, runner, src_files, ref_file, model, kernel_shape, proc_crs, mask_partial, exp_proc_crs, request
 ):
     """ Additional integration tests using 'real' aerial and satellite imagery. """
@@ -107,6 +107,7 @@ def test_fuse(
         for src_dict, corr_dict in zip(src_res, corr_res):
             assert (corr_dict['r2'] > src_dict['r2'])
             assert (corr_dict['rmse'] < src_dict['rmse'])
+            assert (corr_dict['rrmse'] < src_dict['rrmse'])
 
         # test corr_file mask
         with rio.open(src_file, 'r') as src_ds, rio.open(corr_file, 'r') as corr_ds:
@@ -125,6 +126,8 @@ def test_fuse(
                 # test homo mask consists of one blob
                 corr_mask_shapes = list(shapes(corr_mask.astype('uint8', copy=False), mask=corr_mask, connectivity=8))
                 assert (len(corr_mask_shapes) == 1)
+
+
 
 
 ##
