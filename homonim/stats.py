@@ -23,7 +23,7 @@ import threading
 from concurrent import futures
 from contextlib import ExitStack
 from multiprocessing import cpu_count
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Union
 
 import numpy as np
 import rasterio as rio
@@ -39,17 +39,18 @@ from homonim.enums import Model
 logger = logging.getLogger(__name__)
 
 
-# TODO: make it clear here, and in compare what is R2 coeff of det, and PCC
 class ParamStats:
-    def __init__(self, param_filename: pathlib.Path, str):
+    def __init__(self, param_filename: Union[pathlib.Path, str]):
         """
         Class to calculate the statistics of a parameter image.
+
+        Statistics are accumulated over image blocks, allowing large images to be described with limited memory use.
 
         Parameters
         ----------
         param_filename: pathlib.Path, str
             Path to a parameter image file, as created by :meth:`homonim.RasterFuse.process` with a specified
-            ``param_filename`` parameter.  See the :meth:`homonim.RasterFuse.process` documentation for more details.
+            ``param_filename``.  See the :meth:`homonim.RasterFuse.process` documentation for more details.
         """
         self._param_filename = pathlib.Path(param_filename)
 
@@ -61,6 +62,16 @@ class ParamStats:
             self._model = self._tags['FUSE_MODEL'].replace('_', '-')
             self._r2_inpaint_thresh = yaml.safe_load(self._tags['FUSE_R2_INPAINT_THRESH'])
         self._param_im: rio.DatasetReader = self._param_im
+
+    schema = dict(
+        band=dict(abbrev='Band'),
+        mean=dict(abbrev='Mean'),
+        std=dict(abbrev='Std.'),
+        min=dict(abbrev='Min.'),
+        max=dict(abbrev='Max.'),
+        inpaint_p=dict(abbrev='Inpaint (%)', description='Portion of inpainted pixels (%).'),
+    )  # yapf: disable
+    """ Dictionary describing the statistics returned by :attr:`ParamStats.stats`. """
 
     @property
     def closed(self) -> bool:
@@ -80,16 +91,6 @@ class ParamStats:
             res_str += f'R\N{SUPERSCRIPT TWO} inpaint threshold: {self._r2_inpaint_thresh}\n'
         return res_str
 
-    schema = dict(
-        band=dict(abbrev='Band'),
-        mean=dict(abbrev='Mean'),
-        std=dict(abbrev='Std.'),
-        min=dict(abbrev='Min.'),
-        max=dict(abbrev='Max.'),
-        inpaint_p=dict(abbrev='Inpaint (%)', description='Portion of inpainted pixels (%).'),
-    )  # yapf: disable
-    """ Dictionary describing the statistics returned by :attr:`ParamStats.stats`. """
-
     @property
     def schema_table(self) -> str:
         """ Printable table describing statistics returned by :attr:`ParamStats.stats`. """
@@ -101,7 +102,7 @@ class ParamStats:
     @staticmethod
     def stats_table(stats_list: List[Dict]) -> str:
         """
-        Return a table string of the provided parameter statistics.
+        Create a table string from the provided parameter statistics.
 
         Parameters
         ----------
@@ -142,6 +143,10 @@ class ParamStats:
             with read_lock:
                 mask = self._param_im.read_masks(indexes=1, window=block_win)
             block_data_win = get_data_window(mask, nodata=0)
+
+            if block_data_win.width == 0 or block_data_win.height == 0:
+                # return None if there is no valid data in the block
+                return None
             # offset block_data_win to the UL corner of block_win and return
             return Window(
                 block_win.col_off + block_data_win.col_off, block_win.row_off + block_data_win.row_off,
@@ -149,7 +154,7 @@ class ParamStats:
             )
 
         # combine valid block windows into a valid image window
-        data_win: Window = None
+        data_win: Union[Window, None] = None
         bar_format = 'Finding window: {l_bar}{bar}|{n_fmt}/{total_fmt} blocks [{elapsed}<{remaining}]'
         with futures.ThreadPoolExecutor(max_workers=threads) as executor:
             # create threads to get valid block windows
@@ -164,7 +169,7 @@ class ParamStats:
                 leave=False,
             ):
                 block_data_win: Window = future.result()
-                if block_data_win.width > 0 and block_data_win.height > 0:
+                if block_data_win:
                     data_win = union(data_win, block_data_win) if data_win else block_data_win
         return data_win
 
@@ -175,10 +180,13 @@ class ParamStats:
             band_stats = dict(
                 band=self._param_im.descriptions[band_i],
                 mean=band_accum['sum'] / band_accum['n'],
+                # formula for cumulative std dev from:
+                # https://rosettacode.org/wiki/Cumulative_standard_deviation#Python
                 std=np.sqrt((band_accum['sum2'] / band_accum['n']) - (band_accum['sum'] ** 2 / band_accum['n'] ** 2)),
                 min=band_accum['min'],
                 max=band_accum['max'],
             )  # yapf: disable
+
             if 'inpaint_sum' in band_accum:
                 band_stats['inpaint_p'] = 100 * band_accum['inpaint_sum'] / band_accum['n']
             image_stats.append(band_stats)
@@ -198,7 +206,7 @@ class ParamStats:
         Returns
         -------
         list of dict
-            A list of parmeter band statistics.
+            A list of parameter band statistics.
         """
         self._assert_open()
         threads = utils.validate_threads(threads)
@@ -206,7 +214,7 @@ class ParamStats:
         read_lock = threading.Lock()
 
         def get_block_sums(band_i: int, block_win: rio.windows.Window) -> Tuple[Dict, int]:
-            """ Thread-safe function to find sums etc for a given block and band. """
+            """ Thread-safe function read a block and find its sums etc. """
             with read_lock:
                 array: np.ma.masked_array = self._param_im.read(
                     indexes=band_i + 1, window=block_win, masked=True, out_dtype='float64',
@@ -219,11 +227,11 @@ class ParamStats:
                 block_dict.update(inpaint_sum=(array < self._r2_inpaint_thresh).sum())
             return block_dict, band_i
 
-        # accumulate the block sums, min, max etc over the image
+        # find block sums, min, max etc. in threads, and accumulate over the image
         image_accum = [{} for i in range(self._param_im.count)]
         bar_format = 'Finding stats: {l_bar}{bar}|{n_fmt}/{total_fmt} blocks [{elapsed}<{remaining}]'
         with futures.ThreadPoolExecutor(max_workers=threads) as executor:
-            # create threads to get block sums etc
+            # create threads to get block sums etc.
             stats_futures = [
                 executor.submit(get_block_sums, band_i, block_win)
                 for band_i in range(self._param_im.count)

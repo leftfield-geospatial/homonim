@@ -20,26 +20,29 @@
 import concurrent.futures
 import logging
 import threading
-from multiprocessing import cpu_count
-from pathlib import Path
+import pathlib
 from typing import Dict, List, Tuple
 
 import numpy as np
-from homonim import utils
-from homonim.enums import ProcCrs
-from homonim.raster_pair import RasterPairReader, BlockPair, RasterArray
 from rasterio.warp import Resampling
 from tabulate import tabulate
 from tqdm import tqdm
+
+from homonim import utils
+from homonim.enums import ProcCrs
+from homonim.raster_pair import RasterPairReader, BlockPair
 
 logger = logging.getLogger(__name__)
 
 
 class RasterCompare(RasterPairReader):
 
-    def __init__(self, src_filename: Path, ref_filename: Path, proc_crs: ProcCrs = ProcCrs.auto):
+    def __init__(self, src_filename: pathlib.Path, ref_filename: pathlib.Path, proc_crs: ProcCrs = ProcCrs.auto):
         """
         Class to statistically compare source and reference images.
+
+        To improve speed and reduce memory usage, images are divided into blocks for concurrent processing and
+        comparison.
 
         Parameters
         ----------
@@ -105,7 +108,7 @@ class RasterCompare(RasterPairReader):
             upsampling=upsampling,
         )
 
-    def _get_resampling(self, from_res: Tuple[float, float], to_res: Tuple[float, float], **kwargs):
+    def _get_resampling(self, from_res: Tuple[float, float], to_res: Tuple[float, float], **kwargs) -> Resampling:
         """
         Utility method to return the resampling method for re-projecting from resolution `from_res` to resolution
         `to_res`.
@@ -114,7 +117,7 @@ class RasterCompare(RasterPairReader):
         return config['downsampling'] if np.prod(np.abs(from_res)) <= np.prod(np.abs(to_res)) else config['upsampling']
 
     def _get_image_stats(self, image_sums: List[Dict]) -> List[Dict]:
-        """ Return the comparison statistics for each band, given src, ref, src**2 etc band sums. """
+        """ Return the band comparison statistics, given src, ref, src**2 etc band sums. """
 
         def get_band_stats(
             src_sum: float = 0, ref_sum: float = 0, src2_sum: float = 0, ref2_sum: float = 0, src_ref_sum: float = 0,
@@ -154,7 +157,7 @@ class RasterCompare(RasterPairReader):
             k: int(v / len(image_sums)) if isinstance(v, int) else (v / len(image_sums))
             for k, v in sum_over_bands.items()
         }  # yapf: disable
-        # add the means to the list of band
+        # add the means to the list of bands
         image_stats.append(dict(band='Mean', **mean_stats))
         return image_stats
 
@@ -180,7 +183,7 @@ class RasterCompare(RasterPairReader):
 
     def compare(self, **kwargs) -> List[Dict]:
         """
-        Statistically compare source and reference images, displaying and returning results.
+        Statistically compare source and reference images.
 
         Parameters
         ----------
@@ -191,16 +194,16 @@ class RasterCompare(RasterPairReader):
         Returns
         -------
         list of dict
-            A dictionary representing the comparison results.
+            A list of dicts for each band, representing the comparison results.
         """
         self._assert_open()
         config = self.create_config(**kwargs)
 
         def get_block_sums(block_pair: BlockPair):
-            """ Thread-safe function to accumulate source/reference block sums over the image.  """
+            """ Thread-safe function to find the source/reference sums for a block.  """
             src_ra, ref_ra = self.read(block_pair)  # read src and ref blocks
 
-            # re-project so that both source and refernce are in proc_crs
+            # re-project so that both source and reference are in proc_crs
             if self.proc_crs == ProcCrs.ref:
                 resampling = self._get_resampling(src_ra.res, ref_ra.res, **kwargs)
                 src_ra = src_ra.reproject(**ref_ra.proj_profile, resampling=resampling)

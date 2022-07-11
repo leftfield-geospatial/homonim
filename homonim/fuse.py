@@ -45,7 +45,10 @@ class RasterFuse(RasterPairReader):
         self, src_filename: Union[Path, str], ref_filename: Union[Path, str], proc_crs: ProcCrs = ProcCrs.auto,
     ):
         """
-        Class for correcting an image to surface reflectance, by fusion with a reference .
+        Class for correcting an image to surface reflectance, by fusion with a reference.
+
+        To improve speed and reduce memory usage, images are divided into blocks for concurrent processing and
+        correction.
 
         Parameters
         ----------
