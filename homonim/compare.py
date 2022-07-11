@@ -94,9 +94,9 @@ class RasterCompare(RasterPairReader):
             Maximum size of an image block in megabytes. Note that the total memory consumed by a thread is
             proportional to, but a number of times larger than this number.
         downsampling: rasterio.enums.Resampling, optional
-            The resampling method to use when downsampling.
+            Resampling method to use when downsampling.
         upsampling: rasterio.enums.Resampling, optional
-            The resampling method to use when upsampling.
+            Resampling method to use when upsampling.
 
         Returns
         -------
@@ -173,7 +173,7 @@ class RasterCompare(RasterPairReader):
         Returns
         -------
         str
-            A table string.
+            Table string.
         """
         headers = {
             k: self.schema[k]['abbrev'] if k in self.schema else str.capitalize(k)
@@ -194,7 +194,7 @@ class RasterCompare(RasterPairReader):
         Returns
         -------
         list of dict
-            A list of dicts for each band, representing the comparison results.
+            List of dicts for each band, representing the comparison results.
         """
         self._assert_open()
         config = self.create_config(**kwargs)

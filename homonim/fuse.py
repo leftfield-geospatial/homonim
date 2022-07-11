@@ -17,14 +17,14 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 import logging
-import multiprocessing
 import threading
 from concurrent import futures
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Tuple, Dict, Union
+from typing import Tuple, Dict, Union, Iterator, Optional
 
 import numpy as np
+import rasterio
 import rasterio as rio
 from homonim import utils
 from homonim.enums import Model, ProcCrs
@@ -98,7 +98,7 @@ class RasterFuse(RasterPairReader):
         driver: str = 'GTiff',
         dtype: str = RasterArray.default_dtype,
         nodata: float = RasterArray.default_nodata,
-        creation_options: Dict = None
+        creation_options: Optional[Dict] = None
     ) -> Dict:  # yapf: disable
         """
         Utility method to create a `rasterio` image profile for the output image(s) that can be passed to
@@ -114,8 +114,8 @@ class RasterFuse(RasterPairReader):
         nodata: float, optional
             Output image nodata value.
         creation_options: dict, optional
-            Driver specific creation options.  See the `GDAL docs <https://gdal.org/drivers/raster/index.html>`_ for
-            available keys and values.
+            Driver specific creation options e.g. ``dict(compression='deflate')`` for a GeoTIFF.
+            See the `GDAL docs <https://gdal.org/drivers/raster/index.html>`_ for available keys and values.
 
         Returns
         -------
@@ -146,7 +146,7 @@ class RasterFuse(RasterPairReader):
         ovw_levels = [2 ** m for m in range(1, num_ovw_levels + 1)]
         im.build_overviews(ovw_levels, Resampling.average)
 
-    def _merge_corr_profile(self, out_profile: Dict = None) -> Dict:
+    def _merge_corr_profile(self, out_profile: Optional[Dict] = None) -> Dict:
         """
         Return a rasterio profile for the corrected image, by merging the source image profile with ``out_profile``.
         """
@@ -155,7 +155,7 @@ class RasterFuse(RasterPairReader):
         corr_profile['count'] = len(self.src_bands)
         return corr_profile
 
-    def _merge_param_profile(self, out_profile: Dict = None) -> Dict:
+    def _merge_param_profile(self, out_profile: Optional[Dict] = None) -> Dict:
         """
         Create a rasterio profile for the parameter image, using a merge of the ``proc_crs`` image profile,
         and ``out_profile`` as a starting point.
@@ -230,7 +230,7 @@ class RasterFuse(RasterPairReader):
     def _out_files(
         self, corr_filename: Union[Path, str], param_filename: Union[Path, str] = None, out_profile: Dict = None,
         overwrite: bool = False, build_ovw: bool = False, **kwargs
-    ):
+    ) -> Iterator[Tuple[rasterio.DatasetReader, Union[rasterio.DatasetReader, None]]]:
         """
         Internal context manager to handle the corrected, and optional parameter, output file(s).
 
@@ -266,7 +266,8 @@ class RasterFuse(RasterPairReader):
                 param_im.close()
 
     def _process_block(
-        self, block_pair: BlockPair, model: KernelModel, corr_im: DatasetWriter, param_im: DatasetWriter = None,
+        self, block_pair: BlockPair, model: KernelModel, corr_im: DatasetWriter,
+        param_im: Optional[DatasetWriter] = None,
     ):
         """
         Thread-safe method to correct an image block to surface reflectance using the supplied correction ``model``.
@@ -292,15 +293,16 @@ class RasterFuse(RasterPairReader):
                 param_ra.to_rio_dataset(param_im, indexes=indexes, window=param_out_block)
 
     def process(
-        self, corr_filename: Union[Path, str],
+        self,
+        corr_filename: Union[Path, str],
         model: Model,
         kernel_shape: Tuple[int, int],
-        param_filename: Union[Path, str] = None,
+        param_filename: Optional[Union[Path, str]] = None,
         build_ovw: bool = True,
         overwrite: bool = False,
-        model_config: Dict = None,
-        out_profile: Dict = None,
-        block_config: Dict = None,
+        model_config: Optional[Dict] = None,
+        out_profile: Optional[Dict] = None,
+        block_config: Optional[Dict] = None,
     ):  # yapf: disable
         """
         Correct the source image to surface reflectance by fusion with the reference.

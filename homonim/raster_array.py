@@ -19,7 +19,8 @@
 
 import logging
 import multiprocessing
-from typing import Tuple
+import pathlib
+from typing import Tuple, Dict, List, Union, Optional
 
 import numpy
 import numpy as np
@@ -45,22 +46,25 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
     default_nodata = float('nan')  # default internal nodata value
     default_dtype = 'float32'  # default internal data type
 
-    def __init__(self, array, crs, transform, nodata=default_nodata, window=None):
+    def __init__(
+        self, array: np.ndarray, crs: CRS, transform: Affine, nodata: Optional[float] = default_nodata,
+        window: Optional[Window] = None
+    ):
         """
         Construct a RasterArray.
 
         Parameters
         ----------
         array: numpy.ndarray
-               A 2 or 3D array of image data, if 3D, bands are along the first dimension.
+            2 or 3D array of image data, if 3D, bands are along the first dimension.
         crs: rasterio.crs.CRS
-             The array CRS.
+            ``array`` CRS.
         transform: rasterio.transform.Affine
-                   The array geo-transform.
+            ``array`` geo-transform.
         nodata: optional
-                A number or nan, specifying the nodata value to use for masking the array.
+            A number or nan, specifying the nodata value to use for masking the array.
         window: rasterio.windows.Window, optional
-                An optional window into the transform specifying the array region.
+            Optional window into the transform specifying the array region.
         """
 
         if (array.ndim < 2) or (array.ndim > 3):
@@ -87,27 +91,27 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         self._nodata_mask = None
 
     @classmethod
-    def from_profile(cls, array, profile, window=None):
+    def from_profile(cls, array: np.ndarray, profile: Dict, window: Optional[Window] = None) -> 'RasterArray':
         """
         Construct a RasterArray from an array of image data and a profile dictionary.
 
         Parameters
         ----------
         array: numpy.ndarray, None
-               A 2 or 3D array of image data, if 3D, bands are along the first dimension.
-               Can be None, in which case a nodata array is created with the 'width', 'height', 'count', 'dtype' and
-               'nodata' fields in profile.
+            2 or 3D array of image data, if 3D, bands are along the first dimension.
+            Can be None, in which case a nodata array is created with the `width`, `height`, `count`, `dtype` and
+            `nodata` fields in ``profile``.
         profile: dict
-                 A configuration dictionary with items specifying the 'crs', 'transform' and 'nodata' values
-                 (as used by rasterio datasets).  If 'array' is None, this dict should contain the additional fields
-                 to create the array.
+            Configuration dictionary with items specifying the `crs`, `transform` and `nodata` values
+            (as used by rasterio datasets).  If ``array`` is None, this dict should contain the additional fields
+            to create the array.
         window: rasterio.windows.Window, optional
-                An optional window into profile['transform'], specifying the array region.
+            Optional window into ``profile['transform']``, specifying the array region.
 
         Returns
         -------
-        ra: RasterArray
-            The constructed RasterArray.
+        RasterArray
+            Constructed RasterArray.
         """
         if not {'crs', 'transform', 'nodata'} <= set(profile):
             raise ImageProfileError("'profile' should include 'crs', 'transform' and 'nodata' keys")
@@ -121,7 +125,10 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         return cls(array, profile['crs'], profile['transform'], nodata=profile['nodata'], window=window)
 
     @classmethod
-    def from_rio_dataset(cls, rio_dataset, indexes=None, window=None, **kwargs):
+    def from_rio_dataset(
+        cls, rio_dataset: rio.DatasetReader, indexes: Optional[Union[int, List[int]]] = None,
+        window: Optional[Window] = None, **kwargs
+    ) -> 'RasterArray':
         """
         Construct a RasterArray by reading from a rasterio dataset.
 
@@ -130,21 +137,22 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         Parameters
         ----------
         rio_dataset: rasterio.DatasetReader
-                     The rasterio dataset to be read from.
+            Rasterio dataset to be read from.
         indexes: int, list[int], optional
-                 The 1-based index or list of indexes of the bands to be read from 'rio_dataset'.
-                 The default is to read all the 'rio_dataset' bands.
+            1-based index or list of indexes of the bands to be read from ``rio_dataset``.
+            The default is to read all the ``rio_dataset`` bands.
         window: rasterio.windows.Window, optional
-                An optional window into 'rio_dataset' to be read from.
-                This can be a 'boundless' window i.e. a window that extends beyond the bounds of 'rio_dataset',
-                in which case the RasterArray.array will be filled with nodata outside of the the 'rio_dataset' bounds.
+            Optional window into ``rio_dataset`` to be read from.
+            This can be a `boundless` window i.e. a window that extends beyond the bounds of ``rio_dataset``,
+            in which case the :attr:`~RasterArray.array` will be filled with nodata outside of the ``rio_dataset``
+            bounds.
         kwargs: dict, optional
-                Additional arguments to be passed to the dataset's read() method.
+            Additional arguments to be passed to the dataset's read() method.
 
         Returns
         -------
-        ra: RasterArray
-            The constructed RasterArray.
+        RasterArray
+            Constructed RasterArray.
         """
         # form a list of indexes
         if indexes is None:
@@ -178,7 +186,6 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
             )
 
         # read into the bounded section of the array
-
         if is_masked:
             # read the mask from dataset and apply it to the array
             bounded_mask = rio_dataset.dataset_mask(window=bounded_window).astype('bool', copy=False)
@@ -190,8 +197,8 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         return cls(array, rio_dataset.crs, rio_dataset.transform, nodata=nodata, window=window)
 
     @staticmethod
-    def bounded_window_slices(rio_dataset, window):
-        """ Bounded array slices and dataset window from dataset and boundless window """
+    def bounded_window_slices(rio_dataset: rio.DatasetReader, window: Window) -> Tuple[Window, Tuple[slice, slice]]:
+        """ Bounded array slices and dataset window from dataset and boundless window. """
 
         # find window UL and BR corners and crop to rio_dataset bounds
         win_ul = np.array((window.row_off, window.col_off))
@@ -211,7 +218,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
 
     @property
     def array(self) -> numpy.ndarray:
-        """ A 2 or 3D array of image data, if 3D, bands are along the first dimension. """
+        """ 2 or 3D array of image data, if 3D, bands are along the first dimension. """
         return self._array
 
     @array.setter
@@ -223,37 +230,37 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
 
     @property
     def crs(self) -> rasterio.crs.CRS:
-        """ The coordinate reference system. """
+        """ Coordinate reference system. """
         return self._crs
 
     @property
     def width(self) -> int:
-        """ The array width in pixels. """
+        """ Array width in pixels. """
         return self.shape[-1]
 
     @property
     def height(self) -> int:
-        """ The array height in pixels. """
+        """ Array height in pixels. """
         return self.shape[-2]
 
     @property
     def shape(self) -> Tuple[int, int]:
-        """ The array shape (height, width) in pixels. """
+        """ Array shape (height, width) in pixels. """
         return tuple(self._array.shape[-2:])
 
     @property
     def count(self) -> int:
-        """ The number of bands. """
+        """ Number of bands. """
         return self._array.shape[0] if self.array.ndim == 3 else 1
 
     @property
     def dtype(self) -> str:
-        """ The internal data type of the image data. """
+        """ Internal data type of the array. """
         return self._array.dtype.name
 
     @property
     def transform(self) -> rasterio.transform.Affine:
-        """ An affine geo-transform describing the location and orientation of the array in the CRS. """
+        """ Affine geo-transform describing the location and orientation of the array in the CRS. """
         return self._transform
 
     @property
@@ -262,30 +269,30 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         return (self._transform.a, -self._transform.e)
 
     @property
-    def bounds(self) -> Tuple[float, ]:
-        """ The (left, bottom, right, top) co-ordinates of the array extent. """
+    def bounds(self) -> Tuple[float, ...]:
+        """ (left, bottom, right, top) co-ordinates of the array extent. """
         return windows.bounds(windows.Window(0, 0, self.width, self.height), self._transform)
 
     @property
-    def profile(self) -> dict:
-        """ The RasterArray properties formatted as a dictionary, compatible with rasterio. """
+    def profile(self) -> Dict:
+        """ RasterArray properties formatted as a dictionary, compatible with rasterio. """
         return dict(
             crs=self._crs, transform=self._transform, nodata=self._nodata, count=self.count, width=self.width,
             height=self.height, dtype=self.dtype
         )
 
     @property
-    def proj_profile(self) -> dict:
+    def proj_profile(self) -> Dict:
         """
-        RasterArray properties relevant to re-projection (i.e. 'crs', 'transform' and 'shape') formatted as a
+        RasterArray properties relevant to re-projection (i.e. `crs`, `transform` and `shape`) formatted as a
         dictionary.
-        Useful for expanding to keyword arguments to reproject().
+        Useful for expanding to keyword arguments to :meth:`reproject`.
         """
         return dict(crs=self._crs, transform=self._transform, shape=self.shape)
 
     @property
     def mask(self) -> numpy.ndarray:
-        """ A 2D boolean mask corresponding to valid pixels in the array. """
+        """ 2D boolean mask corresponding to valid pixels in the array. """
         if self._nodata is None:
             return np.full(self._array.shape[-2:], True)
         mask = ~utils.nan_equals(self._array, self._nodata)
@@ -303,7 +310,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
     @property
     def mask_ra(self) -> 'RasterArray':
         """
-        A RasterArray containing the 2D mask as 'uint8' data type, and with nodata=None.  Useful for re-projecting
+        RasterArray containing the 2D mask as `uint8` data type, and with nodata=None.  Useful for re-projecting
         the mask.
         """
         mask = self.mask.astype('uint8', copy=False)
@@ -311,7 +318,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
 
     @property
     def nodata(self) -> float:
-        """ The nodata value. """
+        """ Nodata value. """
         return self._nodata
 
     @nodata.setter
@@ -330,11 +337,11 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
                 self._array[nodata_mask] = value
             self._nodata = value
 
-    def copy(self):
+    def copy(self) -> 'RasterArray':
         """ Create a deep copy of the RasterArray. """
         return RasterArray.from_profile(self._array.copy(), self.profile)
 
-    def slice_to_bounds(self, *bounds):
+    def slice_to_bounds(self, *bounds) -> 'RasterArray':
         """
         Create a new RasterArray representing a rectangular sub-region of this RasterArray.
         Note that the created RasterArray is a view into the current array, not a copy.
@@ -342,11 +349,12 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         Parameters
         ----------
         bounds: Tuple
-                The co-ordinate bounds to slice the new array to (left, bottom, right, top), in the current CRS.
+            Co-ordinate bounds to slice the new array to (left, bottom, right, top), in the current :attr:`crs`.
+
         Returns
         -------
-        ra: RasterArray
-            The sliced RasterArray.
+        RasterArray
+            Sliced RasterArray.
         """
         window = self.window(*bounds)
         window = utils.round_window_to_grid(window)
@@ -364,7 +372,10 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
 
         return RasterArray(array, self._crs, self.window_transform(window), nodata=self._nodata)
 
-    def to_rio_dataset(self, rio_dataset, indexes=None, window=None, **kwargs):
+    def to_rio_dataset(
+        self, rio_dataset: rio.DatasetReader, indexes: Optional[Union[int, List[int]]] = None,
+        window: Optional[Window] = None, **kwargs
+    ):
         """
         Write the RasterArray into a rasterio dataset.
 
@@ -373,21 +384,21 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         Parameters
         ----------
         rio_dataset: rasterio.io.DatasetWriter
-                     An open rasterio dataset into which to write the RasterArray.
-                     The dataset must CRS must match that of the RasterArray.
+            An open rasterio dataset into which to write the RasterArray.
+            The dataset CRS must match that of the RasterArray.
         indexes: int, list[int], optional
-                 The 1-based index or list of indexes of the bands to be written in 'rio_dataset'.
-                 It should contain the same number of items as there are RasterArray bands.
-                 [default: write into the first 'count' non-alpha bands of the dataset, where 'count' is the number
-                 of RasterArray bands.]
+            1-based index or list of indexes of the bands to be written in ``rio_dataset``.
+            It should contain the same number of items as there are RasterArray bands.
+            The default is to write into the first `count` non-alpha bands of the dataset, where `count` is the number
+            of RasterArray bands.
         window: rasterio.windows.Window, optional
-                A window defining the region in the dataset to write the RasterArray to, and how to crop the
-                RasterArray, if necessary.  If it is a 'boundless' window i.e. extended beyond the bounds of the
-                dataset, it is cropped to fit the bounds of the dataset. The RasterArray is cropped to fit the bounds
-                of the window in the dataset.
-                [default: write the full extent of RasterArray into the corresponding region in the dataset.]
+            Window defining the region in the dataset to write the RasterArray to, and how to crop the
+            RasterArray, if necessary.  If it is a `boundless` window i.e. extended beyond the bounds of the
+            dataset, it is cropped to fit the bounds of the dataset. The RasterArray is cropped to fit the bounds
+            of the window in the dataset.
+            The default is to write the full extent of RasterArray into the corresponding region in the dataset.
         kwargs: optional
-                Arguments to passed through the dataset's write() method.
+            Arguments to pass through the dataset's write() method.
         """
         if not np.all(np.abs(self.res) == np.abs(rio_dataset.res)):
             raise ImageFormatError(
@@ -432,27 +443,29 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
 
         rio_dataset.write(bounded_ra.array, window=window, indexes=indexes, **kwargs)
 
-    def to_file(self, filename, driver='GTiff', **kwargs):
+    def to_file(self, filename: Union[str, pathlib.Path], driver: str = 'GTiff', **kwargs):
         """
         Write the RasterArray to an image file.
 
         Parameters
         ----------
         filename: str, pathlib.Path
-                  The name of the file to create.
+            Name of the file to create.
         driver: str, optional
-                A valid rasterio short format driver name - see http://www.gdal.org/formats_list.html.
+            Valid rasterio short format driver name - See the `GDAL docs <https://gdal.org/drivers/raster/index.html>`_
+            for available options.
         kwargs: dict, optional
-                Driver specific creation options e.g. compression='deflate' for a geotiff.
-                See the rasterio documentation for more details:
+            Driver specific creation options e.g. ``compression='deflate'`` for a GeoTiff.
+            See the `GDAL docs <https://gdal.org/drivers/raster/index.html>`_ for available keys and values.
         """
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
             with rio.open(filename, 'w', driver=driver, **self.profile, **kwargs) as out_im:
                 out_im.write(self._array, indexes=range(1, self.count + 1) if self.count > 1 else 1)
 
     def reproject(
-        self, crs=None, transform=None, shape=None, nodata=default_nodata, dtype=default_dtype,
-        resampling=Resampling.lanczos, **kwargs
+        self, crs: Optional[CRS] = None, transform: Optional[Affine] = None, shape: Optional[Tuple[int, int]] = None,
+        nodata: float = default_nodata, dtype: str = default_dtype, resampling: Resampling = Resampling.lanczos,
+        **kwargs
     ):
         """
         Re-project the RasterArray.
@@ -460,25 +473,25 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         Parameters
         ----------
         crs: rasterio.crs.CRS, optional
-             The CRS to project into.  [default: use the CRS of the this RasterArray]
+             CRS to project into.  The default is to use the CRS of this RasterArray.
         transform: rasterio.transform.Affine, optional
-                    The geo-transform to project into.  If 'transform' is specified, 'shape' is also required.
-                    [default: use the transform of this RasterArray]
+            Geo-transform to project into.  If ``transform`` is specified, ``shape`` is also required.
+            The default is to use the transform of this RasterArray.
         shape: tuple, optional
-               The (rows, columns) size of the destination array. [default: use the shape of this RasterArray]
+            (rows, columns) size of the destination array. The default is to use the shape of this RasterArray.
         nodata: float, int, optional
-                The nodata value of the destination array.  [default: use the nodata value of this RasterArray]
+            nodata value of the destination array.
         dtype: type, str, optional
-                The data type of destination array.  [default: use the data type of this RasterArray]
+            Internal data type of destination array.
         resampling: rasterio.enums.Resampling, optional
-                    Resampling method to use.  [default: Resampling.lanczos]
+            Resampling method to use.
         kwargs: dict, optional
-                Arguments to passed through the rasterio's reproject() function.
+            Arguments to passed through the rasterio's reproject() function.
 
         Returns
         -------
-        ra: RasterArray
-            The reprojected RasterArray.
+        RasterArray
+            Reprojected RasterArray.
         """
 
         if transform is not None and shape is None:

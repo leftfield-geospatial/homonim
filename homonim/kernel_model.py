@@ -17,7 +17,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
-from typing import Tuple, Dict, List
+from typing import Tuple, Dict, List, Union, Optional
 
 import cv2 as cv
 import numpy as np
@@ -28,6 +28,8 @@ from homonim import utils
 from homonim.enums import Model
 from homonim.raster_array import RasterArray
 
+ONdArray = Optional[np.ndarray]
+OShape = Optional[Tuple[int, int]]
 
 class KernelModel:
     def __init__(self, model: Model, kernel_shape: Tuple[int, int], find_r2: bool = False, **kwargs):
@@ -37,7 +39,7 @@ class KernelModel:
         The surface reflectance relationship between source and reference image blocks is approximated with localised
         linear models.  Models are estimated for each pixel location inside a small rectangular kernel (window),
         using a fast DFT approach.  The corrected output is produced by applying the model parameters to the source
-        image.
+        image block.
 
         Based on the paper:
         Harris, Dugal & Van Niekerk, Adriaan. (2018). Radiometric homogenisation of aerial images by calibrating with
@@ -47,9 +49,9 @@ class KernelModel:
         Parameters
         ----------
         model: homonim.enums.Model
-            The surface reflectance correction model.
+            Surface reflectance correction model.
         kernel_shape: tuple
-            The (height, width) of the kernel in pixels.
+            (height, width) of the kernel in pixels.
         find_r2: bool, optional
             Whether to calculate *R*\ :sup:`2` (coefficient of determination) for each kernel model, and include in
             parameter arrays.
@@ -77,13 +79,13 @@ class KernelModel:
 
     @property
     def find_r2(self) -> bool:
-        """ Whether to create and include R2 (coefficient of determinsation) in parameter arrays. """
+        """ Whether to create and include R2 (coefficient of determination) in parameter arrays. """
         return self._find_r2
 
     @staticmethod
     def create_config(
-        r2_inpaint_thresh:float=0.25, mask_partial:bool=False, downsampling: Resampling=Resampling.average,
-        upsampling: Resampling=Resampling.cubic_spline,
+        r2_inpaint_thresh: float = 0.25, mask_partial: bool = False, downsampling: Resampling = Resampling.average,
+        upsampling: Resampling = Resampling.cubic_spline,
     ) -> Dict:
         """
         Utility method to create a KernelModel configuration dictionary that can be passed to
@@ -93,18 +95,18 @@ class KernelModel:
         Parameters
         ----------
         r2_inpaint_thresh: float, optional
-            The *R*\ :sup:`2` (coefficient of determination) threshold below which to `in-paint` kernel model parameters
+            *R*\ :sup:`2` (coefficient of determination) threshold below which to `in-paint` kernel model parameters
             from surrounding areas (applies to :attr:`model` == :attr:`~homonim.enums.Model.gain_offset` only).  For
-            pixels where the model gives a poor approximation to the data (this can in areas where source and reference
-            differ due to e.g. shadowing, land cover changes etc), model offsets are interpolated from surrounding
-            areas, and gains re-estimated.  Set ``r2_inpaint_thresh`` to `None` to turn off in-painting.
+            pixels where the model gives a poor approximation to the data (this can occur in areas where source and
+            reference differ due to e.g. shadowing, land cover changes etc.), model offsets are interpolated from
+            surrounding areas, and gains re-estimated.  Set ``r2_inpaint_thresh`` to `None` to turn off in-painting.
         mask_partial: bool, optional
             Mask output pixels not produced by full kernel or source/reference image coverage.  Useful for ensuring
             strict model validity, and reducing seam-lines between overlapping images.
         downsampling: rasterio.enums.Resampling, optional
-            The resampling method to use when downsampling.
+            Resampling method to use when downsampling.
         upsampling: rasterio.enums.Resampling, optional
-            The resampling method to use when upsampling.
+            Resampling method to use when upsampling.
 
         Returns
         -------
@@ -117,20 +119,19 @@ class KernelModel:
         )
 
     def _get_resampling(self, from_res: Tuple[float, float], to_res: Tuple[float, float]):
-        """ Return the resampling method for re-projecting from resolution `from_res` to resolution `to_res`. """
+        """ Return the resampling method for re-projecting from resolution ``from_res`` to resolution ``to_res``. """
         return self._downsampling if np.prod(np.abs(from_res)) <= np.prod(np.abs(to_res)) else self._upsampling
 
     def _r2_array(
-        self, ref_array: np.ndarray, src_array: np.ndarray, param_array: np.ndarray, mask: np.ndarray = None,
-        mask_sum: np.ndarray = None, ref_sum: np.ndarray = None, src_sum: np.ndarray = None,
-        ref2_sum: np.ndarray = None, src2_sum: np.ndarray = None, src_ref_sum: np.ndarray = None,
-        dest_array: np.ndarray = None, kernel_shape: Tuple[int, int] = None
+        self, ref_array: np.ndarray, src_array: np.ndarray, param_array: np.ndarray, mask: ONdArray = None,
+        mask_sum: ONdArray = None, ref_sum: ONdArray = None, src_sum: ONdArray = None, ref2_sum: ONdArray = None,
+        src2_sum: ONdArray = None, src_ref_sum: ONdArray = None, dest_array: ONdArray = None,
+        kernel_shape: OShape = None
     ) -> np.ndarray:
         """
         Utility function to return R2 (coefficient of determination) at each pixel/kernel location for the given
         arrays.
         """
-
         if kernel_shape is None:
             kernel_shape = self._kernel_shape
         kernel_shape = tuple(kernel_shape)  # force to tuple for opencv
@@ -210,7 +211,7 @@ class KernelModel:
         norm_model[1] = np.percentile(ref_ra.array[mask], 1) - np.percentile(src_ra.array[mask], 1) * norm_model[0]
         return norm_model
 
-    def _fit_gain(self, src_ra: RasterArray, ref_ra: RasterArray, kernel_shape: Tuple[int, int] = None) -> RasterArray:
+    def _fit_gain(self, src_ra: RasterArray, ref_ra: RasterArray, kernel_shape: OShape = None) -> RasterArray:
         """
         Find sliding kernel gains, for a source & reference band, using opencv convolution.
         Returns a RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second,
@@ -256,7 +257,7 @@ class KernelModel:
         return param_ra
 
     def _fit_gain_blk_offset(
-        self, src_ra: RasterArray, ref_ra: RasterArray, kernel_shape: Tuple[int,int] = None
+        self, src_ra: RasterArray, ref_ra: RasterArray, kernel_shape: OShape = None
     ) -> RasterArray:  # yapf: disable
         """
         Find sliding kernel gains and 'image' (i.e. block) offset, for a band, using opencv convolution.
@@ -284,9 +285,7 @@ class KernelModel:
         param_ra.array[0] *= norm_model[0]
         return param_ra
 
-    def _fit_gain_offset(
-        self, src_ra: RasterArray, ref_ra: RasterArray, kernel_shape: Tuple[int, int] = None
-    ) -> RasterArray:  # yapf: disable
+    def _fit_gain_offset(self, src_ra: RasterArray, ref_ra: RasterArray, kernel_shape: OShape = None) -> RasterArray:
         """
         Find sliding kernel full linear model for a band using opencv convolution.
         Returns a RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second,
@@ -359,20 +358,20 @@ class KernelModel:
         Utility function to create a full coverage mask i.e. a mask of output pixels fully covered by source/reference
         data, sliding (model) kernels, and resampling kernels.
 
-        Note: that this is a strict approach that avoids any kind of partial coverage.
+        Note: this is a strict approach that avoids any kind of partial coverage.
 
         Parameters
         ----------
         in_mask_ra: RasterArray
-            An initial mask of valid source/reference pixels, as a RasterArray with dtype=='uint8'.
+            Initial mask of valid source/reference pixels, as a RasterArray with dtype=='uint8'.
         param_ra: RasterArray
             A parameter RasterArray as returned by :meth:`fit` i.e. a RasterArray in the CRS and grid corresponding
             to :attr:`proc_crs`, whose mask corresponds to the combined reference & source masks.
 
         Returns
         -------
-        mask_ra: RasterArray
-            The full coverage mask as a RasterArray with dtype=='uint8'
+        RasterArray
+            Full coverage mask as a RasterArray with dtype=='uint8'
         """
 
         # re-project the initial mask into proc_crs (the CRS and grid corresponding to the proc_crs attribute)
@@ -396,14 +395,14 @@ class KernelModel:
 
         Parameters
         ----------
-        src_ra : RasterArray
-            Source data block in a RasterArray, with the same CRS, shape & extents as ref_ra.
-        ref_ra : RasterArray
+        src_ra: RasterArray
+            Source data block in a RasterArray, with the same CRS, shape & extents as ``ref_ra``.
+        ref_ra: RasterArray
             Reference data block in a RasterArray.
 
         Returns
         -------
-        param_ra :RasterArray
+        RasterArray
             RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second, and optionally
             *R*\ :sup:`2` for each kernel model in the third band when :attr:`find_r2` is True.
         """
@@ -426,9 +425,9 @@ class KernelModel:
 
         Parameters
         ----------
-        src_ra : RasterArray
+        src_ra: RasterArray
             Source data block in a RasterArray.
-        param_ra :RasterArray
+        param_ra: RasterArray
             RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second, and the same
             CRS, shape & extents as src_ra.
 

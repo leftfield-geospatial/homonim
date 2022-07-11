@@ -21,7 +21,7 @@ import pathlib
 import threading
 from contextlib import ExitStack
 from itertools import product
-from typing import Tuple, NamedTuple
+from typing import Tuple, NamedTuple, Union, List, Dict, Iterable
 
 import numpy as np
 import rasterio
@@ -56,7 +56,10 @@ class BlockPair(NamedTuple):
 
 class RasterPairReader:
 
-    def __init__(self, src_filename, ref_filename, proc_crs=ProcCrs.auto):
+    def __init__(
+        self, src_filename: Union[str, pathlib.Path], ref_filename: Union[str, pathlib.Path],
+        proc_crs: ProcCrs = ProcCrs.auto
+    ):
         """
         Class for reading matching, and optionally overlapping, blocks from a source and reference image pair.
 
@@ -100,12 +103,12 @@ class RasterPairReader:
         return self._ref_im
 
     @property
-    def src_bands(self) -> Tuple[int, ]:
+    def src_bands(self) -> Tuple[int, ...]:
         """ Source non-alpha band indices (1-based). """
         return self._src_bands
 
     @property
-    def ref_bands(self) -> Tuple[int, ]:
+    def ref_bands(self) -> Tuple[int, ...]:
         """ Reference non-alpha band indices (1-based). """
         return self._ref_bands
 
@@ -228,7 +231,7 @@ class RasterPairReader:
         Returns
         -------
         ProcCrs
-            A :class:`~homonim.enums.ProcCrs` instance resolved to either :attr:`~homonim.enums.ProcCrs.src` or
+            :class:`~homonim.enums.ProcCrs` instance resolved to either :attr:`~homonim.enums.ProcCrs.src` or
             :attr:`~homonim.enums.ProcCrs.ref`.
         """
         with rio.open(src_filename, 'r') as src_im, rio.open(ref_filename, 'r') as ref_im:
@@ -238,7 +241,7 @@ class RasterPairReader:
             ) as ref_im:  # yapf: disable
                 return RasterPairReader._resolve_proc_crs(src_im, ref_im, proc_crs=proc_crs)
 
-    def _auto_block_shape(self, max_block_mem: float = np.inf):
+    def _auto_block_shape(self, max_block_mem: float = np.inf) -> Tuple[int, int]:
         """ Find a block shape that satisfies max_block_mem. """
 
         proc_win = self._ref_win if self.proc_crs == ProcCrs.ref else self._src_win
@@ -279,7 +282,7 @@ class RasterPairReader:
             logger.warning(
                 f'The auto block shape is small: {block_shape}.  Increase `max_block_mem` to improve processing times.'
             )
-        return block_shape
+        return tuple(block_shape)
 
     def _init_image_pair(self):
         """ Prepare the raster pair for reading. """
@@ -339,7 +342,7 @@ class RasterPairReader:
         self.close()
         self._stack.__exit__(exc_type, exc_val, exc_tb)
 
-    def read(self, block_pair):
+    def read(self, block_pair: BlockPair) -> Tuple[RasterArray, RasterArray]:
         """
         Thread-safe read of a matching pair of source and reference image blocks.
 
@@ -369,7 +372,7 @@ class RasterPairReader:
             )
         return src_ra, ref_ra
 
-    def block_pairs(self, overlap: Tuple[int, int] = (0, 0), max_block_mem: float = np.inf):
+    def block_pairs(self, overlap: Tuple[int, int] = (0, 0), max_block_mem: float = np.inf) -> Iterable[BlockPair]:
         """
         Iterator over paired source-reference image blocks.
 

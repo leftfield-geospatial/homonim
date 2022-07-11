@@ -23,7 +23,7 @@ import threading
 from concurrent import futures
 from contextlib import ExitStack
 from multiprocessing import cpu_count
-from typing import List, Dict, Tuple, Union
+from typing import List, Dict, Tuple, Union, Optional
 
 import numpy as np
 import rasterio as rio
@@ -138,7 +138,7 @@ class ParamStats:
         self._assert_open()
         read_lock = threading.Lock()
 
-        def get_block_data_window(block_win: Window):
+        def get_block_data_window(block_win: Window) -> Optional[Window]:
             """ Return a window of valid data corresponding to a given block.  """
             with read_lock:
                 mask = self._param_im.read_masks(indexes=1, window=block_win)
@@ -154,7 +154,7 @@ class ParamStats:
             )
 
         # combine valid block windows into a valid image window
-        data_win: Union[Window, None] = None
+        data_win: Optional[Window] = None
         bar_format = 'Finding window: {l_bar}{bar}|{n_fmt}/{total_fmt} blocks [{elapsed}<{remaining}]'
         with futures.ThreadPoolExecutor(max_workers=threads) as executor:
             # create threads to get valid block windows

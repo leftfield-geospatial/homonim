@@ -115,7 +115,7 @@ class FuseCommand(HomonimCommand):
         return click.Command.invoke(self, ctx)
 
 
-def _update_existing_keys(default_dict: Dict, **kwargs):
+def _update_existing_keys(default_dict: Dict, **kwargs) -> Dict:
     """ Update values in a dict with args from matching keys in **kwargs. """
     return {k: kwargs.get(k, v) for k, v in default_dict.items()}
 
@@ -193,7 +193,7 @@ def _creation_options_cb(ctx: click.Context, param: click.Option, value):
         return out
 
 
-def _param_file_cb(ctx: click.Context, param: click.Option, value):
+def _param_file_cb(ctx: click.Context, param: click.Argument, value):
     """ click callback to validate parameter image file(s). """
     for filename in value:
         filename = pathlib.Path(filename)
@@ -253,7 +253,7 @@ context_settings = cloup.Context.settings(
 @click.option('--verbose', '-v', count=True, help='Increase verbosity.')
 @click.option('--quiet', '-q', count=True, help='Decrease verbosity.')
 @click.version_option(version=version.__version__, message='%(version)s')
-def cli(verbose, quiet):
+def cli(verbose: int, quiet: int):
     """ Surface reflectance correction and support utilities. """
     verbosity = verbose - quiet
     _configure_logging(verbosity)
@@ -372,7 +372,7 @@ def cli(verbose, quiet):
 )
 @click.pass_context
 def fuse(
-    ctx: click.Context, src_file: Tuple[pathlib.Path, ], ref_file: pathlib.Path, model: Model,
+    ctx: click.Context, src_file: Tuple[pathlib.Path, ...], ref_file: pathlib.Path, model: Model,
     kernel_shape: Tuple[int, int], out_dir: pathlib.Path, overwrite: bool, comp_ref_file: pathlib.Path, build_ovw: bool,
     proc_crs: ProcCrs, conf: pathlib.Path, param_image: bool, **kwargs
 ):
@@ -488,7 +488,7 @@ cli.add_command(fuse)
     ),
 )
 def compare(
-    src_file: Tuple[pathlib.Path, ], ref_file: pathlib.Path, output: pathlib.Path, proc_crs: ProcCrs, **kwargs
+    src_file: Tuple[pathlib.Path, ...], ref_file: pathlib.Path, output: pathlib.Path, proc_crs: ProcCrs, **kwargs
 ):
     """
     Compare image(s) with a reference.
@@ -553,11 +553,11 @@ cli.add_command(compare)
 
 @cloup.command(cls=HomonimCommand)
 @cloup.argument(
-    'param-file', nargs=-1, metavar='PARAM...', type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
+    'param-files', nargs=-1, metavar='PARAM...', type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
     callback=_param_file_cb, help='Path(s) to parameter image(s).'
 )
 @output_option
-def stats(param_file: pathlib.Path, output: pathlib.Path):
+def stats(param_files: Tuple[pathlib.Path, ...], output: pathlib.Path):
     """
     Report parameter statistics.
 
@@ -570,7 +570,7 @@ def stats(param_file: pathlib.Path, output: pathlib.Path):
         meta_dict = {}
 
         # process parameter file(s), storing results
-        for param_filename in param_file:
+        for param_filename in param_files:
             logger.info(f'\nProcessing {param_filename.name}')
             with ParamStats(param_filename) as param_stats:
                 stats_dict[str(param_filename)] = param_stats.stats()

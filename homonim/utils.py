@@ -20,7 +20,7 @@
 import logging
 import pathlib
 from multiprocessing import cpu_count
-from typing import Tuple
+from typing import Tuple, Dict, Union, List
 
 import numpy as np
 import rasterio as rio
@@ -29,7 +29,7 @@ from rasterio.vrt import WarpedVRT
 from rasterio.windows import Window
 from tabulate import TableFormat, Line, DataRow, tabulate
 
-from homonim.enums import Model
+from homonim.enums import Model, ProcCrs
 from homonim.errors import ImageFormatError
 
 logger = logging.getLogger(__name__)
@@ -48,28 +48,27 @@ table_format = TableFormat(
 )  # yapf: disable
 """ Tabulate format for comparison and parameter stats. """
 
-def nan_equals(a, b):
+def nan_equals(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     """ Compare two numpy objects a & b, returning true where elements of both a & b are nan. """
     return (a == b) | (np.isnan(a) & np.isnan(b))
 
 
-def expand_window_to_grid(win, expand_pixels=(0, 0)):
+def expand_window_to_grid(win: Window, expand_pixels: Tuple[int, int]=(0, 0)) -> Window:
     """
-    Expand rasterio window extents to nearest whole numbers i.e. for expand_pixels >= (0, 0), it will return a window
-    that contains the original extents.
+    Expand rasterio window extents to nearest whole numbers i.e. for ``expand_pixels`` >= (0, 0), it will return a
+    window that contains the original extents.
 
     Parameters
     ----------
     win: rasterio.windows.Window
-        The window to expand.
+        Window to expand.
     expand_pixels: tuple, optional
-        A tuple specifying the number of (rows, columns) pixels to expand the window by.
-        [default: (0, 0)]
+        Tuple specifying the number of (rows, columns) pixels to expand the window by.
 
     Returns
     -------
-    win: rasterio.windows.Window
-         The expanded window.
+    rasterio.windows.Window
+        Expanded window.
     """
     col_off, col_frac = np.divmod(win.col_off - expand_pixels[1], 1)
     row_off, row_frac = np.divmod(win.row_off - expand_pixels[0], 1)
@@ -79,19 +78,19 @@ def expand_window_to_grid(win, expand_pixels=(0, 0)):
     return exp_win
 
 
-def round_window_to_grid(win):
+def round_window_to_grid(win: Window) -> Window:
     """
     Round window extents to the nearest whole numbers.
 
     Parameters
     ----------
     win: rasterio.windows.Window
-        The window to round.
+        Window to round.
 
     Returns
     -------
-    win: rasterio.windows.Window
-        The rounded window with integer extents.
+    rasterio.windows.Window
+        Rounded window with integer extents.
     """
     row_range, col_range = win.toranges()
     row_range = np.round(row_range).astype('int')
@@ -99,20 +98,20 @@ def round_window_to_grid(win):
     return Window(col_off=col_range[0], row_off=row_range[0], width=np.diff(col_range)[0], height=np.diff(row_range)[0])
 
 
-def validate_kernel_shape(kernel_shape: Tuple[int, int], model=Model.gain_blk_offset) -> Tuple[int, int]:
+def validate_kernel_shape(kernel_shape: Tuple[int, int], model: Model = Model.gain_blk_offset) -> Tuple[int, int]:
     """
-    Check a kernel_shape (height, width) tuple for validity.  Raises ValueError if kernel_shape is invalid.
+    Check a kernel shape (height, width) tuple for validity.  Raises ValueError if ``kernel_shape`` is invalid.
 
     Parameters
     ----------
-    kernel_shape: tuple
-        The kernel (height, width) in pixels.
+    kernel_shape: tuple of int
+        Kernel (height, width) in pixels.
     model: Model, optional
-        The modelling model kernel_shape will be used with.
+        The model type ``kernel_shape`` will be used with.
 
     Returns
     -------
-    kernel_shape: tuple
+    tuple of int
         The validated kernel_shape as a numpy array.
     """
     kernel_shape = np.array(kernel_shape).astype(int)
@@ -125,27 +124,27 @@ def validate_kernel_shape(kernel_shape: Tuple[int, int], model=Model.gain_blk_of
     return tuple(kernel_shape)
 
 
-def overlap_for_kernel(kernel_shape):
+def overlap_for_kernel(kernel_shape: Tuple[int, int]) -> Tuple[int, int]:
     """
     Return the block overlap for a kernel shape.
 
     Parameters
     ----------
-    kernel_shape: tuple
-        The kernel (height, width) in pixels.
+    kernel_shape: tuple of int
+        Kernel (height, width) in pixels.
 
     Returns
     -------
-    overlap: numpy.array
-        The overlap (height, width) in integer pixels as a numpy.array.
+    tuple of int
+        Overlap (height, width) in integer pixels.
     """
     # Block overlap should be at least half the kernel 'shape' to ensure full kernel coverage at block edges, and a
     # minimum of (1, 1) to avoid including extrapolated (rather than interpolated) pixels when up-sampling.
     kernel_shape = np.array(kernel_shape).astype(int)
-    return np.ceil(kernel_shape / 2).astype('int')
+    return tuple(np.ceil(kernel_shape / 2).astype('int'))
 
 
-def validate_threads(threads):
+def validate_threads(threads: int) -> int:
     """ Parse number of threads parameter. """
     _cpu_count = cpu_count()
     threads = _cpu_count if threads == 0 else threads
@@ -154,7 +153,7 @@ def validate_threads(threads):
     return threads
 
 
-def create_out_postfix(proc_crs, model, kernel_shape, driver='GTiff'):
+def create_out_postfix(proc_crs: ProcCrs, model: Model, kernel_shape: Tuple[int, int], driver: str = 'GTiff') -> str:
     """ Create a filename postfix, including extension, for the corrected image file. """
     ext_dict = rio.drivers.raster_driver_extensions()
     ext_idx = list(ext_dict.values()).index(driver)
@@ -163,13 +162,13 @@ def create_out_postfix(proc_crs, model, kernel_shape, driver='GTiff'):
     return post_fix
 
 
-def create_param_filename(filename: pathlib.Path):
+def create_param_filename(filename: Union[str, pathlib.Path]) -> pathlib.Path:
     """ Create a debug image filename, given the corrected image filename. """
     filename = pathlib.Path(filename)
     return filename.parent.joinpath(f'{filename.stem}_PARAM{filename.suffix}')
 
 
-def covers_bounds(im1, im2, expand_pixels=(0, 0)):
+def covers_bounds(im1: rio.DatasetReader, im2: rio.DatasetReader, expand_pixels: Tuple[int, int]=(0, 0)) -> bool:
     """
     Determines if the spatial extents of one image cover another image
 
@@ -179,12 +178,12 @@ def covers_bounds(im1, im2, expand_pixels=(0, 0)):
         An open rasterio dataset.
     im2: rasterio.DatasetReader
         Another open rasterio dataset.
-    expand_pixels: Tuple[int, int], optional
+    expand_pixels: tuple of int, optional
         Expand the im2 bounds by this many pixels.
 
     Returns
     -------
-    covers_bounds: bool
+    bool
         True if im1 covers im2 else False.
     """
     # use WarpedVRT to get the datasets in the same crs
@@ -197,7 +196,7 @@ def covers_bounds(im1, im2, expand_pixels=(0, 0)):
     return False if np.any(win_ul < 0) or np.any(win_shape > im1.shape) else True
 
 
-def get_nonalpha_bands(im):
+def get_nonalpha_bands(im: rio.DatasetReader) -> List[int]:
     """
     Return a list of non-alpha band indices from a rasterio dataset.
 
@@ -208,29 +207,29 @@ def get_nonalpha_bands(im):
 
     Returns
     -------
-    bands: list[int, ]
-        The list of 1-based band indices.
+    list of int
+        List of 1-based band indices.
     """
     bands = tuple([bi + 1 for bi in range(im.count) if im.colorinterp[bi] != ColorInterp.alpha])
     return bands
 
 
-def combine_profiles(in_profile, config_profile):
+def combine_profiles(in_profile: Dict, config_profile: Dict) -> Dict:
     """
     Update an input rasterio profile with a configuration profile.
 
     Parameters
     ----------
     in_profile: dict
-        The input/initial rasterio profile to update.  Driver-specific items are in the root dict.
+        Input/initial rasterio profile to update.  Driver-specific items are in the root dict.
     config_profile: dict
-        The configuration profile.  Driver specific options are contained in a nested dict, with 'creation_options' key.
-        E.g. see homonim.fuse.RasterFuse.create_out_profile().
+        Configuration profile.  Driver specific options are contained in a nested dict,
+        with the ``creation_options`` key. E.g. see :meth:`homonim.RasterFuse.create_out_profile`.
 
     Returns
     -------
-    out_profile: dict
-        The combined profile.
+    dict
+        Combined profile.
     """
 
     if in_profile['driver'].lower() != config_profile['driver'].lower():
@@ -255,8 +254,9 @@ def combine_profiles(in_profile, config_profile):
     return nested_update(out_profile, config_profile)
 
 
-def validate_param_image(param_filename):
+def validate_param_image(param_filename: Union[str, pathlib.Path]):
     """ Check file is a valid parameter image. """
+    param_filename = pathlib.Path(param_filename)
     if not param_filename.exists():
         raise FileNotFoundError(f'{param_filename} does not exist')
 
