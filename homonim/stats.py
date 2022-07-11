@@ -20,29 +20,28 @@
 import logging
 import pathlib
 import threading
-from collections import OrderedDict
-from multiprocessing import cpu_count
-from contextlib import ExitStack
 from concurrent import futures
+from contextlib import ExitStack
+from multiprocessing import cpu_count
 from typing import List, Dict, Tuple
 
 import numpy as np
 import rasterio as rio
 import yaml
-from rasterio.windows import get_data_window, intersect, union, Window, transform
+from rasterio.windows import get_data_window, intersect, union, Window
+from tabulate import tabulate
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
-from tabulate import TableFormat, Line, DataRow, tabulate
 
-from homonim import utils
+from homonim import utils, errors
 from homonim.enums import Model
-from homonim import errors
 
 logger = logging.getLogger(__name__)
 
+
 # TODO: make it clear here, and in compare what is R2 coeff of det, and PCC
 class ParamStats:
-    def __init__(self, param_filename):
+    def __init__(self, param_filename: pathlib.Path, str):
         """
         Class to calculate the statistics of a parameter image.
 
@@ -64,12 +63,12 @@ class ParamStats:
         self._param_im: rio.DatasetReader = self._param_im
 
     @property
-    def closed(self):
+    def closed(self) -> bool:
         """ True if the parameter file is closed, otherwise False. """
         return not self._param_im or self._param_im.closed
 
     @property
-    def metadata(self):
+    def metadata(self) -> str:
         """ Printable list of parameter metadata. """
         res_str = (
             f'Model: {self._model}\n'
@@ -100,7 +99,7 @@ class ParamStats:
         return tabulate(schema_list, headers=headers, tablefmt=utils.table_format)
 
     @staticmethod
-    def stats_table(stats_list: List[Dict]):
+    def stats_table(stats_list: List[Dict]) -> str:
         """
         Return a table string of the provided parameter statistics.
 
@@ -176,7 +175,7 @@ class ParamStats:
             band_stats = dict(
                 band=self._param_im.descriptions[band_i],
                 mean=band_accum['sum'] / band_accum['n'],
-                std=np.sqrt((band_accum['sum2'] / band_accum['n']) - (band_accum['sum']**2 / band_accum['n']**2)),
+                std=np.sqrt((band_accum['sum2'] / band_accum['n']) - (band_accum['sum'] ** 2 / band_accum['n'] ** 2)),
                 min=band_accum['min'],
                 max=band_accum['max'],
             )  # yapf: disable
@@ -185,7 +184,7 @@ class ParamStats:
             image_stats.append(band_stats)
         return image_stats
 
-    def stats(self, threads: int=0) -> List[Dict]:
+    def stats(self, threads: int = 0) -> List[Dict]:
         """
         Find parameter image statistics.
 
@@ -212,7 +211,9 @@ class ParamStats:
                 array: np.ma.masked_array = self._param_im.read(
                     indexes=band_i + 1, window=block_win, masked=True, out_dtype='float64',
                 )
-            block_dict = dict(min=array.min(), max=array.max(), sum=array.sum(), sum2=(array**2).sum(), n=array.count())
+            block_dict = dict(
+                min=array.min(), max=array.max(), sum=array.sum(), sum2=(array ** 2).sum(), n=array.count()
+            )
             if (self._model == Model.gain_offset) and (band_i >= self._param_im.count * 2 / 3):
                 # find the sum of inpainted pixels, if this is a R2 band and a gain-offset model
                 block_dict.update(inpaint_sum=(array < self._r2_inpaint_thresh).sum())
