@@ -48,7 +48,7 @@ table_format = TableFormat(
 )  # yapf: disable
 """ Tabulate format for comparison and parameter stats. """
 
-def nan_equals(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+def nan_equals(a: Union[np.ndarray, float], b: Union[np.ndarray, float]) -> np.ndarray:
     """ Compare two numpy objects a & b, returning true where elements of both a & b are nan. """
     return (a == b) | (np.isnan(a) & np.isnan(b))
 

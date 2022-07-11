@@ -21,11 +21,14 @@ import os
 import pytest
 import rasterio as rio
 import yaml
+from pathlib import Path
+from pytest import FixtureRequest
+from typing import Tuple, Dict
+
 from homonim import utils
 from homonim.enums import ProcCrs, Model
 from homonim.errors import IoError
 from homonim.fuse import RasterFuse
-from homonim.kernel_model import KernelModel
 from rasterio.features import shapes
 
 
@@ -34,10 +37,10 @@ from rasterio.features import shapes
         ('float_100cm_src_file', 'float_50cm_ref_file'),
     ]
 ) # yapf: disable
-def test_creation(src_file, ref_file, tmp_path, request):
+def test_creation(src_file: str, ref_file: str, tmp_path: Path, request: FixtureRequest):
     """ Test creation and configuration of RasterFuse. """
-    src_file = request.getfixturevalue(src_file)
-    ref_file = request.getfixturevalue(ref_file)
+    src_file: Path = request.getfixturevalue(src_file)
+    ref_file: Path = request.getfixturevalue(ref_file)
     # TODO: tidy comments, and add replacement test for process
     raster_fuse = RasterFuse(src_file, ref_file)
     with raster_fuse:
@@ -47,7 +50,7 @@ def test_creation(src_file, ref_file, tmp_path, request):
 
 
 @pytest.mark.parametrize('overwrite', [False, True])
-def test_overwrite(tmp_path, float_50cm_src_file, float_100cm_ref_file, overwrite):
+def test_overwrite(tmp_path: Path, float_50cm_src_file: Path, float_100cm_ref_file: Path, overwrite: bool):
     """ Test overwrite behaviour. """
     corr_filename = tmp_path.joinpath('corrected.tif')
     param_filename = utils.create_param_filename(corr_filename)
@@ -85,7 +88,10 @@ def test_overwrite(tmp_path, float_50cm_src_file, float_100cm_ref_file, overwrit
         ('float_100cm_src_file', 'float_45cm_ref_file', Model.gain_offset, (5, 5), 1.e-3),
     ]
 ) # yapf: disable
-def test_basic_fusion(src_file, ref_file, model, kernel_shape, max_block_mem, tmp_path, request):
+def test_basic_fusion(
+    src_file: str, ref_file: str, model: Model, kernel_shape: Tuple[int, int], max_block_mem: float,
+    tmp_path: Path, request: FixtureRequest,
+):
     """ Test fusion output with different src/ref images, and model etc combinations. """
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
@@ -120,7 +126,7 @@ def test_basic_fusion(src_file, ref_file, model, kernel_shape, max_block_mem, tm
         dict(driver='PNG', dtype='uint16', nodata=0, creation_options=dict()),
     ]
 )  # yapf: disable
-def test_out_profile(float_100cm_rgb_file, tmp_path, out_profile):
+def test_out_profile(float_100cm_rgb_file: Path, tmp_path: Path, out_profile: Dict):
     """ Test fusion output image format (profile) with different out_profile configurations. """
     raster_fuse = RasterFuse(float_100cm_rgb_file, float_100cm_rgb_file)
     corr_filename = tmp_path.joinpath('corrected.tif')
@@ -164,7 +170,7 @@ def test_out_profile(float_100cm_rgb_file, tmp_path, out_profile):
         (Model.gain_offset, ProcCrs.src),
     ]
 ) # yapf: disable
-def test_param_image(float_100cm_rgb_file, tmp_path, model, proc_crs):
+def test_param_image(float_100cm_rgb_file: Path, tmp_path: Path, model: Model, proc_crs: ProcCrs):
     """ Test creation and masking of parameter image for different model and proc_crs combinations. """
     corr_filename = tmp_path.joinpath('corrected.tif')
     param_filename = utils.create_param_filename(corr_filename)
@@ -191,10 +197,13 @@ def test_param_image(float_100cm_rgb_file, tmp_path, model, proc_crs):
         ('float_100cm_src_file', 'float_45cm_ref_file', (3, 3), ProcCrs.auto, True),
     ]
 ) # yapf: disable
-def test_mask_partial(src_file, ref_file, tmp_path, kernel_shape, proc_crs, mask_partial, request):
+def test_mask_partial(
+    src_file: str, ref_file: str, tmp_path: Path, kernel_shape: Tuple[int, int], proc_crs: ProcCrs, mask_partial: bool,
+    request: FixtureRequest,
+):
     """ Test partial masking with multiple image blocks. """
-    src_file = request.getfixturevalue(src_file)
-    ref_file = request.getfixturevalue(ref_file)
+    src_file: Path = request.getfixturevalue(src_file)
+    ref_file: Path = request.getfixturevalue(ref_file)
     model_config = RasterFuse.create_model_config(mask_partial=mask_partial)
     block_config = RasterFuse.create_block_config(max_block_mem=1.e-1)
     corr_file = tmp_path.joinpath('corrected.tif')
@@ -218,7 +227,7 @@ def test_mask_partial(src_file, ref_file, tmp_path, kernel_shape, proc_crs, mask
             assert (len(out_mask_shapes) == 1)
 
 
-def test_build_overviews(float_50cm_ref_file, tmp_path):
+def test_build_overviews(tmp_path: Path, float_50cm_ref_file: Path):
     """ Test that overviews are built for corrected and parameter files. """
     corr_filename = tmp_path.joinpath('corrected.tif')
     param_filename = utils.create_param_filename(corr_filename)
@@ -247,14 +256,14 @@ def test_build_overviews(float_50cm_ref_file, tmp_path):
             assert (len(param_ds.overviews(band_i)) > 0)
 
 
-def test_io_error(tmp_path, float_50cm_ref_file):
+def test_io_error(tmp_path: Path, float_50cm_ref_file: Path):
     """ Test we get an IoError if processing without opening/entering the context. """
     raster_fuse = RasterFuse(float_50cm_ref_file, float_50cm_ref_file)
     with pytest.raises(IoError):
         raster_fuse.process(tmp_path, Model.gain_blk_offset, (3, 3))
 
 
-def test_corr_filename(tmp_path, float_50cm_ref_file):
+def test_corr_filename(tmp_path: Path, float_50cm_ref_file: Path):
     """ Test corrected file is created. """
     corr_filename = tmp_path.joinpath('corrected.tif')
     raster_fuse = RasterFuse(float_50cm_ref_file, float_50cm_ref_file)
@@ -264,7 +273,7 @@ def test_corr_filename(tmp_path, float_50cm_ref_file):
     assert (corr_filename.exists())
 
 
-def test_single_thread(tmp_path, float_50cm_ref_file):
+def test_single_thread(tmp_path: Path, float_50cm_ref_file: Path):
     """ Test single-threaded processing creates a corrected file. """
     block_config = RasterFuse.create_block_config(threads=1)
     corr_filename = tmp_path.joinpath('corrected.tif')
@@ -283,10 +292,12 @@ def test_single_thread(tmp_path, float_50cm_ref_file):
         ('float_100cm_src_file', 'float_50cm_ref_file', ProcCrs.ref, ProcCrs.ref),
     ]
 ) # yapf: disable
-def test_proc_crs(tmp_path, src_file, ref_file, proc_crs, exp_proc_crs, request):
+def test_proc_crs(
+    tmp_path: Path, src_file: str, ref_file: str, proc_crs: ProcCrs, exp_proc_crs: ProcCrs, request: FixtureRequest,
+):
     """ Test corrected file creation for forced and auto proc_crs with different src/ref combinations. """
-    src_file = request.getfixturevalue(src_file)
-    ref_file = request.getfixturevalue(ref_file)
+    src_file: Path = request.getfixturevalue(src_file)
+    ref_file: Path = request.getfixturevalue(ref_file)
     corr_filename = tmp_path.joinpath('corrected.tif')
     raster_fuse = RasterFuse(src_file, ref_file, proc_crs=proc_crs)
     assert (raster_fuse.proc_crs == exp_proc_crs)
@@ -295,7 +306,7 @@ def test_proc_crs(tmp_path, src_file, ref_file, proc_crs, exp_proc_crs, request)
     assert (corr_filename.exists())
 
 
-def test_tags(tmp_path, float_50cm_ref_file):
+def test_tags(tmp_path: Path, float_50cm_ref_file: Path):
     """ Test corrected file metadata. """
     model = Model.gain_blk_offset
     kernel_shape = (3, 3)

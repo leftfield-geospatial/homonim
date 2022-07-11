@@ -18,10 +18,13 @@
 """
 
 import json
-import pathlib
+
 import pytest
 import rasterio as rio
 
+from pathlib import Path
+from pytest import FixtureRequest
+from typing import Dict, List
 from rasterio.windows import get_data_window, Window
 from click.testing import CliRunner
 from homonim.cli import cli
@@ -30,7 +33,7 @@ from homonim.stats import ParamStats
 from tests.conftest import str_contain_no_space
 
 
-def _test_vals(param_stats):
+def _test_vals(param_stats: List[Dict]):
     """ Helper function to test statistics against known values for param_file (i.e. gain=1, offset=0, r2=1). """
     assert len(param_stats) == 9
     for band_stats in param_stats:
@@ -48,16 +51,16 @@ def _test_vals(param_stats):
 
 
 @pytest.mark.parametrize('param_file_str', ['param_file', 'param_file_tile_10x20'])
-def test_api__stats(param_file_str: str, request: pytest.FixtureRequest):
+def test_api__stats(param_file_str: str, request: FixtureRequest):
     """ Test ParamStats creation and execution. """
-    param_file: pathlib.Path = request.getfixturevalue(param_file_str)
+    param_file: Path = request.getfixturevalue(param_file_str)
     with ParamStats(param_file) as stats:
         assert (len(stats.metadata) > 0)
         param_stats = stats.stats()
     _test_vals(param_stats)
 
 
-def test_api__context(param_file):
+def test_api__context(param_file: Path):
     """ Test ParamStats context management. """
     stats = ParamStats(param_file)
     # test ParamStats usage without context entry raises an IoError
@@ -70,7 +73,7 @@ def test_api__context(param_file):
     assert stats.closed
 
 
-def test_api__tables(param_file):
+def test_api__tables(param_file: Path):
     """ Test ParamStats table generation. """
     with ParamStats(param_file) as stats:
         assert (len(stats.metadata) > 0)
@@ -93,7 +96,7 @@ def test_api__tables(param_file):
 
 
 @pytest.mark.parametrize('threads', [1, 0])
-def test_api__threads(param_file: pathlib.Path, threads: int):
+def test_api__threads(param_file: Path, threads: int):
     """ Test ParamStats.stats works multi- and single-threaded. """
     with ParamStats(param_file) as stats:
         assert (len(stats.metadata) > 0)
@@ -101,9 +104,9 @@ def test_api__threads(param_file: pathlib.Path, threads: int):
     _test_vals(param_stats)
 
 @pytest.mark.parametrize('param_file_str', ['param_file', 'param_file_tile_10x20'])
-def test_api__data_window(param_file_str: str, request: pytest.FixtureRequest):
+def test_api__data_window(param_file_str: str, request: FixtureRequest):
     """ Test ParamStats._get_data_window() accumulates block windows correctly. """
-    param_file: pathlib.Path = request.getfixturevalue(param_file_str)
+    param_file: Path = request.getfixturevalue(param_file_str)
     with rio.open(param_file, 'r') as param_im:
         mask = param_im.read_masks(indexes=1)
         data_win = get_data_window(mask, nodata=0)
@@ -114,15 +117,15 @@ def test_api__data_window(param_file_str: str, request: pytest.FixtureRequest):
         assert data_win == stats._get_data_window()
 
 
-def test_api__file_format_error(float_100cm_rgb_file):
+def test_api__file_format_error(float_100cm_rgb_file: Path):
     """ Test incorrect parameter file format raises an error. """
     with pytest.raises(ImageFormatError):
         _ = ParamStats(float_100cm_rgb_file)
 
 @pytest.mark.parametrize('param_file_str', ['param_file', 'param_file_tile_10x20'])
-def test_cli(runner: CliRunner, param_file_str: str, request: pytest.FixtureRequest):
+def test_cli(runner: CliRunner, param_file_str: str, request: FixtureRequest):
     """ Test stats cli generates the correct output. """
-    param_file: pathlib.Path = request.getfixturevalue(param_file_str)
+    param_file: Path = request.getfixturevalue(param_file_str)
     cli_str = f'stats {param_file}'
     result = runner.invoke(cli, cli_str.split())
     assert (result.exit_code == 0)
@@ -140,7 +143,7 @@ def test_cli(runner: CliRunner, param_file_str: str, request: pytest.FixtureRequ
     assert (str_contain_no_space(res_str, result.output))
 
 
-def test_cli__out_file(tmp_path, runner, param_file):
+def test_cli__out_file(tmp_path: Path, runner: CliRunner, param_file: Path):
     """ Test stats cli --output option generates the correct values. """
     output_file = tmp_path.joinpath('stats.json')
     cli_str = f'stats {param_file} --output {output_file}'
@@ -157,7 +160,7 @@ def test_cli__out_file(tmp_path, runner, param_file):
     _test_vals(param_stats)
 
 
-def test_cli__mult_inputs(tmp_path, runner, param_file):
+def test_cli__mult_inputs(tmp_path: Path, runner: CliRunner, param_file: Path):
     """ Test stats cli with multiple input files. """
     output_file = tmp_path.joinpath('stats.json')
     cli_str = f'stats {param_file} {param_file} --output {output_file}'
@@ -172,7 +175,7 @@ def test_cli__mult_inputs(tmp_path, runner, param_file):
     assert (param_file in stats_dict)
 
 
-def test_cli__file_format_error(runner, float_100cm_rgb_file):
+def test_cli__file_format_error(runner: CliRunner, float_100cm_rgb_file: Path):
     """ Test stats cli fails with error message when the parameter file format is incorrect. """
     cli_str = f'stats {float_100cm_rgb_file}'
     result = runner.invoke(cli, cli_str.split())

@@ -22,41 +22,42 @@ import pathlib
 import rasterio as rio
 from rasterio.features import shapes
 from click.testing import CliRunner
+from typing import Dict, Tuple, Union
 
 from homonim import root_path, utils, RasterFuse, RasterCompare, ParamStats, ProcCrs, Model
 from homonim.cli import cli
 
 
 @pytest.fixture()
-def modis_ref_file():
+def modis_ref_file() -> pathlib.Path:
     return root_path.joinpath(r'tests/data/reference/MODIS-006-MCD43A4-2015_09_15_B143.tif')
 
 
 @pytest.fixture()
-def landsat_ref_file():
+def landsat_ref_file() -> pathlib.Path:
     return root_path.joinpath(r'tests/data/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif')
 
 
 @pytest.fixture()
-def s2_ref_file():
+def s2_ref_file() -> pathlib.Path:
     return root_path.joinpath(
         r'tests/data/reference/COPERNICUS-S2-20151003T075826_20151003T082014_T35HKC_B432_Byte.tif'
     )
 
 
 @pytest.fixture()
-def landsat_src_file():
+def landsat_src_file() -> pathlib.Path:
     return root_path.joinpath(r'tests/data/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.vrt')
 
 
 @pytest.fixture()
-def ngi_src_files():
+def ngi_src_files() -> Tuple[pathlib.Path, ...]:
     source_root = root_path.joinpath('tests/data/source/')
-    return [fn for fn in source_root.glob('3324c_2015_*_RGB.tif')]
+    return tuple([fn for fn in source_root.glob('3324c_2015_*_RGB.tif')])
 
 
 @pytest.fixture()
-def ngi_src_file():
+def ngi_src_file() -> pathlib.Path:
     return root_path.joinpath(r'tests/data/source/3324c_2015_1004_05_0182_RGB.tif')
 
 
@@ -77,13 +78,15 @@ def ngi_src_file():
     ]
 )
 def test_fuse_compare(
-    tmp_path, runner, src_files, ref_file, model, kernel_shape, proc_crs, mask_partial, exp_proc_crs, request
+    tmp_path: pathlib.Path, runner: CliRunner, src_files: str, ref_file: str, model: Model,
+    kernel_shape: Tuple[int, int], proc_crs: ProcCrs, mask_partial: bool, exp_proc_crs: ProcCrs,
+    request: pytest.FixtureRequest
 ):
     """ Additional integration tests using 'real' aerial and satellite imagery. """
 
     src_files = request.getfixturevalue(src_files)
-    src_files = src_files if isinstance(src_files, list) else [src_files]
-    ref_file = request.getfixturevalue(ref_file)
+    src_files: Tuple[pathlib.Path, ...] = src_files if isinstance(src_files, tuple) else (src_files,)
+    ref_file: pathlib.Path = request.getfixturevalue(ref_file)
     src_file_str = ' '.join([str(fn) for fn in src_files])
     post_fix = utils.create_out_postfix(exp_proc_crs, model, kernel_shape, RasterFuse.create_out_profile()['driver'])
     corr_files = [tmp_path.joinpath(src_file.stem + post_fix) for src_file in src_files]

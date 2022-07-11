@@ -91,7 +91,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         self._nodata_mask = None
 
     @classmethod
-    def from_profile(cls, array: np.ndarray, profile: Dict, window: Optional[Window] = None) -> 'RasterArray':
+    def from_profile(cls, array: Optional[np.ndarray], profile: Dict, window: Optional[Window] = None) -> 'RasterArray':
         """
         Construct a RasterArray from an array of image data and a profile dictionary.
 

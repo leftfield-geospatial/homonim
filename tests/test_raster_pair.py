@@ -19,6 +19,8 @@
 
 import pytest
 import rasterio as rio
+from pathlib import Path
+from pytest import FixtureRequest
 from rasterio import MemoryFile
 from rasterio.enums import Resampling
 from rasterio.windows import Window, union
@@ -36,10 +38,10 @@ from homonim.raster_pair import RasterPairReader, BlockPair
         ('float_100cm_src_file', 'float_50cm_ref_file', ProcCrs.src)
     ]
 ) # yapf: disable
-def test_creation(src_file, ref_file, expected_proc_crs, request):
+def test_creation(src_file: str, ref_file: str, expected_proc_crs: ProcCrs, request: FixtureRequest):
     """ Test RasterPair creation and proc_crs resolution. """
-    src_file = request.getfixturevalue(src_file)
-    ref_file = request.getfixturevalue(ref_file)
+    src_file: Path = request.getfixturevalue(src_file)
+    ref_file: Path = request.getfixturevalue(ref_file)
     raster_pair = RasterPairReader(src_file, ref_file)
     assert (raster_pair.proc_crs == expected_proc_crs)
     assert (raster_pair.src_bands == (1, ))
@@ -61,21 +63,21 @@ def test_creation(src_file, ref_file, expected_proc_crs, request):
         ('float_100cm_ref_file', 'float_100cm_src_file')
     ]
 ) # yapf: disable
-def test_coverage_exception(src_file, ref_file, request):
+def test_coverage_exception(src_file: str, ref_file: str, request: FixtureRequest):
     """ Test that ref not covering the extent of src raises an error. """
-    src_file = request.getfixturevalue(src_file)
-    ref_file = request.getfixturevalue(ref_file)
+    src_file: Path = request.getfixturevalue(src_file)
+    ref_file: Path = request.getfixturevalue(ref_file)
     with pytest.raises(ImageContentError):
         _ = RasterPairReader(src_file, ref_file)
 
 
-def test_band_count_exception(rgba_file, byte_file):
+def test_band_count_exception(rgba_file: Path, byte_file: Path):
     """ Test that src band count > ref band count raises an error. """
     with pytest.raises(ImageContentError):
         _ = RasterPairReader(rgba_file, byte_file)
 
 
-def test_block_shape_exception(float_50cm_src_file, float_100cm_ref_file):
+def test_block_shape_exception(float_50cm_src_file: Path, float_100cm_ref_file: Path):
     """ Test block shape errors. """
     # test auto block shape smaller than a pixel
     raster_pair = RasterPairReader(float_50cm_src_file, float_100cm_ref_file)
@@ -89,7 +91,7 @@ def test_block_shape_exception(float_50cm_src_file, float_100cm_ref_file):
             block_pairs = [block_pair for block_pair in raster_pair.block_pairs(overlap=(5, 5), max_block_mem=1.e-4)]
 
 
-def test_not_open_exception(float_50cm_src_file, float_100cm_ref_file):
+def test_not_open_exception(float_50cm_src_file: Path, float_100cm_ref_file: Path):
     """ Test that using a raster pair before entering the context raises an error. """
     raster_pair = RasterPairReader(float_50cm_src_file, float_100cm_ref_file)
     with pytest.raises(IoError):
@@ -114,18 +116,21 @@ def test_not_open_exception(float_50cm_src_file, float_100cm_ref_file):
         ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (1, 1), 2.e-4),
     ]
 ) # yapf: disable
-def test_block_pair_continuity(src_file, ref_file, proc_crs, blk_overlap, max_block_mem, request):
+def test_block_pair_continuity(
+    src_file: str, ref_file: str, proc_crs: ProcCrs, blk_overlap: Tuple[int, int], max_block_mem: float,
+    request: FixtureRequest
+):
     """ Test the continuity of block pairs for different src/ref etc combinations. """
+    src_file: Path = request.getfixturevalue(src_file)
+    ref_file: Path = request.getfixturevalue(ref_file)
+    raster_pair = RasterPairReader(src_file, ref_file, proc_crs=proc_crs)
+
     def compare_blocks(block: Window, prev_block: Window, overlap: Tuple[int, int] = (0, 0), compare=np.equal):
         """ Test block continuity. """
         if block.row_off == prev_block.row_off:  # blocks in the same row
             assert compare(block.col_off, prev_block.col_off + prev_block.width - 2 * overlap[1])
         else:
             assert compare(block.row_off, prev_block.row_off + prev_block.height - 2 * overlap[0])
-
-    src_file = request.getfixturevalue(src_file)
-    ref_file = request.getfixturevalue(ref_file)
-    raster_pair = RasterPairReader(src_file, ref_file, proc_crs=proc_crs)
 
     with raster_pair:
         # Create lists of compare_blocks() parameters for each block in a BlockPair.
@@ -167,10 +172,13 @@ def test_block_pair_continuity(src_file, ref_file, proc_crs, blk_overlap, max_bl
         ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 2.e-4),
     ]
 ) # yapf: disable
-def test_block_pair_coverage(src_file, ref_file, proc_crs, overlap, max_block_mem, request):
+def test_block_pair_coverage(
+    src_file: str, ref_file: str, proc_crs: ProcCrs, overlap: Tuple[int, int], max_block_mem: float,
+    request: FixtureRequest,
+):
     """ Test that combined block pairs cover the processing window for different src/ref etc combinations. """
-    src_file = request.getfixturevalue(src_file)
-    ref_file = request.getfixturevalue(ref_file)
+    src_file: Path = request.getfixturevalue(src_file)
+    ref_file: Path = request.getfixturevalue(ref_file)
     raster_pair = RasterPairReader(src_file, ref_file, proc_crs=proc_crs)
     with raster_pair:
         block_pairs = list(raster_pair.block_pairs(overlap=overlap, max_block_mem=max_block_mem))
@@ -207,15 +215,18 @@ def test_block_pair_coverage(src_file, ref_file, proc_crs, overlap, max_block_me
         ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 2.e-4),
     ]
 ) # yapf: disable
-def test_block_pair_io(src_file, ref_file, proc_crs, overlap, max_block_mem, request):
+def test_block_pair_io(
+    src_file: str, ref_file: str, proc_crs: ProcCrs, overlap: Tuple[int, int], max_block_mem: float,
+    request: FixtureRequest,
+):
     """
     Test block pairs can be read, reprojected and written as raster arrays without loss of data
 
     This is more an integration test with raster array than a raster pair unit test.  It simulates the way raster
     arrays are reprojected in *KernelModel.    .
     """
-    src_file = request.getfixturevalue(src_file)
-    ref_file = request.getfixturevalue(ref_file)
+    src_file: Path = request.getfixturevalue(src_file)
+    ref_file: Path = request.getfixturevalue(ref_file)
     raster_pair = RasterPairReader(src_file, ref_file, proc_crs=proc_crs)
 
     if raster_pair.proc_crs == ProcCrs.ref:

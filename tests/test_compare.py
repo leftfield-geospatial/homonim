@@ -21,7 +21,10 @@ import multiprocessing
 
 import numpy as np
 import pytest
-from typing import List, Dict, Union
+from pytest import FixtureRequest
+from click.testing import CliRunner
+from typing import List, Dict
+from pathlib import Path
 
 from homonim.cli import cli
 from homonim.compare import RasterCompare
@@ -54,16 +57,16 @@ def _test_identical_compare_dict(res_list: List):
         ('float_100cm_rgb_file', 'float_50cm_rgb_file'),
     ]
 )  # yapf:disable
-def test_api(src_file, ref_file, request):
+def test_api(src_file: str, ref_file: str, request: FixtureRequest):
     """ Basic test of RasterCompare for proc_crs=ref&src image combinations. """
-    src_file = request.getfixturevalue(src_file)
-    ref_file = request.getfixturevalue(ref_file)
+    src_file: Path = request.getfixturevalue(src_file)
+    ref_file: Path = request.getfixturevalue(ref_file)
     with RasterCompare(src_file, ref_file) as compare:
         res_dict = compare.compare()
     _test_identical_compare_dict(res_dict)
 
 
-def test_api__thread(float_45cm_src_file, float_100cm_ref_file):
+def test_api__thread(float_45cm_src_file: Path, float_100cm_ref_file: Path):
     """ Test compasison results remain the same with different `threads` configurations. """
     with RasterCompare(float_45cm_src_file, float_100cm_ref_file) as raster_compare:
         res_list_single = raster_compare.compare(threads=1)
@@ -78,10 +81,10 @@ def test_api__thread(float_45cm_src_file, float_100cm_ref_file):
         ('float_50cm_src_file', 'float_100cm_ref_file', ProcCrs.src, dict(upsampling='lanczos')),
     ]
 )  # yapf:disable
-def test_api__resampling(src_file: str, ref_file: str, proc_crs: ProcCrs, config: Dict, request: pytest.FixtureRequest):
+def test_api__resampling(src_file: str, ref_file: str, proc_crs: ProcCrs, config: Dict, request: FixtureRequest):
     """ Test non-default resampling parameters give similar but different results to the defaults. """
-    src_file = request.getfixturevalue(src_file)
-    ref_file = request.getfixturevalue(ref_file)
+    src_file: Path = request.getfixturevalue(src_file)
+    ref_file: Path = request.getfixturevalue(ref_file)
     with RasterCompare(src_file, ref_file, proc_crs=proc_crs) as raster_compare:
         res_list_def = raster_compare.compare()     # default configuration results
         res_list_lz = raster_compare.compare(**config)  # non-default configuration
@@ -100,10 +103,10 @@ def test_api__resampling(src_file: str, ref_file: str, proc_crs: ProcCrs, config
         ('float_100cm_src_file', 'float_45cm_ref_file'),
     ]
 )  # yapf:disable
-def test_api__max_block_mem(src_file:str, ref_file:str, request):
+def test_api__max_block_mem(src_file:str, ref_file:str, request: FixtureRequest):
     """ Test changing the number and shape of blocks (i.e. max_block_mem) gives the same comparison results. """
-    src_file = request.getfixturevalue(src_file)
-    ref_file = request.getfixturevalue(ref_file)
+    src_file: Path = request.getfixturevalue(src_file)
+    ref_file: Path = request.getfixturevalue(ref_file)
     with RasterCompare(src_file, ref_file) as compare:
         stats_list_band = compare.compare(max_block_mem=100)    # compare by band
         stats_list_block = compare.compare(max_block_mem=2e-4)  # compare by small block
@@ -115,7 +118,9 @@ def test_api__max_block_mem(src_file:str, ref_file:str, request):
             assert stats_dict_band[k] == pytest.approx(stats_dict_block[k], rel=1e-5)
 
 
-def test_api__proc_crs(float_45cm_src_file, float_100cm_ref_file, float_100cm_src_file, float_45cm_ref_file):
+def test_api__proc_crs(
+    float_45cm_src_file: Path, float_100cm_ref_file: Path, float_100cm_src_file: Path, float_45cm_ref_file: Path
+):
     """
     Test comparison of high res source with low res reference (proc_crs=ref) gives approx same results as comparison of
     low res source with high res reference (proc_crs=src).
@@ -134,7 +139,7 @@ def test_api__proc_crs(float_45cm_src_file, float_100cm_ref_file, float_100cm_sr
             assert stats_dict_ref[k] == pytest.approx(stats_dict_src[k], rel=1e-3)
 
 
-def test_cli(runner, float_50cm_rgb_file, float_100cm_rgb_file):
+def test_cli(runner: CliRunner, float_50cm_rgb_file: Path, float_100cm_rgb_file: Path):
     """ Test compare CLI with known outputs. """
     ref_file = float_100cm_rgb_file
     src_file = float_50cm_rgb_file
@@ -149,7 +154,7 @@ Mean   1.000  0.000  0.000   144"""
     assert (str_contain_no_space(res_str, result.output))
 
 
-def test_cli__output_file(tmp_path, runner, float_50cm_rgb_file, float_100cm_rgb_file):
+def test_cli__output_file(tmp_path: Path, runner: CliRunner, float_50cm_rgb_file: Path, float_100cm_rgb_file: Path):
     """ Test compare CLI generated json file. """
     ref_file = float_100cm_rgb_file
     src_file = float_50cm_rgb_file
@@ -168,7 +173,7 @@ def test_cli__output_file(tmp_path, runner, float_50cm_rgb_file, float_100cm_rgb
     _test_identical_compare_dict(stats_dict[src_file])
 
 
-def test_cli__mult_inputs(tmp_path, runner, float_50cm_rgb_file, float_100cm_rgb_file):
+def test_cli__mult_inputs(tmp_path: Path, runner: CliRunner, float_50cm_rgb_file: Path, float_100cm_rgb_file: Path):
     """ Test compare CLI with multiple src files. """
     ref_file = float_100cm_rgb_file
     src_file = float_50cm_rgb_file
@@ -186,7 +191,7 @@ def test_cli__mult_inputs(tmp_path, runner, float_50cm_rgb_file, float_100cm_rgb
     assert (src_file in stats_dict)
 
 
-def test_cli__adv_options(tmp_path, runner, float_50cm_src_file, float_100cm_ref_file):
+def test_cli__adv_options(tmp_path: Path, runner: CliRunner, float_50cm_src_file: Path, float_100cm_ref_file: Path):
     """ Test that the combined advanced CLI options affect comparison results as expected. """
     ref_file = float_100cm_ref_file
     src_file = float_50cm_src_file

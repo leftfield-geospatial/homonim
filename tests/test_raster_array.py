@@ -20,6 +20,8 @@
 import numpy as np
 import pytest
 import rasterio as rio
+from typing import Dict, Tuple
+from pathlib import Path
 from rasterio.crs import CRS
 from rasterio.enums import Resampling
 from rasterio.transform import Affine
@@ -29,7 +31,7 @@ from homonim.errors import ImageProfileError, ImageFormatError
 from homonim.raster_array import RasterArray
 
 
-def test_read_only_properties(byte_array, byte_profile):
+def test_read_only_properties(byte_array: np.ndarray, byte_profile: Dict):
     """ Test RasterArray read-only properties. """
     basic_ra = RasterArray(byte_array, byte_profile['crs'], byte_profile['transform'], nodata=byte_profile['nodata'])
     assert basic_ra.shape == byte_array.shape
@@ -43,7 +45,7 @@ def test_read_only_properties(byte_array, byte_profile):
     assert basic_ra.crs == byte_profile['crs']
 
 
-def test_array_property(byte_array, byte_profile):
+def test_array_property(byte_array: np.ndarray, byte_profile: Dict):
     """ Test array get/set. """
     byte_ra = RasterArray(byte_array, byte_profile['crs'], byte_profile['transform'], nodata=byte_profile['nodata'])
     assert (byte_ra.array == byte_array).all()  # test get
@@ -58,7 +60,7 @@ def test_array_property(byte_array, byte_profile):
     assert byte_ra.count == array.shape[0]
 
 
-def test_nodata_mask(byte_ra):
+def test_nodata_mask(byte_ra: RasterArray):
     """ Test set/get nodata and mask properties. """
     mask = byte_ra.mask
     byte_ra.nodata = 254
@@ -81,27 +83,27 @@ def test_nodata_mask(byte_ra):
     assert byte_ra.mask.all()
 
 
-def test_array_set_shape(byte_ra):
+def test_array_set_shape(byte_ra: RasterArray):
     """ Test setting array with different rows/cols raises error. """
     with pytest.raises(ValueError):
         byte_ra.array = byte_ra.array.reshape(-1, 1)
 
 
-def test_from_profile(byte_array, byte_profile):
+def test_from_profile(byte_array: np.ndarray, byte_profile: Dict):
     """ Test creating raster array from rasterio profile dict. """
     byte_ra = RasterArray.from_profile(byte_array, byte_profile)
     assert (byte_ra.array == byte_array).all()
     assert byte_ra.transform == byte_profile['transform']
 
 
-def test_from_profile_noarray(byte_profile):
+def test_from_profile_noarray(byte_profile: Dict):
     """ Test creating raster array from rasterio profile dict w/o array. """
     byte_ra = RasterArray.from_profile(None, byte_profile)
     assert (byte_ra.array == byte_ra.nodata).all()
 
 
 @pytest.mark.parametrize('missing_key', ['crs', 'transform', 'nodata', 'width', 'height', 'count', 'dtype'])
-def test_from_profile_missingkey(byte_profile, missing_key):
+def test_from_profile_missingkey(byte_profile: Dict, missing_key: str):
     """ Test an error is raised when creating raster array from a rasterio profile dict that is missing a key. """
     profile = byte_profile
     profile.pop(missing_key)
@@ -109,7 +111,7 @@ def test_from_profile_missingkey(byte_profile, missing_key):
         RasterArray.from_profile(None, profile)
 
 
-def test_from_rio_dataset(byte_file):
+def test_from_rio_dataset(byte_file: Path):
     """ Test an error is raised when creating raster array from a rasterio profile dict that is missing a key. """
     with rio.open(byte_file, 'r') as ds:
         # check default
@@ -138,9 +140,9 @@ def test_from_rio_dataset(byte_file):
 
 
 @pytest.mark.parametrize('file, count', [('masked_file', 1), ('rgba_file', 3)])
-def test_from_rio_dataset_masked(file, count, request):
+def test_from_rio_dataset_masked(file: str, count: int, request: pytest.FixtureRequest):
     """ Test creating raster array from nodata and internally masked datasets. """
-    file = request.getfixturevalue(file)
+    file: Path = request.getfixturevalue(file)
     with rio.open(file, 'r') as ds:
         ds_mask = ds.dataset_mask().astype('bool', copy=False)
         ra = RasterArray.from_rio_dataset(ds)
@@ -150,7 +152,7 @@ def test_from_rio_dataset_masked(file, count, request):
 
 
 @pytest.mark.parametrize('pad', [[1, 1], [-1, -1]])
-def test_bounded_window_slices(byte_file, pad):
+def test_bounded_window_slices(byte_file: Path, pad: Tuple[int, int]):
     """ Test RasterArray.bounded_window_slices() with bounded and boundless windows. """
     with rio.open(byte_file, 'r') as ds:
         window = Window(-pad[1], -pad[0], ds.width + 2 * pad[1], ds.height + 2 * pad[0])
@@ -177,7 +179,7 @@ def test_slice_to_bounds(byte_ra: RasterArray):
         byte_ra.slice_to_bounds(*byte_ra.window_bounds(Window(-1, -1, byte_ra.width, byte_ra.height)))
 
 
-def test_to_rio_dataset(byte_ra: RasterArray, tmp_path):
+def test_to_rio_dataset(byte_ra: RasterArray, tmp_path: Path):
     """ Test writing raster array to dataset. """
     ds_filename = tmp_path.joinpath('temp.tif')
     with rio.open(ds_filename, 'w', driver='GTiff', **byte_ra.profile) as ds:
@@ -187,7 +189,7 @@ def test_to_rio_dataset(byte_ra: RasterArray, tmp_path):
     assert (test_array == byte_ra.array).all()
 
 
-def test_to_rio_dataset_crop(rgb_byte_ra: RasterArray, tmp_path):
+def test_to_rio_dataset_crop(rgb_byte_ra: RasterArray, tmp_path: Path):
     """ Test writing a raster array to a dataset where the dataset & raster array sizes differ. """
     ds_filename = tmp_path.joinpath('temp.tif')
     indexes = [1, 2, 3]
@@ -208,7 +210,7 @@ def test_to_rio_dataset_crop(rgb_byte_ra: RasterArray, tmp_path):
     assert (test_array == rgb_byte_ra.array[(np.array(indexes) - 1, *crop_window.toslices())]).all()
 
 
-def test_to_rio_dataset_exceptions(rgb_byte_ra: RasterArray, tmp_path):
+def test_to_rio_dataset_exceptions(rgb_byte_ra: RasterArray, tmp_path: Path):
     """ Test possible error conditions when writing a raster array to a dataset. """
     ds_filename = tmp_path.joinpath('temp.tif')
     with rio.open(ds_filename, 'w', driver='GTiff', **rgb_byte_ra.profile) as ds:
