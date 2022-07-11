@@ -1,5 +1,5 @@
 """
-    Homonim: Correction of aerial and satellite imagery to surface relfectance
+    Homonim: Correction of aerial and satellite imagery to surface reflectance.
     Copyright (C) 2021 Dugal Harris
     Email: dugalh@gmail.com
 
