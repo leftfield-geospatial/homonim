@@ -49,7 +49,7 @@ setup(
     author_email='dugalh@gmail.com',
     url='https://github.com/dugalh/homonim',
     license='AGPLv3',
-    packages=find_packages(exclude=['tests', 'data'], include=['homonim']),
+    packages=find_packages(include=['homonim']),
     install_requires=[
         'numpy>=1.19',
         'rasterio>=1.1',
