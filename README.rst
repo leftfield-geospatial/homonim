@@ -79,7 +79,8 @@ Statistically compare the raw and corrected aerial images with the included Land
 
 .. code:: shell
 
-   homonim compare ./homonim/tests/data/source/*_RGB.tif ./*HOMO*.tif ./homonim/tests/data/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif
+   homonim compare ./homonim/tests/data/source/*_RGB.tif ./*FUSE*.tif
+./homonim/tests/data/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif
 
 Example
 -------
