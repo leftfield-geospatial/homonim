@@ -19,7 +19,6 @@
 
 import json
 import logging
-import math
 import pathlib
 import re
 import sys
@@ -28,25 +27,21 @@ from typing import Tuple, Dict
 
 import click
 import cloup
+import numpy as np
 import rasterio as rio
 import yaml
 from click.core import ParameterSource
 from rasterio.warp import SUPPORTED_RESAMPLING
-from tabulate import tabulate
 from homonim import utils, version
-from homonim.compare import RasterCompare
-from homonim.enums import ProcCrs, Model
 from homonim.errors import ImageFormatError
-from homonim.fuse import RasterFuse
-from homonim.kernel_model import KernelModel
+from homonim import RasterFuse, RasterCompare, ParamStats, ProcCrs, Model
 from homonim.raster_array import RasterArray
-from homonim.stats import ParamStats
 
 logger = logging.getLogger(__name__)
 
 
 class PlainInfoFormatter(logging.Formatter):
-    """ logging formatter to format INFO logs without the module name etc prefix. """
+    """ logging formatter to format INFO logs without the module name etc. prefix. """
 
     def format(self, record: logging.LogRecord):
         if record.levelno == logging.INFO:
@@ -57,21 +52,24 @@ class PlainInfoFormatter(logging.Formatter):
 
 
 class HomonimCommand(cloup.Command):
-    """ cloup.Command sub-class for formatting help with RST markup. """
+    """ cloup.Command subclass for formatting help with RST markup. """
 
     def get_help(self, ctx: click.Context):
         """ Strip some RST markup from the help text for CLI display.  Will not work with grid tables. """
+
+        # Note that this can't easily be done in __init__, as each sub-command's __init__ gets called,
+        # which ends up re-assigning self.wrap_text to reformat_text
         if not hasattr(self, 'wrap_text'):
             self.wrap_text = cloup.formatting._formatter.wrap_text
         sub_strings = {
             '\b\n': '\n\b',  # convert from RST friendly to click literal (unwrapped) block marker
-            '\| ': '',  # strip RST literal (unwrapped) marker in e.g. tables and bullet lists
-            '\n\.\. _.*:\n': '',  # strip RST ref directive '\n.. <name>:\n'
-            '`(.*?) <(.*?)>`_': '\g<1>',  # convert from RST cross-ref '`<name> <<link>>`_' to 'name'
+            r'\| ': '',  # strip RST literal (unwrapped) marker in e.g. tables and bullet lists
+            r'\n\.\. _.*:\n': '',  # strip RST ref directive '\n.. <name>:\n'
+            '`(.*?) <(.*?)>`_': r'\g<1>',  # convert from RST cross-ref '`<name> <<link>>`_' to 'name'
             '::': ':',  # convert from RST '::' to ':'
-            '``(.*?)``': '\g<1>',  # convert from RST '``literal``' to 'literal'
-            ':option:`(.*?)( <.*?>)?`': '\g<1>',  # convert ':option:`--name <group-command --name>`' to '--name'
-            ':option:`(.*?)`': '\g<1>',  # convert ':option:`--name`' to '--name'
+            '``(.*?)``': r'\g<1>',  # convert from RST '``literal``' to 'literal'
+            ':option:`(.*?)( <.*?>)?`': r'\g<1>',  # convert ':option:`--name <group-command --name>`' to '--name'
+            ':option:`(.*?)`': r'\g<1>',  # convert ':option:`--name`' to '--name'
         }  # yapf: disable
 
         def reformat_text(text: str, width: int, **kwargs):
@@ -84,7 +82,7 @@ class HomonimCommand(cloup.Command):
 
 
 class FuseCommand(HomonimCommand):
-    """ click.Command sub-class for setting fuse command parameters from a yaml config file. """
+    """ click.Command subclass for setting fuse command parameters from a yaml config file. """
 
     def invoke(self, ctx: click.Context):
         """ Merge config file with command line and default parameter values.  """
@@ -166,8 +164,7 @@ def _nodata_cb(ctx: click.Context, param: click.Option, value):
 
 def _compare_cb(ctx: click.Context, param: click.Option, value):
     """ click callback to check --compare path exists if specified.  """
-    if value and str(value) != 'ref':
-        if not pathlib.Path(value).exists():
+    if value and str(value) != 'ref' and not pathlib.Path(value).exists():
             raise click.BadParameter(f'Comparison image does not exist: {value}')
     return value
 
@@ -239,7 +236,8 @@ output_option = click.option(
 """ cloup context settings to print help in 'linear' layout with heading/option emphasis. """
 context_settings = cloup.Context.settings(
     formatter_settings=cloup.HelpFormatter.settings(
-        col2_min_width=math.inf, theme=cloup.HelpTheme(
+        col2_min_width=np.inf,
+        theme=cloup.HelpTheme(
             invoked_command=cloup.Style(fg='bright_white', bold=True),
             heading=cloup.Style(fg='bright_white', bold=True),
             col1=cloup.Style(fg='bright_white'),
@@ -270,7 +268,7 @@ def cli(verbose: int, quiet: int):
 @cloup.option_group(
     "Standard options",
     # note: either use click.option(...), or cloup.option(..., help=inspect.cleandoc(...)) for RST help strings,
-    # if cloup's mutually exclusive etc functionality is needed, it should be the latter.
+    # if cloup's mutually exclusive etc. functionality is needed, it should be the latter.
     click.option(
         '-m', '--model', type=click.Choice([m.value for m in Model], case_sensitive=False),
         default=Model.gain_blk_offset.value, show_default=True,
@@ -347,11 +345,12 @@ def cli(verbose: int, quiet: int):
         """
     ),
     click.option(
-        '--driver', type=click.Choice(set(rio.drivers.raster_driver_extensions().values()), case_sensitive=False),
+        '--driver',
+        type=click.Choice(tuple(set(rio.drivers.raster_driver_extensions().values())), case_sensitive=False),
         default=RasterFuse.create_out_profile()['driver'], show_default=True, metavar='TEXT',
         help='Output image format driver.  See the `GDAL docs <https://gdal.org/drivers/raster/index.html>`_ for '
         'details.'
-    ),
+    ),  # yapf: disable
     click.option(
         '--dtype', type=click.Choice(list(rio.dtypes.dtype_fwd.values())[1:8], case_sensitive=False),
         default=RasterFuse.create_out_profile()['dtype'], show_default=True,

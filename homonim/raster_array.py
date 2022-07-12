@@ -25,12 +25,12 @@ from typing import Tuple, Dict, List, Union, Optional
 import numpy
 import numpy as np
 import rasterio as rio
-import rasterio.windows
-from rasterio import Affine, transform, windows
+from rasterio import Affine, windows
 from rasterio.crs import CRS
 from rasterio.enums import MaskFlags
 from rasterio.warp import reproject, Resampling
-from rasterio.windows import Window
+from rasterio.windows import Window, WindowMethodsMixin
+from rasterio.transform import TransformMethodsMixin
 
 from homonim import utils
 from homonim.errors import ImageProfileError, ImageFormatError
@@ -38,7 +38,7 @@ from homonim.errors import ImageProfileError, ImageFormatError
 logger = logging.getLogger(__name__)
 
 
-class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
+class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
     """
     A class for encapsulating a masked, geo-referenced numpy array.
     Provides methods for re-projection, and reading/writing from/to rasterio datasets.
@@ -85,7 +85,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
             else:
                 self._transform = transform
         else:
-            raise TypeError("transform' must be an instance of rasterio.transform.Affine")
+            raise TypeError("`transform` must be an instance of rasterio.transform.Affine")
 
         self._nodata = nodata
         self._nodata_mask = None
@@ -144,7 +144,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         window: rasterio.windows.Window, optional
             Optional window into ``rio_dataset`` to be read from.
             This can be a `boundless` window i.e. a window that extends beyond the bounds of ``rio_dataset``,
-            in which case the :attr:`~RasterArray.array` will be filled with nodata outside of the ``rio_dataset``
+            in which case the :attr:`~RasterArray.array` will be filled with nodata outside the ``rio_dataset``
             bounds.
         kwargs: dict, optional
             Additional arguments to be passed to the dataset's read() method.
@@ -197,7 +197,9 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         return cls(array, rio_dataset.crs, rio_dataset.transform, nodata=nodata, window=window)
 
     @staticmethod
-    def bounded_window_slices(rio_dataset: rio.DatasetReader, window: Window) -> Tuple[Window, Tuple[slice, slice]]:
+    def bounded_window_slices(
+        rio_dataset: Union[rio.DatasetReader, rio.io.DatasetWriter], window: Window
+    ) -> Tuple[Window, Tuple[slice, slice]]:  # yapf?: disable
         """ Bounded array slices and dataset window from dataset and boundless window. """
 
         # find window UL and BR corners and crop to rio_dataset bounds
@@ -213,7 +215,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         bounded_slices = (
             slice(bounded_start[0], bounded_stop[0], None),
             slice(bounded_start[1], bounded_stop[1], None)
-        ) # yapf: disable
+        )  # yapf: disable
         return bounded_window, bounded_slices
 
     @property
@@ -229,7 +231,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
             raise ValueError("'value' and 'array' shapes must match")
 
     @property
-    def crs(self) -> rasterio.crs.CRS:
+    def crs(self) -> CRS:
         """ Coordinate reference system. """
         return self._crs
 
@@ -259,14 +261,14 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         return self._array.dtype.name
 
     @property
-    def transform(self) -> rasterio.transform.Affine:
+    def transform(self) -> Affine:
         """ Affine geo-transform describing the location and orientation of the array in the CRS. """
         return self._transform
 
     @property
     def res(self) -> Tuple[float, float]:
         """ Array (x, y) resolution (m). """
-        return (self._transform.a, -self._transform.e)
+        return self._transform.a, -self._transform.e
 
     @property
     def bounds(self) -> Tuple[float, ...]:
@@ -343,7 +345,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
 
     def slice_to_bounds(self, *bounds) -> 'RasterArray':
         """
-        Create a new RasterArray representing a rectangular sub-region of this RasterArray.
+        Create a new RasterArray representing a rectangular subregion of this RasterArray.
         Note that the created RasterArray is a view into the current array, not a copy.
 
         Parameters
@@ -373,7 +375,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
         return RasterArray(array, self._crs, self.window_transform(window), nodata=self._nodata)
 
     def to_rio_dataset(
-        self, rio_dataset: rio.DatasetReader, indexes: Optional[Union[int, List[int]]] = None,
+        self, rio_dataset: rio.io.DatasetWriter, indexes: Optional[Union[int, List[int]]] = None,
         window: Optional[Window] = None, **kwargs
     ):
         """
@@ -432,7 +434,7 @@ class RasterArray(transform.TransformMethodsMixin, windows.WindowMethodsMixin):
 
         # crop the window to dataset bounds
         window, _ = self.bounded_window_slices(rio_dataset, window)
-        # crop the RasterArray to match the bounds of the the dataset window
+        # crop the RasterArray to match the bounds of the dataset window
         bounded_ra = self.slice_to_bounds(*rio_dataset.window_bounds(window))
 
         if np.any(bounded_ra.shape != np.array((window.height, window.width))):

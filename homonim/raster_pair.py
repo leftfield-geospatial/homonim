@@ -21,7 +21,7 @@ import pathlib
 import threading
 from contextlib import ExitStack
 from itertools import product
-from typing import Tuple, NamedTuple, Union, List, Dict, Iterable
+from typing import Tuple, NamedTuple, Union, Iterable
 
 import numpy as np
 import rasterio
@@ -75,7 +75,7 @@ class RasterPairReader:
             :class:`~homonim.enums.ProcCrs` instance specifying which of the source/reference image spaces will be
             used for processing.  For most use cases, including typical surface reflectance correction,
             it can be left as the default of :attr:`~homonim.enums.ProcCrs.auto`. In this case it will be resolved to
-            refer to lowest resolution of the source and reference image CRS's.
+            refer to the lowest resolution of the source and reference image CRS's.
         """
         self._src_filename = pathlib.Path(src_filename)
         self._ref_filename = pathlib.Path(ref_filename)
@@ -233,10 +233,10 @@ class RasterPairReader:
             :class:`~homonim.enums.ProcCrs` instance resolved to either :attr:`~homonim.enums.ProcCrs.src` or
             :attr:`~homonim.enums.ProcCrs.ref`.
         """
-        with rio.open(src_filename, 'r') as src_im, rio.open(ref_filename, 'r') as ref_im:
+        with rio.open(src_filename, 'r') as src_im, rio.open(ref_filename, 'r') as _ref_im:
             with (
-                WarpedVRT(ref_im, crs=src_im.crs, resampling=Resampling.bilinear)
-                if src_im.crs.to_proj4() != ref_im.crs.to_proj4() else ref_im
+                WarpedVRT(_ref_im, crs=src_im.crs, resampling=Resampling.bilinear)
+                if src_im.crs.to_proj4() != _ref_im.crs.to_proj4() else _ref_im
             ) as ref_im:  # yapf: disable
                 return RasterPairReader._resolve_proc_crs(src_im, ref_im, proc_crs=proc_crs)
 
@@ -380,9 +380,9 @@ class RasterPairReader:
         overlap: tuple of int
             Block overlap (rows, columns) in pixels of the :attr:`proc_crs` image.
         max_block_mem: float
-            Maximum allowable block size in MB. The image is divided into 2\ :sup:`n` blocks with n the smallest number
+            Maximum allowable block size in MB. The image is divided into 2\\ :sup:`n` blocks with n the smallest number
             where ``max_block_mem`` is satisfied.  If ``max_block_mem`` is `float('inf')`, the block shape will be set
-            to the encompass full extent of the source image.
+            to encompass the full extent of the source image.
 
         Yields
         -------
@@ -399,7 +399,7 @@ class RasterPairReader:
 
         # initialise block formation variables
         # blocks are first formed in proc_crs, then transformed to the 'other' image crs, so here we assign the src/ref
-        # windows etc to proc_* equivalents
+        # windows etc. to proc_* equivalents
         if self.proc_crs == ProcCrs.ref:
             proc_win, proc_im, other_im = (self._ref_win, self._ref_im, self._src_im)
         else:

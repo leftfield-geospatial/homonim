@@ -17,7 +17,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
-from typing import Tuple, Dict, List, Union, Optional
+from typing import Tuple, Dict, Optional
 
 import cv2 as cv
 import numpy as np
@@ -30,6 +30,7 @@ from homonim.raster_array import RasterArray
 
 ONdArray = Optional[np.ndarray]
 OShape = Optional[Tuple[int, int]]
+
 
 class KernelModel:
     def __init__(self, model: Model, kernel_shape: Tuple[int, int], find_r2: bool = False, **kwargs):
@@ -44,7 +45,8 @@ class KernelModel:
         Based on the paper:
         Harris, Dugal & Van Niekerk, Adriaan. (2018). Radiometric homogenisation of aerial images by calibrating with
         satellite data. International Journal of Remote Sensing. 40. 1-25. 10.1080/01431161.2018.1528404.
-        https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data
+        https://www.researchgate.net/publication
+        /328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data
 
         Parameters
         ----------
@@ -53,7 +55,7 @@ class KernelModel:
         kernel_shape: tuple
             (height, width) of the kernel in pixels.
         find_r2: bool, optional
-            Whether to calculate *R*\ :sup:`2` (coefficient of determination) for each kernel model, and include in
+            Whether to calculate *R*\\ :sup:`2` (coefficient of determination) for each kernel model, and include in
             parameter arrays.
         kwargs:
             Optional configuration arguments.  See :meth:`KernelModel.create_config` for keys and defaults values.
@@ -64,8 +66,10 @@ class KernelModel:
 
         # update config defaults with any passed values, and set attributes
         config = self.create_config(**kwargs)
-        for conf_key, conf_val in config.items():
-            setattr(self, '_' + conf_key, conf_val)
+        self._r2_inpaint_thresh: float = config['r2_inpaint_thresh']
+        self._mask_partial: bool = config['mask_partial']
+        self._downsampling: Resampling = config['downsampling']
+        self._upsampling: Resampling = config['upsampling']
 
     @property
     def model(self) -> Model:
@@ -95,7 +99,7 @@ class KernelModel:
         Parameters
         ----------
         r2_inpaint_thresh: float, optional
-            *R*\ :sup:`2` (coefficient of determination) threshold below which to `in-paint` kernel model parameters
+            *R*\\ :sup:`2` (coefficient of determination) threshold below which to `in-paint` kernel model parameters
             from surrounding areas (applies to :attr:`model` == :attr:`~homonim.enums.Model.gain_offset` only).  For
             pixels where the model gives a poor approximation to the data (this can occur in areas where source and
             reference differ due to e.g. shadowing, land cover changes etc.), model offsets are interpolated from
@@ -175,7 +179,7 @@ class KernelModel:
                 (2 * param_array[0] * src_ref_sum) -
                 (2 * param_array[1] * ref_sum) +
                 ref2_sum + (mask_sum * (param_array[1] ** 2))
-            ) # yapf: disable
+            )  # yapf: disable
         else:
             # find RSS for model == Model.gain or Model.gain_blk_offset
 
@@ -229,7 +233,7 @@ class KernelModel:
         ref_array[~mask] = 0
         src_array[~mask] = 0
 
-        # setup a RasterArray profile for the parameters
+        # set up a RasterArray profile for the parameters
         param_profile = src_ra.profile.copy()
         param_profile.update(
             count=3 if self._find_r2 else 2, nodata=RasterArray.default_nodata, dtype=RasterArray.default_dtype
@@ -303,7 +307,7 @@ class KernelModel:
         ref_array[~mask] = 0
         src_array[~mask] = 0
 
-        # setup a RasterArray profile for the parameters
+        # set up a RasterArray profile for the parameters
         param_profile = src_ra.profile.copy()
         find_r2 = self._find_r2 or (self._r2_inpaint_thresh is not None)
         param_profile.update(
@@ -404,10 +408,10 @@ class KernelModel:
         -------
         RasterArray
             RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second, and optionally
-            *R*\ :sup:`2` for each kernel model in the third band when :attr:`find_r2` is True.
+            *R*\\ :sup:`2` for each kernel model in the third band when :attr:`find_r2` is True.
         """
         # TODO : include a CRS comparison below i.e. one that is faster that rasterio's current implementation
-        if ((ref_ra.transform != src_ra.transform) or (ref_ra.shape != src_ra.shape)):
+        if (ref_ra.transform != src_ra.transform) or (ref_ra.shape != src_ra.shape):
             raise ValueError("'ref_ra' and 'src_ra' must have the same CRS, transform and shape")
 
         if self._model == Model.gain:
@@ -436,7 +440,7 @@ class KernelModel:
         corr_ra :RasterArray
             Corrected block in a RasterArray.
         """
-        if ((param_ra.transform != src_ra.transform) or (param_ra.shape != src_ra.shape)):
+        if (param_ra.transform != src_ra.transform) or (param_ra.shape != src_ra.shape):
             raise ValueError("'param_ra' and 'src_ra' must have the same CRS, transform and shape")
         corr_array = (param_ra.array[0] * src_ra.array) + param_ra.array[1]
         corr_ra = RasterArray.from_profile(corr_array, param_ra.profile)

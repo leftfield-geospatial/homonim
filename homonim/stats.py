@@ -57,11 +57,11 @@ class ParamStats:
         utils.validate_param_image(self._param_filename)
 
         # read some parameters from the metadata
+        self._param_im: rio.DatasetReader
         with rio.open(self._param_filename, 'r') as self._param_im:
             self._tags = self._param_im.tags()
             self._model = self._tags['FUSE_MODEL'].replace('_', '-')
             self._r2_inpaint_thresh = yaml.safe_load(self._tags['FUSE_R2_INPAINT_THRESH'])
-        self._param_im: rio.DatasetReader = self._param_im
 
     schema = dict(
         band=dict(abbrev='Band'),
@@ -142,19 +142,19 @@ class ParamStats:
             """ Return a window of valid data corresponding to a given block.  """
             with read_lock:
                 mask = self._param_im.read_masks(indexes=1, window=block_win)
-            block_data_win = get_data_window(mask, nodata=0)
+            _block_data_win = get_data_window(mask, nodata=0)
 
-            if block_data_win.width == 0 or block_data_win.height == 0:
+            if _block_data_win.width == 0 or _block_data_win.height == 0:
                 # return None if there is no valid data in the block
                 return None
-            # offset block_data_win to the UL corner of block_win and return
+            # offset _block_data_win to the UL corner of block_win and return
             return Window(
-                block_win.col_off + block_data_win.col_off, block_win.row_off + block_data_win.row_off,
-                block_data_win.width, block_data_win.height
+                block_win.col_off + _block_data_win.col_off, block_win.row_off + _block_data_win.row_off,
+                _block_data_win.width, _block_data_win.height
             )
 
         # combine valid block windows into a valid image window
-        data_win: Optional[Window] = None
+        im_data_win: Optional[Window] = None
         bar_format = 'Finding window: {l_bar}{bar}|{n_fmt}/{total_fmt} blocks [{elapsed}<{remaining}]'
         with futures.ThreadPoolExecutor(max_workers=threads) as executor:
             # create threads to get valid block windows
@@ -170,8 +170,8 @@ class ParamStats:
             ):
                 block_data_win: Window = future.result()
                 if block_data_win:
-                    data_win = union(data_win, block_data_win) if data_win else block_data_win
-        return data_win
+                    im_data_win = union(im_data_win, block_data_win) if im_data_win else block_data_win
+        return im_data_win
 
     def _get_image_stats(self, image_accum: List[Dict]) -> List[Dict]:
         """ Utility method to calculate image statistics from accumulated results. """
@@ -219,16 +219,16 @@ class ParamStats:
                 array: np.ma.masked_array = self._param_im.read(
                     indexes=band_i + 1, window=block_win, masked=True, out_dtype='float64',
                 )
-            block_dict = dict(
+            _block_dict = dict(
                 min=array.min(), max=array.max(), sum=array.sum(), sum2=(array ** 2).sum(), n=array.count()
             )
             if (self._model == Model.gain_offset) and (band_i >= self._param_im.count * 2 / 3):
                 # find the sum of inpainted pixels, if this is a R2 band and a gain-offset model
-                block_dict.update(inpaint_sum=(array < self._r2_inpaint_thresh).sum())
-            return block_dict, band_i
+                _block_dict.update(inpaint_sum=(array < self._r2_inpaint_thresh).sum())
+            return _block_dict, band_i
 
         # find block sums, min, max etc. in threads, and accumulate over the image
-        image_accum = [{} for i in range(self._param_im.count)]
+        image_accum = [{} for _ in range(self._param_im.count)]
         bar_format = 'Finding stats: {l_bar}{bar}|{n_fmt}/{total_fmt} blocks [{elapsed}<{remaining}]'
         with futures.ThreadPoolExecutor(max_workers=threads) as executor:
             # create threads to get block sums etc.

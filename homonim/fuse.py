@@ -60,7 +60,7 @@ class RasterFuse(RasterPairReader):
         proc_crs: homonim.enums.ProcCrs, optional
             :class:`~homonim.enums.ProcCrs` instance specifying which of the source/reference image spaces should be
             used for estimating correction parameters.  In most cases, it can be left as the default of
-            :attr:`~homonim.enums.ProcCrs.auto`,  where it will be resolved to lowest resolution of the source and
+            :attr:`~homonim.enums.ProcCrs.auto`,  where it will be resolved to the lowest resolution of the source and
             reference image CRS's.
         """
         RasterPairReader.__init__(self, src_filename, ref_filename, proc_crs=proc_crs)
@@ -252,7 +252,7 @@ class RasterFuse(RasterPairReader):
         out_im = rio.open(corr_filename, 'w', **self._merge_corr_profile(out_profile))
         param_im = rio.open(param_filename, 'w', **self._merge_param_profile(out_profile)) if param_filename else None
         try:
-            yield (out_im, param_im)
+            yield out_im, param_im
         finally:
             # exit
             self._set_corr_metadata(out_im, **kwargs)
@@ -278,7 +278,7 @@ class RasterFuse(RasterPairReader):
         # fit and apply the sliding kernel models
         param_ra = model.fit(src_ra, ref_ra)
         corr_ra = model.apply(src_ra, param_ra)
-        # change the corrected nodata value so that is is masked correctly for corr_im
+        # change the corrected nodata value so that is masked correctly for corr_im
         corr_ra.nodata = corr_im.nodata
 
         with self._corr_lock:  # write the corrected block
@@ -304,7 +304,7 @@ class RasterFuse(RasterPairReader):
         out_profile: Optional[Dict] = None,
         block_config: Optional[Dict] = None,
     ):  # yapf: disable
-        """
+        r"""
         Correct the source image to surface reflectance by fusion with the reference.
 
         Parameters
@@ -330,8 +330,8 @@ class RasterFuse(RasterPairReader):
             Configuration dictionary for the output image(s).   See :meth:`~RasterFuse.create_out_profile` for
             possible keys and default values.
         block_config: dict, optional
-            Configuration dictionary for block processing.  See :meth:`~RasterFuse.create_block_config` for possible keys and
-            default values.
+            Configuration dictionary for block processing.  See :meth:`~RasterFuse.create_block_config` for possible
+            keys and default values.
         """
         self._assert_open()
 
@@ -376,4 +376,3 @@ class RasterFuse(RasterPairReader):
                         dynamic_ncols=True,
                     ):  # yapf: disable
                         future.result()
-

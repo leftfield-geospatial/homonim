@@ -20,7 +20,7 @@
 import logging
 import pathlib
 from multiprocessing import cpu_count
-from typing import Tuple, Dict, Union, List
+from typing import Tuple, Dict, Union
 
 import numpy as np
 import rasterio as rio
@@ -48,14 +48,15 @@ table_format = TableFormat(
 )  # yapf: disable
 """ Tabulate format for comparison and parameter stats. """
 
+
 def nan_equals(a: Union[np.ndarray, float], b: Union[np.ndarray, float]) -> np.ndarray:
     """ Compare two numpy objects a & b, returning true where elements of both a & b are nan. """
     return (a == b) | (np.isnan(a) & np.isnan(b))
 
 
-def expand_window_to_grid(win: Window, expand_pixels: Tuple[int, int]=(0, 0)) -> Window:
+def expand_window_to_grid(win: Window, expand_pixels: Tuple[int, int] = (0, 0)) -> Window:
     """
-    Expand rasterio window extents to nearest whole numbers i.e. for ``expand_pixels`` >= (0, 0), it will return a
+    Expand rasterio window extents to the nearest whole numbers i.e. for ``expand_pixels`` >= (0, 0), it will return a
     window that contains the original extents.
 
     Parameters
@@ -117,7 +118,7 @@ def validate_kernel_shape(kernel_shape: Tuple[int, int], model: Model = Model.ga
     kernel_shape = np.array(kernel_shape).astype(int)
     if not np.all(np.mod(kernel_shape, 2) == 1):
         raise ValueError('`kernel_shape` must be odd in both dimensions.')
-    if model == Model.gain_offset and not np.product(kernel_shape) >= 25:
+    if model == Model.gain_offset and np.product(kernel_shape) < 25:
         raise ValueError('`kernel_shape` area should contain at least 25 elements for the gain-offset model.')
     if not np.all(kernel_shape >= 1):
         raise ValueError('`kernel_shape` must be a minimum of one in both dimensions.')
@@ -168,7 +169,7 @@ def create_param_filename(filename: Union[str, pathlib.Path]) -> pathlib.Path:
     return filename.parent.joinpath(f'{filename.stem}_PARAM{filename.suffix}')
 
 
-def covers_bounds(im1: rio.DatasetReader, im2: rio.DatasetReader, expand_pixels: Tuple[int, int]=(0, 0)) -> bool:
+def covers_bounds(im1: rio.DatasetReader, im2: rio.DatasetReader, expand_pixels: Tuple[int, int] = (0, 0)) -> bool:
     """
     Determines if the spatial extents of one image cover another image
 
@@ -196,7 +197,7 @@ def covers_bounds(im1: rio.DatasetReader, im2: rio.DatasetReader, expand_pixels:
     return False if np.any(win_ul < 0) or np.any(win_shape > im1.shape) else True
 
 
-def get_nonalpha_bands(im: rio.DatasetReader) -> List[int]:
+def get_nonalpha_bands(im: Union[rio.DatasetReader, rio.io.DatasetWriter]) -> Tuple[int, ...]:
     """
     Return a list of non-alpha band indices from a rasterio dataset.
 
@@ -233,7 +234,7 @@ def combine_profiles(in_profile: Dict, config_profile: Dict) -> Dict:
     """
 
     if in_profile['driver'].lower() != config_profile['driver'].lower():
-        # copy only non driver specific keys from input profile when the driver is different to the configured val
+        # copy only non-driver specific keys from input profile when the driver is different to the configured val
         copy_keys = ['driver', 'width', 'height', 'count', 'dtype', 'crs', 'transform']
         out_profile = {copy_key: in_profile[copy_key] for copy_key in copy_keys}
     else:

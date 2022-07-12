@@ -54,7 +54,7 @@ class RasterCompare(RasterPairReader):
         proc_crs: homonim.enums.ProcCrs, optional
             :class:`~homonim.enums.ProcCrs` instance specifying which of the source/reference image spaces will be
             used for comparison.  In most cases, it can be left as the default of
-            :attr:`~homonim.enums.ProcCrs.auto`,  where it will be resolved to lowest resolution of the source and
+            :attr:`~homonim.enums.ProcCrs.auto`,  where it will be resolved to the lowest resolution of the source and
             reference image CRS's.
         """
         RasterPairReader.__init__(self, src_filename, ref_filename, proc_crs=proc_crs)
@@ -122,7 +122,7 @@ class RasterCompare(RasterPairReader):
             src_sum: float = 0, ref_sum: float = 0, src2_sum: float = 0, ref2_sum: float = 0, src_ref_sum: float = 0,
             res2_sum: float = 0, mask_sum: float = 0
         ) -> Dict:
-            """ Return the comparison statistics for a band, given the source, reference etc sums. """
+            """ Return the comparison statistics for a band, given the source, reference etc. sums. """
             # find PCC using the 3rd equation down at
             # https://en.wikipedia.org/wiki/Pearson_correlation_coefficient#For_a_sample
             src_mean = src_sum / mask_sum
@@ -216,12 +216,12 @@ class RasterCompare(RasterPairReader):
             src_array[~mask] = 0
             ref_array[~mask] = 0
             # find the required sums and return
-            block_sums_dict = dict(
+            sums_dict = dict(
                 src_sum=src_array.sum(), ref_sum=ref_array.sum(), src2_sum=(src_array ** 2).sum(),
                 ref2_sum=(ref_array ** 2).sum(), src_ref_sum=(src_array * ref_array).sum(),
                 res2_sum=((ref_array - src_array) ** 2).sum(), mask_sum=mask.sum()
             )
-            return block_sums_dict, block_pair
+            return sums_dict, block_pair
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=config['threads']) as executor:
             # read and sum image blocks in threads
@@ -231,7 +231,7 @@ class RasterCompare(RasterPairReader):
             ]  # yapf: disable
 
             # wait for threads
-            image_sums = [{} for bi in self.src_bands]
+            image_sums = [{} for _ in self.src_bands]
             bar_format = '{l_bar}{bar}|{n_fmt}/{total_fmt} blocks [{elapsed}<{remaining}]'
             for future in tqdm(
                 concurrent.futures.as_completed(futures), bar_format=bar_format, total=len(futures), dynamic_ncols=True,
