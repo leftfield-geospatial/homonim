@@ -139,7 +139,7 @@ Author
    :target: https://codecov.io/gh/dugalh/homonim
 .. |License: AGPL v3| image:: https://img.shields.io/badge/License-AGPL_v3-blue.svg
    :target: https://www.gnu.org/licenses/agpl-3.0
-.. |PyPI version| image:: https://img.shields.io/pypi/v/homonim
+.. |PyPI version| image:: https://img.shields.io/pypi/v/homonim.svg
    :target: https://pypi.org/project/homonim/
 .. |conda-forge version| image:: https://img.shields.io/conda/vn/conda-forge/homonim.svg
    :alt: conda-forge
