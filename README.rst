@@ -1,4 +1,4 @@
-|Tests| |codecov| |License: AGPL v3|
+|Tests| |codecov| |PyPI version| |conda-forge version| |docs| |License: AGPL v3|
 
 homonim
 =======
@@ -139,3 +139,10 @@ Author
    :target: https://codecov.io/gh/dugalh/homonim
 .. |License: AGPL v3| image:: https://img.shields.io/badge/License-AGPL_v3-blue.svg
    :target: https://www.gnu.org/licenses/agpl-3.0
+.. |PyPI version| image:: https://badge.fury.io/py/homonim.svg
+   :target: https://badge.fury.io/py/homonim
+.. |conda-forge version| image:: https://img.shields.io/conda/vn/conda-forge/homonim.svg
+   :alt: conda-forge
+   :target: https://anaconda.org/conda-forge/homonim
+.. |docs| image:: https://readthedocs.org/projects/homonim/badge/?version=latest
+   :target: https://homonim.readthedocs.io/en/latest/?badge=latest
