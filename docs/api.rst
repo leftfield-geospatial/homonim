@@ -102,12 +102,3 @@ ProcCrs
 
 .. autoclass:: ProcCrs
     :members:
-
-Testing
--------
-
-.. currentmodule:: homonim.raster_pair
-
-.. autoclass:: RasterPairReader
-    :members:
-

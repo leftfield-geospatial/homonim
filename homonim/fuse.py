@@ -47,8 +47,7 @@ class RasterFuse(RasterPairReader):
         """
         Class for correcting an image to surface reflectance, by fusion with a reference.
 
-        To improve speed and reduce memory usage, images are divided into blocks for concurrent processing and
-        correction.
+        To improve speed and reduce memory usage, images are divided into blocks for concurrent processing.
 
         Parameters
         ----------
@@ -199,7 +198,8 @@ class RasterFuse(RasterPairReader):
         for bi in range(0, min(im.count, len(self.ref_bands))):
             ref_bi = self.ref_bands[bi]
             ref_meta_dict = self.ref_im.tags(ref_bi)
-            # TODO: update to copy the latest geedim metadata (also update the test data)
+            # TODO: update to copy the latest geedim metadata (also update the test data) (makes sense to do this
+            #  with the band matching update)
             corr_meta_dict = {k: v for k, v in ref_meta_dict.items() if k in ['ABBREV', 'ID', 'NAME']}
             im.set_band_description(bi + 1, self.ref_im.descriptions[ref_bi - 1])
             im.update_tags(bi + 1, **corr_meta_dict)

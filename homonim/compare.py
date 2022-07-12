@@ -41,8 +41,7 @@ class RasterCompare(RasterPairReader):
         """
         Class to statistically compare source and reference images.
 
-        To improve speed and reduce memory usage, images are divided into blocks for concurrent processing and
-        comparison.
+        To improve speed and reduce memory usage, images are divided into blocks for concurrent processing.
 
         Parameters
         ----------
@@ -126,7 +125,6 @@ class RasterCompare(RasterPairReader):
             """ Return the comparison statistics for a band, given the source, reference etc sums. """
             # find PCC using the 3rd equation down at
             # https://en.wikipedia.org/wiki/Pearson_correlation_coefficient#For_a_sample
-            # TODO: incorporate stats defs in schema as they were
             src_mean = src_sum / mask_sum
             ref_mean = ref_sum / mask_sum
             pcc_num = src_ref_sum - (mask_sum * src_mean * ref_mean)

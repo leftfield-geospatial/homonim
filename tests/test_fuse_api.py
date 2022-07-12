@@ -41,7 +41,6 @@ def test_creation(src_file: str, ref_file: str, tmp_path: Path, request: Fixture
     """ Test creation and configuration of RasterFuse. """
     src_file: Path = request.getfixturevalue(src_file)
     ref_file: Path = request.getfixturevalue(ref_file)
-    # TODO: tidy comments, and add replacement test for process
     raster_fuse = RasterFuse(src_file, ref_file)
     with raster_fuse:
         assert (raster_fuse.proc_crs != ProcCrs.auto)
