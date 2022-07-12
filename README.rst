@@ -88,7 +88,7 @@ Mosaics of 0.5 m resolution aerial imagery before and after correction. A Landsa
 used as reference, and is shown in the background. Correction was performed using the ``gain-blk-offset`` model and
 a 5 x 5 pixel kernel.
 
-.. image:: https://github.com/dugalh/homonim/blob/main/data/readme_eg.jpg
+.. image:: https://raw.githubusercontent.com/dugalh/homonim/main/data/readme_eg.jpg
    :alt: example
 
 

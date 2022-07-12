@@ -42,7 +42,7 @@ from version import __version__
 setup(
     name='homonim',
     version=__version__,
-    description='Correct aerial and satellite imagery to approximate surface reflectance.',
+    description='Correct aerial and satellite imagery to surface reflectance.',
     long_description=long_description,
     long_description_content_type='text/x-rst',
     author='Dugal Harris',
@@ -71,4 +71,8 @@ setup(
         'anisotropy', 'brdf', 'atmospheric correction',
     ],
     entry_points={'console_scripts': ['homonim=homonim.cli:cli']},
-)
+    project_urls={
+        'Documentation': 'https://homonim.readthedocs.io',
+        'Source': 'https://github.com/dugalh/homonim',
+    },
+)  # yapf: disable
