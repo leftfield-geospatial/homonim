@@ -17,26 +17,27 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 import os
+from pathlib import Path
+from typing import Tuple, Dict
 
 import pytest
 import rasterio as rio
 import yaml
-from pathlib import Path
 from pytest import FixtureRequest
-from typing import Tuple, Dict
+from rasterio.features import shapes
 
 from homonim import utils
 from homonim.enums import ProcCrs, Model
 from homonim.errors import IoError
 from homonim.fuse import RasterFuse
-from rasterio.features import shapes
 
 
-@pytest.mark.parametrize('src_file, ref_file', [
+@pytest.mark.parametrize(
+    'src_file, ref_file', [
         ('float_50cm_src_file', 'float_100cm_ref_file'),
         ('float_100cm_src_file', 'float_50cm_ref_file'),
     ]
-) # yapf: disable
+)  # yapf: disable
 def test_creation(src_file: str, ref_file: str, tmp_path: Path, request: FixtureRequest):
     """ Test creation and configuration of RasterFuse. """
     src_file: Path = request.getfixturevalue(src_file)
@@ -55,7 +56,7 @@ def test_overwrite(tmp_path: Path, float_50cm_src_file: Path, float_100cm_ref_fi
     param_filename = utils.create_param_filename(corr_filename)
     params = dict(
         corr_filename=corr_filename, param_filename=param_filename, model=Model.gain_blk_offset, kernel_shape=(5, 5),
-        overwrite=overwrite, 
+        overwrite=overwrite,
     )
 
     raster_fuse = RasterFuse(src_filename=float_50cm_src_file, ref_filename=float_100cm_ref_file)
@@ -86,7 +87,7 @@ def test_overwrite(tmp_path: Path, float_50cm_src_file: Path, float_100cm_ref_fi
         ('float_100cm_src_file', 'float_45cm_ref_file', Model.gain_blk_offset, (1, 1), 1.e-3),
         ('float_100cm_src_file', 'float_45cm_ref_file', Model.gain_offset, (5, 5), 1.e-3),
     ]
-) # yapf: disable
+)  # yapf: disable
 def test_basic_fusion(
     src_file: str, ref_file: str, model: Model, kernel_shape: Tuple[int, int], max_block_mem: float,
     tmp_path: Path, request: FixtureRequest,
@@ -107,6 +108,7 @@ def test_basic_fusion(
         out_mask = out_ds.dataset_mask().astype('bool', copy=False)
         assert (out_mask == src_mask).all()
         assert (out_array[out_mask] == pytest.approx(src_array[src_mask], abs=2))
+
 
 @pytest.mark.parametrize(
     'out_profile', [
@@ -141,7 +143,7 @@ def test_out_profile(float_100cm_rgb_file: Path, tmp_path: Path, out_profile: Di
                 (v is None and k not in fuse_ds.profile) or
                 (fuse_ds.profile[k] == v) or
                 (str(fuse_ds.profile[k]) == str(v))
-            ) # yapf: disable
+            )  # yapf: disable
 
         # test output image has been set with src image properties not in out_profile
         if src_ds.profile['driver'].lower() == out_profile['driver'].lower():
@@ -156,7 +158,7 @@ def test_out_profile(float_100cm_rgb_file: Path, tmp_path: Path, out_profile: Di
                 (v is None and k not in fuse_ds.profile) or
                 (fuse_ds.profile[k] == v) or
                 (str(fuse_ds.profile[k]) == str(v))
-            ) # yapf: disable
+            )  # yapf: disable
 
 
 @pytest.mark.parametrize(
@@ -168,7 +170,7 @@ def test_out_profile(float_100cm_rgb_file: Path, tmp_path: Path, out_profile: Di
         (Model.gain_blk_offset, ProcCrs.src),
         (Model.gain_offset, ProcCrs.src),
     ]
-) # yapf: disable
+)  # yapf: disable
 def test_param_image(float_100cm_rgb_file: Path, tmp_path: Path, model: Model, proc_crs: ProcCrs):
     """ Test creation and masking of parameter image for different model and proc_crs combinations. """
     corr_filename = tmp_path.joinpath('corrected.tif')
@@ -195,7 +197,7 @@ def test_param_image(float_100cm_rgb_file: Path, tmp_path: Path, model: Model, p
         ('float_100cm_src_file', 'float_45cm_ref_file', (1, 1), ProcCrs.auto, True),
         ('float_100cm_src_file', 'float_45cm_ref_file', (3, 3), ProcCrs.auto, True),
     ]
-) # yapf: disable
+)  # yapf: disable
 def test_mask_partial(
     src_file: str, ref_file: str, tmp_path: Path, kernel_shape: Tuple[int, int], proc_crs: ProcCrs, mask_partial: bool,
     request: FixtureRequest,
@@ -235,8 +237,10 @@ def test_build_overviews(tmp_path: Path, float_50cm_ref_file: Path):
     # replace raster_fuse.build_overviews() with a test_build_overviews() that forces min_level_pixels==1, otherwise
     # overviews won't be built for the small test raster
     orig_build_overviews = raster_fuse._build_overviews
+
     def test_build_overviews(im):
         orig_build_overviews(im, min_level_pixels=1)
+
     raster_fuse._build_overviews = test_build_overviews
 
     with raster_fuse:
@@ -290,7 +294,7 @@ def test_single_thread(tmp_path: Path, float_50cm_ref_file: Path):
         ('float_100cm_src_file', 'float_50cm_ref_file', ProcCrs.auto, ProcCrs.src),
         ('float_100cm_src_file', 'float_50cm_ref_file', ProcCrs.ref, ProcCrs.ref),
     ]
-) # yapf: disable
+)  # yapf: disable
 def test_proc_crs(
     tmp_path: Path, src_file: str, ref_file: str, proc_crs: ProcCrs, exp_proc_crs: ProcCrs, request: FixtureRequest,
 ):
@@ -315,7 +319,9 @@ def test_tags(tmp_path: Path, float_50cm_ref_file: Path):
     corr_filename = tmp_path.joinpath('corrected.tif')
     param_filename = utils.create_param_filename(corr_filename)
     with raster_fuse:
-        raster_fuse.process(corr_filename, model, kernel_shape, param_filename=param_filename, block_config=block_config)
+        raster_fuse.process(
+            corr_filename, model, kernel_shape, param_filename=param_filename, block_config=block_config
+        )
 
     assert (corr_filename.exists())
     assert (param_filename.exists())
@@ -335,7 +341,7 @@ def test_tags(tmp_path: Path, float_50cm_ref_file: Path):
         assert (tags['FUSE_MODEL'] == str(model.name))
         assert (tags['FUSE_PROC_CRS'] == str(proc_crs.name))
         assert (tags['FUSE_KERNEL_SHAPE'] == str(kernel_shape))
-        for key,val in RasterFuse.create_model_config().items():
+        for key, val in RasterFuse.create_model_config().items():
             assert (tags[f'FUSE_{key.upper()}'] == val.name if hasattr(val, 'name') else str(val))
         assert (yaml.safe_load(tags['FUSE_MAX_BLOCK_MEM']) == block_config['max_block_mem'])
         assert (yaml.safe_load(tags['FUSE_THREADS']) == block_config['threads'])

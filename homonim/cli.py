@@ -32,9 +32,9 @@ import rasterio as rio
 import yaml
 from click.core import ParameterSource
 from rasterio.warp import SUPPORTED_RESAMPLING
-from homonim import utils, version
+
+from homonim import utils, version, RasterFuse, RasterCompare, ParamStats, ProcCrs, Model
 from homonim.errors import ImageFormatError
-from homonim import RasterFuse, RasterCompare, ParamStats, ProcCrs, Model
 from homonim.raster_array import RasterArray
 
 logger = logging.getLogger(__name__)
@@ -107,7 +107,7 @@ class FuseCommand(HomonimCommand):
         # Set the default creation_options if no other driver or creation_options have been specified.
         # This can't be done in a callback as it depends on --driver.
         if (ctx.get_parameter_source('driver') == ParameterSource.DEFAULT and
-                ctx.get_parameter_source('creation_options') == ParameterSource.DEFAULT):
+            ctx.get_parameter_source('creation_options') == ParameterSource.DEFAULT):
             ctx.params['creation_options'] = RasterFuse.create_out_profile()['creation_options']
 
         return click.Command.invoke(self, ctx)
@@ -165,7 +165,7 @@ def _nodata_cb(ctx: click.Context, param: click.Option, value):
 def _compare_cb(ctx: click.Context, param: click.Option, value):
     """ click callback to check --compare path exists if specified.  """
     if value and str(value) != 'ref' and not pathlib.Path(value).exists():
-            raise click.BadParameter(f'Comparison image does not exist: {value}')
+        raise click.BadParameter(f'Comparison image does not exist: {value}')
     return value
 
 
@@ -296,7 +296,7 @@ def cli(verbose: int, quiet: int):
         '-cmp', '--compare', 'comp_ref_file', metavar='FILE', type=click.Path(dir_okay=False, path_type=pathlib.Path),
         is_flag=False, flag_value='ref', default=None, callback=_compare_cb,
         help='Compare source and corrected images with this reference image.  If no ``FILE`` value is given, source '
-        'and corrected images are compared with :option:`REFERENCE`.'
+             'and corrected images are compared with :option:`REFERENCE`.'
     ),
     click.option(
         '-bo/-nbo', '--build-ovw/--no-build-ovw', type=click.BOOL, default=True, show_default=True,
@@ -314,7 +314,7 @@ def cli(verbose: int, quiet: int):
     click.option(
         '-pi/-npi', '--param-image/--no-param-image', type=click.BOOL, default=False, show_default=True,
         help=f'Write the  model parameters and R\N{SUPERSCRIPT TWO} values for each corrected image into a parameter '
-        f'image file.'
+             f'image file.'
     ),
     click.option(
         '-mp/-nmp', '--mask-partial/--no-mask-partial', type=click.BOOL,
@@ -331,7 +331,7 @@ def cli(verbose: int, quiet: int):
         '-rit', '--r2-inpaint-thresh', type=click.FloatRange(min=0, max=1),
         default=RasterFuse.create_model_config()['r2_inpaint_thresh'], show_default=True, metavar='FLOAT 0-1',
         help='R\N{SUPERSCRIPT TWO} threshold below which to inpaint model parameters from surrounding areas '
-        '(0 = turn off inpainting). Valid for `gain-offset` :option:`--model` only.'
+             '(0 = turn off inpainting). Valid for `gain-offset` :option:`--model` only.'
     ),
     click.option(
         '-pc', '--proc-crs', type=click.Choice([pc.value for pc in ProcCrs], case_sensitive=False),
@@ -349,24 +349,24 @@ def cli(verbose: int, quiet: int):
         type=click.Choice(tuple(set(rio.drivers.raster_driver_extensions().values())), case_sensitive=False),
         default=RasterFuse.create_out_profile()['driver'], show_default=True, metavar='TEXT',
         help='Output image format driver.  See the `GDAL docs <https://gdal.org/drivers/raster/index.html>`_ for '
-        'details.'
+             'details.'
     ),  # yapf: disable
     click.option(
         '--dtype', type=click.Choice(list(rio.dtypes.dtype_fwd.values())[1:8], case_sensitive=False),
         default=RasterFuse.create_out_profile()['dtype'], show_default=True,
         help=f'Output image data type.  Valid for corrected images only, parameter images always use '
-        f'{RasterArray.default_dtype}.'
+             f'{RasterArray.default_dtype}.'
     ),
     click.option(
         '--nodata', 'nodata', type=click.STRING, callback=_nodata_cb, metavar='[NUMBER|null|nan]',
         default=RasterFuse.create_out_profile()['nodata'], show_default=True,
         help=f'Output image nodata value.  Valid for corrected images only, parameter images always use '
-        f'{RasterArray.default_nodata}.'
+             f'{RasterArray.default_nodata}.'
     ),
     click.option(
         '-co', '--creation-options', metavar='NAME=VALUE', multiple=True, default=(), callback=_creation_options_cb,
         help='Driver specific image creation option(s) for the output image(s).  See the `GDAL docs '
-        '<https://gdal.org/drivers/raster/index.html>`_ for details.'
+             '<https://gdal.org/drivers/raster/index.html>`_ for details.'
     ),
 )
 @click.pass_context

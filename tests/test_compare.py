@@ -18,13 +18,13 @@
 """
 import json
 import multiprocessing
+from pathlib import Path
+from typing import List, Dict
 
 import numpy as np
 import pytest
-from pytest import FixtureRequest
 from click.testing import CliRunner
-from typing import List, Dict
-from pathlib import Path
+from pytest import FixtureRequest
 
 from homonim.cli import cli
 from homonim.compare import RasterCompare
@@ -75,6 +75,7 @@ def test_api__thread(float_45cm_src_file: Path, float_100cm_ref_file: Path):
     assert (len(res_list_mult) == 2)
     assert (res_list_mult == res_list_single)
 
+
 @pytest.mark.parametrize(
     'src_file, ref_file, proc_crs, config', [
         ('float_50cm_src_file', 'float_100cm_ref_file', ProcCrs.ref, dict(downsampling='lanczos')),
@@ -86,7 +87,7 @@ def test_api__resampling(src_file: str, ref_file: str, proc_crs: ProcCrs, config
     src_file: Path = request.getfixturevalue(src_file)
     ref_file: Path = request.getfixturevalue(ref_file)
     with RasterCompare(src_file, ref_file, proc_crs=proc_crs) as raster_compare:
-        res_list_def = raster_compare.compare()     # default configuration results
+        res_list_def = raster_compare.compare()  # default configuration results
         res_list_lz = raster_compare.compare(**config)  # non-default configuration
     assert (len(res_list_def) == 2)
     assert (len(res_list_lz) == 2)
@@ -103,12 +104,12 @@ def test_api__resampling(src_file: str, ref_file: str, proc_crs: ProcCrs, config
         ('float_100cm_src_file', 'float_45cm_ref_file'),
     ]
 )  # yapf:disable
-def test_api__max_block_mem(src_file:str, ref_file:str, request: FixtureRequest):
+def test_api__max_block_mem(src_file: str, ref_file: str, request: FixtureRequest):
     """ Test changing the number and shape of blocks (i.e. max_block_mem) gives the same comparison results. """
     src_file: Path = request.getfixturevalue(src_file)
     ref_file: Path = request.getfixturevalue(ref_file)
     with RasterCompare(src_file, ref_file) as compare:
-        stats_list_band = compare.compare(max_block_mem=100)    # compare by band
+        stats_list_band = compare.compare(max_block_mem=100)  # compare by band
         stats_list_block = compare.compare(max_block_mem=2e-4)  # compare by small block
     assert (len(stats_list_band) == 2)
     assert (len(stats_list_block) == 2)
@@ -126,11 +127,11 @@ def test_api__proc_crs(
     low res source with high res reference (proc_crs=src).
     """
     with RasterCompare(float_45cm_src_file, float_100cm_ref_file, proc_crs=ProcCrs.ref) as raster_compare:
-        stats_list_ref = raster_compare.compare()    # compare by band
+        stats_list_ref = raster_compare.compare()  # compare by band
         assert (raster_compare.proc_crs == ProcCrs.ref)
     assert (len(stats_list_ref) == 2)
     with RasterCompare(float_100cm_src_file, float_45cm_ref_file, proc_crs=ProcCrs.src) as raster_compare:
-        stats_list_src = raster_compare.compare()    # compare by band
+        stats_list_src = raster_compare.compare()  # compare by band
         assert (raster_compare.proc_crs == ProcCrs.src)
     assert (len(stats_list_src) == 2)
     # test ProcCrs.ref and ProcCrs.src results are approx the same

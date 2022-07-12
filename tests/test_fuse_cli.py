@@ -18,14 +18,14 @@
 """
 
 import os
+from pathlib import Path
+from typing import Tuple
 
 import pytest
 import rasterio as rio
-from rasterio.warp import Resampling
 import yaml
 from click.testing import CliRunner
-from pathlib import Path
-from typing import Tuple
+from rasterio.warp import Resampling
 
 from homonim import utils
 from homonim.cli import cli
@@ -40,9 +40,9 @@ from tests.conftest import str_contain_no_space, FuseCliParams
         (Model.gain_blk_offset, (1, 1)),
         (Model.gain_offset, (5, 5)),
     ]
-) # yapf: disable
+)  # yapf: disable
 def test_fuse(
-    tmp_path: Path, runner: CliRunner, float_100cm_rgb_file: Path, float_50cm_rgb_file: Path, model: Model, 
+    tmp_path: Path, runner: CliRunner, float_100cm_rgb_file: Path, float_50cm_rgb_file: Path, model: Model,
     kernel_shape: Tuple[int, int],
 ):
     """ Test fuse cli output with different methods and kernel shapes. """
@@ -143,7 +143,7 @@ def test_compare(runner: CliRunner, float_100cm_ref_file: Path, float_100cm_src_
       Mean 1.000  0.000   0.000 144"""
         assert (str_contain_no_space(corr_cmp_str, result.output))
 
-        sum_cmp_str =                           """File    r²   RMSE   rRMSE   N
+        sum_cmp_str = """File    r²   RMSE   rRMSE   N
     --------------------------------------------------- ----- ------ ------- ---
                                     float_100cm_src.tif 1.000  0.000   0.000 144
     float_100cm_src_FUSE_cREF_mGAIN-BLK-OFFSET_k5_5.tif 1.000  0.000   0.000 144"""
@@ -342,7 +342,7 @@ def test_r2_inpaint_thresh_error(runner: CliRunner, basic_fuse_cli_params: FuseC
         ('GTiff', 'uint16', 65535),
         ('PNG', 'uint8', 0),
     ]
-) # yapf: disable
+)  # yapf: disable
 def test_out_profile(runner: CliRunner, basic_fuse_cli_params: FuseCliParams, driver: str, dtype: str, nodata: float):
     """ Test --out-* options generate a correctly configured output. """
     cli_str = basic_fuse_cli_params.cli_str + f' --driver {driver} --dtype {dtype} --nodata {nodata}'

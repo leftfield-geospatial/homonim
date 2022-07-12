@@ -18,15 +18,15 @@
 """
 
 import json
+from pathlib import Path
+from typing import Dict, List
 
 import pytest
 import rasterio as rio
-
-from pathlib import Path
-from pytest import FixtureRequest
-from typing import Dict, List
-from rasterio.windows import get_data_window, Window
 from click.testing import CliRunner
+from pytest import FixtureRequest
+from rasterio.windows import get_data_window, Window
+
 from homonim.cli import cli
 from homonim.errors import ImageFormatError, IoError
 from homonim.stats import ParamStats
@@ -42,7 +42,7 @@ def _test_vals(param_stats: List[Dict]):
     exp_param_stats_list = (
         3 * [{'mean': 1, 'std': 0, 'min': 1, 'max': 1}] +  # gains
         3 * [{'mean': 0, 'std': 0, 'min': 0, 'max': 0}] +  # offsets
-        3 * [{'mean': 1, 'std': 0, 'min': 1, 'max': 1, 'inpaint_p': 0}]   # r2
+        3 * [{'mean': 1, 'std': 0, 'min': 1, 'max': 1, 'inpaint_p': 0}]  # r2
     )  # yapf: disable
 
     for param_band_stats, exp_param_band_stats in zip(param_stats, exp_param_stats_list):
@@ -103,6 +103,7 @@ def test_api__threads(param_file: Path, threads: int):
         param_stats = stats.stats(threads=threads)
     _test_vals(param_stats)
 
+
 @pytest.mark.parametrize('param_file_str', ['param_file', 'param_file_tile_10x20'])
 def test_api__data_window(param_file_str: str, request: FixtureRequest):
     """ Test ParamStats._get_data_window() accumulates block windows correctly. """
@@ -121,6 +122,7 @@ def test_api__file_format_error(float_100cm_rgb_file: Path):
     """ Test incorrect parameter file format raises an error. """
     with pytest.raises(ImageFormatError):
         _ = ParamStats(float_100cm_rgb_file)
+
 
 @pytest.mark.parametrize('param_file_str', ['param_file', 'param_file_tile_10x20'])
 def test_cli(runner: CliRunner, param_file_str: str, request: FixtureRequest):
@@ -183,4 +185,3 @@ def test_cli__file_format_error(runner: CliRunner, float_100cm_rgb_file: Path):
     assert ('Invalid value' in result.output)
 
 ##
-

@@ -18,11 +18,12 @@
 """
 import os
 import pathlib
-from homonim.fuse import RasterFuse
+
 from homonim.compare import RasterCompare
-from homonim.stats import ParamStats
 from homonim.enums import Model, ProcCrs
+from homonim.fuse import RasterFuse
 from homonim.kernel_model import KernelModel
+from homonim.stats import ParamStats
 
 if '__file__' in globals():
     root_path = pathlib.Path(__file__).absolute().parents[1]

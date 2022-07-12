@@ -17,14 +17,15 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
-import pytest
 import pathlib
-import rasterio as rio
-from rasterio.features import shapes
-from click.testing import CliRunner
-from typing import Dict, Tuple, Union
+from typing import Tuple
 
-from homonim import root_path, utils, RasterFuse, RasterCompare, ParamStats, ProcCrs, Model
+import pytest
+import rasterio as rio
+from click.testing import CliRunner
+from rasterio.features import shapes
+
+from homonim import root_path, utils, RasterFuse, RasterCompare, ProcCrs, Model
 from homonim.cli import cli
 
 
@@ -129,8 +130,5 @@ def test_fuse_compare(
                 # test homo mask consists of one blob
                 corr_mask_shapes = list(shapes(corr_mask.astype('uint8', copy=False), mask=corr_mask, connectivity=8))
                 assert (len(corr_mask_shapes) == 1)
-
-
-
 
 ##

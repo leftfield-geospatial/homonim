@@ -37,7 +37,7 @@ from homonim.raster_array import RasterArray
         (Model.gain_blk_offset, (5, 5)),
         (Model.gain_offset, (5, 5)),
     ]
-) # yapf: disable
+)  # yapf: disable
 def test_ref_basic_fit(
     float_100cm_ra: RasterArray, float_50cm_ra: RasterArray, model: Model, kernel_shape: Tuple[int, int],
 ):
@@ -64,7 +64,7 @@ def test_ref_basic_fit(
         (Model.gain_blk_offset, (5, 5)),
         (Model.gain_offset, (5, 5)),
     ]
-) # yapf: disable
+)  # yapf: disable
 def test_src_basic_fit(
     float_100cm_ra: RasterArray, float_50cm_ra: RasterArray, model: Model, kernel_shape: Tuple[int, int],
 ):
@@ -126,7 +126,7 @@ def test_src_basic_apply(float_100cm_ra: RasterArray):
         (Model.gain_blk_offset, True),
         (Model.gain_blk_offset, False),
     ]
-) # yapf: disable
+)  # yapf: disable
 def test_ref_find_r2(float_100cm_ra: RasterArray, float_50cm_ra: RasterArray, model: Model, find_r2: bool):
     """ Test ref-space R2 band is added correctly with find_r2==True. """
     kernel_model = RefSpaceModel(model, (5, 5), find_r2=find_r2, r2_inpaint_thresh=None)
@@ -149,7 +149,7 @@ def test_ref_find_r2(float_100cm_ra: RasterArray, float_50cm_ra: RasterArray, mo
         (Model.gain_blk_offset, True),
         (Model.gain_blk_offset, False),
     ]
-) # yapf: disable
+)  # yapf: disable
 def find_r2(float_100cm_ra: RasterArray, float_50cm_ra: RasterArray, model: Model, find_r2: bool):
     """ Test src-space R2 band is added correctly with find_r2==True. """
     kernel_model = SrcSpaceModel(model, (5, 5), find_r2=find_r2, r2_inpaint_thresh=None)
@@ -211,7 +211,7 @@ def test_r2_inpainting(float_50cm_ra: RasterArray, kernel_shape: Tuple[int, int]
         ((3, 5), True),
         ((5, 5), True),
     ]
-) # yapf: disable
+)  # yapf: disable
 def test_ref_masking(
     float_100cm_ra: RasterArray, float_50cm_ra: RasterArray, kernel_shape: Tuple[int, int], mask_partial: bool,
 ):
@@ -250,7 +250,7 @@ def test_ref_masking(
         ((3, 5), True),
         ((5, 5), True),
     ]
-) # yapf: disable
+)  # yapf: disable
 def test_src_masking(
     float_100cm_ra: RasterArray, float_50cm_ra: RasterArray, kernel_shape: Tuple[int, int], mask_partial: bool,
 ):
@@ -299,7 +299,7 @@ def test_src_force_proc_crs(float_100cm_ra: RasterArray, float_50cm_ra: RasterAr
         (Model.gain_blk_offset, (0, 0)),
         (Model.gain_offset, (4, 5)),
     ]
-) # yapf: disable
+)  # yapf: disable
 def test_kernel_shape_exception(model: Model, kernel_shape: Tuple[int, int]):
     """ Test bad kernel shape / model combination raises an exception. """
     with pytest.raises(ValueError):

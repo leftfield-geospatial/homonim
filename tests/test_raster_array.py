@@ -17,11 +17,12 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
+from pathlib import Path
+from typing import Dict, Tuple
+
 import numpy as np
 import pytest
 import rasterio as rio
-from typing import Dict, Tuple
-from pathlib import Path
 from rasterio.crs import CRS
 from rasterio.enums import Resampling
 from rasterio.transform import Affine

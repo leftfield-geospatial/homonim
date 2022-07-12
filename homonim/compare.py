@@ -19,8 +19,8 @@
 
 import concurrent.futures
 import logging
-import threading
 import pathlib
+import threading
 from typing import Dict, List, Tuple
 
 import numpy as np

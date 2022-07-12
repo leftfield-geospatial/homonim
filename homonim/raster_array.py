@@ -28,9 +28,9 @@ import rasterio as rio
 from rasterio import Affine, windows
 from rasterio.crs import CRS
 from rasterio.enums import MaskFlags
+from rasterio.transform import TransformMethodsMixin
 from rasterio.warp import reproject, Resampling
 from rasterio.windows import Window, WindowMethodsMixin
-from rasterio.transform import TransformMethodsMixin
 
 from homonim import utils
 from homonim.errors import ImageProfileError, ImageFormatError
@@ -517,6 +517,5 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
             num_threads=multiprocessing.cpu_count(), resampling=resampling, **kwargs
         )
         return RasterArray(_dst_array, crs=crs, transform=_dst_transform, nodata=nodata)
-
 
 ##

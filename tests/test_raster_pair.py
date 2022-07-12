@@ -17,19 +17,20 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
+from pathlib import Path
+from typing import Tuple
+
+import numpy as np
 import pytest
 import rasterio as rio
-from pathlib import Path
 from pytest import FixtureRequest
 from rasterio import MemoryFile
 from rasterio.enums import Resampling
 from rasterio.windows import Window, union
-from typing import Tuple
-import numpy as np
 
 from homonim.enums import ProcCrs
 from homonim.errors import ImageContentError, BlockSizeError, IoError
-from homonim.raster_pair import RasterPairReader, BlockPair
+from homonim.raster_pair import RasterPairReader
 
 
 @pytest.mark.parametrize(
@@ -37,15 +38,15 @@ from homonim.raster_pair import RasterPairReader, BlockPair
         ('float_50cm_src_file', 'float_100cm_ref_file', ProcCrs.ref),
         ('float_100cm_src_file', 'float_50cm_ref_file', ProcCrs.src)
     ]
-) # yapf: disable
+)  # yapf: disable
 def test_creation(src_file: str, ref_file: str, expected_proc_crs: ProcCrs, request: FixtureRequest):
     """ Test RasterPair creation and proc_crs resolution. """
     src_file: Path = request.getfixturevalue(src_file)
     ref_file: Path = request.getfixturevalue(ref_file)
     raster_pair = RasterPairReader(src_file, ref_file)
     assert (raster_pair.proc_crs == expected_proc_crs)
-    assert (raster_pair.src_bands == (1, ))
-    assert (raster_pair.ref_bands == (1, ))
+    assert (raster_pair.src_bands == (1,))
+    assert (raster_pair.ref_bands == (1,))
 
     # enter the raster pair context and test block(s) correspond to bands
     with raster_pair as rp:
@@ -62,7 +63,7 @@ def test_creation(src_file: str, ref_file: str, expected_proc_crs: ProcCrs, requ
         ('float_100cm_ref_file', 'float_50cm_src_file'),
         ('float_100cm_ref_file', 'float_100cm_src_file')
     ]
-) # yapf: disable
+)  # yapf: disable
 def test_coverage_exception(src_file: str, ref_file: str, request: FixtureRequest):
     """ Test that ref not covering the extent of src raises an error. """
     src_file: Path = request.getfixturevalue(src_file)
@@ -115,7 +116,7 @@ def test_not_open_exception(float_50cm_src_file: Path, float_100cm_ref_file: Pat
         ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (0, 0), 2.e-4),
         ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (1, 1), 2.e-4),
     ]
-) # yapf: disable
+)  # yapf: disable
 def test_block_pair_continuity(
     src_file: str, ref_file: str, proc_crs: ProcCrs, blk_overlap: Tuple[int, int], max_block_mem: float,
     request: FixtureRequest
@@ -171,7 +172,7 @@ def test_block_pair_continuity(
         ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (0, 0), 2.e-4),
         ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 2.e-4),
     ]
-) # yapf: disable
+)  # yapf: disable
 def test_block_pair_coverage(
     src_file: str, ref_file: str, proc_crs: ProcCrs, overlap: Tuple[int, int], max_block_mem: float,
     request: FixtureRequest,
@@ -214,7 +215,7 @@ def test_block_pair_coverage(
         ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (0, 0), 2.e-4),
         ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 2.e-4),
     ]
-) # yapf: disable
+)  # yapf: disable
 def test_block_pair_io(
     src_file: str, ref_file: str, proc_crs: ProcCrs, overlap: Tuple[int, int], max_block_mem: float,
     request: FixtureRequest,
@@ -240,7 +241,9 @@ def test_block_pair_io(
     for reproj_ra in ['src', 'ref']:
         # create src and ref test datasets for writing, and enter the raster pair context
         with MemoryFile() as src_mf, MemoryFile() as ref_mf, raster_pair:
-            with src_mf.open(**raster_pair.src_im.profile) as src_ds, ref_mf.open(**raster_pair.ref_im.profile) as ref_ds:
+            with src_mf.open(**raster_pair.src_im.profile) as src_ds, ref_mf.open(
+                **raster_pair.ref_im.profile
+            ) as ref_ds:
                 # read, reproject and write block pairs to their respective datasets
                 block_pairs = list(raster_pair.block_pairs(overlap=overlap, max_block_mem=max_block_mem))
                 for block_pair in block_pairs:

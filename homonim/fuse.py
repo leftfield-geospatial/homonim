@@ -26,15 +26,16 @@ from typing import Tuple, Dict, Union, Iterator, Optional
 import numpy as np
 import rasterio
 import rasterio as rio
+from rasterio.enums import Resampling
+from rasterio.io import DatasetWriter
+from tqdm import tqdm
+
 from homonim import utils
 from homonim.enums import Model, ProcCrs
 from homonim.errors import IoError
 from homonim.kernel_model import KernelModel, RefSpaceModel, SrcSpaceModel
 from homonim.raster_array import RasterArray
 from homonim.raster_pair import RasterPairReader, BlockPair
-from rasterio.enums import Resampling
-from rasterio.io import DatasetWriter
-from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
