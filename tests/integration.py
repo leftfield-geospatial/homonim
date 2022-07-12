@@ -86,7 +86,7 @@ def test_fuse_compare(
     """ Additional integration tests using 'real' aerial and satellite imagery. """
 
     src_files = request.getfixturevalue(src_files)
-    src_files: Tuple[pathlib.Path, ...] = src_files if isinstance(src_files, tuple) else (src_files,)
+    src_files: Tuple[pathlib.Path, ...] = src_files if isinstance(src_files, tuple) else (src_files, )
     ref_file: pathlib.Path = request.getfixturevalue(ref_file)
     src_file_str = ' '.join([str(fn) for fn in src_files])
     post_fix = utils.create_out_postfix(exp_proc_crs, model, kernel_shape, RasterFuse.create_out_profile()['driver'])
@@ -130,5 +130,6 @@ def test_fuse_compare(
                 # test homo mask consists of one blob
                 corr_mask_shapes = list(shapes(corr_mask.astype('uint8', copy=False), mask=corr_mask, connectivity=8))
                 assert (len(corr_mask_shapes) == 1)
+
 
 ##

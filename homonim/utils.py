@@ -265,7 +265,7 @@ def validate_param_image(param_filename: Union[str, pathlib.Path]):
         tags = param_im.tags()
         # check band count is a multiple of 3 and that expected metadata tags exist
         if (param_im.count == 0 or divmod(param_im.count, 3)[1] != 0 or
-            not {'FUSE_MODEL', 'FUSE_KERNEL_SHAPE', 'FUSE_PROC_CRS', 'FUSE_REF_FILE'} <= set(tags)):
+                not {'FUSE_MODEL', 'FUSE_KERNEL_SHAPE', 'FUSE_PROC_CRS', 'FUSE_REF_FILE'} <= set(tags)):
             raise ImageFormatError(f'{param_filename.name} is not a valid parameter image.')
 
         # check band descriptions end with the expected suffixes

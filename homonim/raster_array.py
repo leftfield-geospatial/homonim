@@ -199,7 +199,7 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
     @staticmethod
     def bounded_window_slices(
         rio_dataset: Union[rio.DatasetReader, rio.io.DatasetWriter], window: Window
-    ) -> Tuple[Window, Tuple[slice, slice]]:  # yapf?: disable
+    ) -> Tuple[Window, Tuple[slice, slice]]:  # yapf: disable
         """ Bounded array slices and dataset window from dataset and boundless window. """
 
         # find window UL and BR corners and crop to rio_dataset bounds
@@ -517,5 +517,6 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
             num_threads=multiprocessing.cpu_count(), resampling=resampling, **kwargs
         )
         return RasterArray(_dst_array, crs=crs, transform=_dst_transform, nodata=nodata)
+
 
 ##

@@ -33,6 +33,7 @@ OShape = Optional[Tuple[int, int]]
 
 
 class KernelModel:
+
     def __init__(self, model: Model, kernel_shape: Tuple[int, int], find_r2: bool = False, **kwargs):
         """
         A base class for surface reflectance modelling and correction of blocks of image data.

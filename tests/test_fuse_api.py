@@ -89,8 +89,8 @@ def test_overwrite(tmp_path: Path, float_50cm_src_file: Path, float_100cm_ref_fi
     ]
 )  # yapf: disable
 def test_basic_fusion(
-    src_file: str, ref_file: str, model: Model, kernel_shape: Tuple[int, int], max_block_mem: float,
-    tmp_path: Path, request: FixtureRequest,
+    src_file: str, ref_file: str, model: Model, kernel_shape: Tuple[int, int], max_block_mem: float, tmp_path: Path,
+    request: FixtureRequest,
 ):
     """ Test fusion output with different src/ref images, and model etc combinations. """
     src_file = request.getfixturevalue(src_file)
@@ -244,9 +244,7 @@ def test_build_overviews(tmp_path: Path, float_50cm_ref_file: Path):
     raster_fuse._build_overviews = test_build_overviews
 
     with raster_fuse:
-        raster_fuse.process(
-            corr_filename, Model.gain_blk_offset, (3, 3), param_filename=param_filename, build_ovw=True
-        )
+        raster_fuse.process(corr_filename, Model.gain_blk_offset, (3, 3), param_filename=param_filename, build_ovw=True)
 
     assert (corr_filename.exists())
     assert (param_filename.exists())

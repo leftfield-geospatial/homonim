@@ -40,6 +40,7 @@ logger = logging.getLogger(__name__)
 
 
 class ParamStats:
+
     def __init__(self, param_filename: Union[pathlib.Path, str]):
         """
         Class to calculate the statistics of a parameter image.
@@ -167,7 +168,7 @@ class ParamStats:
             for future in tqdm(
                 futures.as_completed(win_futures), bar_format=bar_format, total=len(win_futures), dynamic_ncols=True,
                 leave=False,
-            ):
+            ):  # yapf: disable
                 block_data_win: Window = future.result()
                 if block_data_win:
                     im_data_win = union(im_data_win, block_data_win) if im_data_win else block_data_win
@@ -243,7 +244,7 @@ class ParamStats:
             for future in tqdm(
                 futures.as_completed(stats_futures), bar_format=bar_format, total=len(stats_futures),
                 dynamic_ncols=True,
-            ):
+            ):  # yapf: disable
                 block_dict, band_i = future.result()
                 image_accum[band_i].update(
                     min=np.nanmin((image_accum[band_i].get('min', np.inf), block_dict['min'])),

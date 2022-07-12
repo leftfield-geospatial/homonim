@@ -184,4 +184,5 @@ def test_cli__file_format_error(runner: CliRunner, float_100cm_rgb_file: Path):
     assert (result.exit_code != 0)
     assert ('Invalid value' in result.output)
 
+
 ##

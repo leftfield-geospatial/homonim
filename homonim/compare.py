@@ -235,7 +235,7 @@ class RasterCompare(RasterPairReader):
             bar_format = '{l_bar}{bar}|{n_fmt}/{total_fmt} blocks [{elapsed}<{remaining}]'
             for future in tqdm(
                 concurrent.futures.as_completed(futures), bar_format=bar_format, total=len(futures), dynamic_ncols=True,
-            ):
+            ):  # yapf: disable
                 # get block sums and accumulate over the image
                 block_sums_dict, block_pair = future.result()
                 image_sums[block_pair.band_i] = (

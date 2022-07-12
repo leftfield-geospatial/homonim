@@ -308,9 +308,7 @@ def test_kernel_shape_exception(model: Model, kernel_shape: Tuple[int, int]):
 
 def test_r2_array_defaults(float_100cm_ra: RasterArray):
     """ Test KernelModel._r2_array() with default (none) parameter values. """
-    kernel_model = RefSpaceModel(
-        Model.gain_offset, (5, 5), mask_partial=False, r2_inpaint_thresh=None, find_r2=False
-    )
+    kernel_model = RefSpaceModel(Model.gain_offset, (5, 5), mask_partial=False, r2_inpaint_thresh=None, find_r2=False)
     src_ra = float_100cm_ra
     ref_ra = float_100cm_ra
     param_ra = kernel_model.fit(src_ra, ref_ra.copy())

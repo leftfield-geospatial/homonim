@@ -147,7 +147,7 @@ def byte_ra(byte_array: np.ndarray, byte_profile: Dict) -> RasterArray:
 def rgb_byte_ra(byte_array: np.ndarray, byte_profile: Dict) -> RasterArray:
     """ Raster array with three bands of byte. """
     return RasterArray(
-        np.stack((byte_array,) * 3, axis=0), byte_profile['crs'], byte_profile['transform'],
+        np.stack((byte_array, ) * 3, axis=0), byte_profile['crs'], byte_profile['transform'],
         nodata=byte_profile['nodata']
     )
 
@@ -228,7 +228,7 @@ def byte_file(tmp_path: Path, byte_array: np.ndarray, byte_profile: Dict) -> Pat
 @pytest.fixture
 def rgba_file(tmp_path: Path, byte_array: np.ndarray, byte_profile: Dict) -> Path:
     """ RGB + alpha band byte geotiff. """
-    array = np.stack((byte_array,) * 4, axis=0)
+    array = np.stack((byte_array, ) * 4, axis=0)
     array[3] = (array[0] != byte_profile['nodata']) * 255
     filename = tmp_path.joinpath('rgba.tif')
     profile = byte_profile.copy()
@@ -333,7 +333,7 @@ def float_45cm_ref_file(tmp_path: Path, float_45cm_array: np.ndarray, float_45cm
 @pytest.fixture
 def float_100cm_rgb_file(tmp_path: Path, float_100cm_array: np.ndarray, float_100cm_profile: Dict) -> Path:
     """ 3 band float32 geotiff with 100cm pixel resolution. """
-    array = np.stack((float_100cm_array,) * 3, axis=0)
+    array = np.stack((float_100cm_array, ) * 3, axis=0)
     profile = float_100cm_profile.copy()
     profile.update(count=3)
     filename = tmp_path.joinpath('float_100cm_rgb.tif')
@@ -346,7 +346,7 @@ def float_100cm_rgb_file(tmp_path: Path, float_100cm_array: np.ndarray, float_10
 @pytest.fixture
 def float_50cm_rgb_file(tmp_path: Path, float_50cm_array: np.ndarray, float_50cm_profile: Dict) -> Path:
     """ 3 band float32 geotiff with 50cm pixel resolution, same extent as float_100cm_rgb_file. """
-    array = np.stack((float_50cm_array,) * 3, axis=0)
+    array = np.stack((float_50cm_array, ) * 3, axis=0)
     profile = float_50cm_profile.copy()
     profile.update(count=3)
     filename = tmp_path.joinpath('float_50cm_rgb.tif')

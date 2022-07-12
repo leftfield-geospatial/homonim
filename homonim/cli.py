@@ -107,7 +107,7 @@ class FuseCommand(HomonimCommand):
         # Set the default creation_options if no other driver or creation_options have been specified.
         # This can't be done in a callback as it depends on --driver.
         if (ctx.get_parameter_source('driver') == ParameterSource.DEFAULT and
-            ctx.get_parameter_source('creation_options') == ParameterSource.DEFAULT):
+                ctx.get_parameter_source('creation_options') == ParameterSource.DEFAULT):
             ctx.params['creation_options'] = RasterFuse.create_out_profile()['creation_options']
 
         return click.Command.invoke(self, ctx)
@@ -219,15 +219,15 @@ downsampling_option = click.option(
     '-ds', '--downsampling', type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
     default=RasterFuse.create_model_config()['downsampling'].name, show_default=True,
     help='Resampling method for re-projecting from high to low resolution.  See the `rasterio docs '
-         '<https://rasterio.readthedocs.io/en/latest/api/rasterio.enums.html#rasterio.enums.Resampling>`_ for '
-         'details.'
+    '<https://rasterio.readthedocs.io/en/latest/api/rasterio.enums.html#rasterio.enums.Resampling>`_ for '
+    'details.'
 )
 upsampling_option = click.option(
     '-us', '--upsampling', type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
     default=RasterFuse.create_model_config()['upsampling'].name, show_default=True,
     help='Resampling method for re-projecting from low to high resolution.  See the `rasterio docs '
-         '<https://rasterio.readthedocs.io/en/latest/api/rasterio.enums.html#rasterio.enums.Resampling>`_ for '
-         'details.'
+    '<https://rasterio.readthedocs.io/en/latest/api/rasterio.enums.html#rasterio.enums.Resampling>`_ for '
+    'details.'
 )
 output_option = click.option(
     '-op', '--output', type=click.Path(exists=False, dir_okay=False, writable=True, path_type=pathlib.Path),
@@ -271,8 +271,7 @@ def cli(verbose: int, quiet: int):
     # if cloup's mutually exclusive etc. functionality is needed, it should be the latter.
     click.option(
         '-m', '--model', type=click.Choice([m.value for m in Model], case_sensitive=False),
-        default=Model.gain_blk_offset.value, show_default=True,
-        help="""Correction model.
+        default=Model.gain_blk_offset.value, show_default=True, help="""Correction model.
         \b
         
         - `gain`: gain-only model.
@@ -296,7 +295,7 @@ def cli(verbose: int, quiet: int):
         '-cmp', '--compare', 'comp_ref_file', metavar='FILE', type=click.Path(dir_okay=False, path_type=pathlib.Path),
         is_flag=False, flag_value='ref', default=None, callback=_compare_cb,
         help='Compare source and corrected images with this reference image.  If no ``FILE`` value is given, source '
-             'and corrected images are compared with :option:`REFERENCE`.'
+        'and corrected images are compared with :option:`REFERENCE`.'
     ),
     click.option(
         '-bo/-nbo', '--build-ovw/--no-build-ovw', type=click.BOOL, default=True, show_default=True,
@@ -314,7 +313,7 @@ def cli(verbose: int, quiet: int):
     click.option(
         '-pi/-npi', '--param-image/--no-param-image', type=click.BOOL, default=False, show_default=True,
         help=f'Write the  model parameters and R\N{SUPERSCRIPT TWO} values for each corrected image into a parameter '
-             f'image file.'
+        f'image file.'
     ),
     click.option(
         '-mp/-nmp', '--mask-partial/--no-mask-partial', type=click.BOOL,
@@ -322,16 +321,13 @@ def cli(verbose: int, quiet: int):
         help=f'Mask output pixels produced from partial kernel, or source / reference, image coverage.'
     ),
     # yapf: disable
-    threads_option,
-    max_block_mem_option,
-    downsampling_option,
-    upsampling_option,
+    threads_option, max_block_mem_option, downsampling_option, upsampling_option,
     # yapf: enable
     click.option(
         '-rit', '--r2-inpaint-thresh', type=click.FloatRange(min=0, max=1),
         default=RasterFuse.create_model_config()['r2_inpaint_thresh'], show_default=True, metavar='FLOAT 0-1',
         help='R\N{SUPERSCRIPT TWO} threshold below which to inpaint model parameters from surrounding areas '
-             '(0 = turn off inpainting). Valid for `gain-offset` :option:`--model` only.'
+        '(0 = turn off inpainting). Valid for `gain-offset` :option:`--model` only.'
     ),
     click.option(
         '-pc', '--proc-crs', type=click.Choice([pc.value for pc in ProcCrs], case_sensitive=False),
@@ -349,24 +345,24 @@ def cli(verbose: int, quiet: int):
         type=click.Choice(tuple(set(rio.drivers.raster_driver_extensions().values())), case_sensitive=False),
         default=RasterFuse.create_out_profile()['driver'], show_default=True, metavar='TEXT',
         help='Output image format driver.  See the `GDAL docs <https://gdal.org/drivers/raster/index.html>`_ for '
-             'details.'
+        'details.'
     ),  # yapf: disable
     click.option(
         '--dtype', type=click.Choice(list(rio.dtypes.dtype_fwd.values())[1:8], case_sensitive=False),
         default=RasterFuse.create_out_profile()['dtype'], show_default=True,
         help=f'Output image data type.  Valid for corrected images only, parameter images always use '
-             f'{RasterArray.default_dtype}.'
+        f'{RasterArray.default_dtype}.'
     ),
     click.option(
         '--nodata', 'nodata', type=click.STRING, callback=_nodata_cb, metavar='[NUMBER|null|nan]',
         default=RasterFuse.create_out_profile()['nodata'], show_default=True,
         help=f'Output image nodata value.  Valid for corrected images only, parameter images always use '
-             f'{RasterArray.default_nodata}.'
+        f'{RasterArray.default_nodata}.'
     ),
     click.option(
         '-co', '--creation-options', metavar='NAME=VALUE', multiple=True, default=(), callback=_creation_options_cb,
         help='Driver specific image creation option(s) for the output image(s).  See the `GDAL docs '
-             '<https://gdal.org/drivers/raster/index.html>`_ for details.'
+        '<https://gdal.org/drivers/raster/index.html>`_ for details.'
     ),
 )
 @click.pass_context
@@ -464,20 +460,12 @@ cli.add_command(fuse)
     help='Path(s) to image(s) to compare with :option:`REFERENCE`.'
 )
 @ref_file_arg
+@cloup.option_group("Standard options", output_option, )
 @cloup.option_group(
-    "Standard options",
-    output_option,
-)
-@cloup.option_group(
-    "Advanced options",
-    threads_option,
-    max_block_mem_option,
-    downsampling_option,
-    upsampling_option,
+    "Advanced options", threads_option, max_block_mem_option, downsampling_option, upsampling_option,
     click.option(
         '-pc', '--proc-crs', type=click.Choice([pc.value for pc in ProcCrs], case_sensitive=False),
-        default=ProcCrs.auto.value, show_default=True,
-        help="""The image CRS in which to compare images. 
+        default=ProcCrs.auto.value, show_default=True, help="""The image CRS in which to compare images. 
     \b
 
     - `auto`: lowest resolution of the source and reference CRS's (recommended). 

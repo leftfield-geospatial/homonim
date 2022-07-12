@@ -251,7 +251,7 @@ def test_reprojection(rgb_byte_ra: RasterArray):
     assert (reprj_ra.crs == to_crs)
     assert (
         reprj_ra.array[:, reprj_ra.mask].mean() == pytest.approx(rgb_byte_ra.array[:, rgb_byte_ra.mask].mean(), abs=.01)
-    )
+    )  # yapf: disable
 
     # reproject with rescaling to WGS84 using a specified transform & shape
     to_transform = Affine.identity() * Affine.scale(.5e-5)
