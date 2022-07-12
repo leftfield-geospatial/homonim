@@ -44,7 +44,7 @@ setup(
     version=__version__,
     description='Correct aerial and satellite imagery to approximate surface reflectance.',
     long_description=long_description,
-    long_description_content_type='text/markdown',
+    long_description_content_type='text/x-rst',
     author='Dugal Harris',
     author_email='dugalh@gmail.com',
     url='https://github.com/dugalh/homonim',
