@@ -91,7 +91,6 @@ a 5 x 5 pixel kernel.
 .. image:: https://github.com/dugalh/homonim/blob/main/data/readme_eg.jpg
    :alt: example
 
-   example
 
 Usage
 -----
