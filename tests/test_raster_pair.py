@@ -241,10 +241,8 @@ def test_block_pair_io(
     for reproj_ra in ['src', 'ref']:
         # create src and ref test datasets for writing, and enter the raster pair context
         with MemoryFile() as src_mf, MemoryFile() as ref_mf, raster_pair:
-            with (
-                src_mf.open(**raster_pair.src_im.profile) as src_ds,
-                ref_mf.open(**raster_pair.ref_im.profile) as ref_ds
-            ):  # yapf: disable
+            with src_mf.open(**raster_pair.src_im.profile) as src_ds, ref_mf.open(
+                **raster_pair.ref_im.profile) as ref_ds:   # yapf: disable
                 # read, reproject and write block pairs to their respective datasets
                 block_pairs = list(raster_pair.block_pairs(overlap=overlap, max_block_mem=max_block_mem))
                 for block_pair in block_pairs:
