@@ -48,8 +48,6 @@ class RasterFuse(RasterPairReader):
         """
         Class for correcting an image to surface reflectance, by fusion with a reference.
 
-        To improve speed and reduce memory usage, images are divided into blocks for concurrent processing.
-
         Parameters
         ----------
         src_filename: str, pathlib.Path
@@ -307,6 +305,8 @@ class RasterFuse(RasterPairReader):
     ):  # yapf: disable
         r"""
         Correct the source image to surface reflectance by fusion with the reference.
+
+        To improve speed and reduce memory usage, images are divided into blocks for concurrent processing.
 
         Parameters
         ----------

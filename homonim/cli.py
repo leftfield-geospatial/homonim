@@ -274,9 +274,9 @@ def cli(verbose: int, quiet: int):
         default=Model.gain_blk_offset.value, show_default=True, help="""Correction model.
         \b
         
-        - `gain`: gain-only model.
-        - `gain-blk-offset`: gain-only model applied to offset normalised image blocks.
-        - `gain-offset`: gain and offset model.
+        - `gain`: Gain-only model.
+        - `gain-blk-offset`: Gain-only model applied to offset normalised image blocks.
+        - `gain-offset`: Gain and offset model.
         """,
     ),  # yapf: disable
     click.option(
@@ -318,7 +318,7 @@ def cli(verbose: int, quiet: int):
     click.option(
         '-mp/-nmp', '--mask-partial/--no-mask-partial', type=click.BOOL,
         default=RasterFuse.create_model_config()['mask_partial'], show_default=True,
-        help=f'Mask output pixels produced from partial kernel, or source / reference, image coverage.'
+        help=f'Mask output pixels produced from partial kernel or source / reference image coverage.'
     ),
     # yapf: disable
     threads_option, max_block_mem_option, downsampling_option, upsampling_option,
@@ -486,8 +486,6 @@ def compare(
 
     Reference image extents must encompass those of the input image(s), and input / reference band ordering should
     match i.e. reference band 1 corresponds to input band 1, reference band 2 corresponds to input band 2 etc.
-
-    Images will be re-projected and compared in the lowest resolution of the input and reference image CRS's.
     \b
 
     Examples:

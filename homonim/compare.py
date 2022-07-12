@@ -41,8 +41,6 @@ class RasterCompare(RasterPairReader):
         """
         Class to statistically compare source and reference images.
 
-        To improve speed and reduce memory usage, images are divided into blocks for concurrent processing.
-
         Parameters
         ----------
         src_filename: str, pathlib.Path
@@ -70,7 +68,7 @@ class RasterCompare(RasterPairReader):
 
     @property
     def schema_table(self) -> str:
-        """ Printable table describing statistics returned by :attr:`RasterCompare.compare`. """
+        """ Table string describing statistics returned by :attr:`RasterCompare.compare`. """
         headers = {key: key.upper() for key in list(self.schema.values())[0].keys()}
         return tabulate(self.schema.values(), headers=headers, tablefmt=utils.table_format)
 
@@ -93,9 +91,13 @@ class RasterCompare(RasterPairReader):
             Maximum size of an image block in megabytes. Note that the total memory consumed by a thread is
             proportional to, but a number of times larger than this number.
         downsampling: rasterio.enums.Resampling, optional
-            Resampling method to use when downsampling.
+            Resampling method to use when downsampling. See the `rasterio docs
+            <https://rasterio.readthedocs.io/en/latest/api/rasterio.enums.html#rasterio.enums.Resampling>`_ for
+            available options.
         upsampling: rasterio.enums.Resampling, optional
-            Resampling method to use when upsampling.
+            Resampling method to use when upsampling.  See the `rasterio docs
+            <https://rasterio.readthedocs.io/en/latest/api/rasterio.enums.html#rasterio.enums.Resampling>`_ for
+            available options.
 
         Returns
         -------
@@ -161,7 +163,7 @@ class RasterCompare(RasterPairReader):
 
     def stats_table(self, stats_list: List[Dict]):
         """
-        Return a table string of the provided comparison statistics.
+        Create a table string from the provided comparison statistics.
 
         Parameters
         ----------
@@ -183,11 +185,13 @@ class RasterCompare(RasterPairReader):
         """
         Statistically compare source and reference images.
 
+        To improve speed and reduce memory usage, images are divided into blocks for concurrent processing.
+
         Parameters
         ----------
         kwargs
-            Optional configuration settings.  See :meth:`RasterCompare.create_config` for arguments and their default
-            values.
+            Optional configuration settings.  See :meth:`RasterCompare.create_config` for possible arguments and their
+            default values.
 
         Returns
         -------

@@ -45,8 +45,6 @@ class ParamStats:
         """
         Class to calculate the statistics of a parameter image.
 
-        Statistics are accumulated over image blocks, allowing large images to be described with limited memory use.
-
         Parameters
         ----------
         param_filename: pathlib.Path, str
@@ -81,7 +79,7 @@ class ParamStats:
 
     @property
     def metadata(self) -> str:
-        """ Printable list of parameter metadata. """
+        """ Parameter metadata string. """
         res_str = (
             f'Model: {self._model}\n'
             f'Kernel shape: {self._tags["FUSE_KERNEL_SHAPE"]}\n'
@@ -94,7 +92,7 @@ class ParamStats:
 
     @property
     def schema_table(self) -> str:
-        """ Printable table describing statistics returned by :attr:`ParamStats.stats`. """
+        """ Table string describing statistics returned by :attr:`ParamStats.stats`. """
         schema_list = [v for k, v in self.schema.items() if 'description' in v]
         schema_list.append(dict(abbrev='*_R2', description='R\N{SUPERSCRIPT TWO} coefficient of determination.'))
         headers = {k: k.upper() for k in schema_list[0].keys()}
@@ -196,6 +194,8 @@ class ParamStats:
     def stats(self, threads: int = 0) -> List[Dict]:
         """
         Find parameter image statistics.
+
+        Statistics are accumulated over image blocks, allowing large images to be described with limited memory use.
 
         Parameters
         ----------

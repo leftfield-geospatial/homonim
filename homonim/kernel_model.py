@@ -101,7 +101,7 @@ class KernelModel:
         ----------
         r2_inpaint_thresh: float, optional
             *R*\\ :sup:`2` (coefficient of determination) threshold below which to `in-paint` kernel model parameters
-            from surrounding areas (applies to :attr:`model` == :attr:`~homonim.enums.Model.gain_offset` only).  For
+            from surrounding areas (applies to the :attr:`~homonim.enums.Model.gain_offset` model only).  For
             pixels where the model gives a poor approximation to the data (this can occur in areas where source and
             reference differ due to e.g. shadowing, land cover changes etc.), model offsets are interpolated from
             surrounding areas, and gains re-estimated.  Set ``r2_inpaint_thresh`` to `None` to turn off in-painting.
@@ -109,9 +109,13 @@ class KernelModel:
             Mask output pixels not produced by full kernel or source/reference image coverage.  Useful for ensuring
             strict model validity, and reducing seam-lines between overlapping images.
         downsampling: rasterio.enums.Resampling, optional
-            Resampling method to use when downsampling.
+            Resampling method to use when downsampling.  See the `rasterio docs
+            <https://rasterio.readthedocs.io/en/latest/api/rasterio.enums.html#rasterio.enums.Resampling>`_ for
+            available options.
         upsampling: rasterio.enums.Resampling, optional
-            Resampling method to use when upsampling.
+            Resampling method to use when upsampling. See the `rasterio docs
+            <https://rasterio.readthedocs.io/en/latest/api/rasterio.enums.html#rasterio.enums.Resampling>`_ for
+            available options.
 
         Returns
         -------

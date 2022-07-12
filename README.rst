@@ -23,8 +23,8 @@ It is useful as a pre-processing step for quantitative mapping applications such
 precision agriculture, and for reducing seamlines and other visual artefacts in image mosaics.  It can be applied to
 multi-spectral drone, aerial and satellite imagery.
 
-``homonim`` is based on the method described in `Radiometric homogenisation of aerial images by calibrating with
-satellite data <https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data>`__.
+``homonim`` is based on the method described in the paper:
+`Radiometric homogenisation of aerial images by calibrating with satellite data <https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data>`__.
 
 .. description_end
 
@@ -103,13 +103,12 @@ Terminology
 
 ``homonim`` is shorthand for *homogenise image* and is a reference to `the paper <https://www.researchgate
 .net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data>`_ on which
-it is based.  The more commonly understood terms *correction* or *surface reflectance correction* are used to describe
-the method in the documentation.
+it is based.
 
 Credits
 -------
 
-``homonim`` depends on a number of `libraries <meta.yaml>`__, making extensive use of the following excellent projects:
+``homonim`` makes extensive use of the following excellent projects:
 
 -  `rasterio <https://github.com/rasterio/rasterio>`__
 -  `opencv <https://github.com/opencv/opencv>`__

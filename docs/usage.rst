@@ -9,9 +9,9 @@ Image preparation
 =================
 
 Before correcting, a *reference* image needs to be acquired.  Examples of suitable surface reflectance image
-collections for the *reference* image are those produced by Landsat, Sentinel-2 and MODIS.  There are a number of platforms providing these images including the Google_ and `Amazon <https://aws.amazon.com/earth/>`_ repositories.  See other options `here <https://eos.com/blog/free-satellite-imagery-sources/>`_.
+collections for the *reference* image are those produced by Landsat, Sentinel-2 and MODIS.
 
-|geedim|_ can be used as a companion tool to ``homonim`` for acquiring *reference* imagery.  It provides command line search, cloud/shadow-free compositing, and download of `Google Earth Engine`_ surface reflectance imagery.
+|geedim|_ can be used as a companion tool to ``homonim`` for acquiring *reference* imagery.  It provides command line search, cloud/shadow-free compositing, and download of `Google Earth Engine`_ surface reflectance imagery. Alternatively, there are a number of online platforms providing these images, including the Google_, `Amazon <https://aws.amazon.com/earth/>`_ and `Microsoft <https://planetarycomputer.microsoft.com/catalog>`_ repositories.
 
 For best results, the *reference* and *source* image(s) should be:
 
