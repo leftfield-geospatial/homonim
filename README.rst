@@ -89,7 +89,7 @@ Mosaics of 0.5 m resolution aerial imagery before and after correction. Correcti
 ``gain-blk-offset`` model and a 5 x 5 pixel kernel, with a Landsat-7 reference image.
 
 
-.. image:: https://raw.githubusercontent.com/dugalh/homonim/main/data/readme_eg.jpg
+.. image:: https://raw.githubusercontent.com/dugalh/homonim/main/data/readme_eg.png
    :alt: example
 
 

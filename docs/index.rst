@@ -9,6 +9,8 @@ homonim
 
 .. include:: installation.rst
 
+.. image:: ../data/readme_eg.png
+
 .. include:: usage.rst
 
 Contents
