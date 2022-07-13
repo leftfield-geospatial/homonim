@@ -81,17 +81,18 @@ Statistically compare the raw and corrected aerial images with the included Land
 
    homonim compare ./homonim/tests/data/source/*_RGB.tif ./*FUSE*.tif ./homonim/tests/data/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif
 
+.. example_start
 
 Example
 -------
 
-Mosaics of 0.5 m resolution aerial imagery before and after correction. Correction was performed using the
-``gain-blk-offset`` model and a 5 x 5 pixel kernel, with a Landsat-7 reference image.
+Mosaics of 0.5 m resolution aerial imagery before and after correction with ``homonim``. Correction was performed using the *gain-blk-offset* model and a 5 x 5 pixel kernel, with a Landsat-7 reference image.
 
 
 .. image:: https://raw.githubusercontent.com/dugalh/homonim/main/data/readme_eg.png
    :alt: example
 
+.. example_end
 
 Usage
 -----
