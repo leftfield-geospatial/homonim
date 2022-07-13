@@ -85,9 +85,9 @@ Statistically compare the raw and corrected aerial images with the included Land
 Example
 -------
 
-Mosaics of 0.5 m resolution aerial imagery before and after correction. A Landsat-7 surface reflectance image was
-used as reference, and is shown in the background. Correction was performed using the ``gain-blk-offset`` model and
-a 5 x 5 pixel kernel.
+Mosaics of 0.5 m resolution aerial imagery before and after correction. Correction was performed using the
+``gain-blk-offset`` model and a 5 x 5 pixel kernel, with a Landsat-7 reference image.
+
 
 .. image:: https://raw.githubusercontent.com/dugalh/homonim/main/data/readme_eg.jpg
    :alt: example
