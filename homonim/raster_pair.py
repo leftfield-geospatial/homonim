@@ -333,7 +333,8 @@ class RasterPairReader:
 
     def __enter__(self):
         self._stack = ExitStack()
-        self._stack.enter_context(rio.Env(GDAL_NUM_THREADS='ALL_CPUs'))
+        # TODO: if the below env settings apply to reads, then might setting gdal cache size to e.g. block size help?
+        self._stack.enter_context(rio.Env(GDAL_NUM_THREADS='ALL_CPUs', GTIFF_FORCE_RGBA=False))
         self._stack.enter_context(logging_redirect_tqdm([logging.getLogger(__package__)]))
         self.open()
         return self
@@ -361,7 +362,8 @@ class RasterPairReader:
             Reference image block wrapped in a RasterArray.
         """
         self._assert_open()
-
+        # TODO: are these reads done in the context gdal environment?  or might we speed up by entering another
+        #  environment here with NUM_THREADS=ALL_CPUS
         with self._src_lock:
             src_ra = RasterArray.from_rio_dataset(
                 self._src_im, indexes=self._src_bands[block_pair.band_i], window=block_pair.src_in_block
