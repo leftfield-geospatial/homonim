@@ -361,8 +361,6 @@ class RasterPairReader:
             Reference image block wrapped in a RasterArray.
         """
         self._assert_open()
-        # TODO: are these reads done in the context gdal environment?  or might we speed up by entering another
-        #  environment here with NUM_THREADS=ALL_CPUS
         with self._src_lock:
             src_ra = RasterArray.from_rio_dataset(
                 self._src_im, indexes=self._src_bands[block_pair.band_i], window=block_pair.src_in_block

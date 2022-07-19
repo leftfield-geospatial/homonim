@@ -353,6 +353,8 @@ class KernelModel:
         if self._r2_inpaint_thresh is not None:
             # fill/inpaint low R2 and negative gain areas in the offset parameter
             r2_mask = (param_ra.array[2] > self._r2_inpaint_thresh) & (param_ra.array[0] > 0) & mask
+            # NOTE: fillnodata does not release the GIL, so this can slow down processing, especially for proc-crs=src
+            # TODO: raise an issue with rasterio to release the GIL on fillnodata
             param_ra.array[1] = fillnodata(param_ra.array[1], r2_mask)
             param_ra.mask = mask  # re-mask as nodata areas will have been filled above
 

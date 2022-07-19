@@ -249,7 +249,7 @@ class RasterFuse(RasterPairReader):
                 f"Parameter image file exists and won't be overwritten without the `overwrite` option: {param_filename}"
             )
         # the images below will be opened in the RasterPairReader context, with its rasterio environment i.e. we
-        # don't need to enter another context here
+        # don't need to enter another environment context here
         out_im = rio.open(corr_filename, 'w', **self._merge_corr_profile(out_profile))
         param_im = rio.open(param_filename, 'w', **self._merge_param_profile(out_profile)) if param_filename else None
         try:
