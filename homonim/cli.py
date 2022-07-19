@@ -64,7 +64,7 @@ class HomonimCommand(cloup.Command):
         sub_strings = {
             '\b\n': '\n\b',  # convert from RST friendly to click literal (unwrapped) block marker
             r'\| ': '',  # strip RST literal (unwrapped) marker in e.g. tables and bullet lists
-            r'\n\.\. _.*:\n': '',  # strip RST ref directive '\n.. <name>:\n'
+            '\n\.\. _.*:\n': '',  # strip RST ref directive '\n.. _<name>:\n'
             '`(.*?) <(.*?)>`_': r'\g<1>',  # convert from RST cross-ref '`<name> <<link>>`_' to 'name'
             '::': ':',  # convert from RST '::' to ':'
             '``(.*?)``': r'\g<1>',  # convert from RST '``literal``' to 'literal'
