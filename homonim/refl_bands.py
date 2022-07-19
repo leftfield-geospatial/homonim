@@ -92,10 +92,9 @@ class ReflBands():
             raise ValueError(f'{other.name.capitalize()} has fewer bands than {self.name}')
 
         if any(self.center_wavelengths) and any(other.center_wavelengths):
-            if sum([cw is not None for cw in self.center_wavelengths]) >
-                self_wavelengths = np.array(self.center_wavelengths)
+            # if sum([cw is not None for cw in self.center_wavelengths]) >
+            self_wavelengths = np.array(self.center_wavelengths)
             other_wavelengths = np.array(other.center_wavelengths)
-            for self_wavelength in self_wavelengths:
 
 
         elif self.count == other.count:
