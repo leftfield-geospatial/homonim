@@ -333,7 +333,6 @@ class RasterPairReader:
 
     def __enter__(self):
         self._stack = ExitStack()
-        # TODO: if the below env settings apply to reads, then might setting gdal cache size to e.g. block size help?
         self._stack.enter_context(rio.Env(GDAL_NUM_THREADS='ALL_CPUs', GTIFF_FORCE_RGBA=False))
         self._stack.enter_context(logging_redirect_tqdm([logging.getLogger(__package__)]))
         self.open()

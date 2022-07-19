@@ -248,7 +248,8 @@ class RasterFuse(RasterPairReader):
             raise FileExistsError(
                 f"Parameter image file exists and won't be overwritten without the `overwrite` option: {param_filename}"
             )
-        # TODO: we have no rasterio environment here to set up threading etc
+        # the images below will be opened in the RasterPairReader context, with its rasterio environment i.e. we
+        # don't need to enter another context here
         out_im = rio.open(corr_filename, 'w', **self._merge_corr_profile(out_profile))
         param_im = rio.open(param_filename, 'w', **self._merge_param_profile(out_profile)) if param_filename else None
         try:
@@ -280,7 +281,6 @@ class RasterFuse(RasterPairReader):
         corr_ra = model.apply(src_ra, param_ra)
         # change the corrected nodata value so that is masked correctly for corr_im
         corr_ra.nodata = corr_im.nodata
-        # TODO: do we need a thread specific gdal environment here?
         with self._corr_lock:  # write the corrected block
             corr_ra.to_rio_dataset(corr_im, indexes=block_pair.band_i + 1, window=block_pair.src_out_block)
 
