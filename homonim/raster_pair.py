@@ -21,7 +21,7 @@ import pathlib
 import threading
 from contextlib import ExitStack
 from itertools import product
-from typing import Tuple, NamedTuple, Union, Iterable
+from typing import Tuple, NamedTuple, Union, Iterable, List
 
 import numpy as np
 import rasterio
@@ -59,7 +59,7 @@ class RasterPairReader:
 
     def __init__(
         self, src_filename: Union[str, pathlib.Path], ref_filename: Union[str, pathlib.Path],
-        proc_crs: ProcCrs = ProcCrs.auto
+        proc_crs: ProcCrs = ProcCrs.auto, src_bands: Tuple[int, ...] = None, ref_bands: Tuple[int, ...] = None,
     ):
         """
         Class for reading matching, and optionally overlapping, blocks from a source and reference image pair.
@@ -77,6 +77,14 @@ class RasterPairReader:
             used for processing.  For most use cases, including typical surface reflectance correction,
             it can be left as the default of :attr:`~homonim.enums.ProcCrs.auto`. In this case it will be resolved to
             refer to the lowest resolution of the source and reference image CRS's.
+        src_bands: list of int, optional.
+            Indexes of source image bands to be corrected (1 based).  If not specified, all bands with the
+            `center_wavelength` property will be used.  If not specified, and no bands have the `center_wavelength`
+            property, all bands will be used.
+        ref_bands: list of int, optional.
+            Indexes of reference image bands to be corrected against (1 based), in order of matches to ``src_bands``.
+            If not specified, all bands with the `center_wavelength` property will be used.  If not specified, and no
+            bands have the `center_wavelength` property, all bands will be used.
         """
         self._src_filename = pathlib.Path(src_filename)
         self._ref_filename = pathlib.Path(ref_filename)
@@ -89,6 +97,8 @@ class RasterPairReader:
         self._src_im = None
         self._ref_im = None
         self._stack = None
+        self._src_bands = src_bands
+        self._ref_bands = ref_bands
         self._init_image_pair()
 
     @property
@@ -109,7 +119,7 @@ class RasterPairReader:
         return self._src_bands
 
     @property
-    def ref_bands(self) -> Tuple[int, ...]:
+    def ref_bands(self) ->Tuple[int, ...]:
         """ Reference non-alpha band indices (1-based). """
         return self._ref_bands
 
