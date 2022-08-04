@@ -131,10 +131,9 @@ class ReflBands():
                 return row, idx
 
             match_dist, match_bands = nanargmin(abs_dist)
-
             if sum(~np.isnan(match_bands)) > other.count:
-                # truncate match_bands to the best N unique matches with other, where N = other.count
-                # match_idx = ~np.isnan(match_bands)
+                # deal with num matched bands > other.count
+                # truncates valid matched bands to the best N unique matches with other, where N = other.count
                 dist_idx = np.argsort(match_dist)[other.count:]
                 match_bands[dist_idx] = np.nan
                 match_dist[dist_idx] = np.nan
