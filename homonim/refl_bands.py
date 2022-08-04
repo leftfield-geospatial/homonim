@@ -111,7 +111,7 @@ class ReflBands():
 
         if other.count < self.count:
             if not force:
-                raise ValueError(f'{other.name} has fewer bands than {self.name}')
+                raise ValueError(f'{other.name} has fewer bands than {self.name}.')
             else:
                 logger.warning(f'Using {other.count} of {self.count} {self.name} bands only.')
 
@@ -120,16 +120,24 @@ class ReflBands():
             # match self and other bands with center wavelengths
             abs_dist = np.abs(self.center_wavelengths[:, np.newaxis] - other.center_wavelengths[:, np.newaxis])
 
+            # TODO: we need to deal with the case where mult self bands get matched to the same ref band
             def nanmin(array: np.ndarray) -> np.ndarray:
                 """ Return min and argmin along the cols (axis=1), reverting to nan if the whole row is nan. """
                 idx = np.array([np.nan] * array.shape[0])
                 val = np.array([np.nan] * array.shape[0])
                 for rowi, row in enumerate(array):
                     idx[rowi] = np.nanargmin(row) if not all(np.isnan(row)) else np.nan
-                    val[rowi] = np.nmin(row)
+                    val[rowi] = np.min(row)
                 return row, idx
 
             match_dist, match_bands = nanargmin(abs_dist)
+
+            if sum(~np.isnan(match_bands)) > other.count:
+                # truncate match_bands to the best N unique matches with other, where N = other.count
+                # match_idx = ~np.isnan(match_bands)
+                dist_idx = np.argsort(match_dist)[other.count:]
+                match_bands[dist_idx] = np.nan
+                match_dist[dist_idx] = np.nan
 
             if any(match_dist > self._max_wavelength_diff):
                 err_idx = match_dist > self._max_wavelength_diff
@@ -155,7 +163,7 @@ class ReflBands():
                 f'(nm) respectively.'
             )
 
-        if any(np.isnan(match_bands)):
+        if sum(np.isnan(match_bands)) < other.count:
             # match remaining unmatched bands
             unmatch_idx = np.isnan(match_bands)
             if self.count == other.count:
@@ -167,8 +175,10 @@ class ReflBands():
                     f'bands: {tuple(unmatch_other_bands)}.'
                 )
             elif force:
-                # take the first sum(unmatch_idx) bands of other, and assumne in matching order with self
-                unmatch_other_bands = set(other.bands).difference(match_bands)[:sum(unmatch_idx)]
+                # take the first sum(unmatch_idx) bands of other, and assumne in matching order with self.
+                unmatch_other_bands = list(set(other.bands).difference(match_bands))[:sum(unmatch_idx)]
+                # if there are not sum(unmatch_idx) bands in other, just use what is there.
+                unmatch_idx = unmatch_idx[:len(unmatch_other_bands)]
                 match_bands[unmatch_idx] = unmatch_other_bands
                 logger.warning(
                     f'Matching {self.name} bands: {tuple(self.bands[unmatch_idx])} in file order with {other.name} '
@@ -178,9 +188,10 @@ class ReflBands():
                 # could not match bands
                 unmatch_other_bands = set(other.bands).difference(match_bands)
                 raise ValueError(
-                    f'Could not matching {self.name} bands: {tuple(self.bands[unmatch_idx])} with {other.name} '
-                    f'bands: {tuple(unmatch_other_bands)}.  Ensure {self.name} and {other.name} non-alpha band counts '
-                    f'match, or set `force` to True.'
+                    f'Could not match {self.name} bands: {tuple(self.bands[unmatch_idx])} with {other.name} '
+                    f'bands: {tuple(unmatch_other_bands)}.  \nEnsure {self.name} and {other.name} non-alpha band '
+                    f'counts match, {self.name} and {other.name} have `center_wavelength` tags for each band, or '
+                    f'set `force` to True.'
                 )
 
         return ReflBands(other.im, other.name, match_bands)
