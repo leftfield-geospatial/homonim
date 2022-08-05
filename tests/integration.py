@@ -26,6 +26,7 @@ from click.testing import CliRunner
 from rasterio.features import shapes
 
 from homonim import root_path, utils, RasterFuse, RasterCompare, ProcCrs, Model
+from homonim.refl_bands import ReflBands
 from homonim.cli import cli
 
 
@@ -33,7 +34,8 @@ from homonim.cli import cli
 def modis_ref_file() -> pathlib.Path:
     return root_path.joinpath(r'tests/data/reference/MODIS-006-MCD43A4-2015_09_15_B143.tif')
 
-
+# TODO: change these files (here and in git) to all bands or more bands so that we use the center wavelen matching
+#  code?
 @pytest.fixture()
 def landsat_ref_file() -> pathlib.Path:
     return root_path.joinpath(r'tests/data/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif')
@@ -133,3 +135,19 @@ def test_fuse_compare(
 
 
 ##
+@pytest.mark.parametrize(
+    'src_file, ref_file', [
+        ('ngi_src_file', 'modis_ref_file'),
+        ('ngi_src_file', 'landsat_ref_file'),
+        ('ngi_src_file', 's2_ref_file'),
+        ('landsat_src_file', 's2_ref_file'),
+    ]
+)
+def test_refl_bands(src_file: str, ref_file: str, tmp_path: pathlib.Path, request: pytest.FixtureRequest):
+    src_file: pathlib.Path = request.getfixturevalue(src_file)
+    ref_file: pathlib.Path = request.getfixturevalue(ref_file)
+    with rio.open(src_file, 'r') as src_ds, rio.open(ref_file, 'r') as ref_ds:
+        src_bands = ReflBands(src_ds, 'src')
+        ref_bands = ReflBands(ref_ds, 'ref')
+        src_match_bands, ref_match_bands = src_bands.match(ref_bands)
+        pass
