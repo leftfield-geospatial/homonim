@@ -83,7 +83,14 @@ class ReflBands():
         self._im = im
         self._bands = bands
         self._center_wavelengths = center_wavelengths[bands - 1]
-        # TODO: get band string names / descriptors to use in log messages/ exceptions
+
+        band_names = np.array(im.descriptions)[bands - 1]
+        if all(band_names):
+            self._band_names = band_names
+        else:
+            self._band_names = np.array(
+                [im.descriptions[bi - 1] if im.descriptions[bi - 1] else f'B{bi}' for bi in bands]
+            )
 
     @property
     def name(self) -> str:
@@ -97,6 +104,9 @@ class ReflBands():
     def bands(self) -> np.ndarray:
         return self._bands
 
+    @property
+    def band_names(self) -> np.ndarray:
+        return self._band_names
     # @bands.setter
     # def bands(self, value: Tuple[int, ...]):
     #     if set(value) > set(self._bands):
@@ -147,83 +157,72 @@ class ReflBands():
                     # store match idx and distance for this row
                     match_idx[min_dist_row_idx] = np.nanargmin(min_dist_row)
                     match_dist[min_dist_row_idx] = min_dist_per_row[min_dist_row_idx]
-                    # prevent same `other` band being selected again
+                    # prevent same row and col being used again
                     dist[:, int(match_idx[min_dist_row_idx])] = np.nan
-                    dist[min_dist_row_idx, :] = np.nan  # TODO: ?
+                    dist[min_dist_row_idx, :] = np.nan
 
-                # for rowi, dist_row in enumerate(dist):
-                #     if not all(np.isnan(dist_row)):
-                #         match_idx[rowi] = np.nanargmin(dist_row)
-                #         match_dist[rowi] = dist_row[int(match_idx[rowi])]
-                #         # if force or (val[rowi] < self._max_wavelength_diff):
-                #         dist[:, int(match_idx[rowi])] = np.nan  # prevent same band being selected twice
                 return match_dist, match_idx
 
             match_dist, match_idx = greedy_match(abs_dist)
-            # # if there are more matched bands > other.count
-            # if sum(~np.isnan(match_bands)) > other.count:
-            #     # truncates valid matched bands to the best N unique matches with other, where N = other.count
-            #     dist_idx = np.argsort(match_dist)[other.count:]
-            #     match_bands[dist_idx] = np.nan
-            #     match_dist[dist_idx] = np.nan
 
             # if any of the matched distances are greater than a threshold, raise an informative error,
             # or log a warning, depending on `force`
             # TODO: do a relative (to self wavelength), rather than absolute comparison
             if any(match_dist > self._max_wavelength_diff):
                 err_idx = match_dist > self._max_wavelength_diff
-                self_err_bands = list(self.bands[err_idx])
-                other_err_bands = list(other.bands[np.int64(match_idx[err_idx])])
+                self_err_band_names = list(self.band_names[err_idx])
+                other_err_band_names = list(other.band_names[np.int64(match_idx[err_idx])])
                 err_dists = list(match_dist[err_idx].round(3))
                 if not force:
                     raise ValueError(
-                        f'{self.name} band(s) {self_err_bands} could not be auto-matched.  The nearest {other.name} '
-                        f'band(s) were {other_err_bands}, at center wavelength difference(s) of {err_dists} (um) '
-                        f'respectively.'
+                        f'{self.name} band(s) {self_err_band_names} could not be auto-matched.  The nearest '
+                        f'{other.name} band(s) were {other_err_band_names}, at center wavelength difference(s) of '
+                        f'{err_dists} (um) respectively.'
                     )
                 else:
                     logger.warning(
-                        f'Force matching {self.name} band(s) {self_err_bands} with {other.name} band(s)'
-                        f' {other_err_bands}, at center wavelength differences of {err_dists} (um) respectively.'
+                        f'Force matching {self.name} band(s) {self_err_band_names} with {other.name} band(s) '
+                        f'{other_err_band_names}, at center wavelength differences of {err_dists} (um) respectively.'
                     )
 
             matched = ~np.isnan(match_idx)
             match_bands[matched] = other.bands[np.int64(match_idx[matched])]
-            # log a message about which bands have been mactched
             logger.debug(
-                f'Matching {self.name} band(s) {list(self.bands[matched])} with {other.name} band(s) '
-                f'{list(other.bands[np.int64(match_idx[matched])])}, at center wavelength difference(s) of '
+                f'Matching {self.name} band(s) {list(self.band_names[matched])} with {other.name} band(s) '
+                f'{list(other.band_names[np.int64(match_idx[matched])])}, at center wavelength difference(s) of '
                 f'{list(match_dist[matched].round(3))} (um) respectively.'
             )
 
         # match any remaining bands that don't have center wavelength metadata
         if sum(~np.isnan(match_bands)) < min(self.count, other.count):
             unmatched = np.isnan(match_bands)
-            unmatch_other_bands = np.array([bi for bi in other.bands if bi not in match_bands])
+            unmatch_other_bands = np.array([bi for bi in other.bands if bi not in match_bands], dtype=int)
+            unmatch_other_band_names = other.band_names[unmatch_other_bands - 1]
             if self.count == other.count:
                 # assume unmatched self and other image bands are in matching order
                 match_bands[unmatched] = unmatch_other_bands
                 logger.debug(
-                    f'Matching {self.name} band(s): {list(self.bands[unmatched])} in file order with {other.name} '
-                    f'band(s): {list(unmatch_other_bands)}.'
+                    f'Matching {self.name} band(s) {list(self.band_names[unmatched])} in file order with {other.name} '
+                    f'band(s) {list(unmatch_other_band_names)}.'
                 )
             elif force:
                 # match the remaining N self bands with the first N unmatched bands of other (N=sum(unmatched))
                 unmatch_other_bands = unmatch_other_bands[:sum(unmatched)]
+                unmatch_other_band_names = unmatch_other_band_names[:sum(unmatched)]
                 # if there are not N unmatched bands in other, truncate unmatched to just match what we can
                 unmatched = unmatched[:len(unmatch_other_bands)]
                 match_bands[unmatched] = unmatch_other_bands
                 logger.warning(
                     f'Matching {self.name} band(s): {list(self.bands[unmatched])} in file order with {other.name} '
-                    f'band(s): {list(unmatch_other_bands)}.'
+                    f'band(s): {list(unmatch_other_band_names)}.'
                 )
             else:
                 # raise an error when remaining unmatched bands counts do not match and `force` is False
                 raise ValueError(
                     f'Could not match {self.name} band(s) {list(self.bands[unmatched])} with {other.name} '
-                    f'band(s) {list(unmatch_other_bands)}.  Ensure {self.name} and {other.name} non-alpha band '
-                    f'counts match, {self.name} and {other.name} have `center_wavelength` tags for each band, or '
-                    f'set `force` to True.'
+                    f'band(s) {list(unmatch_other_band_names)}.  Ensure {self.name} and {other.name} non-alpha band '
+                    f'counts match, {self.name} and {other.name} have `center_wavelength` tags for each band, or set '
+                    f'`force` to True.'
                 )
         # Truncate self and other to reflect the matched bands
         matched = ~np.isnan(match_bands)
@@ -231,7 +230,7 @@ class ReflBands():
         other_match = ReflBands(other.im, other.name, bands=np.int64(match_bands[matched]))
         # TODO: log debug table of matching bands including names, wavelengths etc
         logger.info(
-            f'Matching {self.name} band(s) {list(self_match.bands)} with {other.name} band(s) '
-            f'{list(other_match.bands)}.'
+            f'Matching {self.name} band(s) {list(self_match.band_names)} with {other.name} band(s) '
+            f'{list(other_match.band_names)}.'
         )
         return self_match, other_match
