@@ -25,8 +25,9 @@ import pytest
 import rasterio as rio
 from rasterio.crs import CRS
 from rasterio.enums import Resampling
-from rasterio.transform import Affine
+from rasterio.transform import Affine, from_bounds
 from rasterio.windows import Window
+from rasterio.warp import transform_bounds
 
 from homonim.errors import ImageProfileError, ImageFormatError
 from homonim.raster_array import RasterArray
@@ -250,13 +251,15 @@ def test_reprojection(rgb_byte_ra: RasterArray):
     reprj_ra = rgb_byte_ra.reproject(crs=to_crs, resampling=Resampling.bilinear)
     assert (reprj_ra.crs == to_crs)
     assert (
-        reprj_ra.array[:, reprj_ra.mask].mean() == pytest.approx(rgb_byte_ra.array[:, rgb_byte_ra.mask].mean(), abs=.01)
+        reprj_ra.array[:, reprj_ra.mask].mean() == pytest.approx(rgb_byte_ra.array[:, rgb_byte_ra.mask].mean(), abs=.1)
     )  # yapf: disable
 
     # reproject with rescaling to WGS84 using a specified transform & shape
-    to_transform = Affine.identity() * Affine.scale(.5e-5)
+    bounds_wgs84 = transform_bounds(rgb_byte_ra.crs, to_crs, *rgb_byte_ra.bounds)
+    to_shape = tuple(np.array(rgb_byte_ra.shape) * 2)
+    to_transform = from_bounds(*bounds_wgs84, *to_shape[::-1])
     reprj_ra = rgb_byte_ra.reproject(
-        crs=to_crs, transform=to_transform, shape=tuple(np.array(rgb_byte_ra.shape) * 2), resampling=Resampling.bilinear
+        crs=to_crs, transform=to_transform, shape=to_shape, resampling=Resampling.bilinear
     )
     assert (reprj_ra.crs == to_crs)
     assert (reprj_ra.transform == to_transform)

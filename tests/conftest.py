@@ -94,7 +94,8 @@ def byte_profile(byte_array: np.ndarray) -> Dict:
     """ rasterio profile dict for byte_array. """
     profile = {
         'crs': CRS({'init': 'epsg:3857'}),
-        'transform': Affine.identity() * Affine.translation(1e-10, 1e-10),
+        # North-up, in S hemisphere
+        'transform': Affine(1, 0, 0, 0, -1, 0) * Affine.translation(1, 1),
         'count': 1 if byte_array.ndim < 3 else byte_array.shape[0],
         'dtype': rio.uint8,
         'driver': 'GTiff',
@@ -110,7 +111,8 @@ def float_100cm_profile(float_100cm_array: np.ndarray) -> Dict:
     """ rasterio profile dict for float_100cm_array. """
     profile = {
         'crs': CRS({'init': 'epsg:3857'}),
-        'transform': Affine.identity(),
+        # North-up, in S hemisphere
+        'transform': Affine(1, 0, 0, 0, -1, 0) * Affine.translation(5, 5),
         'count': 1 if float_100cm_array.ndim < 3 else float_100cm_array.shape[0],
         'dtype': rio.float32,
         'driver': 'GTiff',
@@ -126,7 +128,8 @@ def float_50cm_profile(float_50cm_array: np.ndarray) -> Dict:
     """ rasterio profile dict for float_50cm_array. """
     profile = {
         'crs': CRS({'init': 'epsg:3857'}),
-        'transform': Affine.identity() * Affine.scale(0.5),
+        # North-up, and in S hemisphere
+        'transform': Affine(1, 0, 0, 0, -1, 0) * Affine.translation(5, 5) * Affine.scale(0.5),
         'count': 1 if float_50cm_array.ndim < 3 else float_50cm_array.shape[0],
         'dtype': rio.float32,
         'driver': 'GTiff',
@@ -353,6 +356,43 @@ def float_50cm_rgb_file(tmp_path: Path, float_50cm_array: np.ndarray, float_50cm
     with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
         with rio.open(filename, 'w', **profile) as ds:
             ds.write(array, indexes=[1, 2, 3])
+    return filename
+
+
+@pytest.fixture
+def byte_file_wgs84(tmp_path: Path, byte_ra: RasterArray, byte_profile: Dict) -> Path:
+    """ Single band byte geotiff. """
+    filename = tmp_path.joinpath('uint8.tif')
+    with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
+        byte_ra_wgs84 = byte_ra.reproject(crs=CRS.from_epsg('4326'))
+        with rio.open(filename, 'w', **byte_profile) as ds:
+            ds.write(byte_array, indexes=1)
+    return filename
+
+
+@pytest.fixture
+def float_100cm_wgs84_src_file(tmp_path: Path, float_100cm_ra: RasterArray, float_100cm_profile: Dict) -> Path:
+    """ Single band float32 geotiff with 100cm pixel resolution. """
+    filename = tmp_path.joinpath('float_100cm_wgs84_src.tif')
+    with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
+        float_100cm_ra_wgs84_ra = float_100cm_ra.reproject(crs=CRS.from_epsg('4326'), resampling='bilinear')
+        profile = float_100cm_profile.copy()
+        profile.update(float_100cm_ra_wgs84_ra.profile)
+        with rio.open(filename, 'w', **float_100cm_profile) as ds:
+            ds.write(float_100cm_ra_wgs84_ra.array, indexes=1)
+    return filename
+
+
+@pytest.fixture
+def float_45cm_wgs84_src_file(tmp_path: Path, float_45cm_ra: RasterArray, float_45cm_profile: Dict) -> Path:
+    """ Single band float32 geotiff with 45cm pixel resolution. """
+    filename = tmp_path.joinpath('float_45cm_wgs84_src.tif')
+    with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
+        float_45cm_ra_wgs84_ra = float_45cm_ra.reproject(crs=CRS.from_epsg('4326'), resampling='bilinear')
+        profile = float_45cm_profile.copy()
+        profile.update(**float_45cm_ra_wgs84_ra.profile)
+        with rio.open(filename, 'w', **profile) as ds:
+            ds.write(float_45cm_ra_wgs84_ra.array, indexes=1)
     return filename
 
 

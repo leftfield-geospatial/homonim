@@ -468,7 +468,7 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         self, crs: Optional[CRS] = None, transform: Optional[Affine] = None, shape: Optional[Tuple[int, int]] = None,
         nodata: float = default_nodata, dtype: str = default_dtype, resampling: Resampling = Resampling.lanczos,
         **kwargs
-    ):
+    ) -> 'RasterArray':
         """
         Re-project the RasterArray.
 

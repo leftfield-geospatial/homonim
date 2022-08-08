@@ -214,6 +214,8 @@ def test_block_pair_coverage(
         ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 1.e-3),
         ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (0, 0), 2.e-4),
         ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 2.e-4),
+        ('float_100cm_wgs84_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 2.e-4),
+        ('float_45cm_wgs84_src_file', 'float_100cm_ref_file', ProcCrs.auto, (2, 2), 2.e-4),
     ]
 )  # yapf: disable
 def test_block_pair_io(
@@ -221,10 +223,10 @@ def test_block_pair_io(
     request: FixtureRequest,
 ):
     """
-    Test block pairs can be read, reprojected and written as raster arrays without loss of data
+    Test block pairs can be read, reprojected and written as raster arrays without loss of data.
 
     This is more an integration test with raster array than a raster pair unit test.  It simulates the way raster
-    arrays are reprojected in *KernelModel.    .
+    arrays are reprojected in *KernelModel.
     """
     src_file: Path = request.getfixturevalue(src_file)
     ref_file: Path = request.getfixturevalue(ref_file)
@@ -241,8 +243,12 @@ def test_block_pair_io(
     for reproj_ra in ['src', 'ref']:
         # create src and ref test datasets for writing, and enter the raster pair context
         with MemoryFile() as src_mf, MemoryFile() as ref_mf, raster_pair:
-            with src_mf.open(**raster_pair.src_im.profile) as src_ds, ref_mf.open(
-                **raster_pair.ref_im.profile) as ref_ds:   # yapf: disable
+            # create profiles that don't use the VRT driver, which can't be written to
+            src_profile = raster_pair.src_im.meta.copy()
+            src_profile.update(driver='GTiff')
+            ref_profile = raster_pair.ref_im.meta.copy()
+            ref_profile.update(driver='GTiff')
+            with src_mf.open(**src_profile) as src_ds, ref_mf.open(**ref_profile) as ref_ds:   # yapf: disable
                 # read, reproject and write block pairs to their respective datasets
                 block_pairs = list(raster_pair.block_pairs(overlap=overlap, max_block_mem=max_block_mem))
                 for block_pair in block_pairs:
@@ -260,11 +266,11 @@ def test_block_pair_io(
 
             # test the written datasets contain same valid areas as the original src/ref files
             with rio.open(src_file, 'r') as src_ds, src_mf.open() as test_src_ds:
-                src_mask = src_ds.dataset_mask().astype('bool', copy=False)
-                test_mask = test_src_ds.dataset_mask().astype('bool', copy=False)
+                src_mask = src_ds.read_masks(indexes=1).astype('bool', copy=False)
+                test_mask = test_src_ds.read_masks(indexes=1).astype('bool', copy=False)
                 assert (test_mask[src_mask]).all()
 
             with rio.open(ref_file, 'r') as ref_ds, ref_mf.open() as test_ref_ds:
-                ref_mask = ref_ds.dataset_mask().astype('bool', copy=False)
-                test_mask = test_ref_ds.dataset_mask().astype('bool', copy=False)
+                ref_mask = ref_ds.read_masks(indexes=1).astype('bool', copy=False)
+                test_mask = test_ref_ds.read_masks(indexes=1).astype('bool', copy=False)
                 assert (test_mask[ref_mask]).all()
