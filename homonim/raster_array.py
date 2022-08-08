@@ -488,7 +488,7 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         resampling: rasterio.enums.Resampling, optional
             Resampling method to use.
         kwargs: dict, optional
-            Arguments to passed through the rasterio's reproject() function.
+            Additional arguments to pass through the rasterio's reproject() function.
 
         Returns
         -------

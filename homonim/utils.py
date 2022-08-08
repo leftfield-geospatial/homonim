@@ -169,6 +169,14 @@ def create_param_filename(filename: Union[str, pathlib.Path]) -> pathlib.Path:
     return filename.parent.joinpath(f'{filename.stem}_PARAM{filename.suffix}')
 
 
+def north_up(im: rio.DatasetReader) -> bool:
+    """ Return true if im is in a standard North-up orientation. """
+    return(
+        (np.sign(im.transform.a) == 1) and (np.sign(im.transform.e) == -1) and (im.transform.b == 0) and
+        (im.transform.d == 0)
+    )
+
+
 def covers_bounds(im1: rio.DatasetReader, im2: rio.DatasetReader, expand_pixels: Tuple[int, int] = (0, 0)) -> bool:
     """
     Determines if the spatial extents of one image cover another image
