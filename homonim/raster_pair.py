@@ -93,9 +93,7 @@ class RasterPairReader:
             self._validate_pair_format(src_im, ref_im)
             self._src_bands, self._ref_bands = self._match_pair_bands(src_im, ref_im)
             # reproject source to reference CRS if necessary
-            with (
-                WarpedVRT(src_im, crs=ref_im.crs) if src_im.crs != ref_im.crs else src_im
-            ) as src_im:   # yapf:disable
+            with utils.same_orientation_crs_ctx(src_im, ref_im) as (src_im, ref_im):
                 if not utils.covers_bounds(ref_im, src_im):
                     raise errors.ImageContentError(f'Reference extent does not cover source image')
                 self._proc_crs = self._resolve_proc_crs(src_im, ref_im, proc_crs=ProcCrs(proc_crs))
@@ -291,25 +289,10 @@ class RasterPairReader:
         self._src_im = rio.open(self._src_filename, 'r')
         self._ref_im = rio.open(self._ref_filename, 'r')
 
-        # Reproject source and reference so that they both oriented north-up, and in the same CRS
-        # (without transform etc arguments, WarpedVRT re-projects to north-up).
-        if self._src_im.crs.to_proj4() == self._ref_im.crs.to_proj4():
-            # ensure both images are north-up
-            if not utils.north_up(self._src_im):
-                self._src_im = WarpedVRT(self._src_im, crs=self._src_im.crs, resampling=Resampling.bilinear)
-            if not utils.north_up(self._ref_im):
-                self._ref_im = WarpedVRT(self._ref_im, crs=self._ref_im.crs, resampling=Resampling.bilinear)
-        else:
-            # re-project the proc_crs image (usually lower resolution) into the CRS of the other, and ensure both are
-            # north-up
-            if self.proc_crs == ProcCrs.src:
-                self._src_im = WarpedVRT(self._src_im, crs=self._ref_im.crs, resampling=Resampling.bilinear)
-                if not utils.north_up(self._ref_im):
-                    self._ref_im = WarpedVRT(self._ref_im, crs=self._ref_im.crs, resampling=Resampling.bilinear)
-            else:
-                self._ref_im = WarpedVRT(self._ref_im, crs=self._src_im.crs, resampling=Resampling.bilinear)
-                if not utils.north_up(self._src_im):
-                    self._src_im = WarpedVRT(self._src_im, crs=self._src_im.crs, resampling=Resampling.bilinear)
+        # Re-project source and reference so that they both oriented north-up, and in the same CRS
+        # Re-project the proc_crs image (usually lower resolution) into the CRS of the other when the CRSs are not
+        # the same.
+        self._src_im, self._ref_im = utils.same_orientation_crs(self._src_im, self._ref_im, proc_crs=self._proc_crs)
 
         # create image windows that allow re-projections between source and reference without loss of data
         self._ref_win = utils.expand_window_to_grid(self._ref_im.window(*self._src_im.bounds))
