@@ -246,23 +246,24 @@ def test_to_rio_dataset_exceptions(rgb_byte_ra: RasterArray, tmp_path: Path):
 
 def test_reprojection(rgb_byte_ra: RasterArray):
     """ Test raster array re-projection. """
-    # reproject to WGS84 with default parameters
+    # reproject to WGS84 with default parameters, assuming rgb_byte_ra is North up
     to_crs = CRS.from_epsg(4326)
-    reprj_ra = rgb_byte_ra.reproject(crs=to_crs, resampling=Resampling.bilinear)
+    reprj_ra = rgb_byte_ra.reproject(crs=to_crs, resampling=Resampling.nearest)
     assert (reprj_ra.crs == to_crs)
-    assert (
-        reprj_ra.array[:, reprj_ra.mask].mean() == pytest.approx(rgb_byte_ra.array[:, rgb_byte_ra.mask].mean(), abs=.1)
-    )  # yapf: disable
+    abs_diff = np.abs(reprj_ra.array[:, reprj_ra.mask] - rgb_byte_ra.array[:, rgb_byte_ra.mask])
+    assert abs_diff.mean() == pytest.approx(0, abs=.1)
 
     # reproject with rescaling to WGS84 using a specified transform & shape
-    bounds_wgs84 = transform_bounds(rgb_byte_ra.crs, to_crs, *rgb_byte_ra.bounds)
+    to_bounds = transform_bounds(rgb_byte_ra.crs, to_crs, *rgb_byte_ra.bounds)
     to_shape = tuple(np.array(rgb_byte_ra.shape) * 2)
-    to_transform = from_bounds(*bounds_wgs84, *to_shape[::-1])
+    to_transform = from_bounds(*to_bounds, *to_shape[::-1])
     reprj_ra = rgb_byte_ra.reproject(
         crs=to_crs, transform=to_transform, shape=to_shape, resampling=Resampling.bilinear
     )
     assert (reprj_ra.crs == to_crs)
     assert (reprj_ra.transform == to_transform)
+    assert (reprj_ra.shape == to_shape)
+    assert (reprj_ra.bounds == pytest.approx(to_bounds, abs=1.e-9))
     assert (
         reprj_ra.array[:, reprj_ra.mask].mean() == pytest.approx(rgb_byte_ra.array[:, rgb_byte_ra.mask].mean(), abs=.1)
     )
