@@ -145,14 +145,20 @@ class RasterPairReader:
 
         def validate_image_format(im: rasterio.DatasetReader):
             """ Validate an open rasterio dataset for use as a source or reference image. """
+            # test for 12 bit jpegs
+            twelve_bit_jpeg_error =  errors.UnsupportedImageError(
+                f'Could not read image {im.name}.  JPEG compression with NBITS==12 is not supported, '
+                f'you probably need to recompress this image.'
+            )
+            if 'IMAGE_STRUCTURE' in im.tag_namespaces(1) and 'NBITS' in im.tags(1, 'IMAGE_STRUCTURE'):
+                if im.tags(1,'IMAGE_STRUCTURE')['NBITS'] == '12':
+                    raise twelve_bit_jpeg_error
+
             try:
                 _ = im.read(1, window=im.block_window(1, 0, 0))
             except Exception as ex:
                 if 'compress' in im.profile and im.profile['compress'] == 'jpeg':  # assume it is a 12bit JPEG
-                    raise errors.UnsupportedImageError(
-                        f'Could not read image {im.name}.  JPEG compression with NBITS==12 is not supported, '
-                        f'you probably need to recompress this image.'
-                    )
+                    raise twelve_bit_jpeg_error
                 else:
                     raise ex
 
@@ -163,11 +169,17 @@ class RasterPairReader:
                     f'{im.name} has no mask or nodata value, any invalid pixels should be masked before processing.'
                 )
 
+            # warn if not standard north-up orientation
+            if not utils.north_up(im):
+                logger.warning(f'{im.name} will be re-projected to a standard North-up orientation.')
+
         validate_image_format(src_im)
         validate_image_format(ref_im)
         # warn if the source and reference are not in the same CRS
         if src_im.crs.to_proj4() != ref_im.crs.to_proj4():
-            logger.warning(f'Source and reference image pair are not in the same CRS: {src_im.name} and {ref_im.name}')
+            logger.warning(
+                f'Source and reference image will be re-projected to the same CRS: {src_im.name} and {ref_im.name}'
+            )
 
     @staticmethod
     def _match_pair_bands(src_im: rasterio.DatasetReader, ref_im: rasterio.DatasetReader) -> Tuple[Tuple[int], Tuple[int]]:
@@ -222,6 +234,7 @@ class RasterPairReader:
                 f'proc_crs={rec_crs_str} is recommended when the source pixel size is {cmp_str} than the reference.'
             )
         return proc_crs
+
 
     def _auto_block_shape(self, max_block_mem: float = np.inf) -> Tuple[int, int]:
         """ Find a block shape that satisfies max_block_mem. """
@@ -278,15 +291,25 @@ class RasterPairReader:
         self._src_im = rio.open(self._src_filename, 'r')
         self._ref_im = rio.open(self._ref_filename, 'r')
 
-        # It is essential that the source and reference are in the same CRS so that rectangular regions of valid
-        # data in one will re-project to rectangular regions of valid data in the other.
-        if self._src_im.crs.to_proj4() != self._ref_im.crs.to_proj4():
-            # open the image pair in the same CRS, re-projecting the proc_crs (usually lower resolution) image into the
-            # CRS of the other
+        # Reproject source and reference so that they both oriented north-up, and in the same CRS
+        # (without transform etc arguments, WarpedVRT re-projects to north-up).
+        if self._src_im.crs.to_proj4() == self._ref_im.crs.to_proj4():
+            # ensure both images are north-up
+            if not utils.north_up(self._src_im):
+                self._src_im = WarpedVRT(self._src_im, crs=self._src_im.crs, resampling=Resampling.bilinear)
+            if not utils.north_up(self._ref_im):
+                self._ref_im = WarpedVRT(self._ref_im, crs=self._ref_im.crs, resampling=Resampling.bilinear)
+        else:
+            # re-project the proc_crs image (usually lower resolution) into the CRS of the other, and ensure both are
+            # north-up
             if self.proc_crs == ProcCrs.src:
                 self._src_im = WarpedVRT(self._src_im, crs=self._ref_im.crs, resampling=Resampling.bilinear)
+                if not utils.north_up(self._ref_im):
+                    self._ref_im = WarpedVRT(self._ref_im, crs=self._ref_im.crs, resampling=Resampling.bilinear)
             else:
                 self._ref_im = WarpedVRT(self._ref_im, crs=self._src_im.crs, resampling=Resampling.bilinear)
+                if not utils.north_up(self._src_im):
+                    self._src_im = WarpedVRT(self._src_im, crs=self._src_im.crs, resampling=Resampling.bilinear)
 
         # create image windows that allow re-projections between source and reference without loss of data
         self._ref_win = utils.expand_window_to_grid(self._ref_im.window(*self._src_im.bounds))
