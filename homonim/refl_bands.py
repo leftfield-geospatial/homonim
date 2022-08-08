@@ -43,7 +43,7 @@ class ReflBands():
             raise ValueError(
                 f'User specified {name} bands contain alpha band(s) {alpha_bands}.'
             )
-        # test bands have center_wavelength metadata when it exists
+        # warn if some but not all bands have center wavelength metadata
         if (bands is not None) and len(refl_bands) and (not set(bands).issubset(refl_bands)):
             non_refl_bands = list(set(bands).difference(refl_bands))
             logger.warning(
@@ -55,6 +55,7 @@ class ReflBands():
             bands = np.array(bands)
         elif len(refl_bands) > 0:
             # else use bands with center wavelengths if any
+            # TODO: remove these logs, or log band names
             logger.debug(f'Using {name} reflectance bands {list(refl_bands)}.')
             bands = np.array(refl_bands)
         elif len(non_alpha_bands) > 0:
@@ -77,7 +78,7 @@ class ReflBands():
             for i, rgb_cw in zip(non_alpha_bands - 1, [.660, .520, .450]):
                 center_wavelengths[i] = rgb_cw if np.isnan(center_wavelengths[i]) else center_wavelengths[i]
             # TODO: this gets displayed once on init and another time on match for some images
-            logger.debug(f'Assuming {name} image is RGB/RGBA.')
+            logger.debug(f'Assuming standard RGB center wavelengths for {name}.')
 
         self._name = name
         self._im = im
@@ -107,12 +108,6 @@ class ReflBands():
     @property
     def band_names(self) -> np.ndarray:
         return self._band_names
-    # @bands.setter
-    # def bands(self, value: Tuple[int, ...]):
-    #     if set(value) > set(self._bands):
-    #         raise ValueError('`value` must be a subset of `bands`')
-    #     self._bands = value
-    #     self._center_wavelengths
 
     @property
     def count(self) -> int:
@@ -122,42 +117,48 @@ class ReflBands():
     def center_wavelengths(self) -> np.ndarray:
         return self._center_wavelengths
 
+    def select(self, index: np.ndarray) -> 'ReflBands':
+        bands = self._bands[index]
+        band_names = self._band_names[index]
+        center_wavelengths = self._center_wavelengths[index]
+
+
     def match(self, other: 'ReflBands', force=False) -> Tuple['ReflBands', 'ReflBands']:
-        # TODO: maybe force the user to either provide src/ref images with same num bands, or src/ref_bands with same
-        #  number of bands?
         if other.count < self.count:
             if not force:
                 raise ValueError(f'{other.name} has fewer bands than {self.name}.')
             else:
-                logger.warning(f'Using {other.count} of {self.count} {self.name} bands only.')
+                logger.warning(f'{other.name} has fewer bands than {self.name}.')
 
         match_bands = np.array([np.nan] * self.count) # TODO: deal with src.count > ref.count
         # match self with other bands based on center wavelength metadata
         if any(self.center_wavelengths) and any(other.center_wavelengths):
-            # TODO: consider using a linear programming type optimisation here,
+            # TODO: can consider using a linear programming type optimisation here,
             #  e.g. https://stackoverflow.com/questions/67368093/find-optimal-unique-neighbour-pairs-based-on-closest-distance
 
             # absolute distance matrix between self and other center wavelengths
             abs_dist = np.abs(self.center_wavelengths[:, np.newaxis] - other.center_wavelengths[np.newaxis, :])
             def greedy_match(dist: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-                """ Greedy matching of distances.  Returns match distances and indices. """
-                # TODO: match in order of min distance, not in order of rows
-                # `self` bands are down the rows, and `other` bands are along the cols of `dist`.
-                # Attempts to match one `other` band for each `self` band until either all self or all other bands
-                # have been matched.
+                """
+                Greedy matching of `self` to `other` bands based on the provided center wavelength distance matix,
+                `dist`. `self` bands must be down the rows, and `other` bands along the cols of `dist`.
+                Will match one `other` band for each `self` band until either all `self` or all `other` bands
+                have been matched.  Works for all cases where self.count != other.count.
+                """
+                # match_idx[i] is the index of the `other` band that matches with the ith `self` band
                 match_idx = np.array([np.nan] * dist.shape[0])
-                match_dist = np.array([np.nan] * dist.shape[0])
+                match_dist = np.array([np.nan] * dist.shape[0]) # distances corresponding to the above matches
 
                 # repeat until all self or other bands have been matched
                 while not all(np.isnan(np.nanmin(dist, axis=1))) or not all(np.isnan(np.nanmin(dist, axis=0))):
                     # find the row with the smallest distance in it
-                    min_dist_per_row = np.nanmin(dist, axis=1)
-                    min_dist_row_idx = np.nanargmin(min_dist_per_row)
+                    min_dist = np.nanmin(dist, axis=1)
+                    min_dist_row_idx = np.nanargmin(min_dist)
                     min_dist_row = dist[min_dist_row_idx, :]
                     # store match idx and distance for this row
                     match_idx[min_dist_row_idx] = np.nanargmin(min_dist_row)
                     match_dist[min_dist_row_idx] = min_dist_per_row[min_dist_row_idx]
-                    # prevent same row and col being used again
+                    # set the matched row and col to nan, so that it is not used again
                     dist[:, int(match_idx[min_dist_row_idx])] = np.nan
                     dist[min_dist_row_idx, :] = np.nan
 
