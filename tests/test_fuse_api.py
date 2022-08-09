@@ -25,6 +25,7 @@ import rasterio as rio
 import yaml
 from pytest import FixtureRequest
 from rasterio.features import shapes
+from rasterio.vrt import WarpedVRT
 
 from homonim import utils
 from homonim.enums import ProcCrs, Model
@@ -86,6 +87,8 @@ def test_overwrite(tmp_path: Path, float_50cm_src_file: Path, float_100cm_ref_fi
         ('float_100cm_src_file', 'float_45cm_ref_file', Model.gain, (1, 1), 2.e-4),
         ('float_100cm_src_file', 'float_45cm_ref_file', Model.gain_blk_offset, (1, 1), 1.e-3),
         ('float_100cm_src_file', 'float_45cm_ref_file', Model.gain_offset, (5, 5), 1.e-3),
+        ('float_45cm_src_file', 'float_100cm_wgs84_sup_ref_file', Model.gain_blk_offset, (1, 1), 1.e-3),
+        ('float_100cm_wgs84_sup_src_file', 'float_45cm_ref_file', Model.gain_blk_offset, (1, 1), 1.e-3),
     ]
 )  # yapf: disable
 def test_basic_fusion(
@@ -101,7 +104,8 @@ def test_basic_fusion(
     with raster_fuse:
         raster_fuse.process(corr_filename, model, kernel_shape, block_config=block_config)
     assert (corr_filename.exists())
-    with rio.open(src_file, 'r') as src_ds, rio.open(corr_filename, 'r') as out_ds:
+    # open src_file in a WarpedVRT to reproject it North-up (if necessary)
+    with WarpedVRT(rio.open(src_file, 'r')) as src_ds, rio.open(corr_filename, 'r') as out_ds:
         src_array = src_ds.read(indexes=1)
         src_mask = src_ds.dataset_mask().astype('bool', copy=False)
         out_array = out_ds.read(indexes=1)
