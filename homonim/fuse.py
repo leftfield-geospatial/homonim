@@ -36,11 +36,12 @@ from homonim.errors import IoError
 from homonim.kernel_model import KernelModel, RefSpaceModel, SrcSpaceModel
 from homonim.raster_array import RasterArray
 from homonim.raster_pair import RasterPairReader, BlockPair
+from homonim.refl_bands import MatchedPairReader
 
 logger = logging.getLogger(__name__)
 
 
-class RasterFuse(RasterPairReader):
+class RasterFuse(MatchedPairReader):
 
     def __init__(
         self, src_filename: Union[Path, str], ref_filename: Union[Path, str], proc_crs: ProcCrs = ProcCrs.auto,
@@ -62,7 +63,7 @@ class RasterFuse(RasterPairReader):
             :attr:`~homonim.enums.ProcCrs.auto`,  where it will be resolved to the lowest resolution of the source and
             reference image CRS's.
         """
-        RasterPairReader.__init__(self, src_filename, ref_filename, proc_crs=proc_crs)
+        MatchedPairReader.__init__(self, src_filename, ref_filename, proc_crs=proc_crs)
         self._corr_lock = threading.Lock()
         self._param_lock = threading.Lock()
 

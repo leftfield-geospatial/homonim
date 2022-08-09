@@ -59,7 +59,7 @@ class RasterPairReader:
 
     def __init__(
         self, src_filename: Union[str, pathlib.Path], ref_filename: Union[str, pathlib.Path],
-        proc_crs: ProcCrs = ProcCrs.auto, src_bands: Tuple[int, ...] = None, ref_bands: Tuple[int, ...] = None,
+        proc_crs: ProcCrs = ProcCrs.auto,
     ):
         """
         Class for reading matching, and optionally overlapping, blocks from a source and reference image pair.
@@ -77,14 +77,6 @@ class RasterPairReader:
             used for processing.  For most use cases, including typical surface reflectance correction,
             it can be left as the default of :attr:`~homonim.enums.ProcCrs.auto`. In this case it will be resolved to
             refer to the lowest resolution of the source and reference image CRS's.
-        src_bands: list of int, optional.
-            Indexes of source image bands to be corrected (1 based).  If not specified, all bands with the
-            `center_wavelength` property will be used.  If not specified, and no bands have the `center_wavelength`
-            property, all bands will be used.
-        ref_bands: list of int, optional.
-            Indexes of reference image bands to be corrected against (1 based), in order of matches to ``src_bands``.
-            If not specified, all bands with the `center_wavelength` property will be used.  If not specified, and no
-            bands have the `center_wavelength` property, all bands will be used.
         """
         self._src_filename = pathlib.Path(src_filename)
         self._ref_filename = pathlib.Path(ref_filename)
@@ -179,8 +171,9 @@ class RasterPairReader:
                 f'Source and reference image will be re-projected to the same CRS: {src_im.name} and {ref_im.name}'
             )
 
-    @staticmethod
-    def _match_pair_bands(src_im: rasterio.DatasetReader, ref_im: rasterio.DatasetReader) -> Tuple[Tuple[int], Tuple[int]]:
+    def _match_pair_bands(
+        self, src_im: rasterio.DatasetReader, ref_im: rasterio.DatasetReader
+    ) -> Tuple[Tuple[int], Tuple[int]]:  # yapf: disable
         """ Validate and match source and reference bands. """
         # retrieve non-alpha bands
         src_bands = utils.get_nonalpha_bands(src_im)
