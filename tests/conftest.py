@@ -94,7 +94,7 @@ def byte_profile(byte_array: np.ndarray) -> Dict:
     """ rasterio profile dict for byte_array. """
     profile = {
         'crs': CRS({'init': 'epsg:3857'}),
-        # North-up, in S hemisphere
+        # North-up, with origin at (1, -1)
         'transform': Affine(1, 0, 0, 0, -1, 0) * Affine.translation(1, 1),
         'count': 1 if byte_array.ndim < 3 else byte_array.shape[0],
         'dtype': rio.uint8,
@@ -111,7 +111,7 @@ def float_100cm_profile(float_100cm_array: np.ndarray) -> Dict:
     """ rasterio profile dict for float_100cm_array. """
     profile = {
         'crs': CRS({'init': 'epsg:3857'}),
-        # North-up, in S hemisphere
+        # North-up, origin at (5, -5)
         'transform': Affine(1, 0, 0, 0, -1, 0) * Affine.translation(5, 5),
         'count': 1 if float_100cm_array.ndim < 3 else float_100cm_array.shape[0],
         'dtype': rio.float32,
@@ -128,7 +128,7 @@ def float_50cm_profile(float_50cm_array: np.ndarray) -> Dict:
     """ rasterio profile dict for float_50cm_array. """
     profile = {
         'crs': CRS({'init': 'epsg:3857'}),
-        # North-up, and in S hemisphere
+        # North-up, origin at (5, -5)
         'transform': Affine(1, 0, 0, 0, -1, 0) * Affine.translation(5, 5) * Affine.scale(0.5),
         'count': 1 if float_50cm_array.ndim < 3 else float_50cm_array.shape[0],
         'dtype': rio.float32,
@@ -376,6 +376,21 @@ def float_100cm_sup_src_file(tmp_path: Path, float_100cm_array: np.ndarray, floa
 
 
 @pytest.fixture
+def float_100cm_rot_src_file(tmp_path: Path, float_100cm_array: np.ndarray, float_100cm_profile: Dict) -> Path:
+    """ Single band float32 geotiff with 100cm pixel resolution.  West-up orientation. """
+    # Rotate the north-up (-ve scale y axis) transform counter-clock-wise by 90 degrees.  Now both x and y axes are
+    # positive scale.  Then shift the origin (at BL of image) to (5, -15), so that the bounds are the same as for
+    # float_100cm_src_file (i.e. 5,-25,15,-5).
+    transform = Affine(1, 0, 0, 0, -1, 0) * Affine.rotation(90) * Affine.translation(5, -5-float_100cm_array.shape[1])
+    profile = float_100cm_profile.copy()
+    profile.update(transform=transform, width=float_100cm_array.shape[0], height=float_100cm_array.shape[1])
+    filename = tmp_path.joinpath('float_100cm_rot_src.tif')
+    with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(filename, 'w', **profile) as ds:
+        ds.write(np.rot90(float_100cm_array), indexes=1)
+    return filename
+
+
+@pytest.fixture
 def float_100cm_wgs84_src_file(tmp_path: Path, float_100cm_array: np.ndarray, float_100cm_profile: Dict) -> Path:
     """ Single band float32 geotiff with 100cm pixel resolution. WGS84 `projection`.  """
     to_crs = CRS.from_epsg('4326')
@@ -423,6 +438,26 @@ def float_100cm_sup_ref_file(tmp_path: Path, float_100cm_array: np.ndarray, floa
     window = windows.Window(1, 1, float_100cm_array.shape[1], float_100cm_array.shape[0])
     with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(filename, 'w', **profile) as ds:
         ds.write(np.flipud(float_100cm_array), indexes=1, window=window)
+    return filename
+
+
+@pytest.fixture
+def float_100cm_rot_ref_file(tmp_path: Path, float_100cm_array: np.ndarray, float_100cm_profile: Dict) -> Path:
+    """
+    Single band float32 geotiff with 100cm pixel resolution, the same as float_100cm_src_file, but padded with an
+    extra pixel, and West-up orientation.
+    """
+    # Rotate the north-up (-ve scale y axis) transform counter-clock-wise by 90 degrees.  Now both x and y axes are
+    # positive scale.  Then shift the origin (at BL of image) to (5, -15), so that the bounds are the same as for
+    # float_100cm_src_file (i.e. 5,-25,15,-5).
+    transform = Affine(1, 0, 0, 0, -1, 0) * Affine.rotation(90) * Affine.translation(5, -5 - float_100cm_array.shape[1])
+    transform *= Affine.translation(-1, -1)  # padding
+    profile = float_100cm_profile.copy()
+    profile.update(transform=transform, width=float_100cm_array.shape[0] + 2, height=float_100cm_array.shape[1] + 2)
+    window = windows.Window(1, 1, float_100cm_array.shape[0], float_100cm_array.shape[1])
+    filename = tmp_path.joinpath('float_100cm_rot_ref.tif')
+    with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(filename, 'w', **profile) as ds:
+        ds.write(np.rot90(float_100cm_array), indexes=1, window=window)
     return filename
 
 
