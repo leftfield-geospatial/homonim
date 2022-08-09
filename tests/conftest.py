@@ -28,8 +28,8 @@ from click.testing import CliRunner
 from rasterio.crs import CRS
 from rasterio.enums import ColorInterp, Resampling
 from rasterio.transform import Affine
-from rasterio.warp import reproject
-from rasterio.windows import Window
+from rasterio.warp import reproject, calculate_default_transform
+from rasterio import windows
 
 from homonim import root_path, utils
 from homonim.enums import ProcCrs, Model
@@ -267,14 +267,16 @@ def float_100cm_src_file(tmp_path: Path, float_100cm_array: np.ndarray, float_10
 
 @pytest.fixture
 def float_100cm_ref_file(tmp_path: Path, float_100cm_array: np.ndarray, float_100cm_profile: Dict) -> Path:
-    """Single band float32 geotiff with 100cm pixel resolution, the same as float_100cm_src_file, but padded with an
-    extra pixel"""
+    """
+    Single band float32 geotiff with 100cm pixel resolution, the same as float_100cm_src_file, but padded with an
+    extra pixel.
+    """
     shape = (np.array(float_100cm_array.shape) + 2).astype('int')
     transform = float_100cm_profile['transform'] * Affine.translation(-1, -1)
     profile = float_100cm_profile.copy()
     profile.update(transform=transform, width=shape[1], height=shape[0])
     filename = tmp_path.joinpath('float_100cm_ref.tif')
-    window = Window(1, 1, float_100cm_array.shape[1], float_100cm_array.shape[0])
+    window = windows.Window(1, 1, float_100cm_array.shape[1], float_100cm_array.shape[0])
     with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
         with rio.open(filename, 'w', **profile) as ds:
             ds.write(float_100cm_array, indexes=1, window=window)
@@ -300,7 +302,7 @@ def float_50cm_ref_file(tmp_path: Path, float_50cm_array: np.ndarray, float_50cm
     profile = float_50cm_profile.copy()
     profile.update(transform=transform, width=shape[1], height=shape[0])
     filename = tmp_path.joinpath('float_50cm_ref.tif')
-    window = Window(1, 1, float_50cm_array.shape[1], float_50cm_array.shape[0])
+    window = windows.Window(1, 1, float_50cm_array.shape[1], float_50cm_array.shape[0])
     with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
         with rio.open(filename, 'w', **profile) as ds:
             ds.write(float_50cm_array, indexes=1, window=window)
@@ -326,7 +328,7 @@ def float_45cm_ref_file(tmp_path: Path, float_45cm_array: np.ndarray, float_45cm
     profile = float_45cm_profile.copy()
     profile.update(transform=transform, width=shape[1], height=shape[0])
     filename = tmp_path.joinpath('float_45cm_ref.tif')
-    window = Window(1, 1, float_45cm_array.shape[1], float_45cm_array.shape[0])
+    window = windows.Window(1, 1, float_45cm_array.shape[1], float_45cm_array.shape[0])
     with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
         with rio.open(filename, 'w', **profile) as ds:
             ds.write(float_45cm_array, indexes=1, window=window)
@@ -360,39 +362,110 @@ def float_50cm_rgb_file(tmp_path: Path, float_50cm_array: np.ndarray, float_50cm
 
 
 @pytest.fixture
-def byte_file_wgs84(tmp_path: Path, byte_ra: RasterArray, byte_profile: Dict) -> Path:
-    """ Single band byte geotiff. """
-    filename = tmp_path.joinpath('uint8.tif')
-    with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
-        byte_ra_wgs84 = byte_ra.reproject(crs=CRS.from_epsg('4326'))
-        with rio.open(filename, 'w', **byte_profile) as ds:
-            ds.write(byte_array, indexes=1)
+def float_100cm_sup_src_file(tmp_path: Path, float_100cm_array: np.ndarray, float_100cm_profile: Dict) -> Path:
+    """ Single band float32 geotiff with 100cm pixel resolution.  South-up orientation. """
+    transform = (
+        float_100cm_profile['transform'] * Affine.scale(1, -1) * Affine.translation(0, -float_100cm_array.shape[0])
+    )
+    profile = float_100cm_profile.copy()
+    profile.update(transform=transform)
+    filename = tmp_path.joinpath('float_100cm_sup_src.tif')
+    with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(filename, 'w', **profile) as ds:
+        ds.write(np.flipud(float_100cm_array), indexes=1)
     return filename
 
 
 @pytest.fixture
-def float_100cm_wgs84_src_file(tmp_path: Path, float_100cm_ra: RasterArray, float_100cm_profile: Dict) -> Path:
-    """ Single band float32 geotiff with 100cm pixel resolution. """
+def float_100cm_wgs84_src_file(tmp_path: Path, float_100cm_array: np.ndarray, float_100cm_profile: Dict) -> Path:
+    """ Single band float32 geotiff with 100cm pixel resolution. WGS84 `projection`.  """
+    to_crs = CRS.from_epsg('4326')
+    bounds = windows.bounds(windows.Window(0, 0, *float_100cm_array.shape[::-1]), float_100cm_profile['transform'])
+    transform, _, _ = calculate_default_transform(
+        float_100cm_profile['crs'], to_crs, *float_100cm_array.shape[::-1], *bounds
+    )
+    profile = float_100cm_profile.copy()
+    profile.update(crs=to_crs, transform=transform)
     filename = tmp_path.joinpath('float_100cm_wgs84_src.tif')
-    with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
-        float_100cm_ra_wgs84_ra = float_100cm_ra.reproject(crs=CRS.from_epsg('4326'), resampling='bilinear')
-        profile = float_100cm_profile.copy()
-        profile.update(float_100cm_ra_wgs84_ra.profile)
-        with rio.open(filename, 'w', **float_100cm_profile) as ds:
-            ds.write(float_100cm_ra_wgs84_ra.array, indexes=1)
+    with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(filename, 'w', **profile) as ds:
+        ds.write(float_100cm_array, indexes=1)
     return filename
 
 
 @pytest.fixture
-def float_45cm_wgs84_src_file(tmp_path: Path, float_45cm_ra: RasterArray, float_45cm_profile: Dict) -> Path:
-    """ Single band float32 geotiff with 45cm pixel resolution. """
-    filename = tmp_path.joinpath('float_45cm_wgs84_src.tif')
-    with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
-        float_45cm_ra_wgs84_ra = float_45cm_ra.reproject(crs=CRS.from_epsg('4326'), resampling='bilinear')
-        profile = float_45cm_profile.copy()
-        profile.update(**float_45cm_ra_wgs84_ra.profile)
-        with rio.open(filename, 'w', **profile) as ds:
-            ds.write(float_45cm_ra_wgs84_ra.array, indexes=1)
+def float_100cm_wgs84_sup_src_file(tmp_path: Path, float_100cm_array: np.ndarray, float_100cm_profile: Dict) -> Path:
+    """ Single band float32 geotiff with 100cm pixel resolution. WGS84 `projection` and South-up orientation.  """
+    to_crs = CRS.from_epsg('4326')
+    bounds = windows.bounds(windows.Window(0, 0, *float_100cm_array.shape[::-1]), float_100cm_profile['transform'])
+    transform, _, _ = calculate_default_transform(
+        float_100cm_profile['crs'], to_crs, *float_100cm_array.shape[::-1], *bounds
+    )
+    transform *= Affine.scale(1, -1) * Affine.translation(0, -float_100cm_array.shape[0])    # south up
+    profile = float_100cm_profile.copy()
+    profile.update(crs=to_crs, transform=transform)
+    filename = tmp_path.joinpath('float_100cm_wgs84_sup_src.tif')
+    with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(filename, 'w', **profile) as ds:
+        ds.write(np.flipud(float_100cm_array), indexes=1)
+    return filename
+
+
+@pytest.fixture
+def float_100cm_sup_ref_file(tmp_path: Path, float_100cm_array: np.ndarray, float_100cm_profile: Dict) -> Path:
+    """
+    Single band float32 geotiff with 100cm pixel resolution, the same as float_100cm_src_file, but padded with an
+    extra pixel, and South-up orientation.
+    """
+    shape = (np.array(float_100cm_array.shape) + 2).astype('int')
+    transform = float_100cm_profile['transform'] * Affine.translation(-1, -1)   # padding
+    transform *= Affine.scale(1, -1) * Affine.translation(0, -shape[0])   # South-up
+    profile = float_100cm_profile.copy()
+    profile.update(transform=transform, width=shape[1], height=shape[0])
+    filename = tmp_path.joinpath('float_100cm_sup_ref.tif')
+    window = windows.Window(1, 1, float_100cm_array.shape[1], float_100cm_array.shape[0])
+    with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(filename, 'w', **profile) as ds:
+        ds.write(np.flipud(float_100cm_array), indexes=1, window=window)
+    return filename
+
+
+@pytest.fixture
+def float_100cm_wgs84_ref_file(tmp_path: Path, float_100cm_array: np.ndarray, float_100cm_profile: Dict) -> Path:
+    """
+    Single band float32 geotiff with 100cm pixel resolution, the same as float_100cm_src_file, but padded with an
+    extra pixel, and in WGS84.
+    """
+    shape = (np.array(float_100cm_array.shape) + 2).astype('int')
+    to_crs = CRS.from_epsg('4326')
+    bounds = windows.bounds(windows.Window(-1, -1, *shape[::-1]), float_100cm_profile['transform'])
+    transform, _, _ = calculate_default_transform(
+        float_100cm_profile['crs'], to_crs, *shape, *bounds
+    )
+    profile = float_100cm_profile.copy()
+    profile.update(crs=to_crs, transform=transform, width=shape[1], height=shape[0])
+    filename = tmp_path.joinpath('float_100cm_wgs84_ref.tif')
+    window = windows.Window(1, 1, float_100cm_array.shape[1], float_100cm_array.shape[0])
+    with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(filename, 'w', **profile) as ds:
+        ds.write(float_100cm_array, indexes=1, window=window)
+    return filename
+
+
+@pytest.fixture
+def float_100cm_wgs84_sup_ref_file(tmp_path: Path, float_100cm_array: np.ndarray, float_100cm_profile: Dict) -> Path:
+    """
+    Single band float32 geotiff with 100cm pixel resolution, the same as float_100cm_src_file, but padded with an
+    extra pixel, in WGS84, and oriented South-up.
+    """
+    shape = (np.array(float_100cm_array.shape) + 2).astype('int')
+    to_crs = CRS.from_epsg('4326')
+    bounds = windows.bounds(windows.Window(-1, -1, *shape[::-1]), float_100cm_profile['transform'])
+    transform, _, _ = calculate_default_transform(
+        float_100cm_profile['crs'], to_crs, *shape, *bounds
+    )
+    transform *= Affine.scale(1, -1) * Affine.translation(0, -shape[0])    # south up
+    profile = float_100cm_profile.copy()
+    profile.update(crs=to_crs, transform=transform, width=shape[1], height=shape[0])
+    filename = tmp_path.joinpath('float_100cm_wgs84_sup_ref.tif')
+    window = windows.Window(1, 1, float_100cm_array.shape[1], float_100cm_array.shape[0])
+    with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(filename, 'w', **profile) as ds:
+        ds.write(np.flipud(float_100cm_array), indexes=1, window=window)
     return filename
 
 

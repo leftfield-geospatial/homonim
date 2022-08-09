@@ -203,7 +203,7 @@ def test_block_pair_coverage(
             assert (accum_block_pair['ref_in_block'].intersection(raster_pair._ref_win) == raster_pair._ref_win)
             assert (accum_block_pair['ref_out_block'].intersection(raster_pair._ref_win) == raster_pair._ref_win)
 
-
+# TODO: add tests to check rasterpair with N up/ S up ref/src
 @pytest.mark.parametrize(
     'src_file, ref_file, proc_crs, overlap, max_block_mem', [
         ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (0, 0), 1.e-3),
@@ -269,8 +269,52 @@ def test_block_pair_io(
                 src_mask = src_ds.read_masks(indexes=1).astype('bool', copy=False)
                 test_mask = test_src_ds.read_masks(indexes=1).astype('bool', copy=False)
                 assert (test_mask[src_mask]).all()
+                # TODO: include value test here, that would pick up orientation issues.
 
             with rio.open(ref_file, 'r') as ref_ds, ref_mf.open() as test_ref_ds:
                 ref_mask = ref_ds.read_masks(indexes=1).astype('bool', copy=False)
                 test_mask = test_ref_ds.read_masks(indexes=1).astype('bool', copy=False)
                 assert (test_mask[ref_mask]).all()
+
+
+@pytest.mark.parametrize(
+    'src_file, ref_file, proc_crs', [
+        ('float_100cm_src_file', 'float_100cm_ref_file', ProcCrs.ref),
+        ('float_100cm_sup_src_file', 'float_100cm_ref_file', ProcCrs.ref),
+        ('float_100cm_wgs84_src_file', 'float_100cm_ref_file', ProcCrs.ref),
+        ('float_100cm_wgs84_sup_src_file', 'float_100cm_ref_file', ProcCrs.ref),
+        ('float_100cm_wgs84_src_file', 'float_100cm_ref_file', ProcCrs.src),
+        ('float_100cm_wgs84_sup_src_file', 'float_100cm_ref_file', ProcCrs.src),
+        ('float_100cm_src_file', 'float_100cm_sup_ref_file', ProcCrs.ref),
+        ('float_100cm_src_file', 'float_100cm_wgs84_ref_file', ProcCrs.ref),
+        ('float_100cm_src_file', 'float_100cm_wgs84_sup_ref_file', ProcCrs.ref),
+        ('float_100cm_src_file', 'float_100cm_wgs84_ref_file', ProcCrs.src),
+        ('float_100cm_src_file', 'float_100cm_wgs84_sup_ref_file', ProcCrs.src),
+    ]
+)  # yapf: disable
+def test_orientation_crs(src_file: str, ref_file: str, proc_crs: ProcCrs, request: FixtureRequest):
+    """ Test reference and source in different CRS's and orientations. """
+    src_file: Path = request.getfixturevalue(src_file)
+    ref_file: Path = request.getfixturevalue(ref_file)
+    raster_pair = RasterPairReader(src_file, ref_file, proc_crs=proc_crs)
+
+    if raster_pair.proc_crs == ProcCrs.ref:
+        ref_sampling = Resampling.average
+        src_sampling = Resampling.cubic_spline
+    else:
+        ref_sampling = Resampling.cubic_spline
+        src_sampling = Resampling.average
+
+    with raster_pair:
+        block_pairs = list(raster_pair.block_pairs())
+        for block_pair in block_pairs:
+            src_ra, ref_ra = raster_pair.read(block_pair)
+            _src_ra = src_ra.reproject(**ref_ra.proj_profile, resampling=Resampling.nearest)
+            abs_diff = np.abs(ref_ra.array - _src_ra.array)
+            assert np.nanmean(abs_diff) == pytest.approx(0, abs=0.1)
+            assert np.all(_src_ra.mask[ref_ra.mask])
+            _ref_ra = ref_ra.reproject(**src_ra.proj_profile, resampling=Resampling.nearest)
+            abs_diff = np.abs(src_ra.array - _ref_ra.array)
+            assert np.nanmean(abs_diff) == pytest.approx(0, abs=0.1)
+            assert np.all(_ref_ra.mask[src_ra.mask])
+
