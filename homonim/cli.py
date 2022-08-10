@@ -233,6 +233,19 @@ output_option = click.option(
     '-op', '--output', type=click.Path(exists=False, dir_okay=False, writable=True, path_type=pathlib.Path),
     help='Write results to this json file.'
 )
+src_bands_option = click.option(
+    '-sb', '--src-band', 'src_bands', type=click.INT, multiple=True, default=None,
+    show_default='all spectral or non-alpha bands.', help=f'Source band index(es) to process (1 based).'
+)
+ref_bands_option = click.option(
+    '-rb', '--ref-band', 'ref_bands', type=click.INT, multiple=True, default=None,
+    show_default='all spectral or non-alpha bands.',
+    help=f'Reference band index(es) that correspond (spectrally) to :option:`--src-band`(s).'
+)
+force_match_option = click.option(
+    '-f', '--force-match',  is_flag=True, type=click.BOOL, default=False, show_default=True,
+    help=f'Bypass band matching consistency checks.  Use with caution.'
+)
 """ cloup context settings to print help in 'linear' layout with heading/option emphasis. """
 context_settings = cloup.Context.settings(
     formatter_settings=cloup.HelpFormatter.settings(
@@ -283,12 +296,14 @@ def cli(verbose: int, quiet: int):
         '-k', '--kernel-shape', type=click.Tuple([click.INT, click.INT]), nargs=2, default=(5, 5), show_default=True,
         metavar='HEIGHT WIDTH', help='Kernel height and width in pixels of the :option:`--proc-crs` image.'
     ),
+    src_bands_option,
+    ref_bands_option,
     click.option(
         '-od', '--out-dir', type=click.Path(exists=True, file_okay=False, writable=True),
         show_default='source image directory.', help='Directory in which to place corrected image(s).'
     ),
     click.option(
-        '-o', '--overwrite', is_flag=True, type=bool, default=False, show_default=True,
+        '-o', '--overwrite', is_flag=True, type=click.BOOL, default=False, show_default=True,
         help='Overwrite existing output file(s).'
     ),
     click.option(
@@ -364,12 +379,14 @@ def cli(verbose: int, quiet: int):
         help='Driver specific image creation option(s) for the output image(s).  See the `GDAL docs '
         '<https://gdal.org/drivers/raster/index.html>`_ for details.'
     ),
+    force_match_option,  # yapf:disable
 )
 @click.pass_context
 def fuse(
     ctx: click.Context, src_file: Tuple[pathlib.Path, ...], ref_file: pathlib.Path, model: Model,
-    kernel_shape: Tuple[int, int], out_dir: pathlib.Path, overwrite: bool, comp_ref_file: pathlib.Path, build_ovw: bool,
-    proc_crs: ProcCrs, conf: pathlib.Path, param_image: bool, **kwargs
+    kernel_shape: Tuple[int, int], src_bands: Tuple[int], ref_bands: Tuple[int], out_dir: pathlib.Path,
+    overwrite: bool, comp_ref_file: pathlib.Path, build_ovw: bool, proc_crs: ProcCrs, conf: pathlib.Path,
+    param_image: bool, force_match: bool, **kwargs
 ):
     # @formatter:off
     """
@@ -422,7 +439,9 @@ def fuse(
         for src_filename in src_file:
             out_path = pathlib.Path(out_dir) if out_dir is not None else src_filename.parent
             logger.info(f'\nCorrecting {src_filename.name}')
-            with RasterFuse(src_filename, ref_file, proc_crs=proc_crs) as raster_fuse:
+            with RasterFuse(
+                src_filename, ref_file, proc_crs=proc_crs, src_bands=src_bands, ref_bands=ref_bands, force=force_match,
+            ) as raster_fuse:  # yapf: disable
                 # construct output filenames
                 post_fix = utils.create_out_postfix(
                     raster_fuse.proc_crs, model=model, kernel_shape=kernel_shape, driver=out_profile['driver'],
@@ -460,7 +479,7 @@ cli.add_command(fuse)
     help='Path(s) to image(s) to compare with :option:`REFERENCE`.'
 )
 @ref_file_arg
-@cloup.option_group("Standard options", output_option, )
+@cloup.option_group("Standard options", src_bands_option, ref_bands_option, output_option)
 @cloup.option_group(
     "Advanced options", threads_option, max_block_mem_option, downsampling_option, upsampling_option,
     click.option(
@@ -473,9 +492,11 @@ cli.add_command(fuse)
     - `ref`: reference image CRS.
     """
     ),
+    force_match_option,  # yapf: disable
 )
 def compare(
-    src_file: Tuple[pathlib.Path, ...], ref_file: pathlib.Path, output: pathlib.Path, proc_crs: ProcCrs, **kwargs
+    src_file: Tuple[pathlib.Path, ...], ref_file: pathlib.Path, src_bands: Tuple[int], ref_bands: Tuple[int],
+    output: pathlib.Path, proc_crs: ProcCrs, force_match, **kwargs
 ):
     """
     Compare image(s) with a reference.
@@ -504,7 +525,9 @@ def compare(
         for src_filename in src_file:
             logger.info(f'\nComparing {src_filename.name}')
             start_time = timer()
-            with RasterCompare(src_filename, ref_file, proc_crs=proc_crs) as raster_compare:
+            with RasterCompare(
+                src_filename, ref_file, proc_crs=proc_crs, src_bands=src_bands, ref_bands=ref_bands, force=force_match,
+            ) as raster_compare:  # yapf: disable
                 stats_dict[str(src_filename)] = raster_compare.compare(**config)
             logger.info(f'Completed in {timer() - start_time:.2f} secs')
 

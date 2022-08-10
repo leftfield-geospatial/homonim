@@ -96,7 +96,7 @@ class MatchedPairReader(RasterPairReader):
                 f'User specified {name} bands contain non-reflectance band(s) {non_refl_bands}.'
             )
 
-        if bands is not None:
+        if (bands is not None) and (len(bands) > 0):
             # use bands if it was specified
             bands = np.array(bands)
         elif len(refl_bands) > 0:
