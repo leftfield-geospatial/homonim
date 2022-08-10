@@ -68,7 +68,7 @@ class MatchedPairReader(RasterPairReader):
             bands.  Otherwise, without ``center_wavelength`` metadata, ``ref_bands`` should be in matching order with
             :param:`src_bands`.  If ``ref_bands`` is not specified, all bands with the ``center_wavelength`` property,
             or all non-alpha bands, are used as candidates for auto-matching to source bands.
-        force: bool
+        force: bool, optional
             Force matching of source to reference bands by bypassing consistency checks.  Use with caution.
         """
         self._src_bands = src_bands
@@ -120,6 +120,7 @@ class MatchedPairReader(RasterPairReader):
 
         # if the image appears to an RGB or RGBA image, and it does not have all its center wavelengths,
         # then populate the missing wavelengths with default RGB values
+        # TODO: exlcude geedim *MASK bands
         if (len(non_alpha_bands) == 3) and (sum(np.isnan(center_wavelengths)) > 0):
             for i, rgb_cw in zip(non_alpha_bands - 1, [.650, .560, .480]):
                 center_wavelengths[i] = rgb_cw if np.isnan(center_wavelengths[i]) else center_wavelengths[i]

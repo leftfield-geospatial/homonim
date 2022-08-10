@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 class RasterCompare(MatchedPairReader):
 
-    def __init__(self, src_filename: pathlib.Path, ref_filename: pathlib.Path, proc_crs: ProcCrs = ProcCrs.auto):
+    def __init__(self, *args, **kwargs):
         """
         Class to statistically compare source and reference images.
 
@@ -46,17 +46,28 @@ class RasterCompare(MatchedPairReader):
         ----------
         src_filename: str, pathlib.Path
             Path to the source image file.  Can be any raw, corrected, etc. multi-spectral image.
-        ref_filename: str, pathlib.Path
-            Path to the reference image file.  The extents of this image should cover the source with at least a 2
-            pixel border.  The reference image should have at least as many bands as the source, and the
-            ordering of the source and reference bands should match.
+        ref_filename: str, Path
+            Path to the reference image file.  The extents of this image should cover the source with at least a
+            pixel border.  This image should contain spectral bands that correspond (roughly, in terms of
+            wavelength) to the source spectral bands.
         proc_crs: homonim.enums.ProcCrs, optional
             :class:`~homonim.enums.ProcCrs` instance specifying which of the source/reference image spaces will be
             used for comparison.  In most cases, it can be left as the default of
             :attr:`~homonim.enums.ProcCrs.auto`,  where it will be resolved to the lowest resolution of the source and
             reference image CRS's.
+        src_bands: list of int, optional.
+            Indexes of source spectral bands to be compared (1 based).  If not specified, all bands with the
+            ``center_wavelength`` property, or all non-alpha bands, are auto-matched to reference bands.
+        ref_bands: list of int, optional.
+            Indexes of reference spectral bands that correspond (spectrally) to :param:`src_bands`.  If there is
+            ``center_wavelength`` metadata, this will be used to auto-match the specified reference bands to source
+            bands.  Otherwise, without ``center_wavelength`` metadata, ``ref_bands`` should be in matching order with
+            :param:`src_bands`.  If ``ref_bands`` is not specified, all bands with the ``center_wavelength`` property,
+            or all non-alpha bands, are used as candidates for auto-matching to source bands.
+        force: bool, optional
+            Force matching of source to reference bands by bypassing consistency checks.  Use with caution.
         """
-        MatchedPairReader.__init__(self, src_filename, ref_filename, proc_crs=proc_crs)
+        MatchedPairReader.__init__(self, *args, **kwargs)
         self._lock = threading.Lock()
 
     schema = dict(
