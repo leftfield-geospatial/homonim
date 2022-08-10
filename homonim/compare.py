@@ -30,12 +30,13 @@ from tqdm import tqdm
 
 from homonim import utils
 from homonim.enums import ProcCrs
-from homonim.raster_pair import RasterPairReader, BlockPair
+from homonim.raster_pair import BlockPair
+from homonim.matched_pair import MatchedPairReader
 
 logger = logging.getLogger(__name__)
 
 
-class RasterCompare(RasterPairReader):
+class RasterCompare(MatchedPairReader):
 
     def __init__(self, src_filename: pathlib.Path, ref_filename: pathlib.Path, proc_crs: ProcCrs = ProcCrs.auto):
         """
@@ -55,7 +56,7 @@ class RasterCompare(RasterPairReader):
             :attr:`~homonim.enums.ProcCrs.auto`,  where it will be resolved to the lowest resolution of the source and
             reference image CRS's.
         """
-        RasterPairReader.__init__(self, src_filename, ref_filename, proc_crs=proc_crs)
+        MatchedPairReader.__init__(self, src_filename, ref_filename, proc_crs=proc_crs)
         self._lock = threading.Lock()
 
     schema = dict(
