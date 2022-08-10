@@ -214,8 +214,6 @@ def test_block_pair_coverage(
         ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 1.e-3),
         ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (0, 0), 2.e-4),
         ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 2.e-4),
-        ('float_100cm_wgs84_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 2.e-4),
-        ('float_45cm_wgs84_src_file', 'float_100cm_ref_file', ProcCrs.auto, (2, 2), 2.e-4),
     ]
 )  # yapf: disable
 def test_block_pair_io(

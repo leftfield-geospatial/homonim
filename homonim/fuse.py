@@ -36,7 +36,7 @@ from homonim.errors import IoError
 from homonim.kernel_model import KernelModel, RefSpaceModel, SrcSpaceModel
 from homonim.raster_array import RasterArray
 from homonim.raster_pair import RasterPairReader, BlockPair
-from homonim.refl_bands import MatchedPairReader
+from homonim.matched_pair import MatchedPairReader
 
 logger = logging.getLogger(__name__)
 
