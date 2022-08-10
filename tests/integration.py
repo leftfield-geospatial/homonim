@@ -26,7 +26,7 @@ from click.testing import CliRunner
 from rasterio.features import shapes
 
 from homonim import root_path, utils, RasterFuse, RasterCompare, ProcCrs, Model
-from homonim.refl_bands import ReflBands
+from homonim.matched_pair import MatchedPairReader
 from homonim.cli import cli
 
 @pytest.fixture()
@@ -156,20 +156,20 @@ def s2_ref_file2() -> pathlib.Path:
         ('ngi_src_file', 'modis_ref_file', False),
         ('ngi_src_file', 'landsat_ref_file', False),
         ('ngi_src_file', 's2_ref_file', False),
-        ('landsat_ref_file', 's2_ref_file', False),
+        # ('landsat_ref_file', 's2_ref_file', False),
         ('ngi_src_file', 'modis_ref_file2', False),
         ('ngi_src_file', 'landsat_ref_file2', False),
         ('ngi_src_file', 's2_ref_file2', False),
-        ('landsat_ref_file2', 's2_ref_file2', True),
-        ('modis_ref_file2', 's2_ref_file2', False),
-        ('s2_ref_file2', 'landsat_ref_file2', True),
-        ('modis_ref_file2', 'landsat_ref_file2', True),
-        ('modis_ref_file2', 'ngi_src_file', True),
-        ('landsat_ref_file2', 'ngi_src_file', True),
-        ('s2_ref_file2', 'ngi_src_file', True),
+        # ('landsat_ref_file2', 's2_ref_file2', True),
+        # ('modis_ref_file2', 's2_ref_file2', False),
+        # ('s2_ref_file2', 'landsat_ref_file2', True),
+        # ('modis_ref_file2', 'landsat_ref_file2', True),
+        # ('modis_ref_file2', 'ngi_src_file', True),
+        # ('landsat_ref_file2', 'ngi_src_file', True),
+        # ('s2_ref_file2', 'ngi_src_file', True),
     ]
 )
-def test_refl_bands(
+def test_matched_pair(
     src_file: str, ref_file: str, force: bool, tmp_path: pathlib.Path, request: pytest.FixtureRequest,
     caplog: pytest.LogCaptureFixture
 ):
@@ -177,8 +177,5 @@ def test_refl_bands(
     logging.getLogger('rasterio').setLevel(logging.INFO)
     src_file: pathlib.Path = request.getfixturevalue(src_file)
     ref_file: pathlib.Path = request.getfixturevalue(ref_file)
-    with rio.open(src_file, 'r') as src_ds, rio.open(ref_file, 'r') as ref_ds:
-        src_bands = ReflBands(src_ds, 'src')
-        ref_bands = ReflBands(ref_ds, 'ref')
-        src_match_bands, ref_match_bands = src_bands.match(ref_bands, force=force)
+    with MatchedPairReader(src_file, ref_file) as matched_pair:
         pass
