@@ -69,7 +69,7 @@ class MatchedPairReader(RasterPairReader):
             :param:`src_bands`.  If ``ref_bands`` is not specified, all bands with the ``center_wavelength`` property,
             or all non-alpha bands, are used as candidates for auto-matching to source bands.
         force: bool, optional
-            Bypass band-matching errors.  Use with caution.
+            Bypass auto wavelength matching, and any band-matching errors.  Use with caution.
         """
         self._src_bands = src_bands
         self._ref_bands = ref_bands
@@ -82,7 +82,13 @@ class MatchedPairReader(RasterPairReader):
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """ Return band indices, corresponding names, and center wavelengths (if any). """
         name = name or Path(im.name).name or ''
-        non_alpha_bands = np.array([i + 1 for i in range(im.count) if im.colorinterp[i] != ColorInterp.alpha])
+        non_alpha_bands = np.array([
+            i + 1 for i in range(im.count)
+            if (
+                (im.colorinterp[i] != ColorInterp.alpha) and not
+                (im.descriptions[i] and (im.descriptions[i].endswith('_MASK') or im.descriptions[i].endswith('_DIST')))
+            )   # if not alpha band or geedim mask band
+        ])  # yapf: disable
         refl_bands = np.array([bi for bi in non_alpha_bands if 'center_wavelength' in im.tags(bi)])
         # test bands do not contain alpha bands
         if (bands is not None) and (not set(bands).issubset(non_alpha_bands)):
@@ -93,17 +99,17 @@ class MatchedPairReader(RasterPairReader):
             non_refl_bands = list(set(bands).difference(refl_bands))
             logger.warning(f'User specified {name} bands contain non-reflectance band index(es) {non_refl_bands}.')
 
+        log_prefix = f'Using {name} bands '
         if (bands is not None) and (len(bands) > 0):
             # use bands if it was specified
             bands = np.array(bands)
         elif len(refl_bands) > 0:
             # else use bands with center wavelengths if any
-            # TODO: remove these logs, or log band names
-            logger.debug(f'Using {name} reflectance band index(es) {list(refl_bands)}.')
+            log_prefix = f'Using {name} reflectance bands '
             bands = np.array(refl_bands)
         elif len(non_alpha_bands) > 0:
             # else use non-alpha bands
-            logger.debug(f'Using {name} non-alpha band index(es) {list(non_alpha_bands)}.')
+            log_prefix = f'Using {name} non-alpha bands '
             bands = np.array(non_alpha_bands)
         else:
             raise ValueError(f'There are no non-alpha/reflectance {name} bands to use.')
@@ -117,15 +123,14 @@ class MatchedPairReader(RasterPairReader):
 
         # if the image appears to an RGB or RGBA image, and it does not have all its center wavelengths,
         # then populate the missing wavelengths with default RGB values
-        # TODO: exlcude geedim *MASK bands
         if (len(non_alpha_bands) == 3) and (sum(np.isnan(center_wavelengths)) > 0):
             for i, rgb_cw in zip(non_alpha_bands - 1, [.650, .560, .480]):
                 center_wavelengths[i] = rgb_cw if np.isnan(center_wavelengths[i]) else center_wavelengths[i]
-            # TODO: this gets displayed once on init and another time on match for some images
             logger.debug(f'Assuming standard RGB center wavelengths for {name}.')
 
         center_wavelengths = center_wavelengths[bands - 1]
         band_names = np.array([im.descriptions[bi - 1] if im.descriptions[bi - 1] else str(bi) for bi in bands])
+        logger.debug(f'{log_prefix} {list(band_names)}.')
         return bands, band_names, center_wavelengths
 
 
@@ -186,7 +191,7 @@ class MatchedPairReader(RasterPairReader):
 
         match_bands = np.array([np.nan] * len(src_bands)) # TODO: deal with src.count > ref.count
         # match self with other bands based on center wavelength metadata
-        if any(src_wavelengths) and any(ref_wavelengths):
+        if any(src_wavelengths) and any(ref_wavelengths) and not force:
             # TODO: consider using a linear programming type optimisation here,
             #  e.g. https://stackoverflow.com/questions/67368093/find-optimal-unique-neighbour-pairs-based-on-closest-distance
 
@@ -222,7 +227,7 @@ class MatchedPairReader(RasterPairReader):
 
             # if any of the matched distances are greater than a threshold, raise an informative error,
             # or log a warning, depending on `self._force`
-            # TODO: do a relative (to self wavelength), rather than absolute comparison
+            # TODO: do a relative (to self wavelength), rather than absolute comparison?
             if any(match_dist > MatchedPairReader._max_wavelength_diff):
                 err_idx = match_dist > MatchedPairReader._max_wavelength_diff
                 src_err_band_names = list(src_band_names[err_idx])
