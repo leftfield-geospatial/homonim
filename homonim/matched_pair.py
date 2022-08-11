@@ -125,7 +125,7 @@ class MatchedPairReader(RasterPairReader):
             logger.debug(f'Assuming standard RGB center wavelengths for {name}.')
 
         center_wavelengths = center_wavelengths[bands - 1]
-        band_names = np.array([im.descriptions[bi - 1] if im.descriptions[bi - 1] else f'B{bi}' for bi in bands])
+        band_names = np.array([im.descriptions[bi - 1] if im.descriptions[bi - 1] else str(bi) for bi in bands])
         return bands, band_names, center_wavelengths
 
 
@@ -144,10 +144,10 @@ class MatchedPairReader(RasterPairReader):
         band_keys = {'name': 'Name', 'description': 'Descr.', 'center_wavelength': 'Wavelen.'}
         for band_list, im, bands in zip([src_band_list, ref_band_list], [src_im, ref_im], [src_bands, ref_bands]):
             for band in bands:
-                band_dict = im.tags(band)
-                band_dict = {bkn: im.tags(band)[bk] for bk, bkn in band_keys.items() if bk in im.tags(band)}
-                if 'Name' not in band_dict:
-                    band_dict.update(Name=im.descriptions[band-1] or f'B{band}')
+                band_dict = {}
+                if 'name' not in im.tags(band):
+                    band_dict.update(Name=im.descriptions[band-1] or str(band))
+                band_dict.update(**{bkn: im.tags(band)[bk] for bk, bkn in band_keys.items() if bk in im.tags(band)})
                 band_list.append(band_dict)
 
         # combine src and ref lists of dicts into one
