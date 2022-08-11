@@ -244,7 +244,7 @@ ref_bands_option = click.option(
 )
 force_match_option = click.option(
     '-f', '--force-match',  is_flag=True, type=click.BOOL, default=False, show_default=True,
-    help=f'Bypass band matching consistency checks.  Use with caution.'
+    help=f'Bypass band matching errors.  Use with caution.'
 )
 """ cloup context settings to print help in 'linear' layout with heading/option emphasis. """
 context_settings = cloup.Context.settings(

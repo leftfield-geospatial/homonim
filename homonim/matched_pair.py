@@ -69,7 +69,7 @@ class MatchedPairReader(RasterPairReader):
             :param:`src_bands`.  If ``ref_bands`` is not specified, all bands with the ``center_wavelength`` property,
             or all non-alpha bands, are used as candidates for auto-matching to source bands.
         force: bool, optional
-            Force matching of source to reference bands by bypassing consistency checks.  Use with caution.
+            Bypass band-matching errors.  Use with caution.
         """
         self._src_bands = src_bands
         self._ref_bands = ref_bands
