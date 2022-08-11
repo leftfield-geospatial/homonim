@@ -18,12 +18,12 @@
 """
 import logging
 from pathlib import Path
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union, Dict
 
-import rasterio
-from rasterio.enums import ColorInterp
 import numpy as np
 import rasterio as rio
+from rasterio.enums import ColorInterp
+from tabulate import tabulate
 from homonim.raster_pair import RasterPairReader
 from homonim.enums import ProcCrs
 
@@ -78,23 +78,20 @@ class MatchedPairReader(RasterPairReader):
 
     @staticmethod
     def _get_band_info(
-        im: rasterio.DatasetReader, bands: Tuple[int] = None, name: str = None
+        im: rio.DatasetReader, bands: Tuple[int] = None, name: str = None
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """ Return band indices, corresponding names, and center wavelengths (if any). """
         name = name or Path(im.name).name or ''
         non_alpha_bands = np.array([i + 1 for i in range(im.count) if im.colorinterp[i] != ColorInterp.alpha])
         refl_bands = np.array([bi for bi in non_alpha_bands if 'center_wavelength' in im.tags(bi)])
         # test bands do not contain alpha bands
         if (bands is not None) and (not set(bands).issubset(non_alpha_bands)):
             alpha_bands = list(set(bands).difference(non_alpha_bands))
-            raise ValueError(
-                f'User specified {name} bands contain alpha band(s) {alpha_bands}.'
-            )
+            raise ValueError(f'User specified {name} bands contain alpha band(s) {alpha_bands}.')
         # warn if some but not all bands have center wavelength metadata
         if (bands is not None) and len(refl_bands) and (not set(bands).issubset(refl_bands)):
             non_refl_bands = list(set(bands).difference(refl_bands))
-            logger.warning(
-                f'User specified {name} bands contain non-reflectance band(s) {non_refl_bands}.'
-            )
+            logger.warning(f'User specified {name} bands contain non-reflectance band index(es) {non_refl_bands}.')
 
         if (bands is not None) and (len(bands) > 0):
             # use bands if it was specified
@@ -102,11 +99,11 @@ class MatchedPairReader(RasterPairReader):
         elif len(refl_bands) > 0:
             # else use bands with center wavelengths if any
             # TODO: remove these logs, or log band names
-            logger.debug(f'Using {name} reflectance bands {list(refl_bands)}.')
+            logger.debug(f'Using {name} reflectance band index(es) {list(refl_bands)}.')
             bands = np.array(refl_bands)
         elif len(non_alpha_bands) > 0:
             # else use non-alpha bands
-            logger.debug(f'Using {name} non-alpha bands {list(non_alpha_bands)}.')
+            logger.debug(f'Using {name} non-alpha band index(es) {list(non_alpha_bands)}.')
             bands = np.array(non_alpha_bands)
         else:
             raise ValueError(f'There are no non-alpha/reflectance {name} bands to use.')
@@ -128,16 +125,51 @@ class MatchedPairReader(RasterPairReader):
             logger.debug(f'Assuming standard RGB center wavelengths for {name}.')
 
         center_wavelengths = center_wavelengths[bands - 1]
-        band_names = np.array(
-            [im.descriptions[bi - 1] if im.descriptions[bi - 1] else f'B{bi}' for bi in bands]
-        )
+        band_names = np.array([im.descriptions[bi - 1] if im.descriptions[bi - 1] else f'B{bi}' for bi in bands])
         return bands, band_names, center_wavelengths
 
 
+    def _get_pair_band_table(
+        self, src_im: rio.DatasetReader, ref_im: rio.DatasetReader, src_bands: Tuple[int, ...] = None,
+        ref_bands: Tuple[int, ...] = None
+    ):
+        """ Return a table of source and reference metadata for the given bands. """
+        num_bands = min(len(src_bands), len(ref_bands))
+        src_bands = src_bands[:num_bands]
+        ref_bands = ref_bands[:num_bands]
+
+        # retrieve src/ref image band metadata as lists of dicts
+        src_band_list = []
+        ref_band_list = []
+        band_keys = {'name': 'Name', 'description': 'Descr.', 'center_wavelength': 'Wavelen.'}
+        for band_list, im, bands in zip([src_band_list, ref_band_list], [src_im, ref_im], [src_bands, ref_bands]):
+            for band in bands:
+                band_dict = im.tags(band)
+                band_dict = {bkn: im.tags(band)[bk] for bk, bkn in band_keys.items() if bk in im.tags(band)}
+                if 'Name' not in band_dict:
+                    band_dict.update(Name=im.descriptions[band-1] or f'B{band}')
+                band_list.append(band_dict)
+
+        # combine src and ref lists of dicts into one
+        def prefix_dict_keys(band_dict: Dict, prefix: str):
+            return {f'{prefix} {k}':v for k, v in band_dict.items()}
+
+        band_list = []
+        for src_band_dict, ref_band_dict in zip(src_band_list, ref_band_list):
+            band_dict = {}
+            band_dict.update(prefix_dict_keys(src_band_dict, 'Source'))
+            band_dict.update(prefix_dict_keys(ref_band_dict, 'Ref.'))
+            band_list.append(band_dict)
+
+        return tabulate(band_list, headers='keys')
+
+
     def _match_pair_bands(
-        self, src_im: rasterio.DatasetReader, ref_im: rasterio.DatasetReader
+        self, src_im: rio.DatasetReader, ref_im: rio.DatasetReader
     ) -> Tuple[Tuple[int], Tuple[int]]:  # yapf: disable
-        """ Validate and match source and reference bands. """
+        """
+        Validate and match source and reference bands. An override of base class RasterPairReader._match_pair_bands().
+        """
         # TODO: where ref/src_bands are specified, should we not assume they are specified in matching order,
         #  and then not re-match them below?
         # retrieve non-alpha bands
@@ -155,7 +187,7 @@ class MatchedPairReader(RasterPairReader):
         match_bands = np.array([np.nan] * len(src_bands)) # TODO: deal with src.count > ref.count
         # match self with other bands based on center wavelength metadata
         if any(src_wavelengths) and any(ref_wavelengths):
-            # TODO: can consider using a linear programming type optimisation here,
+            # TODO: consider using a linear programming type optimisation here,
             #  e.g. https://stackoverflow.com/questions/67368093/find-optimal-unique-neighbour-pairs-based-on-closest-distance
 
             # absolute distance matrix between self and other center wavelengths
@@ -252,9 +284,5 @@ class MatchedPairReader(RasterPairReader):
         src_bands = src_bands[src_matched]
         ref_matched = np.array([list(ref_bands).index(bi) for bi in match_bands])
         ref_bands = ref_bands[ref_matched]
-        # TODO: log debug table of matching bands including names, wavelengths etc
-        logger.info(
-            f'Matching {src_name} band(s) {list(src_band_names[src_matched])} with {ref_name} band(s) '
-            f'{list(ref_band_names[ref_matched])}.'
-        )
+        logger.info('Matched band(s):\n' + self._get_pair_band_table(src_im, ref_im, src_bands, ref_bands))
         return tuple(src_bands.tolist()), tuple(ref_bands.tolist())

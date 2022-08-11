@@ -2,56 +2,35 @@
   <SRS dataAxisToSRSAxisMapping="1,2">PROJCS["unnamed",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",25],PARAMETER["scale_factor",1],PARAMETER["false_easting",0],PARAMETER["false_northing",0],UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["Easting",EAST],AXIS["Northing",NORTH]]</SRS>
   <GeoTransform> -5.9940000000000000e+04,  3.0000000000000000e+01,  0.0000000000000000e+00, -3.7233900000000000e+06,  0.0000000000000000e+00, -3.0000000000000000e+01</GeoTransform>
   <VRTRasterBand dataType="Byte" band="1">
-    <Metadata>
-      <MDI key="STATISTICS_MAXIMUM">255</MDI>
-      <MDI key="STATISTICS_MEAN">44.738282865889</MDI>
-      <MDI key="STATISTICS_MINIMUM">10</MDI>
-      <MDI key="STATISTICS_STDDEV">18.720163576441</MDI>
-      <MDI key="STATISTICS_VALID_PERCENT">100</MDI>
-    </Metadata>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
       <SourceFilename relativeToVRT="1">LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif</SourceFilename>
       <SourceBand>1</SourceBand>
-      <SourceProperties RasterXSize="245" RasterYSize="416" DataType="Byte" BlockXSize="245" BlockYSize="11" />
-      <SrcRect xOff="4" yOff="4" xSize="245" ySize="416" />
-      <DstRect xOff="0" yOff="0" xSize="245" ySize="416" />
+      <SourceProperties RasterXSize="267" RasterYSize="454" DataType="Byte" BlockXSize="267" BlockYSize="10" />
+      <SrcRect xOff="15" yOff="23" xSize="237" ySize="408" />
+      <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
       <NODATA>0</NODATA>
     </ComplexSource>
   </VRTRasterBand>
   <VRTRasterBand dataType="Byte" band="2">
-    <Metadata>
-      <MDI key="STATISTICS_MAXIMUM">247</MDI>
-      <MDI key="STATISTICS_MEAN">44.077686770911</MDI>
-      <MDI key="STATISTICS_MINIMUM">11</MDI>
-      <MDI key="STATISTICS_STDDEV">14.24902926947</MDI>
-      <MDI key="STATISTICS_VALID_PERCENT">100</MDI>
-    </Metadata>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
       <SourceFilename relativeToVRT="1">LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif</SourceFilename>
       <SourceBand>2</SourceBand>
-      <SourceProperties RasterXSize="245" RasterYSize="416" DataType="Byte" BlockXSize="245" BlockYSize="11" />
-      <SrcRect xOff="4" yOff="4" xSize="245" ySize="416" />
-      <DstRect xOff="0" yOff="0" xSize="245" ySize="416" />
+      <SourceProperties RasterXSize="267" RasterYSize="454" DataType="Byte" BlockXSize="267" BlockYSize="10" />
+      <SrcRect xOff="15" yOff="23" xSize="237" ySize="408" />
+      <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
       <NODATA>0</NODATA>
     </ComplexSource>
   </VRTRasterBand>
   <VRTRasterBand dataType="Byte" band="3">
-    <Metadata>
-      <MDI key="STATISTICS_MAXIMUM">183</MDI>
-      <MDI key="STATISTICS_MEAN">29.413874410524</MDI>
-      <MDI key="STATISTICS_MINIMUM">5</MDI>
-      <MDI key="STATISTICS_STDDEV">9.5945223975201</MDI>
-      <MDI key="STATISTICS_VALID_PERCENT">100</MDI>
-    </Metadata>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
       <SourceFilename relativeToVRT="1">LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif</SourceFilename>
       <SourceBand>3</SourceBand>
-      <SourceProperties RasterXSize="245" RasterYSize="416" DataType="Byte" BlockXSize="245" BlockYSize="11" />
-      <SrcRect xOff="4" yOff="4" xSize="245" ySize="416" />
-      <DstRect xOff="0" yOff="0" xSize="245" ySize="416" />
+      <SourceProperties RasterXSize="267" RasterYSize="454" DataType="Byte" BlockXSize="267" BlockYSize="10" />
+      <SrcRect xOff="15" yOff="23" xSize="237" ySize="408" />
+      <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
       <NODATA>0</NODATA>
     </ComplexSource>
   </VRTRasterBand>
