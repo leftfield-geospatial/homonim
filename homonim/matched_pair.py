@@ -191,7 +191,7 @@ class MatchedPairReader(RasterPairReader):
 
         match_bands = np.array([np.nan] * len(src_bands)) # TODO: deal with src.count > ref.count
         # match self with other bands based on center wavelength metadata
-        if any(src_wavelengths) and any(ref_wavelengths) and not force:
+        if any(src_wavelengths) and any(ref_wavelengths) and not self._force:
             # TODO: consider using a linear programming type optimisation here,
             #  e.g. https://stackoverflow.com/questions/67368093/find-optimal-unique-neighbour-pairs-based-on-closest-distance
 
