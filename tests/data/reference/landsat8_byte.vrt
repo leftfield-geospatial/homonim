@@ -14,7 +14,7 @@
     <NoDataValue>0</NoDataValue>
     <ColorInterp>Gray</ColorInterp>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_Byte.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
       <SourceBand>1</SourceBand>
       <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
       <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
@@ -33,7 +33,7 @@
     </Metadata>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_Byte.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
       <SourceBand>2</SourceBand>
       <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
       <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
@@ -52,7 +52,7 @@
     </Metadata>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_Byte.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
       <SourceBand>3</SourceBand>
       <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
       <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
@@ -71,7 +71,7 @@
     </Metadata>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_Byte.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
       <SourceBand>4</SourceBand>
       <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
       <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
@@ -90,7 +90,7 @@
     </Metadata>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_Byte.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
       <SourceBand>5</SourceBand>
       <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
       <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
@@ -109,7 +109,7 @@
     </Metadata>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_Byte.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
       <SourceBand>6</SourceBand>
       <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
       <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
@@ -128,7 +128,7 @@
     </Metadata>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_Byte.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
       <SourceBand>7</SourceBand>
       <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
       <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
@@ -143,7 +143,7 @@
     </Metadata>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_Byte.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
       <SourceBand>8</SourceBand>
       <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
       <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
@@ -163,7 +163,7 @@
     </Metadata>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_Byte.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
       <SourceBand>9</SourceBand>
       <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
       <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
@@ -179,7 +179,7 @@
     </Metadata>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_Byte.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
       <SourceBand>10</SourceBand>
       <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
       <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
@@ -196,7 +196,7 @@
     </Metadata>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_Byte.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
       <SourceBand>11</SourceBand>
       <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
       <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
@@ -213,7 +213,7 @@
     </Metadata>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_Byte.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
       <SourceBand>12</SourceBand>
       <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
       <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
@@ -229,7 +229,7 @@
     </Metadata>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_Byte.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
       <SourceBand>13</SourceBand>
       <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
       <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
@@ -245,7 +245,7 @@
     </Metadata>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_Byte.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
       <SourceBand>14</SourceBand>
       <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
       <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
@@ -262,7 +262,7 @@
     </Metadata>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_Byte.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
       <SourceBand>15</SourceBand>
       <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
       <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
@@ -279,7 +279,7 @@
     </Metadata>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_Byte.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
       <SourceBand>16</SourceBand>
       <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
       <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
@@ -296,7 +296,7 @@
     </Metadata>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_Byte.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
       <SourceBand>17</SourceBand>
       <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
       <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
@@ -311,7 +311,7 @@
     </Metadata>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_Byte.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
       <SourceBand>18</SourceBand>
       <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
       <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
@@ -326,7 +326,7 @@
     </Metadata>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_Byte.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
       <SourceBand>19</SourceBand>
       <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
       <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
@@ -339,7 +339,7 @@
     </Metadata>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_Byte.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
       <SourceBand>20</SourceBand>
       <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
       <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
@@ -352,7 +352,7 @@
     </Metadata>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_Byte.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
       <SourceBand>21</SourceBand>
       <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
       <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
@@ -365,7 +365,7 @@
     </Metadata>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_Byte.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
       <SourceBand>22</SourceBand>
       <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
       <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
@@ -378,7 +378,7 @@
     </Metadata>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_Byte.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
       <SourceBand>23</SourceBand>
       <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
       <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
@@ -391,7 +391,7 @@
     </Metadata>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_Byte.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
       <SourceBand>24</SourceBand>
       <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
       <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
