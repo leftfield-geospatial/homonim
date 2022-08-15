@@ -78,7 +78,7 @@ class MatchedPairReader(RasterPairReader):
 
     @staticmethod
     def _get_band_info(
-        im: rio.DatasetReader, bands: Tuple[int] = None, name: str = None
+        im: rio.DatasetReader, bands: Tuple[int, ...] = None, name: str = None
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """ Return band indices, corresponding names, and center wavelengths (if any). """
         name = name or Path(im.name).name or ''

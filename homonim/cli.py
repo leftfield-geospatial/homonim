@@ -311,7 +311,8 @@ def cli(verbose: int, quiet: int):
         is_flag=False, flag_value='ref', default=None, callback=_compare_cb,
         help='Compare source and corrected images with this reference image.  If no ``FILE`` value is given, source '
         'and corrected images are compared with :option:`REFERENCE`.'
-    ),
+    ), # TODO: pass through --src-bands and --ref-bands to compare.  And somehow deal with the case where the ref
+       #  file is different... !
     click.option(
         '-bo/-nbo', '--build-ovw/--no-build-ovw', type=click.BOOL, default=True, show_default=True,
         help='Build overviews for the output image(s).'

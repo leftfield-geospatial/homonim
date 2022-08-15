@@ -11,6 +11,7 @@
       <MDI key="scale">2.75e-05</MDI>
       <MDI key="wavelength">0.435-0.451 &amp;mu;m</MDI>
     </Metadata>
+    <Description>SR_B1</Description>
     <NoDataValue>0</NoDataValue>
     <ColorInterp>Gray</ColorInterp>
     <ComplexSource>
@@ -31,6 +32,7 @@
       <MDI key="scale">2.75e-05</MDI>
       <MDI key="wavelength">0.452-0.512 &amp;mu;m</MDI>
     </Metadata>
+    <Description>SR_B2</Description>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
       <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
@@ -50,6 +52,7 @@
       <MDI key="scale">2.75e-05</MDI>
       <MDI key="wavelength">0.533-0.590 &amp;mu;m</MDI>
     </Metadata>
+    <Description>SR_B3</Description>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
       <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
@@ -69,6 +72,7 @@
       <MDI key="scale">2.75e-05</MDI>
       <MDI key="wavelength">0.636-0.673 &amp;mu;m</MDI>
     </Metadata>
+    <Description>SR_B4</Description>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
       <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
@@ -88,6 +92,7 @@
       <MDI key="scale">2.75e-05</MDI>
       <MDI key="wavelength">0.851-0.879 &amp;mu;m</MDI>
     </Metadata>
+    <Description>SR_B5</Description>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
       <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
@@ -107,6 +112,7 @@
       <MDI key="scale">2.75e-05</MDI>
       <MDI key="wavelength">1.566-1.651 &amp;mu;m</MDI>
     </Metadata>
+    <Description>SR_B6</Description>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
       <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
@@ -126,6 +132,7 @@
       <MDI key="scale">2.75e-05</MDI>
       <MDI key="wavelength">2.107-2.294 &amp;mu;m</MDI>
     </Metadata>
+    <Description>SR_B7</Description>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
       <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
@@ -141,6 +148,7 @@
       <MDI key="gsd">30</MDI>
       <MDI key="name">SR_QA_AEROSOL</MDI>
     </Metadata>
+    <Description>SR_QA_AEROSOL</Description>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
       <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
@@ -161,6 +169,7 @@
       <MDI key="units">Kelvin</MDI>
       <MDI key="wavelength">10.60-11.19 &amp;mu;m</MDI>
     </Metadata>
+    <Description>ST_B10</Description>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
       <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
@@ -177,6 +186,7 @@
       <MDI key="name">ST_ATRAN</MDI>
       <MDI key="scale">0.0001</MDI>
     </Metadata>
+    <Description>ST_ATRAN</Description>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
       <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
@@ -194,6 +204,7 @@
       <MDI key="scale">0.01</MDI>
       <MDI key="units">km</MDI>
     </Metadata>
+    <Description>ST_CDIST</Description>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
       <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
@@ -211,6 +222,7 @@
       <MDI key="scale">0.001</MDI>
       <MDI key="units">W/(m^2*sr*um)/ DN</MDI>
     </Metadata>
+    <Description>ST_DRAD</Description>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
       <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
@@ -227,6 +239,7 @@
       <MDI key="name">ST_EMIS</MDI>
       <MDI key="scale">0.0001</MDI>
     </Metadata>
+    <Description>ST_EMIS</Description>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
       <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
@@ -243,6 +256,7 @@
       <MDI key="name">ST_EMSD</MDI>
       <MDI key="scale">0.0001</MDI>
     </Metadata>
+    <Description>ST_EMSD</Description>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
       <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
@@ -260,6 +274,7 @@
       <MDI key="scale">0.01</MDI>
       <MDI key="units">K</MDI>
     </Metadata>
+    <Description>ST_QA</Description>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
       <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
@@ -277,6 +292,7 @@
       <MDI key="scale">0.001</MDI>
       <MDI key="units">W/(m^2*sr*um)/ DN</MDI>
     </Metadata>
+    <Description>ST_TRAD</Description>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
       <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
@@ -294,6 +310,7 @@
       <MDI key="scale">0.001</MDI>
       <MDI key="units">W/(m^2*sr*um)/ DN</MDI>
     </Metadata>
+    <Description>ST_URAD</Description>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
       <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
@@ -309,6 +326,7 @@
       <MDI key="gsd">30</MDI>
       <MDI key="name">QA_PIXEL</MDI>
     </Metadata>
+    <Description>QA_PIXEL</Description>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
       <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
@@ -324,6 +342,7 @@
       <MDI key="gsd">30</MDI>
       <MDI key="name">QA_RADSAT</MDI>
     </Metadata>
+    <Description>QA_RADSAT</Description>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
       <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
@@ -337,6 +356,7 @@
     <Metadata>
       <MDI key="name">FILL_MASK</MDI>
     </Metadata>
+    <Description>FILL_MASK</Description>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
       <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
@@ -350,6 +370,7 @@
     <Metadata>
       <MDI key="name">CLOUD_MASK</MDI>
     </Metadata>
+    <Description>CLOUD_MASK</Description>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
       <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
@@ -363,6 +384,7 @@
     <Metadata>
       <MDI key="name">SHADOW_MASK</MDI>
     </Metadata>
+    <Description>SHADOW_MASK</Description>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
       <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
@@ -376,6 +398,7 @@
     <Metadata>
       <MDI key="name">CLOUDLESS_MASK</MDI>
     </Metadata>
+    <Description>CLOUDLESS_MASK</Description>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
       <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
@@ -389,6 +412,7 @@
     <Metadata>
       <MDI key="name">CLOUD_DIST</MDI>
     </Metadata>
+    <Description>CLOUD_DIST</Description>
     <NoDataValue>0</NoDataValue>
     <ComplexSource>
       <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>

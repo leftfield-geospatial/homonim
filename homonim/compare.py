@@ -170,6 +170,7 @@ class RasterCompare(MatchedPairReader):
             for k, v in sum_over_bands.items()
         }  # yapf: disable
         # add the means to the list of bands
+        # TODO rather return a dict with descriptions as keys to enable easier comparison between comparison results?
         image_stats.append(dict(band='Mean', **mean_stats))
         return image_stats
 
