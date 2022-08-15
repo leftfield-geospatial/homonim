@@ -29,60 +29,27 @@ from homonim import root_path, utils, RasterFuse, RasterCompare, ProcCrs, Model
 from homonim.matched_pair import MatchedPairReader
 from homonim.cli import cli
 
-@pytest.fixture()
-def modis_ref_file() -> pathlib.Path:
-    return root_path.joinpath(r'tests/data/reference/MODIS-006-MCD43A4-2015_09_15_B143.tif')
-
-# TODO: change these files (here and in git) to all bands or more bands so that we use the center wavelen matching
-#  code?
-@pytest.fixture()
-def landsat_ref_file() -> pathlib.Path:
-    return root_path.joinpath(r'tests/data/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif')
-
-
-@pytest.fixture()
-def s2_ref_file() -> pathlib.Path:
-    return root_path.joinpath(
-        r'tests/data/reference/COPERNICUS-S2-20151003T075826_20151003T082014_T35HKC_B432_Byte.tif'
-    )
-
-
-@pytest.fixture()
-def landsat_src_file() -> pathlib.Path:
-    return root_path.joinpath(r'tests/data/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.vrt')
-
-
-@pytest.fixture()
-def ngi_src_files() -> Tuple[pathlib.Path, ...]:
-    source_root = root_path.joinpath('tests/data/source/')
-    return tuple([fn for fn in source_root.glob('3324c_2015_*_RGB.tif')])
-
-
-@pytest.fixture()
-def ngi_src_file() -> pathlib.Path:
-    return root_path.joinpath(r'tests/data/source/3324c_2015_1004_05_0182_RGB.tif')
-
 
 @pytest.mark.parametrize(
-    'src_files, ref_file, model, kernel_shape, proc_crs, mask_partial, exp_proc_crs', [
-        ('ngi_src_files', 'modis_ref_file', Model.gain, (1, 1), ProcCrs.auto, False, ProcCrs.ref),
-        ('ngi_src_files', 'landsat_ref_file', Model.gain_blk_offset, (5, 5), ProcCrs.auto, False, ProcCrs.ref),
-        ('ngi_src_files', 's2_ref_file', Model.gain_offset, (15, 15), ProcCrs.auto, False, ProcCrs.ref),
-        ('landsat_src_file', 's2_ref_file', Model.gain_blk_offset, (5, 5), ProcCrs.auto, False, ProcCrs.src),
-        ('landsat_src_file', 's2_ref_file', Model.gain_blk_offset, (31, 31), ProcCrs.ref, False, ProcCrs.ref),
-        ('ngi_src_files', 's2_ref_file', Model.gain_offset, (31, 31), ProcCrs.src, False, ProcCrs.src),
-        ('ngi_src_files', 'modis_ref_file', Model.gain, (1, 1), ProcCrs.auto, True, ProcCrs.ref),
-        ('ngi_src_files', 'landsat_ref_file', Model.gain_blk_offset, (5, 5), ProcCrs.auto, True, ProcCrs.ref),
-        ('ngi_src_files', 's2_ref_file', Model.gain_offset, (15, 15), ProcCrs.auto, True, ProcCrs.ref),
-        ('landsat_src_file', 's2_ref_file', Model.gain_blk_offset, (5, 5), ProcCrs.auto, True, ProcCrs.src),
-        ('landsat_src_file', 's2_ref_file', Model.gain_blk_offset, (31, 31), ProcCrs.ref, True, ProcCrs.ref),
-        ('ngi_src_files', 's2_ref_file', Model.gain_offset, (31, 31), ProcCrs.src, True, ProcCrs.src),
+    'src_files, ref_file, model, kernel_shape, proc_crs, mask_partial, src_bands, exp_proc_crs', [
+        ('ngi_src_files', 'modis_ref_file', Model.gain, (1, 1), ProcCrs.auto, False, None, ProcCrs.ref),
+        ('ngi_src_files', 'landsat_ref_file', Model.gain_blk_offset, (5, 5), ProcCrs.auto, False, None, ProcCrs.ref),
+        ('ngi_src_files', 's2_ref_file', Model.gain_offset, (15, 15), ProcCrs.auto, False, None, ProcCrs.ref),
+        ('landsat_src_file', 's2_ref_file', Model.gain_blk_offset, (5, 5), ProcCrs.auto, False, (4, 3, 2), ProcCrs.src),
+        ('landsat_src_file', 's2_ref_file', Model.gain_blk_offset, (31, 31), ProcCrs.ref, False, (4, 3, 2), ProcCrs.ref),
+        ('ngi_src_files', 's2_ref_file', Model.gain_offset, (31, 31), ProcCrs.src, False, None, ProcCrs.src),
+        ('ngi_src_files', 'modis_ref_file', Model.gain, (1, 1), ProcCrs.auto, True, None, ProcCrs.ref),
+        ('ngi_src_files', 'landsat_ref_file', Model.gain_blk_offset, (5, 5), ProcCrs.auto, True, None, ProcCrs.ref),
+        ('ngi_src_files', 's2_ref_file', Model.gain_offset, (15, 15), ProcCrs.auto, True, None, ProcCrs.ref),
+        ('landsat_src_file', 's2_ref_file', Model.gain_blk_offset, (5, 5), ProcCrs.auto, True, (4, 3, 2), ProcCrs.src),
+        ('landsat_src_file', 's2_ref_file', Model.gain_blk_offset, (31, 31), ProcCrs.ref, True, (4, 3, 2), ProcCrs.ref),
+        ('ngi_src_files', 's2_ref_file', Model.gain_offset, (31, 31), ProcCrs.src, True, None, ProcCrs.src),
     ]
-)
+)  # TODO: change compare output to dict and change ordering of src_bands (?)
 def test_fuse_compare(
     tmp_path: pathlib.Path, runner: CliRunner, src_files: str, ref_file: str, model: Model,
-    kernel_shape: Tuple[int, int], proc_crs: ProcCrs, mask_partial: bool, exp_proc_crs: ProcCrs,
-    request: pytest.FixtureRequest
+    kernel_shape: Tuple[int, int], proc_crs: ProcCrs, mask_partial: bool, src_bands: Tuple[int, ...],
+    exp_proc_crs: ProcCrs, request: pytest.FixtureRequest
 ):
     """ Additional integration tests using 'real' aerial and satellite imagery. """
 
@@ -92,10 +59,11 @@ def test_fuse_compare(
     src_file_str = ' '.join([str(fn) for fn in src_files])
     post_fix = utils.create_out_postfix(exp_proc_crs, model, kernel_shape, RasterFuse.create_out_profile()['driver'])
     corr_files = [tmp_path.joinpath(src_file.stem + post_fix) for src_file in src_files]
+    src_bands_str = ' '.join([f'-sb {bi}' for bi in src_bands]) if src_bands else ''
 
     cli_str = (
         f'fuse -m {model.value} -k {kernel_shape[0]} {kernel_shape[1]} -od {tmp_path} -pc {proc_crs.value}'
-        f' -mbm 1 {src_file_str} {ref_file}'
+        f' -mbm 1 {src_bands_str} {src_file_str} {ref_file}'
     )
     if mask_partial:
         cli_str += ' --mask-partial'
@@ -105,7 +73,7 @@ def test_fuse_compare(
 
     for (src_file, corr_file) in zip(src_files, corr_files):
         # test corr_file improves on src_file (by comparing both to ref_file)
-        with RasterCompare(src_file, ref_file, proc_crs=proc_crs) as src_compare:
+        with RasterCompare(src_file, ref_file, proc_crs=proc_crs, src_bands=src_bands) as src_compare:
             src_res = src_compare.compare()
         with RasterCompare(corr_file, ref_file, proc_crs=proc_crs) as corr_compare:
             corr_res = corr_compare.compare()
@@ -136,13 +104,13 @@ def test_fuse_compare(
 
 @pytest.fixture()
 def modis_ref_file2() -> pathlib.Path:
-    return root_path.joinpath(r'tests/data/reference/MODIS-006-MCD43A4-2015_09_15.tif')
+    return root_path.joinpath(r'tests/data/reference/modis_nbar.tif')
 
 # TODO: change these files (here and in git) to all bands or more bands so that we use the center wavelen matching
 #  code?
 @pytest.fixture()
 def landsat_ref_file2() -> pathlib.Path:
-    return root_path.joinpath(r'tests/data/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_Byte.tif')
+    return root_path.joinpath(r'tests/data/reference/landsat8_byte.tif')
 
 
 @pytest.fixture()

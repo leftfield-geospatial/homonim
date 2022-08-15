@@ -19,7 +19,7 @@
 import re
 from collections import namedtuple
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Tuple
 
 import numpy as np
 import pytest
@@ -502,6 +502,39 @@ def float_100cm_wgs84_sup_ref_file(tmp_path: Path, float_100cm_array: np.ndarray
     with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'), rio.open(filename, 'w', **profile) as ds:
         ds.write(np.flipud(float_100cm_array), indexes=1, window=window)
     return filename
+
+
+@pytest.fixture()
+def modis_ref_file() -> Path:
+    return root_path.joinpath(r'tests/data/reference/modis_nbar.tif')
+
+
+@pytest.fixture()
+def landsat_ref_file() -> Path:
+    return root_path.joinpath(r'tests/data/reference/landsat8_byte.tif')
+
+
+@pytest.fixture()
+def s2_ref_file() -> Path:
+    return root_path.joinpath(
+        r'tests/data/reference/sentinel2_b432_byte.tif'
+    )
+
+
+@pytest.fixture()
+def landsat_src_file() -> Path:
+    return root_path.joinpath(r'tests/data/reference/landsat8_byte.vrt')
+
+
+@pytest.fixture()
+def ngi_src_files() -> Tuple[Path, ...]:
+    source_root = root_path.joinpath('tests/data/source/')
+    return tuple([fn for fn in source_root.glob('3324c_2015_*_RGB.tif')])
+
+
+@pytest.fixture()
+def ngi_src_file() -> Path:
+    return root_path.joinpath(r'tests/data/source/3324c_2015_1004_05_0182_RGB.tif')
 
 
 @pytest.fixture
