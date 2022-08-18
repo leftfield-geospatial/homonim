@@ -464,7 +464,8 @@ def fuse(
             comp_file = ref_file if str(comp_ref_file) == 'ref' else comp_ref_file
             comp_cfg = {k: kwargs[k] for k, v in RasterCompare.create_config().items() if k in kwargs}
             ctx.invoke(
-                compare, src_file=comp_files, ref_file=comp_file, proc_crs=proc_crs, ref_bands=ref_bands, **comp_cfg
+                compare, src_file=comp_files, ref_file=comp_file, proc_crs=proc_crs,
+                src_bands=[src_bands, None] * len(src_file), ref_bands=ref_bands, force_match=force_match, **comp_cfg
             )
 
     except Exception:
@@ -524,8 +525,14 @@ def compare(
     config = RasterCompare.create_config(**kwargs)
     try:
         stats_dict = {}
+        # if src_bands comes from compare CLI, convert to list[src_bands, ...] with one element for each source file
+        src_bands_list = (
+            [src_bands] * len(src_file)
+            if not src_bands or all([isinstance(src_band, int) for src_band in src_bands])
+            else src_bands
+        )  # yapf: disable
         # iterate over source files, comparing with reference
-        for src_filename in src_file:
+        for src_filename, src_bands in zip(src_file, src_bands_list):
             logger.info(f'\nComparing {src_filename.name}')
             start_time = timer()
             with RasterCompare(
