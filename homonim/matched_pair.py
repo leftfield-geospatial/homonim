@@ -256,8 +256,9 @@ class MatchedPairReader(RasterPairReader):
         # match any remaining bands that don't have center wavelength metadata
         if sum(~np.isnan(match_bands)) < min(len(src_bands), len(ref_bands)):
             unmatched = np.isnan(match_bands)
-            unmatch_ref_bands = np.array([bi for bi in ref_bands if bi not in match_bands], dtype=int)
-            unmatch_ref_band_names = ref_band_names[unmatch_ref_bands - 1]
+            unmatch_ref_idx = np.array([i for i, bi in enumerate(ref_bands) if bi not in match_bands], dtype=int)
+            unmatch_ref_bands = ref_bands[unmatch_ref_idx]
+            unmatch_ref_band_names = ref_band_names[unmatch_ref_idx]
             if len(src_bands) == len(ref_bands):
                 # assume unmatched self and other image bands are in matching order
                 match_bands[unmatched] = unmatch_ref_bands
