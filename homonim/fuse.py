@@ -207,11 +207,16 @@ class RasterFuse(MatchedPairReader):
         for bi in range(0, min(im.count, len(self.ref_bands))):
             ref_bi = self.ref_bands[bi]
             ref_meta_dict = self.ref_im.tags(ref_bi)
-            # TODO: update to copy the latest geedim metadata (also update the test data) (makes sense to do this
-            #  with the band matching update)
-            corr_meta_dict = {k: v for k, v in ref_meta_dict.items() if k in ['ABBREV', 'ID', 'NAME']}
-            im.set_band_description(bi + 1, self.ref_im.descriptions[ref_bi - 1])
+            geedim_meta_keys = ['center_wavelength', 'name', 'description', 'offset', 'scale']
+            # copy geedim metadata from reference if the keys do not already exist in corrected image
+            corr_meta_dict = {
+                k: v for k, v in ref_meta_dict.items()
+                if (k in geedim_meta_keys) and (k not in im.tags(bi + 1))
+            }  # yapf. disable
             im.update_tags(bi + 1, **corr_meta_dict)
+            # copy description from reference if the corrected file does not have one already
+            if im.descriptions[bi] is None:
+                im.set_band_description(bi + 1, self.ref_im.descriptions[ref_bi - 1])
 
     def _set_param_metadata(self, im: DatasetWriter, **kwargs):
         """

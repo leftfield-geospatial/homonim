@@ -77,8 +77,8 @@ def test_fuse_compare(
             src_res = src_compare.compare()
         with RasterCompare(corr_file, ref_file, proc_crs=proc_crs) as corr_compare:
             corr_res = corr_compare.compare()
-        for band_name, src_dict in src_res.items():
-            corr_dict = corr_res[band_name]
+        for band, src_dict in src_res.items():
+            corr_dict = corr_res[band]
             assert (corr_dict['r2'] > src_dict['r2'])
             assert (corr_dict['rmse'] < src_dict['rmse'])
             assert (corr_dict['rrmse'] < src_dict['rrmse'])
