@@ -77,7 +77,8 @@ def test_fuse_compare(
             src_res = src_compare.compare()
         with RasterCompare(corr_file, ref_file, proc_crs=proc_crs) as corr_compare:
             corr_res = corr_compare.compare()
-        for src_dict, corr_dict in zip(src_res, corr_res):
+        for band_name, src_dict in src_res.items():
+            corr_dict = corr_res[band_name]
             assert (corr_dict['r2'] > src_dict['r2'])
             assert (corr_dict['rmse'] < src_dict['rmse'])
             assert (corr_dict['rrmse'] < src_dict['rrmse'])
@@ -88,11 +89,11 @@ def test_fuse_compare(
             corr_mask = corr_ds.dataset_mask().astype('bool', copy=False)
             if not mask_partial:
                 # test src and homo masks are identical
-                assert (corr_res[-1]['n'] == src_res[-1]['n'])
+                assert (corr_res['Mean']['n'] == src_res['Mean']['n'])
                 assert (corr_mask == src_mask).all()
             else:
                 # test homo mask is smaller than src mask
-                assert (corr_res[-1]['n'] < src_res[-1]['n'])
+                assert (corr_res['Mean']['n'] < src_res['Mean']['n'])
                 assert (corr_mask.sum() > 0)
                 assert (corr_mask.sum() < src_mask.sum())
                 assert (src_mask[corr_mask].all())

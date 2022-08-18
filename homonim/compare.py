@@ -152,7 +152,7 @@ class RasterCompare(MatchedPairReader):
             rrmse = rmse / ref_mean
             return dict(r2=pcc ** 2, rmse=rmse, rrmse=rrmse, n=int(mask_sum))
 
-        image_stats = []
+        image_stats = {}
         sum_over_bands = {}
         for band_i, band_sum_dict in enumerate(image_sums):
             band_stats = get_band_stats(**band_sum_dict)
@@ -161,7 +161,7 @@ class RasterCompare(MatchedPairReader):
                 self.src_im.descriptions[self.src_bands[band_i] - 1] or
                 f'Band {band_i + 1}'
             )  # yapf: disable
-            image_stats.append(dict(band=band_desc, **band_stats))
+            image_stats[band_desc] = band_stats
             sum_over_bands = {k: sum_over_bands.get(k, 0) + v for k, v in band_stats.items()}
 
         # find mean of each statistic over the bands, retaining int types
@@ -171,30 +171,33 @@ class RasterCompare(MatchedPairReader):
         }  # yapf: disable
         # add the means to the list of bands
         # TODO rather return a dict with descriptions as keys to enable easier comparison between comparison results?
-        image_stats.append(dict(band='Mean', **mean_stats))
+        image_stats['Mean'] = mean_stats
         return image_stats
 
-    def stats_table(self, stats_list: List[Dict]):
+    def stats_table(self, stats_dict: Dict[str, Dict], key_header: str = 'band'):
         """
         Create a table string from the provided comparison statistics.
 
         Parameters
         ----------
-        stats_list: list of dict
+        stats_dict: dict of str: dict
             Comparison statistics to tabulate, as returned by :meth:`RasterCompare.compare`.
+        key_headrer: str, optional
+            Table header for the stats_dict key values.
 
         Returns
         -------
         str
             Table string.
         """
+        stats_list = [dict(**{key_header: key}, **val) for key, val in stats_dict.items()]
         headers = {
             k: self.schema[k]['abbrev'] if k in self.schema else str.capitalize(k)
             for k in list(stats_list[0].keys())
         }  # yapf: disable
         return tabulate(stats_list, headers=headers, floatfmt='.3f', stralign='right', tablefmt=utils.table_format)
 
-    def compare(self, **kwargs) -> List[Dict]:
+    def compare(self, **kwargs) -> Dict[str, Dict]:
         """
         Statistically compare source and reference images.
 
@@ -208,8 +211,8 @@ class RasterCompare(MatchedPairReader):
 
         Returns
         -------
-        list of dict
-            List of dicts for each band, representing the comparison results.
+        dict of str: dict
+            Dict representing the comparison results.
         """
         self._assert_open()
         config = self.create_config(**kwargs)

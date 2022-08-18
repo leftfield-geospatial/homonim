@@ -536,16 +536,14 @@ def compare(
         logger.info(f'\n\n{raster_compare.schema_table}')
 
         # print a results table per source image file
-        summ_list = []
-        for src_filename, im_stats_list in stats_dict.items():
-            logger.info(f'\n\n{str(src_filename)}:\n\n{raster_compare.stats_table(im_stats_list)}')
-            mean_dict = im_stats_list[-1].copy()
-            mean_dict.pop('band')
-            summ_list.append(dict(file=pathlib.Path(src_filename).name, **mean_dict))
+        summ_dict = {}
+        for src_filename, im_stats_dict in stats_dict.items():
+            logger.info(f'\n\n{str(src_filename)}:\n\n{raster_compare.stats_table(im_stats_dict)}')
+            summ_dict[pathlib.Path(src_filename).name] = im_stats_dict['Mean'].copy()
 
         # print a summary results table comparing all source files
-        if len(summ_list) > 1:
-            logger.info(f'\n\nSummary over bands:\n\n{raster_compare.stats_table(summ_list)}')
+        if len(summ_dict) > 1:
+            logger.info(f'\n\nSummary over bands:\n\n{raster_compare.stats_table(summ_dict, key_header="file")}')
 
         if output is not None:
             stats_dict['Reference'] = str(ref_file)
