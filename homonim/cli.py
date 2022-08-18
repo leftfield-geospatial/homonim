@@ -307,12 +307,16 @@ def cli(verbose: int, quiet: int):
         help='Overwrite existing output file(s).'
     ),
     click.option(
-        '-cmp', '--compare', 'comp_ref_file', metavar='FILE', type=click.Path(dir_okay=False, path_type=pathlib.Path),
+        '-cmp', '--compare', 'cmp_file', metavar='FILE', type=click.Path(dir_okay=False, path_type=pathlib.Path),
         is_flag=False, flag_value='ref', default=None, callback=_compare_cb,
         help='Compare source and corrected images with this reference image.  If no ``FILE`` value is given, source '
         'and corrected images are compared with :option:`REFERENCE`.'
-    ), # TODO: pass through --src-bands and --ref-bands to compare.  And somehow deal with the case where the ref
-       #  file is different... !
+    ),
+    click.option(
+        '-cb', '--cmp-band', 'cmp_bands', type=click.INT, multiple=True, default=None,
+        show_default='all spectral or non-alpha bands.',
+        help=f'Comparison reference band index(es) that correspond (spectrally) to :option:`--src-band`(s).'
+    ),
     click.option(
         '-bo/-nbo', '--build-ovw/--no-build-ovw', type=click.BOOL, default=True, show_default=True,
         help='Build overviews for the output image(s).'
@@ -386,8 +390,8 @@ def cli(verbose: int, quiet: int):
 def fuse(
     ctx: click.Context, src_file: Tuple[pathlib.Path, ...], ref_file: pathlib.Path, model: Model,
     kernel_shape: Tuple[int, int], src_bands: Tuple[int], ref_bands: Tuple[int], out_dir: pathlib.Path,
-    overwrite: bool, comp_ref_file: pathlib.Path, build_ovw: bool, proc_crs: ProcCrs, conf: pathlib.Path,
-    param_image: bool, force_match: bool, **kwargs
+    overwrite: bool, cmp_file: pathlib.Path, cmp_bands: Tuple[int], build_ovw: bool, proc_crs: ProcCrs,
+    conf: pathlib.Path, param_image: bool, force_match: bool, **kwargs
 ):
     # @formatter:off
     """
@@ -460,12 +464,16 @@ def fuse(
             comp_files += [src_filename, corr_filename]  # build a list of files to pass to compare
 
         # compare source and corrected files with reference (invokes compare command with relevant parameters)
-        if comp_ref_file:
-            comp_file = ref_file if str(comp_ref_file) == 'ref' else comp_ref_file
-            comp_cfg = {k: kwargs[k] for k, v in RasterCompare.create_config().items() if k in kwargs}
+        if cmp_file:
+            if str(cmp_file) == 'ref':
+                cmp_file = ref_file
+                cmp_bands = ref_bands if not cmp_bands or not len(cmp_bands) else cmp_bands
+
+            cmp_cfg = {k: kwargs[k] for k, v in RasterCompare.create_config().items() if k in kwargs}
             ctx.invoke(
-                compare, src_file=comp_files, ref_file=comp_file, proc_crs=proc_crs,
-                src_bands=[src_bands, None] * len(src_file), ref_bands=ref_bands, force_match=force_match, **comp_cfg
+                compare, src_file=comp_files, ref_file=cmp_file, proc_crs=proc_crs,
+                src_bands=[src_bands, None] * len(src_file), ref_bands=cmp_bands, force_match=force_match,
+                **cmp_cfg
             )
 
     except Exception:
