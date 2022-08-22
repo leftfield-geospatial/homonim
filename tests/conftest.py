@@ -65,7 +65,7 @@ def param_file_tile_10x20() -> Path:
 @pytest.fixture
 def byte_array() -> np.ndarray:
     """ 2D byte gradient image with single pixel nodata=255 border. """
-    array = np.array(range(1, 101), dtype='uint8').reshape(20, 5)
+    array = np.array(range(1, 201), dtype='uint8').reshape(20, 10)
     array[:, [0, -1]] = 255
     array[[0, -1], :] = 255
     return array
@@ -95,7 +95,7 @@ def byte_profile(byte_array: np.ndarray) -> Dict:
     profile = {
         'crs': CRS({'init': 'epsg:3857'}),
         # North-up, with origin at (1, -1)
-        'transform': Affine(1, 0, 0, 0, -1, 0) * Affine.translation(1, 1),
+        'transform': Affine(1, 0, 0, 0, -1, 0) * Affine.translation(5, 5),
         'count': 1 if byte_array.ndim < 3 else byte_array.shape[0],
         'dtype': rio.uint8,
         'driver': 'GTiff',
