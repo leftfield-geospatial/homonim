@@ -90,6 +90,11 @@ class MatchedPairReader(RasterPairReader):
             )   # if not alpha band or geedim mask band
         ])  # yapf: disable
         refl_bands = np.array([bi for bi in non_alpha_bands if 'center_wavelength' in im.tags(bi)])
+
+        # test bands are valid
+        if (bands is not None) and (not set(bands).issubset(range(1, im.count + 1))):
+            invalid_bands = list(set(bands).difference(range(1, im.count + 1)))
+            raise ValueError(f'User specified {name} bands contain invalid band(s) {invalid_bands}.')
         # test bands do not contain alpha bands
         if (bands is not None) and (not set(bands).issubset(non_alpha_bands)):
             alpha_bands = list(set(bands).difference(non_alpha_bands))
