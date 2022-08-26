@@ -45,7 +45,7 @@ from homonim.cli import cli
         ('landsat_src_file', 's2_ref_file', Model.gain_blk_offset, (31, 31), ProcCrs.ref, True, (4, 3, 2), ProcCrs.ref),
         ('ngi_src_files', 's2_ref_file', Model.gain_offset, (31, 31), ProcCrs.src, True, None, ProcCrs.src),
     ]
-)  # TODO: change compare output to dict and change ordering of src_bands (?)
+)
 def test_fuse_compare(
     tmp_path: pathlib.Path, runner: CliRunner, src_files: str, ref_file: str, model: Model,
     kernel_shape: Tuple[int, int], proc_crs: ProcCrs, mask_partial: bool, src_bands: Tuple[int, ...],
@@ -101,50 +101,3 @@ def test_fuse_compare(
                 corr_mask_shapes = list(shapes(corr_mask.astype('uint8', copy=False), mask=corr_mask, connectivity=8))
                 assert (len(corr_mask_shapes) == 1)
 
-# TODO: update/remove these fixtures
-
-@pytest.fixture()
-def modis_ref_file2() -> pathlib.Path:
-    return root_path.joinpath(r'tests/data/reference/modis_nbar.tif')
-
-# TODO: change these files (here and in git) to all bands or more bands so that we use the center wavelen matching
-#  code?
-@pytest.fixture()
-def landsat_ref_file2() -> pathlib.Path:
-    return root_path.joinpath(r'tests/data/reference/landsat8_byte.tif')
-
-
-@pytest.fixture()
-def s2_ref_file2() -> pathlib.Path:
-    return root_path.joinpath(
-        r'tests/data/reference/COPERNICUS-S2-20151003T075826_20151003T082014_T35HKC_Byte.tif'
-    )
-
-@pytest.mark.parametrize(
-    'src_file, ref_file, force', [
-        ('ngi_src_file', 'modis_ref_file', False),
-        ('ngi_src_file', 'landsat_ref_file', False),
-        ('ngi_src_file', 's2_ref_file', False),
-        # ('landsat_ref_file', 's2_ref_file', False),
-        ('ngi_src_file', 'modis_ref_file2', False),
-        ('ngi_src_file', 'landsat_ref_file2', False),
-        ('ngi_src_file', 's2_ref_file2', False),
-        # ('landsat_ref_file2', 's2_ref_file2', True),
-        # ('modis_ref_file2', 's2_ref_file2', False),
-        # ('s2_ref_file2', 'landsat_ref_file2', True),
-        # ('modis_ref_file2', 'landsat_ref_file2', True),
-        # ('modis_ref_file2', 'ngi_src_file', True),
-        # ('landsat_ref_file2', 'ngi_src_file', True),
-        # ('s2_ref_file2', 'ngi_src_file', True),
-    ]
-)
-def test_matched_pair(
-    src_file: str, ref_file: str, force: bool, tmp_path: pathlib.Path, request: pytest.FixtureRequest,
-    caplog: pytest.LogCaptureFixture
-):
-    caplog.set_level(logging.DEBUG)
-    logging.getLogger('rasterio').setLevel(logging.INFO)
-    src_file: pathlib.Path = request.getfixturevalue(src_file)
-    ref_file: pathlib.Path = request.getfixturevalue(ref_file)
-    with MatchedPairReader(src_file, ref_file) as matched_pair:
-        pass
