@@ -203,7 +203,6 @@ def test_block_pair_coverage(
             assert (accum_block_pair['ref_in_block'].intersection(raster_pair._ref_win) == raster_pair._ref_win)
             assert (accum_block_pair['ref_out_block'].intersection(raster_pair._ref_win) == raster_pair._ref_win)
 
-# TODO: add tests to check rasterpair with N up/ S up ref/src
 @pytest.mark.parametrize(
     'src_file, ref_file, proc_crs, overlap, max_block_mem', [
         ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (0, 0), 1.e-3),
@@ -267,7 +266,6 @@ def test_block_pair_io(
                 src_mask = src_ds.read_masks(indexes=1).astype('bool', copy=False)
                 test_mask = test_src_ds.read_masks(indexes=1).astype('bool', copy=False)
                 assert (test_mask[src_mask]).all()
-                # TODO: include value test here, that would pick up orientation issues.
 
             with rio.open(ref_file, 'r') as ref_ds, ref_mf.open() as test_ref_ds:
                 ref_mask = ref_ds.read_masks(indexes=1).astype('bool', copy=False)

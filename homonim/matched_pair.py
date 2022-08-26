@@ -30,7 +30,7 @@ from homonim.enums import ProcCrs
 logger = logging.getLogger(__name__)
 
 class MatchedPairReader(RasterPairReader):
-    _max_wavelength_diff = .1
+    _max_rel_wavelength_diff = .1   # maximum allowed relative distance between center wavelengths for matching
 
     def __init__(
         self, src_filename: Union[str, Path], ref_filename: Union[str, Path], proc_crs: ProcCrs = ProcCrs.auto,
@@ -198,20 +198,21 @@ class MatchedPairReader(RasterPairReader):
             # TODO: consider using a linear programming type optimisation here,
             #  e.g. https://stackoverflow.com/questions/67368093/find-optimal-unique-neighbour-pairs-based-on-closest-distance
 
-            # absolute distance matrix between self and other center wavelengths
+            # absolute & relative distance matrix between src and ref center wavelengths
             abs_dist = np.abs(src_wavelengths[:, np.newaxis] - ref_wavelengths[np.newaxis, :])
+            rel_dist = abs_dist / src_wavelengths[:, np.newaxis]
             def greedy_match(dist: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
                 """
-                Greedy matching of `self` to `other` bands based on the provided center wavelength distance matix,
-                `dist`. `self` bands must be down the rows, and `other` bands along the cols of `dist`.
-                Will match one `other` band for each `self` band until either all `self` or all `other` bands
+                Greedy matching of src to ref bands based on the provided center wavelength distance matix,
+                `dist`. src bands must be down the rows, and ref bands along the cols of `dist`.
+                Will match one ref band for each src band until either all src or all ref bands
                 have been matched.  Works for all cases where len(src_bands) != len(ref_bands).
                 """
-                # match_idx[i] is the index of the `other` band that matches with the ith `self` band
+                # match_idx[i] is the index of the ref band that matches with the ith src band
                 match_idx = np.array([np.nan] * dist.shape[0])
                 match_dist = np.array([np.nan] * dist.shape[0]) # distances corresponding to the above matches
 
-                # repeat until all self or other bands have been matched
+                # repeat until all src or ref bands have been matched
                 while not all(np.isnan(np.nanmin(dist, axis=1))) or not all(np.isnan(np.nanmin(dist, axis=0))):
                     # find the row with the smallest distance in it
                     min_dist = np.nanmin(dist, axis=1)
@@ -226,13 +227,13 @@ class MatchedPairReader(RasterPairReader):
 
                 return match_dist, match_idx
 
-            match_dist, match_idx = greedy_match(abs_dist)
+            match_dist, match_idx = greedy_match(rel_dist)
 
             # if any of the matched distances are greater than a threshold, raise an informative error,
             # or log a warning, depending on `self._force`
-            # TODO: do a relative (to self wavelength), rather than absolute comparison?
-            if any(match_dist > MatchedPairReader._max_wavelength_diff):
-                err_idx = match_dist > MatchedPairReader._max_wavelength_diff
+            # TODO: do a relative (to src wavelength), rather than absolute comparison?
+            if any(match_dist > MatchedPairReader._max_rel_wavelength_diff):
+                err_idx = match_dist > MatchedPairReader._max_rel_wavelength_diff
                 src_err_band_names = list(src_band_names[err_idx])
                 ref_err_band_names = list(ref_band_names[np.int64(match_idx[err_idx])])
                 err_dists = list(match_dist[err_idx].round(3))
@@ -263,7 +264,7 @@ class MatchedPairReader(RasterPairReader):
             unmatch_ref_bands = ref_bands[unmatch_ref_idx]
             unmatch_ref_band_names = ref_band_names[unmatch_ref_idx]
             if len(src_bands) == len(ref_bands):
-                # assume unmatched self and other image bands are in matching order
+                # assume unmatched src and ref image bands are in matching order
                 match_bands[unmatched] = unmatch_ref_bands
                 logger.debug(
                     f'Matching {src_name} band(s) {list(src_band_names[unmatched])} in file order with'
