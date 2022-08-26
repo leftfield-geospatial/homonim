@@ -180,8 +180,6 @@ class MatchedPairReader(RasterPairReader):
         """
         Validate and match source and reference bands. An override of base class RasterPairReader._match_pair_bands().
         """
-        # TODO: where ref/src_bands are specified, should we not assume they are specified in matching order,
-        #  and then not re-match them below?
         # retrieve non-alpha bands
         src_bands, src_band_names, src_wavelengths = MatchedPairReader._get_band_info(src_im, bands=self._src_bands)
         ref_bands, ref_band_names, ref_wavelengths = MatchedPairReader._get_band_info(ref_im, bands=self._ref_bands)
@@ -194,9 +192,9 @@ class MatchedPairReader(RasterPairReader):
             else:
                 logger.warning(f'{ref_name} has fewer bands than {src_name}.')
 
-        match_bands = np.array([np.nan] * len(src_bands))  # TODO: deal with src.count > ref.count
-        # match self with other bands based on center wavelength metadata
-        if any(src_wavelengths) and any(ref_wavelengths):  # TODO: and not self._force:?
+        match_bands = np.array([np.nan] * len(src_bands))
+        # match src with ref bands based on center wavelength metadata, bypassing if force==True
+        if any(src_wavelengths) and any(ref_wavelengths) and not self._force:
             # TODO: consider using a linear programming type optimisation here,
             #  e.g. https://stackoverflow.com/questions/67368093/find-optimal-unique-neighbour-pairs-based-on-closest-distance
 

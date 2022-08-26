@@ -30,34 +30,6 @@ from homonim import utils
 from homonim.matched_pair import MatchedPairReader
 
 
-@pytest.fixture
-def multispec_src_file(tmp_path: Path, float_100cm_array: np.ndarray, float_100cm_profile: Dict) -> Path:
-    """ Single band float32 geotiff with 100cm pixel resolution. """
-    filename = tmp_path.joinpath('float_100cm_src.tif')
-    with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
-        with rio.open(filename, 'w', **float_100cm_profile) as ds:
-            ds.write(float_100cm_array, indexes=1)
-    return filename
-
-
-@pytest.fixture
-def multispec_ref_file(tmp_path: Path, float_100cm_array: np.ndarray, float_100cm_profile: Dict) -> Path:
-    """
-    Single band float32 geotiff with 100cm pixel resolution, the same as float_100cm_src_file, but padded with an
-    extra pixel.
-    """
-    shape = (np.array(float_100cm_array.shape) + 2).astype('int')
-    transform = float_100cm_profile['transform'] * Affine.translation(-1, -1)
-    profile = float_100cm_profile.copy()
-    profile.update(transform=transform, width=shape[1], height=shape[0])
-    filename = tmp_path.joinpath('float_100cm_ref.tif')
-    window = Window(1, 1, float_100cm_array.shape[1], float_100cm_array.shape[0])
-    with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
-        with rio.open(filename, 'w', **profile) as ds:
-            ds.write(float_100cm_array, indexes=1, window=window)
-    return filename
-
-
 @pytest.mark.parametrize(['file', 'bands', 'exp_bands', 'exp_band_names', 'exp_wavelengths'], [
     ('rgba_file', None, [1, 2, 3], ['1', '2', '3'], [.650, .560, .480]),
     ('rgba_file', (1, 2, 3), [1, 2, 3], ['1', '2', '3'], [.650, .560, .480]),
@@ -84,7 +56,7 @@ def test_get_band_info(
         assert all(utils.nan_equals(wavelengths, np.array(exp_wavelengths)))
 
 
-def test_alpha_band_error(rgba_file):
+def test_get_band_info_alpha_band_error(rgba_file):
     """ Test an error is raised in _get_band_info when user bands contain alpha bands. """
     with rio.open(rgba_file, 'r') as im:
         with pytest.raises(ValueError) as ex:
@@ -92,15 +64,7 @@ def test_alpha_band_error(rgba_file):
         assert 'bands contain alpha band(s)' in str(ex)
 
 
-def test_invalid_band_error(rgba_file):
-    """ Test an error is raised in _get_band_info when user bands contain invalid bands. """
-    with rio.open(rgba_file, 'r') as im:
-        with pytest.raises(ValueError) as ex:
-            _, _, _ = MatchedPairReader._get_band_info(im, bands=(4, 1, 0, 2, 5))
-        assert 'bands contain invalid band(s)' in str(ex)
-
-
-def test_invalid_band_error(rgba_file):
+def test_get_band_info_invalid_band_error(rgba_file):
     """ Test an error is raised in _get_band_info when user bands contain invalid bands. """
     with rio.open(rgba_file, 'r') as im:
         with pytest.raises(ValueError) as ex:
@@ -109,8 +73,7 @@ def test_invalid_band_error(rgba_file):
 
 
 @pytest.mark.parametrize(
-    ['src_file', 'ref_file', 'src_bands', 'ref_bands', 'exp_src_bands', 'exp_ref_bands', 'force'],
-    [
+    ['src_file', 'ref_file', 'src_bands', 'ref_bands', 'exp_src_bands', 'exp_ref_bands', 'force'], [
         ('float_100cm_src_file', 'float_100cm_ref_file', None, None, [1], [1], False),
         ('float_100cm_src_file', 'float_100cm_ref_file', (1,), (1,), [1], [1], False),
         ('float_100cm_src_file', 'rgba_file', None, [1], [1], [1], False),
@@ -121,13 +84,17 @@ def test_invalid_band_error(rgba_file):
         ('s2_ref_file', 's2_ref_file', [3, 2], None, [3, 2], [3, 2], False),
         ('s2_ref_file', 'landsat_ref_file', None, None, [1, 2, 3], [4, 3, 2], False),
         ('s2_ref_file', 'landsat_ref_file', [1, 2], list(range(1, 9)), [1, 2], [4, 3], False),
+        # ref with mix of spectral and non-alpha bands, len(src) == len(ref)
         ('s2_ref_file', 'landsat_ref_file', [1, 2], [3, 8], [1, 2], [8, 3], False),
-        ('landsat_src_file', 'landsat_ref_file', [7, 8, 9], [7, 9, 10], [7, 8, 9], [7, 10, 9], False),
-        ('landsat_src_file', 'landsat_ref_file', [7, 8, 9, 10], list(range(1, 12)), [7, 8, 9, 10], [7, 1, 9, 2], True),
-        ('landsat_src_file', 's2_ref_file', None, None, [2, 3, 4], [3, 2, 1], True),
+        # src & ref with mix of spectral and non-alpha bands, len(src) == len(ref)
+        ('landsat_src_file', 'landsat_ref_file', [7, 8, 9, 10], [7, 9, 10, 11], [7, 8, 9, 10], [7, 10, 9, 11], False),
+        # src & ref with mix of spectral and non-alpha bands, len(src) < len(ref) & force
+        ('landsat_src_file', 'landsat_ref_file', [7, 8, 9, 10], list(range(1, 12)), [7, 8, 9, 10], [1, 2, 3, 4], True),
+        # len(src) > len(ref) & force
+        ('landsat_src_file', 's2_ref_file', None, None, [1, 2, 3], [1, 2, 3], True),
     ]
 )  # yapf: disable
-def test_matching(
+def test_match(
     src_file: str, ref_file: str, src_bands: Tuple, ref_bands: Tuple, exp_src_bands: List, exp_ref_bands: List,
     force: bool, request: pytest.FixtureRequest
 ):
@@ -137,3 +104,38 @@ def test_matching(
     with MatchedPairReader(src_file, ref_file, src_bands=src_bands, ref_bands=ref_bands, force=force) as matched_pair:
         assert all(np.array(matched_pair.src_bands) == exp_src_bands)
         assert all(np.array(matched_pair.ref_bands) == exp_ref_bands)
+
+
+def test_match_fewer_ref_bands_error(s2_ref_file, landsat_ref_file):
+    """  Test an error is raised if num src bands > num ref bands. """
+    with pytest.raises(ValueError) as ex:
+        with MatchedPairReader(landsat_ref_file, s2_ref_file) as matched_pair:
+            pass
+    assert 'has fewer bands than' in str(ex)
+
+
+def test_match_wavelength_dist_error(s2_ref_file, landsat_ref_file):
+    """  Test an error is raised if src/ref spectral band wavelengths are too far apart. """
+    with pytest.raises(ValueError) as ex:
+        with MatchedPairReader(s2_ref_file, landsat_ref_file, ref_bands=[1, 3, 5]) as matched_pair:
+            pass
+    assert 'could not be auto-matched' in str(ex)
+
+@pytest.mark.parametrize(
+    ['src_file', 'ref_file', 'src_bands', 'ref_bands','force'], [
+        ('float_100cm_src_file', 'rgba_file', None, None, False),
+        ('landsat_src_file', 'landsat_ref_file', [7, 8, 9], None, False),
+    ]
+)  # yapf: disable
+def test_match_error(
+    src_file: str, ref_file: str, src_bands: Tuple, ref_bands: Tuple, force: bool, request: pytest.FixtureRequest
+):
+    """  Test an error is raised if src/ref spectral band wavelengths are too far apart. """
+    src_file: Path = request.getfixturevalue(src_file)
+    ref_file: Path = request.getfixturevalue(ref_file)
+    with pytest.raises(ValueError) as ex:
+        with MatchedPairReader(
+            src_file, ref_file, src_bands=src_bands, ref_bands=ref_bands, force=force
+        ) as matched_pair:
+            pass
+    assert 'Could not match' in str(ex)
