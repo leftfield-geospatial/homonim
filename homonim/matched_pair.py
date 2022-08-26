@@ -30,7 +30,7 @@ from homonim.enums import ProcCrs
 logger = logging.getLogger(__name__)
 
 class MatchedPairReader(RasterPairReader):
-    _max_wavelength_diff = .05
+    _max_wavelength_diff = .1
 
     def __init__(
         self, src_filename: Union[str, Path], ref_filename: Union[str, Path], proc_crs: ProcCrs = ProcCrs.auto,
@@ -194,9 +194,9 @@ class MatchedPairReader(RasterPairReader):
             else:
                 logger.warning(f'{ref_name} has fewer bands than {src_name}.')
 
-        match_bands = np.array([np.nan] * len(src_bands)) # TODO: deal with src.count > ref.count
+        match_bands = np.array([np.nan] * len(src_bands))  # TODO: deal with src.count > ref.count
         # match self with other bands based on center wavelength metadata
-        if any(src_wavelengths) and any(ref_wavelengths) and not self._force:
+        if any(src_wavelengths) and any(ref_wavelengths):  # TODO: and not self._force:?
             # TODO: consider using a linear programming type optimisation here,
             #  e.g. https://stackoverflow.com/questions/67368093/find-optimal-unique-neighbour-pairs-based-on-closest-distance
 
@@ -272,11 +272,11 @@ class MatchedPairReader(RasterPairReader):
                     f' {ref_name} band(s) {list(unmatch_ref_band_names)}.'
                 )
             elif self._force:
-                # match the remaining N self bands with the first N unmatched bands of other (N=sum(unmatched))
+                # match the remaining N src bands with the first N unmatched ref bands (N=sum(unmatched))
                 unmatch_ref_bands = unmatch_ref_bands[:sum(unmatched)]
                 unmatch_ref_band_names = unmatch_ref_band_names[:sum(unmatched)]
-                # if there are not N unmatched bands in other, truncate unmatched to just match what we can
-                unmatched = unmatched[:len(unmatch_ref_bands)]
+                # if there are not N unmatched ref bands, truncate unmatched to just match what we can
+                unmatched = np.where(unmatched)[0][:len(unmatch_ref_bands)]
                 match_bands[unmatched] = unmatch_ref_bands
                 logger.warning(
                     f'Matching {src_name} band(s) {list(src_bands[unmatched])} in file order with {ref_name} '
@@ -290,10 +290,10 @@ class MatchedPairReader(RasterPairReader):
                     f'counts match, {src_name} and {ref_name} have `center_wavelength` tags for each band, '
                     f'or set `force` to True.'
                 )
-        # Truncate self and other to reflect the matched bands
+        # Truncate src and ref to reflect the matched bands
         src_matched = ~np.isnan(match_bands)
         src_bands = src_bands[src_matched]
-        ref_matched = np.array([list(ref_bands).index(bi) for bi in match_bands])
+        ref_matched = np.array([list(ref_bands).index(bi) for bi in match_bands[src_matched]])
         ref_bands = ref_bands[ref_matched]
         logger.info('Matched band(s):\n' + self._get_pair_band_table(src_im, ref_im, src_bands, ref_bands))
         return tuple(src_bands.tolist()), tuple(ref_bands.tolist())

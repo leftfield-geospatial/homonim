@@ -65,6 +65,11 @@ def multispec_ref_file(tmp_path: Path, float_100cm_array: np.ndarray, float_100c
     ('float_100cm_src_file', [1], [1], ['1'], [float('nan')]),
     ('s2_ref_file', None, [1, 2, 3], ['B4', 'B3', 'B2'], [0.6645, 0.56, 0.4966]),
     ('s2_ref_file', (3, 2, 1), [3, 2, 1], ['B2', 'B3', 'B4'], [0.4966, 0.56, 0.6645]),
+    (
+        'landsat_ref_file', None, list(range(1, 8)) + [9], [f'SR_B{i}' for i in range(1, 8)] + ['ST_B10'],
+        [0.443, 0.482, 0.562, 0.655, 0.865, 1.609, 2.201, 10.895]
+    ),
+    ('landsat_ref_file', [7, 8], [7, 8], ['SR_B7', 'SR_QA_AEROSOL'], [2.201, float('nan')]),
 ])  # yapf: disable
 def test_get_band_info(
     file: str, bands: Tuple, exp_bands: List, exp_band_names: List, exp_wavelengths: List,
@@ -95,15 +100,31 @@ def test_invalid_band_error(rgba_file):
         assert 'bands contain invalid band(s)' in str(ex)
 
 
+def test_invalid_band_error(rgba_file):
+    """ Test an error is raised in _get_band_info when user bands contain invalid bands. """
+    with rio.open(rgba_file, 'r') as im:
+        with pytest.raises(ValueError) as ex:
+            _, _, _ = MatchedPairReader._get_band_info(im, bands=(4, 1, 0, 2, 5))
+        assert 'bands contain invalid band(s)' in str(ex)
+
+
 @pytest.mark.parametrize(
     ['src_file', 'ref_file', 'src_bands', 'ref_bands', 'exp_src_bands', 'exp_ref_bands', 'force'],
     [
         ('float_100cm_src_file', 'float_100cm_ref_file', None, None, [1], [1], False),
         ('float_100cm_src_file', 'float_100cm_ref_file', (1,), (1,), [1], [1], False),
+        ('float_100cm_src_file', 'rgba_file', None, [1], [1], [1], False),
         ('rgba_file', 'rgba_file', None, None, [1, 2, 3], [1, 2, 3], False),
         ('rgba_file', 'rgba_file', [3, 2], None, [3, 2], [3, 2], False),
         ('rgba_file', 'rgba_file', [3, 2], [3, 1, 2], [3, 2], [3, 2], False),
-        ('float_100cm_src_file', 'rgba_file', [1], None, [1], [1], True),
+        ('s2_ref_file', 's2_ref_file', None, None, [1, 2, 3], [1, 2, 3], False),
+        ('s2_ref_file', 's2_ref_file', [3, 2], None, [3, 2], [3, 2], False),
+        ('s2_ref_file', 'landsat_ref_file', None, None, [1, 2, 3], [4, 3, 2], False),
+        ('s2_ref_file', 'landsat_ref_file', [1, 2], list(range(1, 9)), [1, 2], [4, 3], False),
+        ('s2_ref_file', 'landsat_ref_file', [1, 2], [3, 8], [1, 2], [8, 3], False),
+        ('landsat_src_file', 'landsat_ref_file', [7, 8, 9], [7, 9, 10], [7, 8, 9], [7, 10, 9], False),
+        ('landsat_src_file', 'landsat_ref_file', [7, 8, 9, 10], list(range(1, 12)), [7, 8, 9, 10], [7, 1, 9, 2], True),
+        ('landsat_src_file', 's2_ref_file', None, None, [2, 3, 4], [3, 2, 1], True),
     ]
 )  # yapf: disable
 def test_matching(
