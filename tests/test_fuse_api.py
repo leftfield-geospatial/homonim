@@ -347,3 +347,34 @@ def test_tags(tmp_path: Path, float_50cm_ref_file: Path):
             assert (tags[f'FUSE_{key.upper()}'] == val.name if hasattr(val, 'name') else str(val))
         assert (yaml.safe_load(tags['FUSE_MAX_BLOCK_MEM']) == block_config['max_block_mem'])
         assert (yaml.safe_load(tags['FUSE_THREADS']) == block_config['threads'])
+
+@pytest.mark.parametrize(
+    'src_file, ref_file, src_bands, ref_bands, force, exp_bands', [
+        ('float_50cm_rgb_file', 'float_100cm_rgb_file', None, None, False, (1, 2, 3)),
+        ('float_50cm_rgb_file', 'float_100cm_rgb_file', (3, 2, 1), None, False, (3, 2, 1)),
+        ('float_50cm_rgb_file', 'float_100cm_rgb_file', None, (3, 2, 1), False, (1, 2, 3)),
+        ('float_50cm_rgb_file', 'float_100cm_rgb_file', (2, 1), (3, 1, 2), False, (2, 1)),
+        ('float_50cm_rgb_file', 'float_100cm_rgb_file', (2, 1), (3, 2, 1), True, (3, 2)),
+    ]
+)  # yapf: disable
+def test_src_ref_bands(
+    src_file: str, ref_file: str, src_bands: Tuple[int], ref_bands: Tuple[int], force: bool, exp_bands: Tuple[int],
+    tmp_path: Path, request: FixtureRequest
+):
+    """ Test fusion with the src_bands and ref_bands parameters. """
+    src_file: Path = request.getfixturevalue(src_file)
+    ref_file: Path = request.getfixturevalue(ref_file)
+    corr_filename = tmp_path.joinpath('corrected.tif')
+    with RasterFuse(src_file, ref_file, src_bands=src_bands, ref_bands=ref_bands, force=force) as raster_fuse:
+        raster_fuse.process(corr_filename, model=Model.gain_blk_offset, kernel_shape=(3, 3))
+    assert (corr_filename.exists())
+    # open src_file in a WarpedVRT to reproject it North-up (if necessary)
+    with WarpedVRT(rio.open(src_file, 'r')) as src_ds, rio.open(corr_filename, 'r') as out_ds:
+        src_array = src_ds.read(indexes=exp_bands)
+        src_mask = src_ds.dataset_mask().astype('bool', copy=False)
+        out_array = out_ds.read()
+        out_mask = out_ds.dataset_mask().astype('bool', copy=False)
+
+        assert out_ds.count == len(exp_bands)
+        assert (out_mask == src_mask).all()
+        assert (out_array[:, out_mask] == pytest.approx(src_array[:, src_mask], abs=2))

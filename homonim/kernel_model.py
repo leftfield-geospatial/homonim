@@ -419,7 +419,6 @@ class KernelModel:
         """
         # TODO : include a CRS comparison below i.e. one that is faster that rasterio's current implementation, and or
         #  raise an issue with rasterio about the speed of crs comparison
-
         if (ref_ra.transform != src_ra.transform) or (ref_ra.shape != src_ra.shape):
             raise ValueError("'ref_ra' and 'src_ra' must have the same CRS, transform and shape")
 

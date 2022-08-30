@@ -231,7 +231,6 @@ class MatchedPairReader(RasterPairReader):
 
             # if any of the matched distances are greater than a threshold, raise an informative error,
             # or log a warning, depending on `self._force`
-            # TODO: do a relative (to src wavelength), rather than absolute comparison?
             if any(match_dist > MatchedPairReader._max_rel_wavelength_diff):
                 err_idx = match_dist > MatchedPairReader._max_rel_wavelength_diff
                 src_err_band_names = list(src_band_names[err_idx])

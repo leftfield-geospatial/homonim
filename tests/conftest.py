@@ -338,7 +338,7 @@ def float_45cm_ref_file(tmp_path: Path, float_45cm_array: np.ndarray, float_45cm
 @pytest.fixture
 def float_100cm_rgb_file(tmp_path: Path, float_100cm_array: np.ndarray, float_100cm_profile: Dict) -> Path:
     """ 3 band float32 geotiff with 100cm pixel resolution. """
-    array = np.stack((float_100cm_array, ) * 3, axis=0)
+    array = np.stack([i * float_100cm_array for i in range(1, 4)], axis=0)
     profile = float_100cm_profile.copy()
     profile.update(count=3)
     filename = tmp_path.joinpath('float_100cm_rgb.tif')
@@ -351,7 +351,7 @@ def float_100cm_rgb_file(tmp_path: Path, float_100cm_array: np.ndarray, float_10
 @pytest.fixture
 def float_50cm_rgb_file(tmp_path: Path, float_50cm_array: np.ndarray, float_50cm_profile: Dict) -> Path:
     """ 3 band float32 geotiff with 50cm pixel resolution, same extent as float_100cm_rgb_file. """
-    array = np.stack((float_50cm_array, ) * 3, axis=0)
+    array = np.stack([i * float_50cm_array for i in range(1, 4)], axis=0)
     profile = float_50cm_profile.copy()
     profile.update(count=3)
     filename = tmp_path.joinpath('float_50cm_rgb.tif')
@@ -575,4 +575,20 @@ def basic_fuse_cli_params(tmp_path: Path, float_100cm_ref_file: Path, float_100c
         f'fuse -m {model.value} -k {kernel_shape[0]} {kernel_shape[1]} -od {tmp_path} -pc {proc_crs.value} '
         f'{src_file} {ref_file}'
     )
+    return FuseCliParams(src_file, ref_file, model, kernel_shape, proc_crs, corr_file, param_file, cli_str)
+
+
+@pytest.fixture
+def default_fuse_rgb_cli_params(tmp_path: Path, float_100cm_rgb_file: Path, float_50cm_rgb_file: Path) -> FuseCliParams:
+    """ FuseCliParams with default parameter values. """
+    ref_file = float_100cm_rgb_file
+    src_file = float_50cm_rgb_file
+    model = Model.gain_blk_offset
+    kernel_shape = (5, 5)
+    proc_crs = ProcCrs.ref
+    post_fix = utils.create_out_postfix(proc_crs, model, kernel_shape, RasterFuse.create_out_profile()['driver'])
+    corr_file = tmp_path.joinpath(src_file.stem + post_fix)
+    param_file = utils.create_param_filename(corr_file)
+
+    cli_str = (f'fuse -od {tmp_path} {src_file} {ref_file}')
     return FuseCliParams(src_file, ref_file, model, kernel_shape, proc_crs, corr_file, param_file, cli_str)
