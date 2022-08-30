@@ -428,3 +428,48 @@ def test_src_ref_bands(
             assert out_ds.count == len(exp_bands)
             assert (out_mask == src_mask).all()
             assert (out_array[:, out_mask] == pytest.approx(src_array[:, src_mask], abs=2))
+
+@pytest.mark.parametrize(
+    'src_bands, ref_bands, cmp_bands, force, cmp_ref, exp_bands', [
+        (None, None, None, False, False, (1, 2, 3)),
+        ((1, 2), (1, 2), (1, 2), False, False, (1, 2)),
+        ((1, 2), (1, 2), None, True, False, (1, 2)),
+        ((3, 1), (3, 1, 2), None, True, True, (3, 1)),
+    ]
+)  # yapf: disable
+def test_src_ref_cmp_bands(
+    src_bands: Tuple[int], ref_bands: Tuple[int], cmp_bands: Tuple[int], force: bool, cmp_ref: bool,
+    exp_bands: Tuple[int], default_fuse_rgb_cli_params: FuseCliParams, tmp_path: Path, runner: CliRunner,
+):
+    """ Test fuse --compare with --src_band, --ref_band, --force-match and --cmp-band parameters. """
+    cli_str = default_fuse_rgb_cli_params.cli_str
+    if src_bands:
+        cli_str += ''.join([' -sb ' + str(bi) for bi in src_bands])
+    if ref_bands:
+        cli_str += ''.join([' -rb ' + str(bi) for bi in ref_bands])
+    if force:
+        cli_str += ' -f'
+    cli_str += ' -cmp' if cmp_ref else f' -cmp {str(default_fuse_rgb_cli_params.ref_file)}'
+    if cmp_bands:
+        cli_str += ''.join([' -cb ' + str(bi) for bi in cmp_bands])
+
+    result = runner.invoke(cli, cli_str.split())
+    assert (result.exit_code == 0)
+    assert (default_fuse_rgb_cli_params.corr_file.exists())
+
+    with WarpedVRT(rio.open(default_fuse_rgb_cli_params.src_file, 'r')) as src_ds:
+        with rio.open(default_fuse_rgb_cli_params.corr_file, 'r') as out_ds:
+            src_array = src_ds.read(indexes=exp_bands)
+            src_mask = src_ds.dataset_mask().astype('bool', copy=False)
+            out_array = out_ds.read()
+            out_mask = out_ds.dataset_mask().astype('bool', copy=False)
+
+            assert out_ds.count == len(exp_bands)
+            assert (out_mask == src_mask).all()
+            assert (out_array[:, out_mask] == pytest.approx(src_array[:, src_mask], abs=2))
+
+    test_str = """                                              File    r²   RMSE   rRMSE   N
+-------------------------------------------------- ----- ------ ------- ---
+                                float_50cm_rgb.tif 1.000  0.000   0.000 144
+float_50cm_rgb_FUSE_cREF_mGAIN-BLK-OFFSET_k5_5.tif 1.000  0.000   0.000 144"""
+    assert test_str in result.output
