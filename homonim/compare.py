@@ -159,7 +159,7 @@ class RasterCompare(MatchedPairReader):
             band_desc = (
                 self.ref_im.descriptions[self.ref_bands[band_i] - 1] or
                 self.src_im.descriptions[self.src_bands[band_i] - 1] or
-                f'Band {band_i + 1}'
+                f'Reference band {self.ref_bands[band_i]}'
             )  # yapf: disable
             image_stats[band_desc] = band_stats
             sum_over_bands = {k: sum_over_bands.get(k, 0) + v for k, v in band_stats.items()}

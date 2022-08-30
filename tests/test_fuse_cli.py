@@ -394,6 +394,7 @@ def test_creation_options(runner: CliRunner, basic_fuse_cli_params: FuseCliParam
         assert (out_ds.profile['compress'] == 'lzw')
         assert (not out_ds.profile['tiled'])
 
+
 @pytest.mark.parametrize(
     'src_bands, ref_bands, force, exp_bands', [
         ((3, 2, 1), None, False, (3, 2, 1)),
@@ -405,7 +406,7 @@ def test_src_ref_bands(
     src_bands: Tuple[int], ref_bands: Tuple[int], force: bool, exp_bands: Tuple[int],
     default_fuse_rgb_cli_params: FuseCliParams, tmp_path: Path, runner: CliRunner,
 ):
-    """ Test fusion with the src_bands and ref_bands parameters. """
+    """ Test fuse with --src_band, --ref_band and --force-match parameters. """
     cli_str = default_fuse_rgb_cli_params.cli_str
     if src_bands:
         cli_str += ''.join([' -sb ' + str(bi) for bi in src_bands])

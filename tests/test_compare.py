@@ -19,7 +19,7 @@
 import json
 import multiprocessing
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Tuple
 
 import numpy as np
 import pytest
@@ -32,9 +32,9 @@ from homonim.enums import ProcCrs
 from tests.conftest import str_contain_no_space
 
 
-def _test_identical_compare_dict(res_dict: Dict):
+def _test_identical_compare_dict(res_dict: Dict, exp_len: int = 4):
     """ Helper function to run tests on a compare results list, where the compare was between identical images. """
-    assert (len(res_dict) == 4)
+    assert (len(res_dict) == exp_len)
     bands = list(res_dict.keys())
     assert (bands[-1] == 'Mean')
     band_list = list(res_dict.values())[:-1]
@@ -44,27 +44,34 @@ def _test_identical_compare_dict(res_dict: Dict):
     rrmse = np.array([res_item['rrmse'] for res_item in band_list])
     n = np.array([res_item['n'] for res_item in band_list])
     assert (r2 == pytest.approx(1))
+    assert (n == n[0]).all()
     assert (rmse == pytest.approx(0))
     assert (rrmse == pytest.approx(0))
-    assert (n == n[0]).all()
     assert (res_dict['Mean']['r2'] == pytest.approx(1))
     assert (res_dict['Mean']['rmse'] == pytest.approx(0))
     assert (res_dict['Mean']['rrmse'] == pytest.approx(0))
 
 
 @pytest.mark.parametrize(
-    'src_file, ref_file', [
-        ('float_50cm_rgb_file', 'float_100cm_rgb_file'),
-        ('float_100cm_rgb_file', 'float_50cm_rgb_file'),
+    'src_file, ref_file, src_bands, ref_bands, force, exp_bands', [
+        ('float_50cm_rgb_file', 'float_100cm_rgb_file', None, None, False, (1, 2, 3)),
+        ('float_100cm_rgb_file', 'float_50cm_rgb_file', (3, 2, 1), None, False, (3, 2, 1)),
+        ('float_50cm_rgb_file', 'float_100cm_rgb_file', (2, 1), (3, 1, 2), False, (2, 1)),
+        ('float_100cm_rgb_file', 'float_50cm_rgb_file', (2, 1), (3, 2, 1), True, (3, 2)),
     ]
-)  # yapf:disable
-def test_api(src_file: str, ref_file: str, request: FixtureRequest):
-    """ Basic test of RasterCompare for proc_crs=ref&src image combinations. """
+)  # yapf: disable
+def test_api(
+    src_file: str, ref_file: str, src_bands: Tuple[int], ref_bands: Tuple[int], force: bool, exp_bands: Tuple[int],
+    tmp_path: Path, request: FixtureRequest
+):
+    """ Test fusion with the src_bands and ref_bands parameters. """
     src_file: Path = request.getfixturevalue(src_file)
     ref_file: Path = request.getfixturevalue(ref_file)
-    with RasterCompare(src_file, ref_file) as compare:
-        res_dict = compare.compare()
-    _test_identical_compare_dict(res_dict)
+    with RasterCompare(src_file, ref_file, src_bands=src_bands, ref_bands=ref_bands, force=force) as raster_compare:
+        res_dict = raster_compare.compare()
+        assert raster_compare.ref_bands == exp_bands
+    if not force:
+        _test_identical_compare_dict(res_dict, len(exp_bands) + 1)
 
 
 def test_api__thread(float_45cm_src_file: Path, float_100cm_ref_file: Path):
@@ -218,3 +225,40 @@ def test_cli__adv_options(tmp_path: Path, runner: CliRunner, float_50cm_src_file
     # test that r2 with default options, and r2 with advanced options, are different, but not too different
     assert b1_dict_def['r2'] != pytest.approx(b1_dict_adv['r2'], 1e-5)
     assert b1_dict_def['r2'] == pytest.approx(b1_dict_adv['r2'], 1e-1)
+
+
+@pytest.mark.parametrize(
+    'src_bands, ref_bands, force, exp_bands', [
+        ((3, 2, 1), None, False, (3, 2, 1)),
+        ((2, 1), (3, 1, 2), False, (2, 1)),
+        ((2, 1), (3, 2, 1), True, (3, 2)),
+    ]
+)  # yapf: disable
+def test_cli_src_ref_bands(
+    src_bands: Tuple[int], ref_bands: Tuple[int], force: bool, exp_bands: Tuple[int], float_50cm_rgb_file: Path,
+    float_100cm_rgb_file: Path, tmp_path: Path, runner: CliRunner,
+):
+    """ Test compare with --src_band, --ref_band and --force-match parameters. """
+    src_file = float_50cm_rgb_file
+    ref_file = float_100cm_rgb_file
+    out_file = tmp_path.joinpath('results.json')
+    cli_str = f'compare {src_file} {ref_file} -op {out_file}'
+    if src_bands:
+        cli_str += ''.join([' -sb ' + str(bi) for bi in src_bands])
+    if ref_bands:
+        cli_str += ''.join([' -rb ' + str(bi) for bi in ref_bands])
+    if force:
+        cli_str += ' -f'
+
+    result = runner.invoke(cli, cli_str.split())
+    assert (result.exit_code == 0)
+    assert (out_file.exists())
+    with open(out_file) as f:
+        stats_dict = json.load(f)
+    assert str(src_file) in stats_dict
+    stats_dict = stats_dict[str(src_file)]
+    exp_band_names = [f'Reference band {bi}' for bi in exp_bands] + ['Mean']
+    assert list(stats_dict.keys()) == exp_band_names
+    if not force:
+        _test_identical_compare_dict(stats_dict, len(exp_bands) + 1)
+
