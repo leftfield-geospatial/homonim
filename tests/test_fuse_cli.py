@@ -442,6 +442,16 @@ def test_src_ref_cmp_bands(
     exp_bands: Tuple[int], default_fuse_rgb_cli_params: FuseCliParams, tmp_path: Path, runner: CliRunner,
 ):
     """ Test fuse --compare with --src_band, --ref_band, --force-match and --cmp-band parameters. """
+    # When bands are matched based on assumed RGB center wavelengths, the corrected file is (intentionally) not written
+    # with center wavelengths.  Depending on how --src-band is spec'd, This can result in corrected files with < 3
+    # bands, or corrected files with bands not in RGB order.  This in turn can lead to problems with --compare,
+    # where these kinds of corrected files cannot be matched with the compare reference, or are matched incorrectly.
+    # The above parameter cases avoid any of these situations.  It doesn't seem possible to work around this without
+    # writing assumed RGB center wavelengths to corrected files, which seems like a bad idea.  Rather I just
+    # generate a warning when RGB wavelengths are assumed.  Perhaps I should also always print out how
+    # bands are matched?  Practically, I think most of the time people will correct RGB->RGB, so we wouldn't see this
+    # issue often at all.
+
     cli_str = default_fuse_rgb_cli_params.cli_str
     if src_bands:
         cli_str += ''.join([' -sb ' + str(bi) for bi in src_bands])

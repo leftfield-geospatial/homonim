@@ -131,7 +131,7 @@ class MatchedPairReader(RasterPairReader):
         if (len(non_alpha_bands) == 3) and (sum(np.isnan(center_wavelengths)) > 0):
             for i, rgb_cw in zip(non_alpha_bands - 1, [.650, .560, .480]):
                 center_wavelengths[i] = rgb_cw if np.isnan(center_wavelengths[i]) else center_wavelengths[i]
-            logger.warning(f'Assuming standard RGB center wavelengths for {name}.')
+            logger.warning(f'Assuming standard RGB center wavelengths (.65, .56 & 48 um) for {name}.')
 
         center_wavelengths = center_wavelengths[bands - 1]
         band_names = np.array([im.descriptions[bi - 1] if im.descriptions[bi - 1] else str(bi) for bi in bands])
@@ -236,17 +236,11 @@ class MatchedPairReader(RasterPairReader):
                 src_err_band_names = list(src_band_names[err_idx])
                 ref_err_band_names = list(ref_band_names[np.int64(match_idx[err_idx])])
                 err_dists = list(match_dist[err_idx].round(3))
-                if not self._force:
-                    raise ValueError(
-                        f'{src_name} band(s) {src_err_band_names} could not be auto-matched.  The nearest '
-                        f'{ref_name} band(s) were {ref_err_band_names}, at center wavelength difference(s) of '
-                        f'{err_dists} (um) respectively.'
-                    )
-                else:
-                    logger.warning(
-                        f'Force matching {src_name} band(s) {src_err_band_names} with {ref_name} band(s) '
-                        f'{ref_err_band_names}, at center wavelength differences of {err_dists} (um) respectively.'
-                    )
+                raise ValueError(
+                    f'{src_name} band(s) {src_err_band_names} could not be auto-matched.  The nearest '
+                    f'{ref_name} band(s) were {ref_err_band_names}, at center wavelength difference(s) of '
+                    f'{err_dists} (um) respectively.'
+                )
 
             src_matched = ~np.isnan(match_idx)
             match_bands[src_matched] = ref_bands[np.int64(match_idx[src_matched])]
