@@ -151,27 +151,36 @@ class MatchedPairReader(RasterPairReader):
         # retrieve src/ref image band metadata as lists of dicts
         src_band_list = []
         ref_band_list = []
-        band_keys = {'name': 'Name', 'description': 'Descr.', 'center_wavelength': 'Wavelen.'}
+        band_keys = {'name': 'Name', 'description': 'Description', 'center_wavelength': 'Wavelen'}
         for band_list, im, bands in zip([src_band_list, ref_band_list], [src_im, ref_im], [src_bands, ref_bands]):
             for band in bands:
                 band_dict = {}
                 if 'name' not in im.tags(band):
                     band_dict.update(Name=im.descriptions[band-1] or str(band))
-                band_dict.update(**{bkn: im.tags(band)[bk] for bk, bkn in band_keys.items() if bk in im.tags(band)})
+                band_tags = im.tags(band)
+                band_dict.update(**{bkn: band_tags[bk] for bk, bkn in band_keys.items() if bk in band_tags})
                 band_list.append(band_dict)
 
         # combine src and ref lists of dicts into one
         def prefix_dict_keys(band_dict: Dict, prefix: str):
-            return {f'{prefix} {k}':v for k, v in band_dict.items()}
+            return {f'{prefix}\n{k}':v for k, v in band_dict.items()}
 
         band_list = []
+        super_keys = dict()
         for src_band_dict, ref_band_dict in zip(src_band_list, ref_band_list):
             band_dict = {}
             band_dict.update(prefix_dict_keys(src_band_dict, 'Source'))
-            band_dict.update(prefix_dict_keys(ref_band_dict, 'Ref.'))
+            band_dict.update(prefix_dict_keys(ref_band_dict, 'Ref'))
             band_list.append(band_dict)
+            super_keys.update(dict.fromkeys(band_dict.keys()))
 
-        return tabulate(band_list, headers='keys')
+        # update missing keys with empty string vals
+        for band_dict in band_list:
+            update_keys = [k for k in super_keys if k not in band_dict.keys()]
+            update_vals = [''] * len(update_keys)
+            band_dict.update(zip(update_keys, update_vals))
+
+        return tabulate(band_list, headers='keys',  maxcolwidths=20, tablefmt='simple')
 
 
     def _match_pair_bands(
@@ -287,5 +296,5 @@ class MatchedPairReader(RasterPairReader):
         src_bands = src_bands[src_matched]
         ref_matched = np.array([list(ref_bands).index(bi) for bi in match_bands[src_matched]])
         ref_bands = ref_bands[ref_matched]
-        logger.info('Matched band(s):\n' + self._get_pair_band_table(src_im, ref_im, src_bands, ref_bands))
+        logger.debug('Matched band(s):\n\n' + self._get_pair_band_table(src_im, ref_im, src_bands, ref_bands) + '\n')
         return tuple(src_bands.tolist()), tuple(ref_bands.tolist())
