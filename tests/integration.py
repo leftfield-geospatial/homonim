@@ -25,8 +25,7 @@ import rasterio as rio
 from click.testing import CliRunner
 from rasterio.features import shapes
 
-from homonim import root_path, utils, RasterFuse, RasterCompare, ProcCrs, Model
-from homonim.matched_pair import MatchedPairReader
+from homonim import utils, RasterFuse, RasterCompare, ProcCrs, Model
 from homonim.cli import cli
 
 
@@ -100,4 +99,5 @@ def test_fuse_compare(
                 # test homo mask consists of one blob
                 corr_mask_shapes = list(shapes(corr_mask.astype('uint8', copy=False), mask=corr_mask, connectivity=8))
                 assert (len(corr_mask_shapes) == 1)
+
 

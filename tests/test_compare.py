@@ -25,6 +25,8 @@ import numpy as np
 import pytest
 from click.testing import CliRunner
 from pytest import FixtureRequest
+import rasterio as rio
+from rasterio.vrt import WarpedVRT
 
 from homonim.cli import cli
 from homonim.compare import RasterCompare

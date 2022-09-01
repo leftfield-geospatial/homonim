@@ -55,6 +55,6 @@ jobs:
           ls -R
           mkdir ./tests/data/corrected/
           homonim fuse --help
-          homonim fuse -m gain-blk-offset -k 5 5 -od ./tests/data/corrected -o ./tests/data/source/3324c_2015_1004_05_0182_RGB.tif  ./tests/data/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif
+          homonim fuse -m gain-blk-offset -k 5 5 -od ./tests/data/corrected -o ./tests/data/source/aerial_rgb_byte_1.tif  ./tests/data/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif
           ls ./tests/data/corrected/*
-          test -f ./tests/data/corrected/3324c_2015_1004_05_0182_RGB_FUSE_cREF_mGAIN-BLK-OFFSET_k5_5.tif && echo "OK"
+          test -f ./tests/data/corrected/aerial_rgb_byte_1_RGB_FUSE_cREF_mGAIN-BLK-OFFSET_k5_5.tif && echo "OK"

@@ -529,12 +529,12 @@ def landsat_src_file() -> Path:
 @pytest.fixture()
 def ngi_src_files() -> Tuple[Path, ...]:
     source_root = root_path.joinpath('tests/data/source/')
-    return tuple([fn for fn in source_root.glob('3324c_2015_*_RGB.tif')])
+    return tuple([fn for fn in source_root.glob('aerial_rgb_byte_*.tif')])
 
 
 @pytest.fixture()
 def ngi_src_file() -> Path:
-    return root_path.joinpath(r'tests/data/source/3324c_2015_1004_05_0182_RGB.tif')
+    return root_path.joinpath(r'tests/data/source/aerial_rgb_byte_1.tif')
 
 
 @pytest.fixture
