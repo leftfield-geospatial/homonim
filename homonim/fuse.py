@@ -47,30 +47,41 @@ class RasterFuse(MatchedPairReader):
         """
         Class for correcting an image to surface reflectance, by fusion with a reference.
 
+        For best results, reference and source image(s) should be concurrent, co-located and spectrally similar.
+        Reference image extents must encompass those of the source image.
+
+        The reference image should contain bands that are approximate (wavelength) matches to the source image bands.
+        Where source and reference images are RGB, or have `center_wavelength` metadata, bands are matched
+        automatically based on wavelength.  Where there are the same number of source and reference bands, and no
+        `center_wavelength` metadata, bands are assumed to be in matching order.  Subsets and ordering of source
+        and reference bands can be specified with the ``src_bands`` and ``ref_bands`` parameters.
+
+        .. note::
+
+            Satellite and other imagery downloaded with `geedim <https://github.com/dugalh/geedim>`_ is populated with
+            ``center_wavelength``, and other metadata.
+
         Parameters
         ----------
         src_filename: str, Path
-            Path to the source image file.
+            Path to a source image file.
         ref_filename: str, Path
-            Path to the reference image file.  The extents of this image should cover the source with at least a
-            pixel border.  This image should contain spectral bands that correspond (roughly, in terms of
-            wavelength) to the source spectral bands.
+            Path to a reference image file.
         proc_crs: homonim.enums.ProcCrs, optional
             :class:`~homonim.enums.ProcCrs` instance specifying which of the source/reference image spaces will be
-            used for processing.  For most use cases, including typical surface reflectance correction,
-            it can be left as the default of :attr:`~homonim.enums.ProcCrs.auto`. In this case it will be resolved to
-            refer to the lowest resolution of the source and reference image CRS's.
+            used for processing.  For most use cases, it can be left as the default of
+            :attr:`~homonim.enums.ProcCrs.auto`. In this case it will be resolved to refer to the lowest resolution of
+            the source and reference image CRS's.
         src_bands: list of int, optional.
-            Indexes of source spectral bands to be corrected (1 based).  If not specified, all bands with the
-            ``center_wavelength`` property, or all non-alpha bands, are auto-matched to reference bands.
+            Indexes of source spectral bands to be processed (1 based).  If not specified, all bands with the
+            ``center_wavelength`` property, or all non-alpha bands, are used.
         ref_bands: list of int, optional.
-            Indexes of reference spectral bands that correspond (spectrally) to :param:`src_bands`.  If there is
-            ``center_wavelength`` metadata, this will be used to auto-match the specified reference bands to source
-            bands.  Otherwise, without ``center_wavelength`` metadata, ``ref_bands`` should be in matching order with
-            :param:`src_bands`.  If ``ref_bands`` is not specified, all bands with the ``center_wavelength`` property,
-            or all non-alpha bands, are used as candidates for auto-matching to source bands.
+            Indexes of reference spectral bands to match and fuse with source bands (1 based).  Should contain at
+            least as many elements as ``src_bands``, or the number of valid bands in the source image file,
+            if ``src_bands`` is not specified.  If ``ref_bands`` is not specified, all reference bands with the
+            ``center_wavelength`` property, or all non-alpha bands, are used.
         force: bool, optional
-            Bypass band-matching errors.  Use with caution.
+            Bypass auto wavelength matching, and any band-matching errors.  Use with caution.
         """
         MatchedPairReader.__init__(self, *args, **kwargs)
         self._corr_lock = threading.Lock()

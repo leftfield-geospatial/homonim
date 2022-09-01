@@ -64,19 +64,21 @@ class RasterPairReader:
         """
         Class for reading matching, and optionally overlapping, blocks from a source and reference image pair.
 
+        Reference and source image(s) should be co-located and spectrally similar.  Reference image extents must
+        encompass those of the source image.  The reference image should contain bands that are approximate (wavelength)
+        matches to the source image bands, in the same order.
+
         Parameters
         ----------
         src_filename: str, pathlib.Path
             Path to the source image file.
         ref_filename: str, pathlib.Path
-            Path to the reference image file.  The extents of this image should cover the source with at least a 2
-            pixel border.  The reference image should have at least as many bands as the source, and the
-            ordering of the source and reference bands should match.
+            Path to the reference image file.
         proc_crs: homonim.enums.ProcCrs, optional
             :class:`~homonim.enums.ProcCrs` instance specifying which of the source/reference image spaces will be
-            used for processing.  For most use cases, including typical surface reflectance correction,
-            it can be left as the default of :attr:`~homonim.enums.ProcCrs.auto`. In this case it will be resolved to
-            refer to the lowest resolution of the source and reference image CRS's.
+            used for processing.  For most use cases, it can be left as the default of
+            :attr:`~homonim.enums.ProcCrs.auto`. In this case it will be resolved to refer to the lowest resolution of
+            the source and reference image CRS's.
         """
         self._src_filename = pathlib.Path(src_filename)
         self._ref_filename = pathlib.Path(ref_filename)
