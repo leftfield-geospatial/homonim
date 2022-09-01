@@ -215,6 +215,8 @@ class RasterFuse(MatchedPairReader):
             }  # yapf. disable
             im.update_tags(bi + 1, **corr_meta_dict)
             # copy description from reference if the corrected file does not have one already
+            # TODO: how would it have one already?  And which metadata to copy.  We need the ref scale and offset,
+            #  but doesn't it make better sense to have the src center_wavelength, name and description?
             if im.descriptions[bi] is None:
                 im.set_band_description(bi + 1, self.ref_im.descriptions[ref_bi - 1])
 

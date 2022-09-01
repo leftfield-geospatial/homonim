@@ -35,8 +35,8 @@ from homonim.fuse import RasterFuse
 
 @pytest.mark.parametrize(
     'src_file, ref_file', [
-        ('float_50cm_src_file', 'float_100cm_ref_file'),
-        ('float_100cm_src_file', 'float_50cm_ref_file'),
+        ('src_file_50cm_float', 'ref_file_100cm_float'),
+        ('src_file_100cm_float', 'ref_file_50cm_float'),
     ]
 )  # yapf: disable
 def test_creation(src_file: str, ref_file: str, tmp_path: Path, request: FixtureRequest):
@@ -51,7 +51,7 @@ def test_creation(src_file: str, ref_file: str, tmp_path: Path, request: Fixture
 
 
 @pytest.mark.parametrize('overwrite', [False, True])
-def test_overwrite(tmp_path: Path, float_50cm_src_file: Path, float_100cm_ref_file: Path, overwrite: bool):
+def test_overwrite(tmp_path: Path, src_file_50cm_float, ref_file_100cm_float, overwrite: bool):
     """ Test overwrite behaviour. """
     corr_filename = tmp_path.joinpath('corrected.tif')
     param_filename = utils.create_param_filename(corr_filename)
@@ -60,7 +60,7 @@ def test_overwrite(tmp_path: Path, float_50cm_src_file: Path, float_100cm_ref_fi
         overwrite=overwrite,
     )
 
-    raster_fuse = RasterFuse(src_filename=float_50cm_src_file, ref_filename=float_100cm_ref_file)
+    raster_fuse = RasterFuse(src_filename=src_file_50cm_float, ref_filename=ref_file_100cm_float)
     corr_filename.touch()
     with raster_fuse:
         if not overwrite:
@@ -81,14 +81,14 @@ def test_overwrite(tmp_path: Path, float_50cm_src_file: Path, float_100cm_ref_fi
 
 @pytest.mark.parametrize(
     'src_file, ref_file, model, kernel_shape, max_block_mem', [
-        ('float_45cm_src_file', 'float_100cm_ref_file', Model.gain, (1, 1), 2.e-4),
-        ('float_45cm_src_file', 'float_100cm_ref_file', Model.gain_blk_offset, (1, 1), 1.e-3),
-        ('float_45cm_src_file', 'float_100cm_ref_file', Model.gain_offset, (5, 5), 1.e-3),
-        ('float_100cm_src_file', 'float_45cm_ref_file', Model.gain, (1, 1), 2.e-4),
-        ('float_100cm_src_file', 'float_45cm_ref_file', Model.gain_blk_offset, (1, 1), 1.e-3),
-        ('float_100cm_src_file', 'float_45cm_ref_file', Model.gain_offset, (5, 5), 1.e-3),
-        ('float_45cm_src_file', 'float_100cm_wgs84_sup_ref_file', Model.gain_blk_offset, (1, 1), 1.e-3),
-        ('float_100cm_wgs84_sup_src_file', 'float_45cm_ref_file', Model.gain_blk_offset, (1, 1), 1.e-3),
+        ('src_file_45cm_float', 'ref_file_100cm_float', Model.gain, (1, 1), 2.e-4),
+        ('src_file_45cm_float', 'ref_file_100cm_float', Model.gain_blk_offset, (1, 1), 1.e-3),
+        ('src_file_45cm_float', 'ref_file_100cm_float', Model.gain_offset, (5, 5), 1.e-3),
+        ('src_file_100cm_float', 'ref_file_45cm_float', Model.gain, (1, 1), 2.e-4),
+        ('src_file_100cm_float', 'ref_file_45cm_float', Model.gain_blk_offset, (1, 1), 1.e-3),
+        ('src_file_100cm_float', 'ref_file_45cm_float', Model.gain_offset, (5, 5), 1.e-3),
+        ('src_file_45cm_float', 'ref_file_wgs84_sup_float', Model.gain_blk_offset, (1, 1), 1.e-3),
+        ('src_file_wgs84_sup_100cm_float', 'ref_file_45cm_float', Model.gain_blk_offset, (1, 1), 1.e-3),
     ]
 )  # yapf: disable
 def test_basic_fusion(
@@ -131,16 +131,16 @@ def test_basic_fusion(
         dict(driver='PNG', dtype='uint16', nodata=0, creation_options=dict()),
     ]
 )  # yapf: disable
-def test_out_profile(float_100cm_rgb_file: Path, tmp_path: Path, out_profile: Dict):
+def test_out_profile(file_rgb_100cm_float, tmp_path: Path, out_profile: Dict):
     """ Test fusion output image format (profile) with different out_profile configurations. """
-    raster_fuse = RasterFuse(float_100cm_rgb_file, float_100cm_rgb_file)
+    raster_fuse = RasterFuse(file_rgb_100cm_float, file_rgb_100cm_float)
     corr_filename = tmp_path.joinpath('corrected.tif')
     with raster_fuse:
         raster_fuse.process(corr_filename, Model.gain_blk_offset, (3, 3), out_profile=out_profile)
     assert (corr_filename.exists())
     out_profile.update(**out_profile['creation_options'])
     out_profile.pop('creation_options')
-    with rio.open(float_100cm_rgb_file, 'r') as src_ds, rio.open(corr_filename, 'r') as fuse_ds:
+    with rio.open(file_rgb_100cm_float, 'r') as src_ds, rio.open(corr_filename, 'r') as fuse_ds:
         # test output image has been set with out_profile properties
         for k, v in out_profile.items():
             assert (
@@ -175,17 +175,17 @@ def test_out_profile(float_100cm_rgb_file: Path, tmp_path: Path, out_profile: Di
         (Model.gain_offset, ProcCrs.src),
     ]
 )  # yapf: disable
-def test_param_image(float_100cm_rgb_file: Path, tmp_path: Path, model: Model, proc_crs: ProcCrs):
+def test_param_image(file_rgb_100cm_float, tmp_path: Path, model: Model, proc_crs: ProcCrs):
     """ Test creation and masking of parameter image for different model and proc_crs combinations. """
     corr_filename = tmp_path.joinpath('corrected.tif')
     param_filename = utils.create_param_filename(corr_filename)
-    raster_fuse = RasterFuse(float_100cm_rgb_file, float_100cm_rgb_file, proc_crs=proc_crs)
+    raster_fuse = RasterFuse(file_rgb_100cm_float, file_rgb_100cm_float, proc_crs=proc_crs)
     with raster_fuse:
         raster_fuse.process(corr_filename, model, (5, 5), param_filename=param_filename)
 
     assert (param_filename.exists())
 
-    with rio.open(float_100cm_rgb_file, 'r') as ref_src_ds, rio.open(param_filename, 'r') as param_ds:
+    with rio.open(file_rgb_100cm_float, 'r') as ref_src_ds, rio.open(param_filename, 'r') as param_ds:
         assert (param_ds.count == ref_src_ds.count * 3)
         param_mask = param_ds.dataset_mask().astype('bool', copy=False)
         src_ref_mask = ref_src_ds.dataset_mask().astype('bool', copy=False)
@@ -194,12 +194,12 @@ def test_param_image(float_100cm_rgb_file: Path, tmp_path: Path, model: Model, p
 
 @pytest.mark.parametrize(
     'src_file, ref_file, kernel_shape, proc_crs, mask_partial', [
-        ('float_45cm_src_file', 'float_100cm_ref_file', (1, 1), ProcCrs.auto, False),
-        ('float_45cm_src_file', 'float_100cm_ref_file', (1, 1), ProcCrs.auto, True),
-        ('float_45cm_src_file', 'float_100cm_ref_file', (3, 3), ProcCrs.auto, True),
-        ('float_100cm_src_file', 'float_45cm_ref_file', (1, 1), ProcCrs.auto, False),
-        ('float_100cm_src_file', 'float_45cm_ref_file', (1, 1), ProcCrs.auto, True),
-        ('float_100cm_src_file', 'float_45cm_ref_file', (3, 3), ProcCrs.auto, True),
+        ('src_file_45cm_float', 'ref_file_100cm_float', (1, 1), ProcCrs.auto, False),
+        ('src_file_45cm_float', 'ref_file_100cm_float', (1, 1), ProcCrs.auto, True),
+        ('src_file_45cm_float', 'ref_file_100cm_float', (3, 3), ProcCrs.auto, True),
+        ('src_file_100cm_float', 'ref_file_45cm_float', (1, 1), ProcCrs.auto, False),
+        ('src_file_100cm_float', 'ref_file_45cm_float', (1, 1), ProcCrs.auto, True),
+        ('src_file_100cm_float', 'ref_file_45cm_float', (3, 3), ProcCrs.auto, True),
     ]
 )  # yapf: disable
 def test_mask_partial(
@@ -232,11 +232,11 @@ def test_mask_partial(
             assert (len(out_mask_shapes) == 1)
 
 
-def test_build_overviews(tmp_path: Path, float_50cm_ref_file: Path):
+def test_build_overviews(tmp_path: Path, ref_file_50cm_float):
     """ Test that overviews are built for corrected and parameter files. """
     corr_filename = tmp_path.joinpath('corrected.tif')
     param_filename = utils.create_param_filename(corr_filename)
-    raster_fuse = RasterFuse(float_50cm_ref_file, float_50cm_ref_file)
+    raster_fuse = RasterFuse(ref_file_50cm_float, ref_file_50cm_float)
 
     # replace raster_fuse.build_overviews() with a test_build_overviews() that forces min_level_pixels==1, otherwise
     # overviews won't be built for the small test raster
@@ -261,28 +261,28 @@ def test_build_overviews(tmp_path: Path, float_50cm_ref_file: Path):
             assert (len(param_ds.overviews(band_i)) > 0)
 
 
-def test_io_error(tmp_path: Path, float_50cm_ref_file: Path):
+def test_io_error(tmp_path: Path, ref_file_50cm_float):
     """ Test we get an IoError if processing without opening/entering the context. """
-    raster_fuse = RasterFuse(float_50cm_ref_file, float_50cm_ref_file)
+    raster_fuse = RasterFuse(ref_file_50cm_float, ref_file_50cm_float)
     with pytest.raises(IoError):
         raster_fuse.process(tmp_path, Model.gain_blk_offset, (3, 3))
 
 
-def test_corr_filename(tmp_path: Path, float_50cm_ref_file: Path):
+def test_corr_filename(tmp_path: Path, ref_file_50cm_float):
     """ Test corrected file is created. """
     corr_filename = tmp_path.joinpath('corrected.tif')
-    raster_fuse = RasterFuse(float_50cm_ref_file, float_50cm_ref_file)
+    raster_fuse = RasterFuse(ref_file_50cm_float, ref_file_50cm_float)
     with raster_fuse:
         raster_fuse.process(corr_filename, Model.gain_blk_offset, (3, 3))
 
     assert (corr_filename.exists())
 
 
-def test_single_thread(tmp_path: Path, float_50cm_ref_file: Path):
+def test_single_thread(tmp_path: Path, ref_file_50cm_float):
     """ Test single-threaded processing creates a corrected file. """
     block_config = RasterFuse.create_block_config(threads=1)
     corr_filename = tmp_path.joinpath('corrected.tif')
-    raster_fuse = RasterFuse(float_50cm_ref_file, float_50cm_ref_file)
+    raster_fuse = RasterFuse(ref_file_50cm_float, ref_file_50cm_float)
     with raster_fuse:
         raster_fuse.process(corr_filename, Model.gain_blk_offset, (3, 3), block_config=block_config)
 
@@ -291,10 +291,10 @@ def test_single_thread(tmp_path: Path, float_50cm_ref_file: Path):
 
 @pytest.mark.parametrize(
     'src_file, ref_file, proc_crs, exp_proc_crs', [
-        ('float_50cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, ProcCrs.ref),
-        ('float_50cm_src_file', 'float_100cm_ref_file', ProcCrs.src, ProcCrs.src),
-        ('float_100cm_src_file', 'float_50cm_ref_file', ProcCrs.auto, ProcCrs.src),
-        ('float_100cm_src_file', 'float_50cm_ref_file', ProcCrs.ref, ProcCrs.ref),
+        ('src_file_50cm_float', 'ref_file_100cm_float', ProcCrs.auto, ProcCrs.ref),
+        ('src_file_50cm_float', 'ref_file_100cm_float', ProcCrs.src, ProcCrs.src),
+        ('src_file_100cm_float', 'ref_file_50cm_float', ProcCrs.auto, ProcCrs.src),
+        ('src_file_100cm_float', 'ref_file_50cm_float', ProcCrs.ref, ProcCrs.ref),
     ]
 )  # yapf: disable
 def test_proc_crs(
@@ -311,13 +311,13 @@ def test_proc_crs(
     assert (corr_filename.exists())
 
 
-def test_tags(tmp_path: Path, float_50cm_ref_file: Path):
+def test_tags(tmp_path: Path, ref_file_50cm_float):
     """ Test corrected file metadata. """
     model = Model.gain_blk_offset
     kernel_shape = (3, 3)
     proc_crs = ProcCrs.ref
     block_config = RasterFuse.create_block_config()
-    raster_fuse = RasterFuse(float_50cm_ref_file, float_50cm_ref_file, proc_crs=proc_crs)
+    raster_fuse = RasterFuse(ref_file_50cm_float, ref_file_50cm_float, proc_crs=proc_crs)
     corr_filename = tmp_path.joinpath('corrected.tif')
     param_filename = utils.create_param_filename(corr_filename)
     with raster_fuse:
@@ -338,8 +338,8 @@ def test_tags(tmp_path: Path, float_50cm_ref_file: Path):
                 *{f'FUSE_{k.upper()}' for k in RasterFuse.create_model_config().keys()},
             } <= set(tags)
         )
-        assert (tags['FUSE_SRC_FILE'] == float_50cm_ref_file.name)
-        assert (tags['FUSE_REF_FILE'] == float_50cm_ref_file.name)
+        assert (tags['FUSE_SRC_FILE'] == ref_file_50cm_float.name)
+        assert (tags['FUSE_REF_FILE'] == ref_file_50cm_float.name)
         assert (tags['FUSE_MODEL'] == str(model.name))
         assert (tags['FUSE_PROC_CRS'] == str(proc_crs.name))
         assert (tags['FUSE_KERNEL_SHAPE'] == str(kernel_shape))
@@ -350,11 +350,11 @@ def test_tags(tmp_path: Path, float_50cm_ref_file: Path):
 
 @pytest.mark.parametrize(
     'src_file, ref_file, src_bands, ref_bands, force, exp_bands', [
-        ('float_50cm_rgb_file', 'float_100cm_rgb_file', None, None, False, (1, 2, 3)),
-        ('float_50cm_rgb_file', 'float_100cm_rgb_file', (3, 2, 1), None, False, (3, 2, 1)),
-        ('float_50cm_rgb_file', 'float_100cm_rgb_file', None, (3, 2, 1), False, (1, 2, 3)),
-        ('float_50cm_rgb_file', 'float_100cm_rgb_file', (2, 1), (3, 1, 2), False, (2, 1)),
-        ('float_50cm_rgb_file', 'float_100cm_rgb_file', (2, 1), (3, 2, 1), True, (3, 2)),
+        ('file_rgb_50cm_float', 'file_rgb_100cm_float', None, None, False, (1, 2, 3)),
+        ('file_rgb_50cm_float', 'file_rgb_100cm_float', (3, 2, 1), None, False, (3, 2, 1)),
+        ('file_rgb_50cm_float', 'file_rgb_100cm_float', None, (3, 2, 1), False, (1, 2, 3)),
+        ('file_rgb_50cm_float', 'file_rgb_100cm_float', (2, 1), (3, 1, 2), False, (2, 1)),
+        ('file_rgb_50cm_float', 'file_rgb_100cm_float', (2, 1), (3, 2, 1), True, (3, 2)),
     ]
 )  # yapf: disable
 def test_src_ref_bands(

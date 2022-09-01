@@ -43,12 +43,12 @@ from tests.conftest import str_contain_no_space, FuseCliParams
     ]
 )  # yapf: disable
 def test_fuse(
-    tmp_path: Path, runner: CliRunner, float_100cm_rgb_file: Path, float_50cm_rgb_file: Path, model: Model,
+    tmp_path: Path, runner: CliRunner, file_rgb_100cm_float, file_rgb_50cm_float, model: Model,
     kernel_shape: Tuple[int, int],
 ):
     """ Test fuse cli output with different methods and kernel shapes. """
-    ref_file = float_100cm_rgb_file
-    src_file = float_50cm_rgb_file
+    ref_file = file_rgb_100cm_float
+    src_file = file_rgb_50cm_float
     post_fix = utils.create_out_postfix(ProcCrs.ref, model, kernel_shape, RasterFuse.create_out_profile()['driver'])
     corr_file = tmp_path.joinpath(src_file.stem + post_fix)
     cli_str = f'fuse -m {model.value} -k {kernel_shape[0]} {kernel_shape[1]} -od {tmp_path} {src_file} {ref_file}'
@@ -119,13 +119,13 @@ def test_overwrite(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
     assert (basic_fuse_cli_params.param_file.exists())
 
 
-def test_compare(runner: CliRunner, float_100cm_ref_file: Path, float_100cm_src_file: Path):
+def test_compare(runner: CliRunner, ref_file_100cm_float, src_file_100cm_float):
     """ Test --compare, in flag and value configurations, against expected output. """
-    ref_file = float_100cm_ref_file
-    src_file = float_100cm_src_file
+    ref_file = ref_file_100cm_float
+    src_file = src_file_100cm_float
     # test --compare in flag (no value), and value configuration
     cli_strs = [
-        f'fuse  {src_file} {ref_file} --compare', f'fuse {src_file} {ref_file} --compare {float_100cm_ref_file} -o'
+        f'fuse  {src_file} {ref_file} --compare', f'fuse {src_file} {ref_file} --compare {ref_file_100cm_float} -o'
     ]
     for cli_str in cli_strs:
         result = runner.invoke(cli, cli_str.split())
@@ -151,10 +151,10 @@ def test_compare(runner: CliRunner, float_100cm_ref_file: Path, float_100cm_src_
         assert (str_contain_no_space(sum_cmp_str, result.output))
 
 
-def test_compare_file_exists_error(runner: CliRunner, float_100cm_ref_file: Path, float_100cm_src_file: Path):
+def test_compare_file_exists_error(runner: CliRunner, ref_file_100cm_float, src_file_100cm_float):
     """ Test --compare raises an exception when the specified file does not exist. """
-    ref_file = float_100cm_ref_file
-    src_file = float_100cm_src_file
+    ref_file = ref_file_100cm_float
+    src_file = src_file_100cm_float
     # test --compare in flag (no value), and value configurayion
     cli_str = f'fuse  {src_file} {ref_file} --compare unknown.tif'
     result = runner.invoke(cli, cli_str.split())
@@ -164,11 +164,11 @@ def test_compare_file_exists_error(runner: CliRunner, float_100cm_ref_file: Path
 
 @pytest.mark.parametrize('proc_crs', [ProcCrs.auto, ProcCrs.ref, ProcCrs.src])
 def test_proc_crs(
-    tmp_path: Path, runner: CliRunner, float_100cm_ref_file: Path, float_100cm_src_file: Path, proc_crs: ProcCrs,
+    tmp_path: Path, runner: CliRunner, ref_file_100cm_float, src_file_100cm_float, proc_crs: ProcCrs,
 ):
     """ Test valid --proc-crs settings generate an output with correct metadata. """
-    ref_file = float_100cm_ref_file
-    src_file = float_100cm_src_file
+    ref_file = ref_file_100cm_float
+    src_file = src_file_100cm_float
     model = Model.gain_blk_offset
     kernel_shape = (3, 3)
     res_proc_crs = ProcCrs.ref if proc_crs == ProcCrs.auto else proc_crs

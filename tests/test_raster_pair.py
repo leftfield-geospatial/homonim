@@ -35,8 +35,8 @@ from homonim.raster_pair import RasterPairReader
 
 @pytest.mark.parametrize(
     'src_file, ref_file, expected_proc_crs', [
-        ('float_50cm_src_file', 'float_100cm_ref_file', ProcCrs.ref),
-        ('float_100cm_src_file', 'float_50cm_ref_file', ProcCrs.src)
+        ('src_file_50cm_float', 'ref_file_100cm_float', ProcCrs.ref),
+        ('src_file_100cm_float', 'ref_file_50cm_float', ProcCrs.src)
     ]
 )  # yapf: disable
 def test_creation(src_file: str, ref_file: str, expected_proc_crs: ProcCrs, request: FixtureRequest):
@@ -58,10 +58,10 @@ def test_creation(src_file: str, ref_file: str, expected_proc_crs: ProcCrs, requ
 
 @pytest.mark.parametrize(
     'src_file, ref_file', [
-        ('float_50cm_ref_file', 'float_100cm_src_file'),
-        ('float_50cm_ref_file', 'float_50cm_src_file'),
-        ('float_100cm_ref_file', 'float_50cm_src_file'),
-        ('float_100cm_ref_file', 'float_100cm_src_file')
+        ('ref_file_50cm_float', 'src_file_100cm_float'),
+        ('ref_file_50cm_float', 'src_file_50cm_float'),
+        ('ref_file_100cm_float', 'src_file_50cm_float'),
+        ('ref_file_100cm_float', 'src_file_100cm_float')
     ]
 )  # yapf: disable
 def test_coverage_exception(src_file: str, ref_file: str, request: FixtureRequest):
@@ -72,16 +72,16 @@ def test_coverage_exception(src_file: str, ref_file: str, request: FixtureReques
         _ = RasterPairReader(src_file, ref_file)
 
 
-def test_band_count_exception(rgba_file: Path, byte_file: Path):
+def test_band_count_exception(file_rgba, file_byte):
     """ Test that src band count > ref band count raises an error. """
     with pytest.raises(ImageContentError):
-        _ = RasterPairReader(rgba_file, byte_file)
+        _ = RasterPairReader(file_rgba, file_byte)
 
 
-def test_block_shape_exception(float_50cm_src_file: Path, float_100cm_ref_file: Path):
+def test_block_shape_exception(src_file_50cm_float, ref_file_100cm_float):
     """ Test block shape errors. """
     # test auto block shape smaller than a pixel
-    raster_pair = RasterPairReader(float_50cm_src_file, float_100cm_ref_file)
+    raster_pair = RasterPairReader(src_file_50cm_float, ref_file_100cm_float)
     with pytest.raises(BlockSizeError):
         with raster_pair:
             block_pairs = [block_pair for block_pair in raster_pair.block_pairs(max_block_mem=1.e-5)]
@@ -92,9 +92,9 @@ def test_block_shape_exception(float_50cm_src_file: Path, float_100cm_ref_file: 
             block_pairs = [block_pair for block_pair in raster_pair.block_pairs(overlap=(5, 5), max_block_mem=1.e-4)]
 
 
-def test_not_open_exception(float_50cm_src_file: Path, float_100cm_ref_file: Path):
+def test_not_open_exception(src_file_50cm_float, ref_file_100cm_float):
     """ Test that using a raster pair before entering the context raises an error. """
-    raster_pair = RasterPairReader(float_50cm_src_file, float_100cm_ref_file)
+    raster_pair = RasterPairReader(src_file_50cm_float, ref_file_100cm_float)
     with pytest.raises(IoError):
         _ = raster_pair.ref_im
     with pytest.raises(IoError):
@@ -107,14 +107,14 @@ def test_not_open_exception(float_50cm_src_file: Path, float_100cm_ref_file: Pat
 
 @pytest.mark.parametrize(
     'src_file, ref_file, proc_crs, blk_overlap, max_block_mem', [
-        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (0, 0), 1.e-3),
-        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (2, 2), 1.e-3),
-        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (0, 0), 2.e-4),
-        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (1, 1), 2.e-4),
-        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (0, 0), 1.e-3),
-        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 1.e-3),
-        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (0, 0), 2.e-4),
-        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (1, 1), 2.e-4),
+        ('src_file_45cm_float', 'ref_file_100cm_float', ProcCrs.auto, (0, 0), 1.e-3),
+        ('src_file_45cm_float', 'ref_file_100cm_float', ProcCrs.auto, (2, 2), 1.e-3),
+        ('src_file_45cm_float', 'ref_file_100cm_float', ProcCrs.auto, (0, 0), 2.e-4),
+        ('src_file_45cm_float', 'ref_file_100cm_float', ProcCrs.auto, (1, 1), 2.e-4),
+        ('src_file_100cm_float', 'ref_file_45cm_float', ProcCrs.auto, (0, 0), 1.e-3),
+        ('src_file_100cm_float', 'ref_file_45cm_float', ProcCrs.auto, (2, 2), 1.e-3),
+        ('src_file_100cm_float', 'ref_file_45cm_float', ProcCrs.auto, (0, 0), 2.e-4),
+        ('src_file_100cm_float', 'ref_file_45cm_float', ProcCrs.auto, (1, 1), 2.e-4),
     ]
 )  # yapf: disable
 def test_block_pair_continuity(
@@ -163,14 +163,14 @@ def test_block_pair_continuity(
 
 @pytest.mark.parametrize(
     'src_file, ref_file, proc_crs, overlap, max_block_mem', [
-        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (0, 0), 1.e-3),
-        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (2, 2), 1.e-3),
-        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (0, 0), 2.e-4),
-        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (2, 2), 2.e-4),
-        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (0, 0), 1.e-3),
-        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 1.e-3),
-        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (0, 0), 2.e-4),
-        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 2.e-4),
+        ('src_file_45cm_float', 'ref_file_100cm_float', ProcCrs.auto, (0, 0), 1.e-3),
+        ('src_file_45cm_float', 'ref_file_100cm_float', ProcCrs.auto, (2, 2), 1.e-3),
+        ('src_file_45cm_float', 'ref_file_100cm_float', ProcCrs.auto, (0, 0), 2.e-4),
+        ('src_file_45cm_float', 'ref_file_100cm_float', ProcCrs.auto, (2, 2), 2.e-4),
+        ('src_file_100cm_float', 'ref_file_45cm_float', ProcCrs.auto, (0, 0), 1.e-3),
+        ('src_file_100cm_float', 'ref_file_45cm_float', ProcCrs.auto, (2, 2), 1.e-3),
+        ('src_file_100cm_float', 'ref_file_45cm_float', ProcCrs.auto, (0, 0), 2.e-4),
+        ('src_file_100cm_float', 'ref_file_45cm_float', ProcCrs.auto, (2, 2), 2.e-4),
     ]
 )  # yapf: disable
 def test_block_pair_coverage(
@@ -205,14 +205,14 @@ def test_block_pair_coverage(
 
 @pytest.mark.parametrize(
     'src_file, ref_file, proc_crs, overlap, max_block_mem', [
-        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (0, 0), 1.e-3),
-        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (2, 2), 1.e-3),
-        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (0, 0), 2.e-4),
-        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (2, 2), 2.e-4),
-        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (0, 0), 1.e-3),
-        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 1.e-3),
-        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (0, 0), 2.e-4),
-        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 2.e-4),
+        ('src_file_45cm_float', 'ref_file_100cm_float', ProcCrs.auto, (0, 0), 1.e-3),
+        ('src_file_45cm_float', 'ref_file_100cm_float', ProcCrs.auto, (2, 2), 1.e-3),
+        ('src_file_45cm_float', 'ref_file_100cm_float', ProcCrs.auto, (0, 0), 2.e-4),
+        ('src_file_45cm_float', 'ref_file_100cm_float', ProcCrs.auto, (2, 2), 2.e-4),
+        ('src_file_100cm_float', 'ref_file_45cm_float', ProcCrs.auto, (0, 0), 1.e-3),
+        ('src_file_100cm_float', 'ref_file_45cm_float', ProcCrs.auto, (2, 2), 1.e-3),
+        ('src_file_100cm_float', 'ref_file_45cm_float', ProcCrs.auto, (0, 0), 2.e-4),
+        ('src_file_100cm_float', 'ref_file_45cm_float', ProcCrs.auto, (2, 2), 2.e-4),
     ]
 )  # yapf: disable
 def test_block_pair_io(
@@ -275,19 +275,19 @@ def test_block_pair_io(
 
 @pytest.mark.parametrize(
     'src_file, ref_file, proc_crs', [
-        ('float_100cm_src_file', 'float_100cm_ref_file', ProcCrs.ref),
-        ('float_100cm_sup_src_file', 'float_100cm_ref_file', ProcCrs.ref),
-        ('float_100cm_rot_src_file', 'float_100cm_ref_file', ProcCrs.ref),
-        ('float_100cm_wgs84_src_file', 'float_100cm_ref_file', ProcCrs.ref),
-        ('float_100cm_wgs84_sup_src_file', 'float_100cm_ref_file', ProcCrs.ref),
-        ('float_100cm_wgs84_src_file', 'float_100cm_ref_file', ProcCrs.src),
-        ('float_100cm_wgs84_sup_src_file', 'float_100cm_ref_file', ProcCrs.src),
-        ('float_100cm_src_file', 'float_100cm_sup_ref_file', ProcCrs.ref),
-        ('float_100cm_src_file', 'float_100cm_rot_ref_file', ProcCrs.ref),
-        ('float_100cm_src_file', 'float_100cm_wgs84_ref_file', ProcCrs.ref),
-        ('float_100cm_src_file', 'float_100cm_wgs84_sup_ref_file', ProcCrs.ref),
-        ('float_100cm_src_file', 'float_100cm_wgs84_ref_file', ProcCrs.src),
-        ('float_100cm_src_file', 'float_100cm_wgs84_sup_ref_file', ProcCrs.src),
+        ('src_file_100cm_float', 'ref_file_100cm_float', ProcCrs.ref),
+        ('src_file_sup_100cm_float', 'ref_file_100cm_float', ProcCrs.ref),
+        ('src_file_rot_100cm_float', 'ref_file_100cm_float', ProcCrs.ref),
+        ('src_file_wgs84_100cm_float', 'ref_file_100cm_float', ProcCrs.ref),
+        ('src_file_wgs84_sup_100cm_float', 'ref_file_100cm_float', ProcCrs.ref),
+        ('src_file_wgs84_100cm_float', 'ref_file_100cm_float', ProcCrs.src),
+        ('src_file_wgs84_sup_100cm_float', 'ref_file_100cm_float', ProcCrs.src),
+        ('src_file_100cm_float', 'ref_file_sup_100cm_float', ProcCrs.ref),
+        ('src_file_100cm_float', 'ref_file_rot_100cm_float', ProcCrs.ref),
+        ('src_file_100cm_float', 'ref_file_wgs84_100cm_float', ProcCrs.ref),
+        ('src_file_100cm_float', 'ref_file_wgs84_sup_float', ProcCrs.ref),
+        ('src_file_100cm_float', 'ref_file_wgs84_100cm_float', ProcCrs.src),
+        ('src_file_100cm_float', 'ref_file_wgs84_sup_float', ProcCrs.src),
     ]
 )  # yapf: disable
 def test_orientation_crs(src_file: str, ref_file: str, proc_crs: ProcCrs, request: FixtureRequest):

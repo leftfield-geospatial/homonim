@@ -118,10 +118,10 @@ def test_api__data_window(param_file_str: str, request: FixtureRequest):
         assert data_win == stats._get_data_window()
 
 
-def test_api__file_format_error(float_100cm_rgb_file: Path):
+def test_api__file_format_error(file_rgb_100cm_float):
     """ Test incorrect parameter file format raises an error. """
     with pytest.raises(ImageFormatError):
-        _ = ParamStats(float_100cm_rgb_file)
+        _ = ParamStats(file_rgb_100cm_float)
 
 
 @pytest.mark.parametrize('param_file_str', ['param_file', 'param_file_tile_10x20'])
@@ -177,9 +177,9 @@ def test_cli__mult_inputs(tmp_path: Path, runner: CliRunner, param_file: Path):
     assert (param_file in stats_dict)
 
 
-def test_cli__file_format_error(runner: CliRunner, float_100cm_rgb_file: Path):
+def test_cli__file_format_error(runner: CliRunner, file_rgb_100cm_float):
     """ Test stats cli fails with error message when the parameter file format is incorrect. """
-    cli_str = f'stats {float_100cm_rgb_file}'
+    cli_str = f'stats {file_rgb_100cm_float}'
     result = runner.invoke(cli, cli_str.split())
     assert (result.exit_code != 0)
     assert ('Invalid value' in result.output)

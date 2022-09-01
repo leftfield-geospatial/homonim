@@ -56,10 +56,10 @@ def _test_identical_compare_dict(res_dict: Dict, exp_len: int = 4):
 
 @pytest.mark.parametrize(
     'src_file, ref_file, src_bands, ref_bands, force, exp_bands', [
-        ('float_50cm_rgb_file', 'float_100cm_rgb_file', None, None, False, (1, 2, 3)),
-        ('float_100cm_rgb_file', 'float_50cm_rgb_file', (3, 2, 1), None, False, (3, 2, 1)),
-        ('float_50cm_rgb_file', 'float_100cm_rgb_file', (2, 1), (3, 1, 2), False, (2, 1)),
-        ('float_100cm_rgb_file', 'float_50cm_rgb_file', (2, 1), (3, 2, 1), True, (3, 2)),
+        ('file_rgb_50cm_float', 'file_rgb_100cm_float', None, None, False, (1, 2, 3)),
+        ('file_rgb_100cm_float', 'file_rgb_50cm_float', (3, 2, 1), None, False, (3, 2, 1)),
+        ('file_rgb_50cm_float', 'file_rgb_100cm_float', (2, 1), (3, 1, 2), False, (2, 1)),
+        ('file_rgb_100cm_float', 'file_rgb_50cm_float', (2, 1), (3, 2, 1), True, (3, 2)),
     ]
 )  # yapf: disable
 def test_api(
@@ -76,9 +76,9 @@ def test_api(
         _test_identical_compare_dict(res_dict, len(exp_bands) + 1)
 
 
-def test_api__thread(float_45cm_src_file: Path, float_100cm_ref_file: Path):
+def test_api__thread(src_file_45cm_float, ref_file_100cm_float):
     """ Test compasison results remain the same with different `threads` configurations. """
-    with RasterCompare(float_45cm_src_file, float_100cm_ref_file) as raster_compare:
+    with RasterCompare(src_file_45cm_float, ref_file_100cm_float) as raster_compare:
         res_dict_single = raster_compare.compare(threads=1)
         res_dict_mult = raster_compare.compare(threads=multiprocessing.cpu_count())
     assert (len(res_dict_single) == 2)
@@ -88,8 +88,8 @@ def test_api__thread(float_45cm_src_file: Path, float_100cm_ref_file: Path):
 
 @pytest.mark.parametrize(
     'src_file, ref_file, proc_crs, config', [
-        ('float_50cm_src_file', 'float_100cm_ref_file', ProcCrs.ref, dict(downsampling='lanczos')),
-        ('float_50cm_src_file', 'float_100cm_ref_file', ProcCrs.src, dict(upsampling='lanczos')),
+        ('src_file_50cm_float', 'ref_file_100cm_float', ProcCrs.ref, dict(downsampling='lanczos')),
+        ('src_file_50cm_float', 'ref_file_100cm_float', ProcCrs.src, dict(upsampling='lanczos')),
     ]
 )  # yapf:disable
 def test_api__resampling(src_file: str, ref_file: str, proc_crs: ProcCrs, config: Dict, request: FixtureRequest):
@@ -109,9 +109,9 @@ def test_api__resampling(src_file: str, ref_file: str, proc_crs: ProcCrs, config
 
 @pytest.mark.parametrize(
     'src_file, ref_file', [
-        ('float_100cm_src_file', 'float_100cm_ref_file'),
-        ('float_45cm_src_file', 'float_100cm_ref_file'),
-        ('float_100cm_src_file', 'float_45cm_ref_file'),
+        ('src_file_100cm_float', 'ref_file_100cm_float'),
+        ('src_file_45cm_float', 'ref_file_100cm_float'),
+        ('src_file_100cm_float', 'ref_file_45cm_float'),
     ]
 )  # yapf:disable
 def test_api__max_block_mem(src_file: str, ref_file: str, request: FixtureRequest):
@@ -130,17 +130,17 @@ def test_api__max_block_mem(src_file: str, ref_file: str, request: FixtureReques
 
 
 def test_api__proc_crs(
-    float_45cm_src_file: Path, float_100cm_ref_file: Path, float_100cm_src_file: Path, float_45cm_ref_file: Path
+    src_file_45cm_float, ref_file_100cm_float, src_file_100cm_float, ref_file_45cm_float
 ):
     """
     Test comparison of high res source with low res reference (proc_crs=ref) gives approx same results as comparison of
     low res source with high res reference (proc_crs=src).
     """
-    with RasterCompare(float_45cm_src_file, float_100cm_ref_file, proc_crs=ProcCrs.ref) as raster_compare:
+    with RasterCompare(src_file_45cm_float, ref_file_100cm_float, proc_crs=ProcCrs.ref) as raster_compare:
         stats_dict_ref = raster_compare.compare()  # compare by band
         assert (raster_compare.proc_crs == ProcCrs.ref)
     assert (len(stats_dict_ref) == 2)
-    with RasterCompare(float_100cm_src_file, float_45cm_ref_file, proc_crs=ProcCrs.src) as raster_compare:
+    with RasterCompare(src_file_100cm_float, ref_file_45cm_float, proc_crs=ProcCrs.src) as raster_compare:
         stats_dict_src = raster_compare.compare()  # compare by band
         assert (raster_compare.proc_crs == ProcCrs.src)
     assert (len(stats_dict_src) == 2)
@@ -150,10 +150,10 @@ def test_api__proc_crs(
             assert stats_dict_ref[band][k] == pytest.approx(stats_dict_src[band][k], rel=1e-3)
 
 
-def test_cli(runner: CliRunner, float_50cm_rgb_file: Path, float_100cm_rgb_file: Path):
+def test_cli(runner: CliRunner, file_rgb_50cm_float, file_rgb_100cm_float):
     """ Test compare CLI with known outputs. """
-    ref_file = float_100cm_rgb_file
-    src_file = float_50cm_rgb_file
+    ref_file = file_rgb_100cm_float
+    src_file = file_rgb_50cm_float
 
     cli_str = f'compare {src_file} {ref_file}'
     result = runner.invoke(cli, cli_str.split())
@@ -165,10 +165,10 @@ Mean   1.000  0.000  0.000   144"""
     assert (str_contain_no_space(res_str, result.output))
 
 
-def test_cli__output_file(tmp_path: Path, runner: CliRunner, float_50cm_rgb_file: Path, float_100cm_rgb_file: Path):
+def test_cli__output_file(tmp_path: Path, runner: CliRunner, file_rgb_50cm_float, file_rgb_100cm_float):
     """ Test compare CLI generated json file. """
-    ref_file = float_100cm_rgb_file
-    src_file = float_50cm_rgb_file
+    ref_file = file_rgb_100cm_float
+    src_file = file_rgb_50cm_float
 
     output_file = tmp_path.joinpath('compare.json')
     cli_str = f'compare {src_file} {ref_file} --output {output_file}'
@@ -184,10 +184,10 @@ def test_cli__output_file(tmp_path: Path, runner: CliRunner, float_50cm_rgb_file
     _test_identical_compare_dict(stats_dict[src_file])
 
 
-def test_cli__mult_inputs(tmp_path: Path, runner: CliRunner, float_50cm_rgb_file: Path, float_100cm_rgb_file: Path):
+def test_cli__mult_inputs(tmp_path: Path, runner: CliRunner, file_rgb_50cm_float, file_rgb_100cm_float):
     """ Test compare CLI with multiple src files. """
-    ref_file = float_100cm_rgb_file
-    src_file = float_50cm_rgb_file
+    ref_file = file_rgb_100cm_float
+    src_file = file_rgb_50cm_float
 
     output_file = tmp_path.joinpath('compare.json')
     cli_str = f'compare {src_file} {src_file} {ref_file} --output {output_file}'
@@ -202,10 +202,10 @@ def test_cli__mult_inputs(tmp_path: Path, runner: CliRunner, float_50cm_rgb_file
     assert (src_file in stats_dict)
 
 
-def test_cli__adv_options(tmp_path: Path, runner: CliRunner, float_50cm_src_file: Path, float_100cm_ref_file: Path):
+def test_cli__adv_options(tmp_path: Path, runner: CliRunner, src_file_50cm_float, ref_file_100cm_float):
     """ Test that the combined advanced CLI options affect comparison results as expected. """
-    ref_file = float_100cm_ref_file
-    src_file = float_50cm_src_file
+    ref_file = ref_file_100cm_float
+    src_file = src_file_50cm_float
 
     # run a comparison with default advanced options, and with specified advanced options, then compare results
     out_file_def = tmp_path.joinpath('compare_defaults.json')
@@ -237,12 +237,12 @@ def test_cli__adv_options(tmp_path: Path, runner: CliRunner, float_50cm_src_file
     ]
 )  # yapf: disable
 def test_cli_src_ref_bands(
-    src_bands: Tuple[int], ref_bands: Tuple[int], force: bool, exp_bands: Tuple[int], float_50cm_rgb_file: Path,
-    float_100cm_rgb_file: Path, tmp_path: Path, runner: CliRunner,
+    src_bands: Tuple[int], ref_bands: Tuple[int], force: bool, exp_bands: Tuple[int], file_rgb_50cm_float,
+    file_rgb_100cm_float, tmp_path: Path, runner: CliRunner,
 ):
     """ Test compare with --src_band, --ref_band and --force-match parameters. """
-    src_file = float_50cm_rgb_file
-    ref_file = float_100cm_rgb_file
+    src_file = file_rgb_50cm_float
+    ref_file = file_rgb_100cm_float
     out_file = tmp_path.joinpath('results.json')
     cli_str = f'compare {src_file} {ref_file} -op {out_file}'
     if src_bands:
@@ -259,7 +259,7 @@ def test_cli_src_ref_bands(
         stats_dict = json.load(f)
     assert str(src_file) in stats_dict
     stats_dict = stats_dict[str(src_file)]
-    exp_band_names = [f'Reference band {bi}' for bi in exp_bands] + ['Mean']
+    exp_band_names = [f'Band {bi}' for bi in exp_bands] + ['Mean']
     assert list(stats_dict.keys()) == exp_band_names
     if not force:
         _test_identical_compare_dict(stats_dict, len(exp_bands) + 1)

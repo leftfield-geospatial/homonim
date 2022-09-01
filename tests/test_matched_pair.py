@@ -31,10 +31,10 @@ from homonim.matched_pair import MatchedPairReader
 
 
 @pytest.mark.parametrize(['file', 'bands', 'exp_bands', 'exp_band_names', 'exp_wavelengths'], [
-    ('rgba_file', None, [1, 2, 3], ['1', '2', '3'], [.650, .560, .480]),
-    ('rgba_file', (1, 2, 3), [1, 2, 3], ['1', '2', '3'], [.650, .560, .480]),
-    ('masked_file', None, [1], ['1'], [float('nan')]),
-    ('float_100cm_src_file', [1], [1], ['1'], [float('nan')]),
+    ('file_rgba', None, [1, 2, 3], ['1', '2', '3'], [.650, .560, .480]),
+    ('file_rgba', (1, 2, 3), [1, 2, 3], ['1', '2', '3'], [.650, .560, .480]),
+    ('file_masked', None, [1], ['1'], [float('nan')]),
+    ('src_file_100cm_float', [1], [1], ['1'], [float('nan')]),
     ('s2_ref_file', None, [1, 2, 3], ['B4', 'B3', 'B2'], [0.6645, 0.56, 0.4966]),
     ('s2_ref_file', (3, 2, 1), [3, 2, 1], ['B2', 'B3', 'B4'], [0.4966, 0.56, 0.6645]),
     (
@@ -56,17 +56,17 @@ def test_get_band_info(
         assert all(utils.nan_equals(wavelengths, np.array(exp_wavelengths)))
 
 
-def test_get_band_info_alpha_band_error(rgba_file):
+def test_get_band_info_alpha_band_error(file_rgba):
     """ Test an error is raised in _get_band_info when user bands contain alpha bands. """
-    with rio.open(rgba_file, 'r') as im:
+    with rio.open(file_rgba, 'r') as im:
         with pytest.raises(ValueError) as ex:
             _, _, _ = MatchedPairReader._get_band_info(im, bands=(4, 1, 2))
         assert 'bands contain alpha band(s)' in str(ex)
 
 
-def test_get_band_info_invalid_band_error(rgba_file):
+def test_get_band_info_invalid_band_error(file_rgba):
     """ Test an error is raised in _get_band_info when user bands contain invalid bands. """
-    with rio.open(rgba_file, 'r') as im:
+    with rio.open(file_rgba, 'r') as im:
         with pytest.raises(ValueError) as ex:
             _, _, _ = MatchedPairReader._get_band_info(im, bands=(4, 1, 0, 2, 5))
         assert 'bands contain invalid band(s)' in str(ex)
@@ -74,12 +74,12 @@ def test_get_band_info_invalid_band_error(rgba_file):
 
 @pytest.mark.parametrize(
     ['src_file', 'ref_file', 'src_bands', 'ref_bands', 'exp_src_bands', 'exp_ref_bands', 'force'], [
-        ('float_100cm_src_file', 'float_100cm_ref_file', None, None, [1], [1], False),
-        ('float_100cm_src_file', 'float_100cm_ref_file', (1,), (1,), [1], [1], False),
-        ('float_100cm_src_file', 'rgba_file', None, [1], [1], [1], False),
-        ('rgba_file', 'rgba_file', None, None, [1, 2, 3], [1, 2, 3], False),
-        ('rgba_file', 'rgba_file', [3, 2], None, [3, 2], [3, 2], False),
-        ('rgba_file', 'rgba_file', [3, 2], [3, 1, 2], [3, 2], [3, 2], False),
+        ('src_file_100cm_float', 'ref_file_100cm_float', None, None, [1], [1], False),
+        ('src_file_100cm_float', 'ref_file_100cm_float', (1,), (1,), [1], [1], False),
+        ('src_file_100cm_float', 'file_rgba', None, [1], [1], [1], False),
+        ('file_rgba', 'file_rgba', None, None, [1, 2, 3], [1, 2, 3], False),
+        ('file_rgba', 'file_rgba', [3, 2], None, [3, 2], [3, 2], False),
+        ('file_rgba', 'file_rgba', [3, 2], [3, 1, 2], [3, 2], [3, 2], False),
         ('s2_ref_file', 's2_ref_file', None, None, [1, 2, 3], [1, 2, 3], False),
         ('s2_ref_file', 's2_ref_file', [3, 2], None, [3, 2], [3, 2], False),
         ('s2_ref_file', 'landsat_ref_file', None, None, [1, 2, 3], [4, 3, 2], False),
@@ -123,7 +123,7 @@ def test_match_wavelength_dist_error(s2_ref_file, landsat_ref_file):
 
 @pytest.mark.parametrize(
     ['src_file', 'ref_file', 'src_bands', 'ref_bands','force'], [
-        ('float_100cm_src_file', 'rgba_file', None, None, False),
+        ('src_file_100cm_float', 'file_rgba', None, None, False),
         ('landsat_src_file', 'landsat_ref_file', [7, 8, 9], None, False),
     ]
 )  # yapf: disable
