@@ -240,7 +240,7 @@ src_bands_option = click.option(
 ref_bands_option = click.option(
     '-rb', '--ref-band', 'ref_bands', type=click.INT, multiple=True, default=None,
     show_default='all spectral or non-alpha bands.',
-    help=f'Reference band index(es) that correspond (spectrally) to :option:`--src-band`(s).'
+    help=f'Reference band index(es) to match with source band(s) (1 based).'
 )
 force_match_option = click.option(
     '-f', '--force-match',  is_flag=True, type=click.BOOL, default=False, show_default=True,
@@ -400,9 +400,14 @@ def fuse(
     Correct source multi-spectral aerial or satellite imagery to approximate surface reflectance, by fusion with a
     reference satellite image.
 
-    For best results, reference and source image(s) should be concurrent, co-located, and spectrally similar.
-    Reference image extents must encompass those of the source image(s), and source / reference band ordering should
-    match i.e. reference band 1 corresponds to source band 1, reference band 2 corresponds to source band 2 etc.
+    For best results, reference and source image(s) should be concurrent, co-located and spectrally similar.  Reference
+    image extents must encompass those of the source image(s).
+
+    The reference image should contain bands that are approximate (wavelength) matches to the source image bands.
+    Where source and reference images are RGB, or have `center_wavelength` metadata, bands are matched automatically.
+    Where there are the same number of source and reference bands, and no `center_wavelength` metadata, bands are
+    assumed to be in matching order.  The :option:`--src-band`` and :option:`--ref-band` options allow subsets and
+    ordering of source and reference bands to be specified.
 
     Corrected image(s) are named automatically based on the source file name and option values.
     \b
@@ -424,6 +429,10 @@ def fuse(
     compare source and corrected images with `reference2.tif`::
 
         homonim fuse -m gain-offset -k 15 15 --param-image --mask-partial --compare reference2.tif source*.tif reference1.tif
+
+    Correct bands 2 and 3 of `source.tif`, with bands 7 and 8 of `reference.tif`, using the default correction options::
+
+        homonim fuse -sb 2 -sb 3 -rb 7 -rb 8 source.tif reference.tif
     """
     # @formatter:on
 
@@ -517,8 +526,15 @@ def compare(
     before and after accuracy of surface reflectance correction, by comparing source and corrected images with a
     new reference image.
 
-    Reference image extents must encompass those of the input image(s), and input / reference band ordering should
-    match i.e. reference band 1 corresponds to input band 1, reference band 2 corresponds to input band 2 etc.
+    Reference and input image(s) should be co-located and spectrally similar.  Reference image extents must encompass
+    those of the input image(s).
+
+    The reference image should contain bands that are approximate (wavelength) matches to the input image bands.
+    Where input and reference images are RGB, or have `center_wavelength` metadata, bands are matched automatically.
+    Where there are the same number of input and reference bands, and no `center_wavelength` metadata, bands are
+    assumed to be in matching order.  The :option:`--src-band`` and :option:`--ref-band` options allow subsets and
+    ordering of input and reference bands to be specified.
+
     \b
 
     Examples:
