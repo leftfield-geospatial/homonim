@@ -23,7 +23,7 @@
       </HistItem>
     </Histograms>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">3324c_2015_1004_05_0182_RGB.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">aerial_rgb_byte_1.tif</SourceFilename>
       <SourceBand>1</SourceBand>
       <SourceProperties RasterXSize="805" RasterYSize="1421" DataType="Byte" BlockXSize="256" BlockYSize="256" />
       <SrcRect xOff="0" yOff="0" xSize="805" ySize="1421" />
@@ -31,7 +31,7 @@
       <NODATA>0</NODATA>
     </ComplexSource>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">3324c_2015_1004_05_0184_RGB.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">aerial_rgb_byte_2.tif</SourceFilename>
       <SourceBand>1</SourceBand>
       <SourceProperties RasterXSize="806" RasterYSize="1421" DataType="Byte" BlockXSize="256" BlockYSize="256" />
       <SrcRect xOff="0" yOff="0" xSize="806" ySize="1421" />
@@ -39,7 +39,7 @@
       <NODATA>0</NODATA>
     </ComplexSource>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">3324c_2015_1004_06_0251_RGB.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">aerial_rgb_byte_3.tif</SourceFilename>
       <SourceBand>1</SourceBand>
       <SourceProperties RasterXSize="792" RasterYSize="1406" DataType="Byte" BlockXSize="256" BlockYSize="256" />
       <SrcRect xOff="0" yOff="0" xSize="792" ySize="1406" />
@@ -47,7 +47,7 @@
       <NODATA>0</NODATA>
     </ComplexSource>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">3324c_2015_1004_06_0253_RGB.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">aerial_rgb_byte_4.tif</SourceFilename>
       <SourceBand>1</SourceBand>
       <SourceProperties RasterXSize="795" RasterYSize="1411" DataType="Byte" BlockXSize="256" BlockYSize="256" />
       <SrcRect xOff="0" yOff="0" xSize="795" ySize="1411" />
@@ -76,7 +76,7 @@
       </HistItem>
     </Histograms>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">3324c_2015_1004_05_0182_RGB.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">aerial_rgb_byte_1.tif</SourceFilename>
       <SourceBand>2</SourceBand>
       <SourceProperties RasterXSize="805" RasterYSize="1421" DataType="Byte" BlockXSize="256" BlockYSize="256" />
       <SrcRect xOff="0" yOff="0" xSize="805" ySize="1421" />
@@ -84,7 +84,7 @@
       <NODATA>0</NODATA>
     </ComplexSource>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">3324c_2015_1004_05_0184_RGB.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">aerial_rgb_byte_2.tif</SourceFilename>
       <SourceBand>2</SourceBand>
       <SourceProperties RasterXSize="806" RasterYSize="1421" DataType="Byte" BlockXSize="256" BlockYSize="256" />
       <SrcRect xOff="0" yOff="0" xSize="806" ySize="1421" />
@@ -92,7 +92,7 @@
       <NODATA>0</NODATA>
     </ComplexSource>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">3324c_2015_1004_06_0251_RGB.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">aerial_rgb_byte_3.tif</SourceFilename>
       <SourceBand>2</SourceBand>
       <SourceProperties RasterXSize="792" RasterYSize="1406" DataType="Byte" BlockXSize="256" BlockYSize="256" />
       <SrcRect xOff="0" yOff="0" xSize="792" ySize="1406" />
@@ -100,7 +100,7 @@
       <NODATA>0</NODATA>
     </ComplexSource>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">3324c_2015_1004_06_0253_RGB.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">aerial_rgb_byte_4.tif</SourceFilename>
       <SourceBand>2</SourceBand>
       <SourceProperties RasterXSize="795" RasterYSize="1411" DataType="Byte" BlockXSize="256" BlockYSize="256" />
       <SrcRect xOff="0" yOff="0" xSize="795" ySize="1411" />
@@ -129,7 +129,7 @@
       </HistItem>
     </Histograms>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">3324c_2015_1004_05_0182_RGB.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">aerial_rgb_byte_1.tif</SourceFilename>
       <SourceBand>3</SourceBand>
       <SourceProperties RasterXSize="805" RasterYSize="1421" DataType="Byte" BlockXSize="256" BlockYSize="256" />
       <SrcRect xOff="0" yOff="0" xSize="805" ySize="1421" />
@@ -137,7 +137,7 @@
       <NODATA>0</NODATA>
     </ComplexSource>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">3324c_2015_1004_05_0184_RGB.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">aerial_rgb_byte_2.tif</SourceFilename>
       <SourceBand>3</SourceBand>
       <SourceProperties RasterXSize="806" RasterYSize="1421" DataType="Byte" BlockXSize="256" BlockYSize="256" />
       <SrcRect xOff="0" yOff="0" xSize="806" ySize="1421" />
@@ -145,7 +145,7 @@
       <NODATA>0</NODATA>
     </ComplexSource>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">3324c_2015_1004_06_0251_RGB.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">aerial_rgb_byte_3.tif</SourceFilename>
       <SourceBand>3</SourceBand>
       <SourceProperties RasterXSize="792" RasterYSize="1406" DataType="Byte" BlockXSize="256" BlockYSize="256" />
       <SrcRect xOff="0" yOff="0" xSize="792" ySize="1406" />
@@ -153,7 +153,7 @@
       <NODATA>0</NODATA>
     </ComplexSource>
     <ComplexSource>
-      <SourceFilename relativeToVRT="1">3324c_2015_1004_06_0253_RGB.tif</SourceFilename>
+      <SourceFilename relativeToVRT="1">aerial_rgb_byte_4.tif</SourceFilename>
       <SourceBand>3</SourceBand>
       <SourceProperties RasterXSize="795" RasterYSize="1411" DataType="Byte" BlockXSize="256" BlockYSize="256" />
       <SrcRect xOff="0" yOff="0" xSize="795" ySize="1411" />
