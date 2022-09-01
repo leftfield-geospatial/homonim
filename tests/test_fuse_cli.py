@@ -131,17 +131,17 @@ def test_compare(runner: CliRunner, ref_file_100cm_float, src_file_100cm_float):
         result = runner.invoke(cli, cli_str.split())
         assert (result.exit_code == 0)
         src_cmp_str = """float_100cm_src.tif:
-      Band    r²   RMSE   rRMSE   N
-    ------ ----- ------ ------- ---
-    Band 1 1.000  0.000   0.000 144
-      Mean 1.000  0.000   0.000 144"""
+           Band    r²   RMSE   rRMSE   N
+    ----------- ----- ------ ------- ---
+    Ref. band 1 1.000  0.000   0.000 144
+           Mean 1.000  0.000   0.000 144"""
         assert (str_contain_no_space(src_cmp_str, result.output))
 
         corr_cmp_str = """float_100cm_src_FUSE_cREF_mGAIN-BLK-OFFSET_k5_5.tif:
-      Band    r²   RMSE   rRMSE   N
-    ------ ----- ------ ------- ---
-    Band 1 1.000  0.000   0.000 144
-      Mean 1.000  0.000   0.000 144"""
+           Band      r²   RMSE   rRMSE   N
+    ----------- ----- ------ ------- ---
+    Ref. Band 1 1.000  0.000   0.000 144
+           Mean 1.000  0.000   0.000 144"""
         assert (str_contain_no_space(corr_cmp_str, result.output))
 
         sum_cmp_str = """File    r²   RMSE   rRMSE   N

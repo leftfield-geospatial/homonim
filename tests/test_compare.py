@@ -25,8 +25,6 @@ import numpy as np
 import pytest
 from click.testing import CliRunner
 from pytest import FixtureRequest
-import rasterio as rio
-from rasterio.vrt import WarpedVRT
 
 from homonim.cli import cli
 from homonim.compare import RasterCompare
@@ -159,8 +157,8 @@ def test_cli(runner: CliRunner, file_rgb_50cm_float, file_rgb_100cm_float):
     result = runner.invoke(cli, cli_str.split())
     assert (result.exit_code == 0)
     res_str = """Band 1 1.000  0.000  0.000   144
-Band 2 1.000  0.000  0.000   144
-Band 3 1.000  0.000  0.000   144
+Ref. band 2 1.000  0.000  0.000   144
+Ref. band 3 1.000  0.000  0.000   144
 Mean   1.000  0.000  0.000   144"""
     assert (str_contain_no_space(res_str, result.output))
 
@@ -259,7 +257,7 @@ def test_cli_src_ref_bands(
         stats_dict = json.load(f)
     assert str(src_file) in stats_dict
     stats_dict = stats_dict[str(src_file)]
-    exp_band_names = [f'Band {bi}' for bi in exp_bands] + ['Mean']
+    exp_band_names = [f'Ref. band {bi}' for bi in exp_bands] + ['Mean']
     assert list(stats_dict.keys()) == exp_band_names
     if not force:
         _test_identical_compare_dict(stats_dict, len(exp_bands) + 1)
