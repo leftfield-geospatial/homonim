@@ -1,0 +1,425 @@
+<VRTDataset rasterXSize="237" rasterYSize="408">
+  <SRS dataAxisToSRSAxisMapping="1,2">PROJCS["unnamed",GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433,AUTHORITY["EPSG","9122"]],AUTHORITY["EPSG","4326"]],PROJECTION["Transverse_Mercator"],PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",25],PARAMETER["scale_factor",1],PARAMETER["false_easting",0],PARAMETER["false_northing",0],UNIT["metre",1,AUTHORITY["EPSG","9001"]],AXIS["Easting",EAST],AXIS["Northing",NORTH]]</SRS>
+  <GeoTransform> -5.9940000000000000e+04,  3.0000000000000000e+01,  0.0000000000000000e+00, -3.7233900000000000e+06,  0.0000000000000000e+00, -3.0000000000000000e+01</GeoTransform>
+  <VRTRasterBand dataType="Byte" band="1">
+    <Metadata>
+      <MDI key="center_wavelength">0.443</MDI>
+      <MDI key="description">Band 1 (ultra blue, coastal aerosol) surface reflectance</MDI>
+      <MDI key="gsd">30</MDI>
+      <MDI key="name">SR_B1</MDI>
+      <MDI key="offset">-0.2</MDI>
+      <MDI key="scale">2.75e-05</MDI>
+      <MDI key="wavelength">0.435-0.451 &amp;mu;m</MDI>
+    </Metadata>
+    <Description>SR_B1</Description>
+    <NoDataValue>0</NoDataValue>
+    <ColorInterp>Gray</ColorInterp>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="2">
+    <Metadata>
+      <MDI key="center_wavelength">0.482</MDI>
+      <MDI key="description">Band 2 (blue) surface reflectance</MDI>
+      <MDI key="gsd">30</MDI>
+      <MDI key="name">SR_B2</MDI>
+      <MDI key="offset">-0.2</MDI>
+      <MDI key="scale">2.75e-05</MDI>
+      <MDI key="wavelength">0.452-0.512 &amp;mu;m</MDI>
+    </Metadata>
+    <Description>SR_B2</Description>
+    <NoDataValue>0</NoDataValue>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
+      <SourceBand>2</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="3">
+    <Metadata>
+      <MDI key="center_wavelength">0.562</MDI>
+      <MDI key="description">Band 3 (green) surface reflectance</MDI>
+      <MDI key="gsd">30</MDI>
+      <MDI key="name">SR_B3</MDI>
+      <MDI key="offset">-0.2</MDI>
+      <MDI key="scale">2.75e-05</MDI>
+      <MDI key="wavelength">0.533-0.590 &amp;mu;m</MDI>
+    </Metadata>
+    <Description>SR_B3</Description>
+    <NoDataValue>0</NoDataValue>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
+      <SourceBand>3</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="4">
+    <Metadata>
+      <MDI key="center_wavelength">0.655</MDI>
+      <MDI key="description">Band 4 (red) surface reflectance</MDI>
+      <MDI key="gsd">30</MDI>
+      <MDI key="name">SR_B4</MDI>
+      <MDI key="offset">-0.2</MDI>
+      <MDI key="scale">2.75e-05</MDI>
+      <MDI key="wavelength">0.636-0.673 &amp;mu;m</MDI>
+    </Metadata>
+    <Description>SR_B4</Description>
+    <NoDataValue>0</NoDataValue>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
+      <SourceBand>4</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="5">
+    <Metadata>
+      <MDI key="center_wavelength">0.865</MDI>
+      <MDI key="description">Band 5 (near infrared) surface reflectance</MDI>
+      <MDI key="gsd">30</MDI>
+      <MDI key="name">SR_B5</MDI>
+      <MDI key="offset">-0.2</MDI>
+      <MDI key="scale">2.75e-05</MDI>
+      <MDI key="wavelength">0.851-0.879 &amp;mu;m</MDI>
+    </Metadata>
+    <Description>SR_B5</Description>
+    <NoDataValue>0</NoDataValue>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
+      <SourceBand>5</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="6">
+    <Metadata>
+      <MDI key="center_wavelength">1.609</MDI>
+      <MDI key="description">Band 6 (shortwave infrared 1) surface reflectance</MDI>
+      <MDI key="gsd">30</MDI>
+      <MDI key="name">SR_B6</MDI>
+      <MDI key="offset">-0.2</MDI>
+      <MDI key="scale">2.75e-05</MDI>
+      <MDI key="wavelength">1.566-1.651 &amp;mu;m</MDI>
+    </Metadata>
+    <Description>SR_B6</Description>
+    <NoDataValue>0</NoDataValue>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
+      <SourceBand>6</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="7">
+    <Metadata>
+      <MDI key="center_wavelength">2.201</MDI>
+      <MDI key="description">Band 7 (shortwave infrared 2) surface reflectance</MDI>
+      <MDI key="gsd">30</MDI>
+      <MDI key="name">SR_B7</MDI>
+      <MDI key="offset">-0.2</MDI>
+      <MDI key="scale">2.75e-05</MDI>
+      <MDI key="wavelength">2.107-2.294 &amp;mu;m</MDI>
+    </Metadata>
+    <Description>SR_B7</Description>
+    <NoDataValue>0</NoDataValue>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
+      <SourceBand>7</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="8">
+    <Metadata>
+      <MDI key="description">Aerosol attributes</MDI>
+      <MDI key="gsd">30</MDI>
+      <MDI key="name">SR_QA_AEROSOL</MDI>
+    </Metadata>
+    <Description>SR_QA_AEROSOL</Description>
+    <NoDataValue>0</NoDataValue>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
+      <SourceBand>8</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="9">
+    <Metadata>
+      <MDI key="center_wavelength">10.895</MDI>
+      <MDI key="description">Band 10 surface temperature</MDI>
+      <MDI key="gsd">30</MDI>
+      <MDI key="name">ST_B10</MDI>
+      <MDI key="offset">149</MDI>
+      <MDI key="scale">0.00341802</MDI>
+      <MDI key="units">Kelvin</MDI>
+      <MDI key="wavelength">10.60-11.19 &amp;mu;m</MDI>
+    </Metadata>
+    <Description>ST_B10</Description>
+    <NoDataValue>0</NoDataValue>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
+      <SourceBand>9</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="10">
+    <Metadata>
+      <MDI key="description">Atmospheric Transmittance</MDI>
+      <MDI key="gsd">30</MDI>
+      <MDI key="name">ST_ATRAN</MDI>
+      <MDI key="scale">0.0001</MDI>
+    </Metadata>
+    <Description>ST_ATRAN</Description>
+    <NoDataValue>0</NoDataValue>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
+      <SourceBand>10</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="11">
+    <Metadata>
+      <MDI key="description">Pixel distance to cloud</MDI>
+      <MDI key="gsd">30</MDI>
+      <MDI key="name">ST_CDIST</MDI>
+      <MDI key="scale">0.01</MDI>
+      <MDI key="units">km</MDI>
+    </Metadata>
+    <Description>ST_CDIST</Description>
+    <NoDataValue>0</NoDataValue>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
+      <SourceBand>11</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="12">
+    <Metadata>
+      <MDI key="description">Downwelled Radiance</MDI>
+      <MDI key="gsd">30</MDI>
+      <MDI key="name">ST_DRAD</MDI>
+      <MDI key="scale">0.001</MDI>
+      <MDI key="units">W/(m^2*sr*um)/ DN</MDI>
+    </Metadata>
+    <Description>ST_DRAD</Description>
+    <NoDataValue>0</NoDataValue>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
+      <SourceBand>12</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="13">
+    <Metadata>
+      <MDI key="description">Emissivity of Band 10 estimated from ASTER GED</MDI>
+      <MDI key="gsd">30</MDI>
+      <MDI key="name">ST_EMIS</MDI>
+      <MDI key="scale">0.0001</MDI>
+    </Metadata>
+    <Description>ST_EMIS</Description>
+    <NoDataValue>0</NoDataValue>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
+      <SourceBand>13</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="14">
+    <Metadata>
+      <MDI key="description">Emissivity standard deviation</MDI>
+      <MDI key="gsd">30</MDI>
+      <MDI key="name">ST_EMSD</MDI>
+      <MDI key="scale">0.0001</MDI>
+    </Metadata>
+    <Description>ST_EMSD</Description>
+    <NoDataValue>0</NoDataValue>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
+      <SourceBand>14</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="15">
+    <Metadata>
+      <MDI key="description">Uncertainty of the Surface Temperature band</MDI>
+      <MDI key="gsd">30</MDI>
+      <MDI key="name">ST_QA</MDI>
+      <MDI key="scale">0.01</MDI>
+      <MDI key="units">K</MDI>
+    </Metadata>
+    <Description>ST_QA</Description>
+    <NoDataValue>0</NoDataValue>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
+      <SourceBand>15</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="16">
+    <Metadata>
+      <MDI key="description">Thermal band converted to radiance</MDI>
+      <MDI key="gsd">30</MDI>
+      <MDI key="name">ST_TRAD</MDI>
+      <MDI key="scale">0.001</MDI>
+      <MDI key="units">W/(m^2*sr*um)/ DN</MDI>
+    </Metadata>
+    <Description>ST_TRAD</Description>
+    <NoDataValue>0</NoDataValue>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
+      <SourceBand>16</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="17">
+    <Metadata>
+      <MDI key="description">Upwelled Radiance</MDI>
+      <MDI key="gsd">30</MDI>
+      <MDI key="name">ST_URAD</MDI>
+      <MDI key="scale">0.001</MDI>
+      <MDI key="units">W/(m^2*sr*um)/ DN</MDI>
+    </Metadata>
+    <Description>ST_URAD</Description>
+    <NoDataValue>0</NoDataValue>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
+      <SourceBand>17</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="18">
+    <Metadata>
+      <MDI key="description">Pixel quality attributes generated from the CFMASK algorithm.</MDI>
+      <MDI key="gsd">30</MDI>
+      <MDI key="name">QA_PIXEL</MDI>
+    </Metadata>
+    <Description>QA_PIXEL</Description>
+    <NoDataValue>0</NoDataValue>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
+      <SourceBand>18</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="19">
+    <Metadata>
+      <MDI key="description">Radiometric saturation QA</MDI>
+      <MDI key="gsd">30</MDI>
+      <MDI key="name">QA_RADSAT</MDI>
+    </Metadata>
+    <Description>QA_RADSAT</Description>
+    <NoDataValue>0</NoDataValue>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
+      <SourceBand>19</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="20">
+    <Metadata>
+      <MDI key="name">FILL_MASK</MDI>
+    </Metadata>
+    <Description>FILL_MASK</Description>
+    <NoDataValue>0</NoDataValue>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
+      <SourceBand>20</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="21">
+    <Metadata>
+      <MDI key="name">CLOUD_MASK</MDI>
+    </Metadata>
+    <Description>CLOUD_MASK</Description>
+    <NoDataValue>0</NoDataValue>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
+      <SourceBand>21</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="22">
+    <Metadata>
+      <MDI key="name">SHADOW_MASK</MDI>
+    </Metadata>
+    <Description>SHADOW_MASK</Description>
+    <NoDataValue>0</NoDataValue>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
+      <SourceBand>22</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="23">
+    <Metadata>
+      <MDI key="name">CLOUDLESS_MASK</MDI>
+    </Metadata>
+    <Description>CLOUDLESS_MASK</Description>
+    <NoDataValue>0</NoDataValue>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
+      <SourceBand>23</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+  <VRTRasterBand dataType="Byte" band="24">
+    <Metadata>
+      <MDI key="name">CLOUD_DIST</MDI>
+    </Metadata>
+    <Description>CLOUD_DIST</Description>
+    <NoDataValue>0</NoDataValue>
+    <ComplexSource>
+      <SourceFilename relativeToVRT="1">landsat8_byte.tif</SourceFilename>
+      <SourceBand>24</SourceBand>
+      <SrcRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <DstRect xOff="0" yOff="0" xSize="237" ySize="408" />
+      <NODATA>0</NODATA>
+    </ComplexSource>
+  </VRTRasterBand>
+</VRTDataset>

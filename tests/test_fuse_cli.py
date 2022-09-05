@@ -26,6 +26,7 @@ import rasterio as rio
 import yaml
 from click.testing import CliRunner
 from rasterio.warp import Resampling
+from rasterio.vrt import WarpedVRT
 
 from homonim import utils
 from homonim.cli import cli
@@ -42,12 +43,12 @@ from tests.conftest import str_contain_no_space, FuseCliParams
     ]
 )  # yapf: disable
 def test_fuse(
-    tmp_path: Path, runner: CliRunner, float_100cm_rgb_file: Path, float_50cm_rgb_file: Path, model: Model,
+    tmp_path: Path, runner: CliRunner, file_rgb_100cm_float, file_rgb_50cm_float, model: Model,
     kernel_shape: Tuple[int, int],
 ):
     """ Test fuse cli output with different methods and kernel shapes. """
-    ref_file = float_100cm_rgb_file
-    src_file = float_50cm_rgb_file
+    ref_file = file_rgb_100cm_float
+    src_file = file_rgb_50cm_float
     post_fix = utils.create_out_postfix(ProcCrs.ref, model, kernel_shape, RasterFuse.create_out_profile()['driver'])
     corr_file = tmp_path.joinpath(src_file.stem + post_fix)
     cli_str = f'fuse -m {model.value} -k {kernel_shape[0]} {kernel_shape[1]} -od {tmp_path} {src_file} {ref_file}'
@@ -118,29 +119,29 @@ def test_overwrite(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
     assert (basic_fuse_cli_params.param_file.exists())
 
 
-def test_compare(runner: CliRunner, float_100cm_ref_file: Path, float_100cm_src_file: Path):
+def test_compare(runner: CliRunner, ref_file_100cm_float, src_file_100cm_float):
     """ Test --compare, in flag and value configurations, against expected output. """
-    ref_file = float_100cm_ref_file
-    src_file = float_100cm_src_file
+    ref_file = ref_file_100cm_float
+    src_file = src_file_100cm_float
     # test --compare in flag (no value), and value configuration
     cli_strs = [
-        f'fuse  {src_file} {ref_file} --compare', f'fuse {src_file} {ref_file} --compare {float_100cm_ref_file} -o'
+        f'fuse  {src_file} {ref_file} --compare', f'fuse {src_file} {ref_file} --compare {ref_file_100cm_float} -o'
     ]
     for cli_str in cli_strs:
         result = runner.invoke(cli, cli_str.split())
         assert (result.exit_code == 0)
         src_cmp_str = """float_100cm_src.tif:
-      Band    r²   RMSE   rRMSE   N
-    ------ ----- ------ ------- ---
-    Band 1 1.000  0.000   0.000 144
-      Mean 1.000  0.000   0.000 144"""
+           Band    r²   RMSE   rRMSE   N
+    ----------- ----- ------ ------- ---
+    Ref. band 1 1.000  0.000   0.000 144
+           Mean 1.000  0.000   0.000 144"""
         assert (str_contain_no_space(src_cmp_str, result.output))
 
         corr_cmp_str = """float_100cm_src_FUSE_cREF_mGAIN-BLK-OFFSET_k5_5.tif:
-      Band    r²   RMSE   rRMSE   N
-    ------ ----- ------ ------- ---
-    Band 1 1.000  0.000   0.000 144
-      Mean 1.000  0.000   0.000 144"""
+           Band      r²   RMSE   rRMSE   N
+    ----------- ----- ------ ------- ---
+    Ref. band 1 1.000  0.000   0.000 144
+           Mean 1.000  0.000   0.000 144"""
         assert (str_contain_no_space(corr_cmp_str, result.output))
 
         sum_cmp_str = """File    r²   RMSE   rRMSE   N
@@ -150,10 +151,10 @@ def test_compare(runner: CliRunner, float_100cm_ref_file: Path, float_100cm_src_
         assert (str_contain_no_space(sum_cmp_str, result.output))
 
 
-def test_compare_file_exists_error(runner: CliRunner, float_100cm_ref_file: Path, float_100cm_src_file: Path):
+def test_compare_file_exists_error(runner: CliRunner, ref_file_100cm_float, src_file_100cm_float):
     """ Test --compare raises an exception when the specified file does not exist. """
-    ref_file = float_100cm_ref_file
-    src_file = float_100cm_src_file
+    ref_file = ref_file_100cm_float
+    src_file = src_file_100cm_float
     # test --compare in flag (no value), and value configurayion
     cli_str = f'fuse  {src_file} {ref_file} --compare unknown.tif'
     result = runner.invoke(cli, cli_str.split())
@@ -163,11 +164,11 @@ def test_compare_file_exists_error(runner: CliRunner, float_100cm_ref_file: Path
 
 @pytest.mark.parametrize('proc_crs', [ProcCrs.auto, ProcCrs.ref, ProcCrs.src])
 def test_proc_crs(
-    tmp_path: Path, runner: CliRunner, float_100cm_ref_file: Path, float_100cm_src_file: Path, proc_crs: ProcCrs,
+    tmp_path: Path, runner: CliRunner, ref_file_100cm_float, src_file_100cm_float, proc_crs: ProcCrs,
 ):
     """ Test valid --proc-crs settings generate an output with correct metadata. """
-    ref_file = float_100cm_ref_file
-    src_file = float_100cm_src_file
+    ref_file = ref_file_100cm_float
+    src_file = src_file_100cm_float
     model = Model.gain_blk_offset
     kernel_shape = (3, 3)
     res_proc_crs = ProcCrs.ref if proc_crs == ProcCrs.auto else proc_crs
@@ -392,3 +393,93 @@ def test_creation_options(runner: CliRunner, basic_fuse_cli_params: FuseCliParam
     with rio.open(basic_fuse_cli_params.corr_file, 'r') as out_ds:
         assert (out_ds.profile['compress'] == 'lzw')
         assert (not out_ds.profile['tiled'])
+
+
+@pytest.mark.parametrize(
+    'src_bands, ref_bands, force, exp_bands', [
+        ((3, 2, 1), None, False, (3, 2, 1)),
+        ((2, 1), (3, 1, 2), False, (2, 1)),
+        ((2, 1), (3, 2, 1), True, (3, 2)),
+    ]
+)  # yapf: disable
+def test_src_ref_bands(
+    src_bands: Tuple[int], ref_bands: Tuple[int], force: bool, exp_bands: Tuple[int],
+    default_fuse_rgb_cli_params: FuseCliParams, tmp_path: Path, runner: CliRunner,
+):
+    """ Test fuse with --src_band, --ref_band and --force-match parameters. """
+    cli_str = default_fuse_rgb_cli_params.cli_str
+    if src_bands:
+        cli_str += ''.join([' -sb ' + str(bi) for bi in src_bands])
+    if ref_bands:
+        cli_str += ''.join([' -rb ' + str(bi) for bi in ref_bands])
+    if force:
+        cli_str += ' -f'
+
+    result = runner.invoke(cli, cli_str.split())
+    assert (result.exit_code == 0)
+    assert (default_fuse_rgb_cli_params.corr_file.exists())
+    with WarpedVRT(rio.open(default_fuse_rgb_cli_params.src_file, 'r')) as src_ds:
+        with rio.open(default_fuse_rgb_cli_params.corr_file, 'r') as out_ds:
+            src_array = src_ds.read(indexes=exp_bands)
+            src_mask = src_ds.dataset_mask().astype('bool', copy=False)
+            out_array = out_ds.read()
+            out_mask = out_ds.dataset_mask().astype('bool', copy=False)
+
+            assert out_ds.count == len(exp_bands)
+            assert (out_mask == src_mask).all()
+            assert (out_array[:, out_mask] == pytest.approx(src_array[:, src_mask], abs=2))
+
+@pytest.mark.parametrize(
+    'src_bands, ref_bands, cmp_bands, force, cmp_ref, exp_bands', [
+        (None, None, None, False, False, (1, 2, 3)),
+        ((1, 2), (1, 2), (1, 2), False, False, (1, 2)),
+        ((1, 2), (1, 2), None, True, False, (1, 2)),
+        ((3, 1), (3, 1, 2), None, True, True, (3, 1)),
+    ]
+)  # yapf: disable
+def test_src_ref_cmp_bands(
+    src_bands: Tuple[int], ref_bands: Tuple[int], cmp_bands: Tuple[int], force: bool, cmp_ref: bool,
+    exp_bands: Tuple[int], default_fuse_rgb_cli_params: FuseCliParams, tmp_path: Path, runner: CliRunner,
+):
+    """ Test fuse --compare with --src_band, --ref_band, --force-match and --cmp-band parameters. """
+    # When bands are matched based on assumed RGB center wavelengths, the corrected file is (intentionally) not written
+    # with center wavelengths.  Depending on how --src-band is spec'd, This can result in corrected files with < 3
+    # bands, or corrected files with bands not in RGB order.  This in turn can lead to problems with --compare,
+    # where these kinds of corrected files cannot be matched with the compare reference, or are matched incorrectly.
+    # The above parameter cases avoid any of these situations.  It doesn't seem possible to work around this without
+    # writing assumed RGB center wavelengths to corrected files, which seems like a bad idea.  Rather I just
+    # generate a warning when RGB wavelengths are assumed.  Perhaps I should also always print out how
+    # bands are matched?  Practically, I think most of the time people will correct RGB->RGB, so we wouldn't see this
+    # issue often at all.
+
+    cli_str = default_fuse_rgb_cli_params.cli_str
+    if src_bands:
+        cli_str += ''.join([' -sb ' + str(bi) for bi in src_bands])
+    if ref_bands:
+        cli_str += ''.join([' -rb ' + str(bi) for bi in ref_bands])
+    if force:
+        cli_str += ' -f'
+    cli_str += ' -cmp' if cmp_ref else f' -cmp {str(default_fuse_rgb_cli_params.ref_file)}'
+    if cmp_bands:
+        cli_str += ''.join([' -cb ' + str(bi) for bi in cmp_bands])
+
+    result = runner.invoke(cli, cli_str.split())
+    assert (result.exit_code == 0)
+    assert (default_fuse_rgb_cli_params.corr_file.exists())
+
+    with WarpedVRT(rio.open(default_fuse_rgb_cli_params.src_file, 'r')) as src_ds:
+        with rio.open(default_fuse_rgb_cli_params.corr_file, 'r') as out_ds:
+            src_array = src_ds.read(indexes=exp_bands)
+            src_mask = src_ds.dataset_mask().astype('bool', copy=False)
+            out_array = out_ds.read()
+            out_mask = out_ds.dataset_mask().astype('bool', copy=False)
+
+            assert out_ds.count == len(exp_bands)
+            assert (out_mask == src_mask).all()
+            assert (out_array[:, out_mask] == pytest.approx(src_array[:, src_mask], abs=2))
+
+    test_str = """                                              File    r²   RMSE   rRMSE   N
+-------------------------------------------------- ----- ------ ------- ---
+                                float_50cm_rgb.tif 1.000  0.000   0.000 144
+float_50cm_rgb_FUSE_cREF_mGAIN-BLK-OFFSET_k5_5.tif 1.000  0.000   0.000 144"""
+    assert test_str in result.output

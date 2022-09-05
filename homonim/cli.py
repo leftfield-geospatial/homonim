@@ -62,14 +62,15 @@ class HomonimCommand(cloup.Command):
         if not hasattr(self, 'wrap_text'):
             self.wrap_text = cloup.formatting._formatter.wrap_text
         sub_strings = {
-            '\b\n': '\n\b',  # convert from RST friendly to click literal (unwrapped) block marker
-            r'\| ': '',  # strip RST literal (unwrapped) marker in e.g. tables and bullet lists
-            '\n\.\. _.*:\n': '',  # strip RST ref directive '\n.. _<name>:\n'
-            '`(.*?) <(.*?)>`_': r'\g<1>',  # convert from RST cross-ref '`<name> <<link>>`_' to 'name'
-            '::': ':',  # convert from RST '::' to ':'
-            '``(.*?)``': r'\g<1>',  # convert from RST '``literal``' to 'literal'
-            ':option:`(.*?)( <.*?>)?`': r'\g<1>',  # convert ':option:`--name <group-command --name>`' to '--name'
-            ':option:`(.*?)`': r'\g<1>',  # convert ':option:`--name`' to '--name'
+            '\b\n': '\n\b',                 # convert from RST friendly to click literal (unwrapped) block marker
+            r'\| ': '',                     # strip RST literal (unwrapped) marker in e.g. tables and bullet lists
+            '\n\.\. _.*:\n': '',            # strip RST ref directive '\n.. _<name>:\n'
+            '`(.*?) <(.*?)>`_': r'\g<1>',   # convert from RST cross-ref '`<name> <<link>>`_' to 'name'
+            '::': ':',                      # convert from RST '::' to ':'
+            '``(.*?)``': r'\g<1>',          # convert from RST '``literal``' to 'literal'
+            ':option:`(.*?)( <.*?>)?`': r'\g<1>',   # convert ':option:`--name <group-command --name>`' to '--name'
+            ':option:`(.*?)`': r'\g<1>',    # convert ':option:`--name`' to '--name'
+            '-{4,}': r'',                   # strip '----...'
         }  # yapf: disable
 
         def reformat_text(text: str, width: int, **kwargs):
@@ -233,6 +234,19 @@ output_option = click.option(
     '-op', '--output', type=click.Path(exists=False, dir_okay=False, writable=True, path_type=pathlib.Path),
     help='Write results to this json file.'
 )
+src_bands_option = click.option(
+    '-sb', '--src-band', 'src_bands', type=click.INT, multiple=True, default=None,
+    show_default='all spectral or non-alpha bands.', help=f'Source band index(es) to process (1 based).'
+)
+ref_bands_option = click.option(
+    '-rb', '--ref-band', 'ref_bands', type=click.INT, multiple=True, default=None,
+    show_default='all spectral or non-alpha bands.',
+    help=f'Reference band index(es) to match with source band(s) (1 based).'
+)
+force_match_option = click.option(
+    '-f', '--force-match',  is_flag=True, type=click.BOOL, default=False, show_default=True,
+    help=f'Bypass auto wavelength matching, and any band-matching errors.  Use with caution.'
+)
 """ cloup context settings to print help in 'linear' layout with heading/option emphasis. """
 context_settings = cloup.Context.settings(
     formatter_settings=cloup.HelpFormatter.settings(
@@ -283,19 +297,27 @@ def cli(verbose: int, quiet: int):
         '-k', '--kernel-shape', type=click.Tuple([click.INT, click.INT]), nargs=2, default=(5, 5), show_default=True,
         metavar='HEIGHT WIDTH', help='Kernel height and width in pixels of the :option:`--proc-crs` image.'
     ),
+    src_bands_option,
+    ref_bands_option,
     click.option(
         '-od', '--out-dir', type=click.Path(exists=True, file_okay=False, writable=True),
         show_default='source image directory.', help='Directory in which to place corrected image(s).'
     ),
     click.option(
-        '-o', '--overwrite', is_flag=True, type=bool, default=False, show_default=True,
+        '-o', '--overwrite', is_flag=True, type=click.BOOL, default=False, show_default=True,
         help='Overwrite existing output file(s).'
     ),
     click.option(
-        '-cmp', '--compare', 'comp_ref_file', metavar='FILE', type=click.Path(dir_okay=False, path_type=pathlib.Path),
+        '-cmp', '--compare', 'cmp_file', metavar='FILE', type=click.Path(dir_okay=False, path_type=pathlib.Path),
         is_flag=False, flag_value='ref', default=None, callback=_compare_cb,
         help='Compare source and corrected images with this reference image.  If no ``FILE`` value is given, source '
         'and corrected images are compared with :option:`REFERENCE`.'
+    ),
+    click.option(
+        '-cb', '--cmp-band', 'cmp_bands', type=click.INT, multiple=True, default=None,
+        show_default='all spectral or non-alpha bands.',
+        help=f'Comparison reference band index(es) that correspond (spectrally) to '
+             f':option:`--src-band <homonim-fuse --src-band>` (s).'
     ),
     click.option(
         '-bo/-nbo', '--build-ovw/--no-build-ovw', type=click.BOOL, default=True, show_default=True,
@@ -364,12 +386,14 @@ def cli(verbose: int, quiet: int):
         help='Driver specific image creation option(s) for the output image(s).  See the `GDAL docs '
         '<https://gdal.org/drivers/raster/index.html>`_ for details.'
     ),
+    force_match_option,  # yapf:disable
 )
 @click.pass_context
 def fuse(
     ctx: click.Context, src_file: Tuple[pathlib.Path, ...], ref_file: pathlib.Path, model: Model,
-    kernel_shape: Tuple[int, int], out_dir: pathlib.Path, overwrite: bool, comp_ref_file: pathlib.Path, build_ovw: bool,
-    proc_crs: ProcCrs, conf: pathlib.Path, param_image: bool, **kwargs
+    kernel_shape: Tuple[int, int], src_bands: Tuple[int], ref_bands: Tuple[int], out_dir: pathlib.Path,
+    overwrite: bool, cmp_file: pathlib.Path, cmp_bands: Tuple[int], build_ovw: bool, proc_crs: ProcCrs,
+    conf: pathlib.Path, param_image: bool, force_match: bool, **kwargs
 ):
     # @formatter:off
     """
@@ -378,9 +402,15 @@ def fuse(
     Correct source multi-spectral aerial or satellite imagery to approximate surface reflectance, by fusion with a
     reference satellite image.
 
-    For best results, reference and source image(s) should be concurrent, co-located, and spectrally similar.
-    Reference image extents must encompass those of the source image(s), and source / reference band ordering should
-    match i.e. reference band 1 corresponds to source band 1, reference band 2 corresponds to source band 2 etc.
+    For best results, reference and source image(s) should be concurrent, co-located and spectrally similar.  Reference
+    image extents must encompass those of the source image(s).
+
+    The reference image should contain bands that are approximate (wavelength) matches to the source image bands.
+    Where source and reference images are RGB, or have `center_wavelength` metadata, bands are matched automatically.
+    Where there are the same number of source and reference bands, and no `center_wavelength` metadata, bands are
+    assumed to be in matching order.  The :option:`--src-band <homonim-fuse --src-band>` and
+    :option:`--ref-band <homonim-fuse --ref-band>` options allow subsets and ordering of input and reference bands to be
+    specified.
 
     Corrected image(s) are named automatically based on the source file name and option values.
     \b
@@ -402,6 +432,12 @@ def fuse(
     compare source and corrected images with `reference2.tif`::
 
         homonim fuse -m gain-offset -k 15 15 --param-image --mask-partial --compare reference2.tif source*.tif reference1.tif
+
+    Correct bands 2 and 3 of `source.tif`, with bands 7 and 8 of `reference.tif`, using the default correction options::
+
+        homonim fuse -sb 2 -sb 3 -rb 7 -rb 8 source.tif reference.tif
+
+    ----
     """
     # @formatter:on
 
@@ -422,7 +458,9 @@ def fuse(
         for src_filename in src_file:
             out_path = pathlib.Path(out_dir) if out_dir is not None else src_filename.parent
             logger.info(f'\nCorrecting {src_filename.name}')
-            with RasterFuse(src_filename, ref_file, proc_crs=proc_crs) as raster_fuse:
+            with RasterFuse(
+                src_filename, ref_file, proc_crs=proc_crs, src_bands=src_bands, ref_bands=ref_bands, force=force_match,
+            ) as raster_fuse:  # yapf: disable
                 # construct output filenames
                 post_fix = utils.create_out_postfix(
                     raster_fuse.proc_crs, model=model, kernel_shape=kernel_shape, driver=out_profile['driver'],
@@ -440,10 +478,17 @@ def fuse(
             comp_files += [src_filename, corr_filename]  # build a list of files to pass to compare
 
         # compare source and corrected files with reference (invokes compare command with relevant parameters)
-        if comp_ref_file:
-            comp_file = ref_file if str(comp_ref_file) == 'ref' else comp_ref_file
-            comp_cfg = {k: kwargs[k] for k, v in RasterCompare.create_config().items() if k in kwargs}
-            ctx.invoke(compare, src_file=comp_files, ref_file=comp_file, proc_crs=proc_crs, **comp_cfg)
+        if cmp_file:
+            if str(cmp_file) == 'ref':
+                cmp_file = ref_file
+                cmp_bands = ref_bands if not cmp_bands or not len(cmp_bands) else cmp_bands
+
+            cmp_cfg = {k: kwargs[k] for k, v in RasterCompare.create_config().items() if k in kwargs}
+            ctx.invoke(
+                compare, src_file=comp_files, ref_file=cmp_file, proc_crs=proc_crs,
+                src_bands=[src_bands, None] * len(src_file), ref_bands=cmp_bands, force_match=force_match,
+                **cmp_cfg
+            )
 
     except Exception:
         logger.exception('Exception caught during processing.')  # log exception info
@@ -460,7 +505,7 @@ cli.add_command(fuse)
     help='Path(s) to image(s) to compare with :option:`REFERENCE`.'
 )
 @ref_file_arg
-@cloup.option_group("Standard options", output_option, )
+@cloup.option_group("Standard options", src_bands_option, ref_bands_option, output_option)
 @cloup.option_group(
     "Advanced options", threads_option, max_block_mem_option, downsampling_option, upsampling_option,
     click.option(
@@ -473,9 +518,11 @@ cli.add_command(fuse)
     - `ref`: reference image CRS.
     """
     ),
+    force_match_option,  # yapf: disable
 )
 def compare(
-    src_file: Tuple[pathlib.Path, ...], ref_file: pathlib.Path, output: pathlib.Path, proc_crs: ProcCrs, **kwargs
+    src_file: Tuple[pathlib.Path, ...], ref_file: pathlib.Path, src_bands: Tuple[int], ref_bands: Tuple[int],
+    output: pathlib.Path, proc_crs: ProcCrs, force_match, **kwargs
 ):
     """
     Compare image(s) with a reference.
@@ -484,8 +531,15 @@ def compare(
     before and after accuracy of surface reflectance correction, by comparing source and corrected images with a
     new reference image.
 
-    Reference image extents must encompass those of the input image(s), and input / reference band ordering should
-    match i.e. reference band 1 corresponds to input band 1, reference band 2 corresponds to input band 2 etc.
+    Reference and input image(s) should be co-located and spectrally similar.  Reference image extents must encompass
+    those of the input image(s).
+
+    The reference image should contain bands that are approximate (wavelength) matches to the input image bands.
+    Where input and reference images are RGB, or have `center_wavelength` metadata, bands are matched automatically.
+    Where there are the same number of input and reference bands, and no `center_wavelength` metadata, bands are
+    assumed to be in matching order.  The :option:`--src-band <homonim-compare --src-band>` and
+    :option:`--ref-band <homonim-compare --ref-band>` options allow subsets and ordering of input and reference bands
+    to be specified.
     \b
 
     Examples:
@@ -494,17 +548,27 @@ def compare(
     Compare `source.tif` and `corrected.tif` with `reference.tif`::
 
         homonim compare source.tif corrected.tif reference.tif
+
+    ----
     """
 
     # build configuration dictionary
     config = RasterCompare.create_config(**kwargs)
     try:
         stats_dict = {}
+        # if src_bands comes from compare CLI, convert to list[src_bands, ...] with one element for each source file
+        src_bands_list = (
+            [src_bands] * len(src_file)
+            if not src_bands or all([isinstance(src_band, int) for src_band in src_bands])
+            else src_bands
+        )  # yapf: disable
         # iterate over source files, comparing with reference
-        for src_filename in src_file:
+        for src_filename, src_bands in zip(src_file, src_bands_list):
             logger.info(f'\nComparing {src_filename.name}')
             start_time = timer()
-            with RasterCompare(src_filename, ref_file, proc_crs=proc_crs) as raster_compare:
+            with RasterCompare(
+                src_filename, ref_file, proc_crs=proc_crs, src_bands=src_bands, ref_bands=ref_bands, force=force_match,
+            ) as raster_compare:  # yapf: disable
                 stats_dict[str(src_filename)] = raster_compare.compare(**config)
             logger.info(f'Completed in {timer() - start_time:.2f} secs')
 
@@ -512,16 +576,14 @@ def compare(
         logger.info(f'\n\n{raster_compare.schema_table}')
 
         # print a results table per source image file
-        summ_list = []
-        for src_filename, im_stats_list in stats_dict.items():
-            logger.info(f'\n\n{str(src_filename)}:\n\n{raster_compare.stats_table(im_stats_list)}')
-            mean_dict = im_stats_list[-1].copy()
-            mean_dict.pop('band')
-            summ_list.append(dict(file=pathlib.Path(src_filename).name, **mean_dict))
+        summ_dict = {}
+        for src_filename, im_stats_dict in stats_dict.items():
+            logger.info(f'\n\n{str(src_filename)}:\n\n{raster_compare.stats_table(im_stats_dict)}')
+            summ_dict[pathlib.Path(src_filename).name] = im_stats_dict['Mean'].copy()
 
         # print a summary results table comparing all source files
-        if len(summ_list) > 1:
-            logger.info(f'\n\nSummary over bands:\n\n{raster_compare.stats_table(summ_list)}')
+        if len(summ_dict) > 1:
+            logger.info(f'\n\nSummary over bands:\n\n{raster_compare.stats_table(summ_dict, key_header="file")}')
 
         if output is not None:
             stats_dict['Reference'] = str(ref_file)

@@ -407,7 +407,6 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
                 f'The dataset resolution does not match that of the RasterArray. '
                 f'Dataset res: {rio_dataset.res}, RasterArray res: {self.res}'
             )
-        # TODO : raise an issue with rasterio about the speed of crs comparison.  comparing the _crs attr is faster.
         if self.crs != rio_dataset.crs:
             raise ImageFormatError(
                 f'The dataset CRS does not match that of the RasterArray. '
@@ -468,7 +467,7 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         self, crs: Optional[CRS] = None, transform: Optional[Affine] = None, shape: Optional[Tuple[int, int]] = None,
         nodata: float = default_nodata, dtype: str = default_dtype, resampling: Resampling = Resampling.lanczos,
         **kwargs
-    ):
+    ) -> 'RasterArray':
         """
         Re-project the RasterArray.
 
@@ -488,7 +487,7 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         resampling: rasterio.enums.Resampling, optional
             Resampling method to use.
         kwargs: dict, optional
-            Arguments to passed through the rasterio's reproject() function.
+            Additional arguments to pass through the rasterio's reproject() function.
 
         Returns
         -------

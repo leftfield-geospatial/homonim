@@ -35,8 +35,8 @@ from homonim.raster_pair import RasterPairReader
 
 @pytest.mark.parametrize(
     'src_file, ref_file, expected_proc_crs', [
-        ('float_50cm_src_file', 'float_100cm_ref_file', ProcCrs.ref),
-        ('float_100cm_src_file', 'float_50cm_ref_file', ProcCrs.src)
+        ('src_file_50cm_float', 'ref_file_100cm_float', ProcCrs.ref),
+        ('src_file_100cm_float', 'ref_file_50cm_float', ProcCrs.src)
     ]
 )  # yapf: disable
 def test_creation(src_file: str, ref_file: str, expected_proc_crs: ProcCrs, request: FixtureRequest):
@@ -58,10 +58,10 @@ def test_creation(src_file: str, ref_file: str, expected_proc_crs: ProcCrs, requ
 
 @pytest.mark.parametrize(
     'src_file, ref_file', [
-        ('float_50cm_ref_file', 'float_100cm_src_file'),
-        ('float_50cm_ref_file', 'float_50cm_src_file'),
-        ('float_100cm_ref_file', 'float_50cm_src_file'),
-        ('float_100cm_ref_file', 'float_100cm_src_file')
+        ('ref_file_50cm_float', 'src_file_100cm_float'),
+        ('ref_file_50cm_float', 'src_file_50cm_float'),
+        ('ref_file_100cm_float', 'src_file_50cm_float'),
+        ('ref_file_100cm_float', 'src_file_100cm_float')
     ]
 )  # yapf: disable
 def test_coverage_exception(src_file: str, ref_file: str, request: FixtureRequest):
@@ -72,16 +72,16 @@ def test_coverage_exception(src_file: str, ref_file: str, request: FixtureReques
         _ = RasterPairReader(src_file, ref_file)
 
 
-def test_band_count_exception(rgba_file: Path, byte_file: Path):
+def test_band_count_exception(file_rgba, file_byte):
     """ Test that src band count > ref band count raises an error. """
     with pytest.raises(ImageContentError):
-        _ = RasterPairReader(rgba_file, byte_file)
+        _ = RasterPairReader(file_rgba, file_byte)
 
 
-def test_block_shape_exception(float_50cm_src_file: Path, float_100cm_ref_file: Path):
+def test_block_shape_exception(src_file_50cm_float, ref_file_100cm_float):
     """ Test block shape errors. """
     # test auto block shape smaller than a pixel
-    raster_pair = RasterPairReader(float_50cm_src_file, float_100cm_ref_file)
+    raster_pair = RasterPairReader(src_file_50cm_float, ref_file_100cm_float)
     with pytest.raises(BlockSizeError):
         with raster_pair:
             block_pairs = [block_pair for block_pair in raster_pair.block_pairs(max_block_mem=1.e-5)]
@@ -92,9 +92,9 @@ def test_block_shape_exception(float_50cm_src_file: Path, float_100cm_ref_file: 
             block_pairs = [block_pair for block_pair in raster_pair.block_pairs(overlap=(5, 5), max_block_mem=1.e-4)]
 
 
-def test_not_open_exception(float_50cm_src_file: Path, float_100cm_ref_file: Path):
+def test_not_open_exception(src_file_50cm_float, ref_file_100cm_float):
     """ Test that using a raster pair before entering the context raises an error. """
-    raster_pair = RasterPairReader(float_50cm_src_file, float_100cm_ref_file)
+    raster_pair = RasterPairReader(src_file_50cm_float, ref_file_100cm_float)
     with pytest.raises(IoError):
         _ = raster_pair.ref_im
     with pytest.raises(IoError):
@@ -107,14 +107,14 @@ def test_not_open_exception(float_50cm_src_file: Path, float_100cm_ref_file: Pat
 
 @pytest.mark.parametrize(
     'src_file, ref_file, proc_crs, blk_overlap, max_block_mem', [
-        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (0, 0), 1.e-3),
-        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (2, 2), 1.e-3),
-        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (0, 0), 2.e-4),
-        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (1, 1), 2.e-4),
-        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (0, 0), 1.e-3),
-        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 1.e-3),
-        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (0, 0), 2.e-4),
-        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (1, 1), 2.e-4),
+        ('src_file_45cm_float', 'ref_file_100cm_float', ProcCrs.auto, (0, 0), 1.e-3),
+        ('src_file_45cm_float', 'ref_file_100cm_float', ProcCrs.auto, (2, 2), 1.e-3),
+        ('src_file_45cm_float', 'ref_file_100cm_float', ProcCrs.auto, (0, 0), 2.e-4),
+        ('src_file_45cm_float', 'ref_file_100cm_float', ProcCrs.auto, (1, 1), 2.e-4),
+        ('src_file_100cm_float', 'ref_file_45cm_float', ProcCrs.auto, (0, 0), 1.e-3),
+        ('src_file_100cm_float', 'ref_file_45cm_float', ProcCrs.auto, (2, 2), 1.e-3),
+        ('src_file_100cm_float', 'ref_file_45cm_float', ProcCrs.auto, (0, 0), 2.e-4),
+        ('src_file_100cm_float', 'ref_file_45cm_float', ProcCrs.auto, (1, 1), 2.e-4),
     ]
 )  # yapf: disable
 def test_block_pair_continuity(
@@ -163,14 +163,14 @@ def test_block_pair_continuity(
 
 @pytest.mark.parametrize(
     'src_file, ref_file, proc_crs, overlap, max_block_mem', [
-        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (0, 0), 1.e-3),
-        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (2, 2), 1.e-3),
-        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (0, 0), 2.e-4),
-        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (2, 2), 2.e-4),
-        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (0, 0), 1.e-3),
-        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 1.e-3),
-        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (0, 0), 2.e-4),
-        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 2.e-4),
+        ('src_file_45cm_float', 'ref_file_100cm_float', ProcCrs.auto, (0, 0), 1.e-3),
+        ('src_file_45cm_float', 'ref_file_100cm_float', ProcCrs.auto, (2, 2), 1.e-3),
+        ('src_file_45cm_float', 'ref_file_100cm_float', ProcCrs.auto, (0, 0), 2.e-4),
+        ('src_file_45cm_float', 'ref_file_100cm_float', ProcCrs.auto, (2, 2), 2.e-4),
+        ('src_file_100cm_float', 'ref_file_45cm_float', ProcCrs.auto, (0, 0), 1.e-3),
+        ('src_file_100cm_float', 'ref_file_45cm_float', ProcCrs.auto, (2, 2), 1.e-3),
+        ('src_file_100cm_float', 'ref_file_45cm_float', ProcCrs.auto, (0, 0), 2.e-4),
+        ('src_file_100cm_float', 'ref_file_45cm_float', ProcCrs.auto, (2, 2), 2.e-4),
     ]
 )  # yapf: disable
 def test_block_pair_coverage(
@@ -203,17 +203,16 @@ def test_block_pair_coverage(
             assert (accum_block_pair['ref_in_block'].intersection(raster_pair._ref_win) == raster_pair._ref_win)
             assert (accum_block_pair['ref_out_block'].intersection(raster_pair._ref_win) == raster_pair._ref_win)
 
-
 @pytest.mark.parametrize(
     'src_file, ref_file, proc_crs, overlap, max_block_mem', [
-        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (0, 0), 1.e-3),
-        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (2, 2), 1.e-3),
-        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (0, 0), 2.e-4),
-        ('float_45cm_src_file', 'float_100cm_ref_file', ProcCrs.auto, (2, 2), 2.e-4),
-        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (0, 0), 1.e-3),
-        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 1.e-3),
-        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (0, 0), 2.e-4),
-        ('float_100cm_src_file', 'float_45cm_ref_file', ProcCrs.auto, (2, 2), 2.e-4),
+        ('src_file_45cm_float', 'ref_file_100cm_float', ProcCrs.auto, (0, 0), 1.e-3),
+        ('src_file_45cm_float', 'ref_file_100cm_float', ProcCrs.auto, (2, 2), 1.e-3),
+        ('src_file_45cm_float', 'ref_file_100cm_float', ProcCrs.auto, (0, 0), 2.e-4),
+        ('src_file_45cm_float', 'ref_file_100cm_float', ProcCrs.auto, (2, 2), 2.e-4),
+        ('src_file_100cm_float', 'ref_file_45cm_float', ProcCrs.auto, (0, 0), 1.e-3),
+        ('src_file_100cm_float', 'ref_file_45cm_float', ProcCrs.auto, (2, 2), 1.e-3),
+        ('src_file_100cm_float', 'ref_file_45cm_float', ProcCrs.auto, (0, 0), 2.e-4),
+        ('src_file_100cm_float', 'ref_file_45cm_float', ProcCrs.auto, (2, 2), 2.e-4),
     ]
 )  # yapf: disable
 def test_block_pair_io(
@@ -221,10 +220,10 @@ def test_block_pair_io(
     request: FixtureRequest,
 ):
     """
-    Test block pairs can be read, reprojected and written as raster arrays without loss of data
+    Test block pairs can be read, reprojected and written as raster arrays without loss of data.
 
     This is more an integration test with raster array than a raster pair unit test.  It simulates the way raster
-    arrays are reprojected in *KernelModel.    .
+    arrays are reprojected in *KernelModel.
     """
     src_file: Path = request.getfixturevalue(src_file)
     ref_file: Path = request.getfixturevalue(ref_file)
@@ -241,8 +240,12 @@ def test_block_pair_io(
     for reproj_ra in ['src', 'ref']:
         # create src and ref test datasets for writing, and enter the raster pair context
         with MemoryFile() as src_mf, MemoryFile() as ref_mf, raster_pair:
-            with src_mf.open(**raster_pair.src_im.profile) as src_ds, ref_mf.open(
-                **raster_pair.ref_im.profile) as ref_ds:   # yapf: disable
+            # create profiles that don't use the VRT driver, which can't be written to
+            src_profile = raster_pair.src_im.meta.copy()
+            src_profile.update(driver='GTiff')
+            ref_profile = raster_pair.ref_im.meta.copy()
+            ref_profile.update(driver='GTiff')
+            with src_mf.open(**src_profile) as src_ds, ref_mf.open(**ref_profile) as ref_ds:   # yapf: disable
                 # read, reproject and write block pairs to their respective datasets
                 block_pairs = list(raster_pair.block_pairs(overlap=overlap, max_block_mem=max_block_mem))
                 for block_pair in block_pairs:
@@ -260,11 +263,47 @@ def test_block_pair_io(
 
             # test the written datasets contain same valid areas as the original src/ref files
             with rio.open(src_file, 'r') as src_ds, src_mf.open() as test_src_ds:
-                src_mask = src_ds.dataset_mask().astype('bool', copy=False)
-                test_mask = test_src_ds.dataset_mask().astype('bool', copy=False)
+                src_mask = src_ds.read_masks(indexes=1).astype('bool', copy=False)
+                test_mask = test_src_ds.read_masks(indexes=1).astype('bool', copy=False)
                 assert (test_mask[src_mask]).all()
 
             with rio.open(ref_file, 'r') as ref_ds, ref_mf.open() as test_ref_ds:
-                ref_mask = ref_ds.dataset_mask().astype('bool', copy=False)
-                test_mask = test_ref_ds.dataset_mask().astype('bool', copy=False)
+                ref_mask = ref_ds.read_masks(indexes=1).astype('bool', copy=False)
+                test_mask = test_ref_ds.read_masks(indexes=1).astype('bool', copy=False)
                 assert (test_mask[ref_mask]).all()
+
+
+@pytest.mark.parametrize(
+    'src_file, ref_file, proc_crs', [
+        ('src_file_100cm_float', 'ref_file_100cm_float', ProcCrs.ref),
+        ('src_file_sup_100cm_float', 'ref_file_100cm_float', ProcCrs.ref),
+        ('src_file_rot_100cm_float', 'ref_file_100cm_float', ProcCrs.ref),
+        ('src_file_wgs84_100cm_float', 'ref_file_100cm_float', ProcCrs.ref),
+        ('src_file_wgs84_sup_100cm_float', 'ref_file_100cm_float', ProcCrs.ref),
+        ('src_file_wgs84_100cm_float', 'ref_file_100cm_float', ProcCrs.src),
+        ('src_file_wgs84_sup_100cm_float', 'ref_file_100cm_float', ProcCrs.src),
+        ('src_file_100cm_float', 'ref_file_sup_100cm_float', ProcCrs.ref),
+        ('src_file_100cm_float', 'ref_file_rot_100cm_float', ProcCrs.ref),
+        ('src_file_100cm_float', 'ref_file_wgs84_100cm_float', ProcCrs.ref),
+        ('src_file_100cm_float', 'ref_file_wgs84_sup_float', ProcCrs.ref),
+        ('src_file_100cm_float', 'ref_file_wgs84_100cm_float', ProcCrs.src),
+        ('src_file_100cm_float', 'ref_file_wgs84_sup_float', ProcCrs.src),
+    ]
+)  # yapf: disable
+def test_orientation_crs(src_file: str, ref_file: str, proc_crs: ProcCrs, request: FixtureRequest):
+    """ Test reference and source in different CRS's and orientations. """
+    src_file: Path = request.getfixturevalue(src_file)
+    ref_file: Path = request.getfixturevalue(ref_file)
+    with RasterPairReader(src_file, ref_file, proc_crs=proc_crs) as raster_pair:
+        block_pairs = list(raster_pair.block_pairs())
+        for block_pair in block_pairs:
+            src_ra, ref_ra = raster_pair.read(block_pair)
+            _src_ra = src_ra.reproject(**ref_ra.proj_profile, resampling=Resampling.bilinear)
+            abs_diff = np.abs(ref_ra.array - _src_ra.array)
+            assert np.nanmean(abs_diff) == pytest.approx(0, abs=1)
+            assert np.all(_src_ra.mask[ref_ra.mask])
+            _ref_ra = ref_ra.reproject(**src_ra.proj_profile, resampling=Resampling.bilinear)
+            abs_diff = np.abs(src_ra.array - _ref_ra.array)
+            assert np.nanmean(abs_diff) == pytest.approx(0, abs=1)
+            assert np.all(_ref_ra.mask[src_ra.mask])
+

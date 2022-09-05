@@ -21,10 +21,11 @@ import logging
 import pathlib
 from multiprocessing import cpu_count
 from typing import Tuple, Dict, Union
+from contextlib import contextmanager
 
 import numpy as np
 import rasterio as rio
-from rasterio.enums import ColorInterp
+from rasterio.enums import ColorInterp, Resampling
 from rasterio.vrt import WarpedVRT
 from rasterio.windows import Window
 from tabulate import TableFormat, Line, DataRow, tabulate
@@ -169,6 +170,52 @@ def create_param_filename(filename: Union[str, pathlib.Path]) -> pathlib.Path:
     return filename.parent.joinpath(f'{filename.stem}_PARAM{filename.suffix}')
 
 
+def north_up(im: rio.DatasetReader) -> bool:
+    """ Return true if im is in a standard North-up orientation. """
+    return(
+        (np.sign(im.transform.a) == 1) and (np.sign(im.transform.e) == -1) and (im.transform.b == 0) and
+        (im.transform.d == 0)
+    )
+
+
+def same_orientation_crs(
+    src_im: rio.DatasetReader, ref_im: rio.DatasetReader, proc_crs: ProcCrs = None,
+) -> Tuple[rio.DatasetReader, rio.DatasetReader]:  # yapf: disable
+    """
+    Re-project source and reference (as necessary) so that are they both oriented north-up, and in the same CRS.
+    Re-project the proc_crs image (usually lower resolution) into the CRS of the other when the CRSs are not
+    the same.
+    """
+    # Note: without transform etc arguments, WarpedVRT re-projects to north-up
+    resampling = Resampling.bilinear
+    same_crs = src_im.crs.to_proj4() == ref_im.crs.to_proj4()
+    if (not north_up(src_im)) and (same_crs or proc_crs != ProcCrs.src):
+        src_im = WarpedVRT(src_im, crs=src_im.crs, resampling=resampling)
+    if (not north_up(ref_im)) and (same_crs or proc_crs == ProcCrs.src):
+        ref_im = WarpedVRT(ref_im, crs=ref_im.crs, resampling=resampling)
+    if (not same_crs) and (proc_crs == ProcCrs.src):
+        src_im = WarpedVRT(src_im, crs=ref_im.crs, resampling=resampling)
+    if (not same_crs) and (proc_crs != ProcCrs.src):
+        ref_im = WarpedVRT(ref_im, crs=src_im.crs, resampling=resampling)
+    return src_im, ref_im
+
+
+@contextmanager
+def same_orientation_crs_ctx(
+    src_im: rio.DatasetReader, ref_im: rio.DatasetReader, proc_crs: ProcCrs = None,
+) -> Tuple[rio.DatasetReader, rio.DatasetReader]:  # yapf: disable
+    """
+    Context manager to re-project source and reference (as necessary) so that are they both oriented north-up,
+    and in the same CRS.
+    """
+    try:
+        src_im, ref_im = same_orientation_crs(src_im, ref_im, proc_crs=proc_crs)
+        yield (src_im, ref_im)
+    finally:
+        src_im.close()
+        ref_im.close()
+
+
 def covers_bounds(im1: rio.DatasetReader, im2: rio.DatasetReader, expand_pixels: Tuple[int, int] = (0, 0)) -> bool:
     """
     Determines if the spatial extents of one image cover another image
@@ -187,9 +234,8 @@ def covers_bounds(im1: rio.DatasetReader, im2: rio.DatasetReader, expand_pixels:
     bool
         True if im1 covers im2 else False.
     """
-    # use WarpedVRT to get the datasets in the same crs
-    _im2 = WarpedVRT(im2, crs=im1.crs) if im1.crs != im2.crs else im2
-    im1_win = im1.window(*_im2.bounds)
+    with same_orientation_crs_ctx(im1, im2) as (im1, im2):
+        im1_win = im1.window(*im2.bounds)
     if not np.all(np.array(expand_pixels) == 0):
         im1_win = expand_window_to_grid(im1_win, expand_pixels)
     win_ul = np.array((im1_win.row_off, im1_win.col_off))

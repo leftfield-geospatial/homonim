@@ -353,6 +353,8 @@ class KernelModel:
         if self._r2_inpaint_thresh is not None:
             # fill/inpaint low R2 and negative gain areas in the offset parameter
             r2_mask = (param_ra.array[2] > self._r2_inpaint_thresh) & (param_ra.array[0] > 0) & mask
+            # NOTE: fillnodata does not release the GIL, so this can slow down processing, especially for proc-crs=src
+            # TODO: raise an issue with rasterio to release the GIL on fillnodata
             param_ra.array[1] = fillnodata(param_ra.array[1], r2_mask)
             param_ra.mask = mask  # re-mask as nodata areas will have been filled above
 
@@ -415,7 +417,8 @@ class KernelModel:
             RasterArray of sliding kernel model parameters. Gains in first band, offsets in the second, and optionally
             *R*\\ :sup:`2` for each kernel model in the third band when :attr:`find_r2` is True.
         """
-        # TODO : include a CRS comparison below i.e. one that is faster that rasterio's current implementation
+        # TODO : include a CRS comparison below i.e. one that is faster that rasterio's current implementation, and or
+        #  raise an issue with rasterio about the speed of crs comparison
         if (ref_ra.transform != src_ra.transform) or (ref_ra.shape != src_ra.shape):
             raise ValueError("'ref_ra' and 'src_ra' must have the same CRS, transform and shape")
 
