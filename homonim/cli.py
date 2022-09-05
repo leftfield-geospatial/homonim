@@ -62,14 +62,15 @@ class HomonimCommand(cloup.Command):
         if not hasattr(self, 'wrap_text'):
             self.wrap_text = cloup.formatting._formatter.wrap_text
         sub_strings = {
-            '\b\n': '\n\b',  # convert from RST friendly to click literal (unwrapped) block marker
-            r'\| ': '',  # strip RST literal (unwrapped) marker in e.g. tables and bullet lists
-            '\n\.\. _.*:\n': '',  # strip RST ref directive '\n.. _<name>:\n'
-            '`(.*?) <(.*?)>`_': r'\g<1>',  # convert from RST cross-ref '`<name> <<link>>`_' to 'name'
-            '::': ':',  # convert from RST '::' to ':'
-            '``(.*?)``': r'\g<1>',  # convert from RST '``literal``' to 'literal'
-            ':option:`(.*?)( <.*?>)?`': r'\g<1>',  # convert ':option:`--name <group-command --name>`' to '--name'
-            ':option:`(.*?)`': r'\g<1>',  # convert ':option:`--name`' to '--name'
+            '\b\n': '\n\b',                 # convert from RST friendly to click literal (unwrapped) block marker
+            r'\| ': '',                     # strip RST literal (unwrapped) marker in e.g. tables and bullet lists
+            '\n\.\. _.*:\n': '',            # strip RST ref directive '\n.. _<name>:\n'
+            '`(.*?) <(.*?)>`_': r'\g<1>',   # convert from RST cross-ref '`<name> <<link>>`_' to 'name'
+            '::': ':',                      # convert from RST '::' to ':'
+            '``(.*?)``': r'\g<1>',          # convert from RST '``literal``' to 'literal'
+            ':option:`(.*?)( <.*?>)?`': r'\g<1>',   # convert ':option:`--name <group-command --name>`' to '--name'
+            ':option:`(.*?)`': r'\g<1>',    # convert ':option:`--name`' to '--name'
+            '-{4,}': r'',                   # strip '----...'
         }  # yapf: disable
 
         def reformat_text(text: str, width: int, **kwargs):
@@ -315,7 +316,8 @@ def cli(verbose: int, quiet: int):
     click.option(
         '-cb', '--cmp-band', 'cmp_bands', type=click.INT, multiple=True, default=None,
         show_default='all spectral or non-alpha bands.',
-        help=f'Comparison reference band index(es) that correspond (spectrally) to :option:`--src-band`(s).'
+        help=f'Comparison reference band index(es) that correspond (spectrally) to '
+             f':option:`--src-band <homonim-fuse --src-band>` (s).'
     ),
     click.option(
         '-bo/-nbo', '--build-ovw/--no-build-ovw', type=click.BOOL, default=True, show_default=True,
@@ -406,8 +408,9 @@ def fuse(
     The reference image should contain bands that are approximate (wavelength) matches to the source image bands.
     Where source and reference images are RGB, or have `center_wavelength` metadata, bands are matched automatically.
     Where there are the same number of source and reference bands, and no `center_wavelength` metadata, bands are
-    assumed to be in matching order.  The :option:`--src-band`` and :option:`--ref-band` options allow subsets and
-    ordering of source and reference bands to be specified.
+    assumed to be in matching order.  The :option:`--src-band <homonim-fuse --src-band>` and
+    :option:`--ref-band <homonim-fuse --ref-band>` options allow subsets and ordering of input and reference bands to be
+    specified.
 
     Corrected image(s) are named automatically based on the source file name and option values.
     \b
@@ -433,6 +436,8 @@ def fuse(
     Correct bands 2 and 3 of `source.tif`, with bands 7 and 8 of `reference.tif`, using the default correction options::
 
         homonim fuse -sb 2 -sb 3 -rb 7 -rb 8 source.tif reference.tif
+
+    ----
     """
     # @formatter:on
 
@@ -532,9 +537,9 @@ def compare(
     The reference image should contain bands that are approximate (wavelength) matches to the input image bands.
     Where input and reference images are RGB, or have `center_wavelength` metadata, bands are matched automatically.
     Where there are the same number of input and reference bands, and no `center_wavelength` metadata, bands are
-    assumed to be in matching order.  The :option:`--src-band`` and :option:`--ref-band` options allow subsets and
-    ordering of input and reference bands to be specified.
-
+    assumed to be in matching order.  The :option:`--src-band <homonim-compare --src-band>` and
+    :option:`--ref-band <homonim-compare --ref-band>` options allow subsets and ordering of input and reference bands
+    to be specified.
     \b
 
     Examples:
@@ -543,6 +548,8 @@ def compare(
     Compare `source.tif` and `corrected.tif` with `reference.tif`::
 
         homonim compare source.tif corrected.tif reference.tif
+
+    ----
     """
 
     # build configuration dictionary

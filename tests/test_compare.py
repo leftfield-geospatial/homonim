@@ -156,7 +156,7 @@ def test_cli(runner: CliRunner, file_rgb_50cm_float, file_rgb_100cm_float):
     cli_str = f'compare {src_file} {ref_file}'
     result = runner.invoke(cli, cli_str.split())
     assert (result.exit_code == 0)
-    res_str = """Band 1 1.000  0.000  0.000   144
+    res_str = """Ref. band 1 1.000  0.000  0.000   144
 Ref. band 2 1.000  0.000  0.000   144
 Ref. band 3 1.000  0.000  0.000   144
 Mean   1.000  0.000  0.000   144"""
