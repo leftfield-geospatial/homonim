@@ -73,13 +73,13 @@ reference.
 
 .. code:: shell
 
-   homonim fuse -m gain-blk-offset -k 5 5 -od . ./homonim/tests/data/source/*_RGB.tif ./homonim/tests/data/reference/COPERNICUS-S2-20151003T075826_20151003T082014_T35HKC_B432_Byte.tif
+   homonim fuse -m gain-blk-offset -k 5 5 -od . ./homonim/tests/data/source/*rgb_byte*.tif ./homonim/tests/data/reference/sentinel2_b432_byte.tif
 
 Statistically compare the raw and corrected aerial images with the included Landsat-8 reference.
 
 .. code:: shell
 
-   homonim compare ./homonim/tests/data/source/*_RGB.tif ./*FUSE*.tif ./homonim/tests/data/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif
+   homonim compare ./homonim/tests/data/source/*rgb_byte*.tif ./*FUSE*.tif ./homonim/tests/data/reference/landsat8_byte.tif
 
 .. example_start
 

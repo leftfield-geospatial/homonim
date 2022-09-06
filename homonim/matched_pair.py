@@ -135,7 +135,7 @@ class MatchedPairReader(RasterPairReader):
         if (len(non_alpha_bands) == 3) and (sum(np.isnan(center_wavelengths)) > 0):
             for i, rgb_cw in zip(non_alpha_bands - 1, [.650, .560, .480]):
                 center_wavelengths[i] = rgb_cw if np.isnan(center_wavelengths[i]) else center_wavelengths[i]
-            logger.warning(f'Assuming standard RGB center wavelengths (.65, .56 & 48 um) for {name}.')
+            logger.warning(f'Assuming standard RGB center wavelengths (.65, .56 & .48 um) for {name}.')
 
         center_wavelengths = center_wavelengths[bands - 1]
         band_names = np.array([im.descriptions[bi - 1] if im.descriptions[bi - 1] else str(bi) for bi in bands])
