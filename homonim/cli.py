@@ -266,7 +266,7 @@ context_settings = cloup.Context.settings(
 @click.option('--quiet', '-q', count=True, help='Decrease verbosity.')
 @click.version_option(version=version.__version__, message='%(version)s')
 def cli(verbose: int, quiet: int):
-    """ Surface reflectance correction and support utilities. """
+    """ Surface reflectance correction toolkit. """
     verbosity = verbose - quiet
     _configure_logging(verbosity)
 

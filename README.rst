@@ -14,17 +14,11 @@ Correct aerial and satellite imagery to surface reflectance.
 Description
 -----------
 
-``homonim`` provides a command line interface and API for correcting remotely sensed imagery to approximate surface
-reflectance.  It is a form of *spectral harmonisation*, that adjusts for spatially varying atmospheric and anisotropic
-(BRDF) effects, by fusion with satellite surface reflectance data.  Manual reflectance measurements and target
-placements are not required.
+``homonim`` provides a command line interface and API for correcting remotely sensed imagery to approximate surface reflectance.  It is a form of *spectral harmonisation*, that adjusts for spatially varying atmospheric and anisotropic (BRDF) effects, by fusion with satellite surface reflectance data.  Manual reflectance measurements and target placements are not required.
 
-It is useful as a pre-processing step for quantitative mapping applications such as biomass estimation or
-precision agriculture, and for reducing seamlines and other visual artefacts in image mosaics.  It can be applied to
-multi-spectral drone, aerial and satellite imagery.
+It is useful as a pre-processing step for quantitative mapping applications such as biomass estimation or precision agriculture and for reducing seamlines and other visual artefacts in image mosaics.  It can be applied to multi-spectral drone, aerial and satellite imagery.
 
-``homonim`` is based on the method described in the paper:
-`Radiometric homogenisation of aerial images by calibrating with satellite data <https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data>`__.
+``homonim`` is based on the method described in the paper: `Radiometric homogenisation of aerial images by calibrating with satellite data <https://raw.githubusercontent.com/dugalh/homonim/main/docs/radiometric_homogenisation_preprint.pdf>`__.
 
 .. description_end
 
@@ -102,14 +96,13 @@ See the documentation `here <https://homonim.readthedocs.io/>`__.
 Terminology
 -----------
 
-``homonim`` is shorthand for *homogenise image* and is a reference to `the paper <https://www.researchgate
-.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data>`_ on which
+``homonim`` is shorthand for *homogenise image* and is a reference to `the paper <https://raw.githubusercontent.com/dugalh/homonim/main/docs/radiometric_homogenisation_preprint.pdf>`_ on which
 it is based.
 
 Credits
 -------
 
-``homonim`` makes extensive use of the following excellent projects:
+``homonim`` makes use of the following excellent projects:
 
 -  `rasterio <https://github.com/rasterio/rasterio>`__
 -  `opencv <https://github.com/opencv/opencv>`__
@@ -125,9 +118,25 @@ licenses can be arranged by `contacting <mailto:sjdewet@sun.ac.za>`__ them.
 Citation
 --------
 
-Please cite use of the code as: - Harris, D., Van Niekerk, A., 2019. Radiometric homogenisation of aerial images by
-calibrating with satellite data. *Int. J. Remote Sens.* **40**, 2623–2647.
-https://doi.org/10.1080/01431161.2018.1528404.
+Please cite use of the code as:
+
+-  Dugal Harris & Adriaan Van Niekerk (2019) Radiometric homogenisation of aerial images by calibrating with satellite data, *International Journal of Remote Sensing*, **40:7**, 2623-2647, DOI: https://doi.org/10.1080/01431161.2018.1528404.
+
+Bibtex::
+
+    @article{doi:10.1080/01431161.2018.1528404,
+        author = {Dugal Harris and Adriaan Van Niekerk},
+        title = {Radiometric homogenisation of aerial images by calibrating with satellite data},
+        journal = {International Journal of Remote Sensing},
+        volume = {40},
+        number = {7},
+        pages = {2623-2647},
+        year  = {2019},
+        publisher = {Taylor & Francis},
+        doi = {10.1080/01431161.2018.1528404},
+        URL = {https://doi.org/10.1080/01431161.2018.1528404},
+    }
+
 
 Author
 ------
