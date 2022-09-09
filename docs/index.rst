@@ -18,7 +18,7 @@ Contents
    description
    installation
    background
-   preparation
+   advanced
    example
    cli
    api

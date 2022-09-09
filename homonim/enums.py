@@ -20,7 +20,13 @@ from enum import Enum
 
 
 class Model(str, Enum):
-    """ Surface reflectance correction model. """
+    """
+    Surface reflectance correction model.
+
+    Available linear model variants for correcting to surface reflectance.  Broadly speaking, the gain
+    compensates for atmospheric absorption and anisotropic (BRDF) effects, while the offset (when present) compensates
+    for atmospheric reflectance and haze.
+    """
     gain = 'gain'
     """ 
     Gain-only model, suitable for haze-free and zero offset images (i.e. images where a surface reflectance of 
