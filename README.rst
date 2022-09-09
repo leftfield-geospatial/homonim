@@ -83,7 +83,7 @@ Example
 Mosaics of 0.5 m resolution aerial imagery before and after correction with ``homonim``. Correction was performed using the *gain-blk-offset* model and a 5 x 5 pixel kernel, with a Landsat-7 reference image.
 
 
-.. image:: https://raw.githubusercontent.com/dugalh/homonim/main/docs/readme_eg.png
+.. image:: https://raw.githubusercontent.com/dugalh/homonim/update_docs/docs/readme_eg.png
    :alt: example
 
 .. example_end

@@ -16,7 +16,7 @@ In the majority of cases, users should leave the *processing CRS* and *up/downsa
 
 With these defaults, the *processing CRS* will be the *reference* CRS in the majority of cases.  To perform processing, ``homonim`` re-projects one of the *source* or *reference* into the *processing CRS*,
 
-.. image:: https://raw.githubusercontent.com/dugalh/homonim/main/docs/fusion_block_diagram.png
+.. image:: https://raw.githubusercontent.com/dugalh/homonim/update_docs/docs/fusion_block_diagram.png
    :alt: example
 
 ..
