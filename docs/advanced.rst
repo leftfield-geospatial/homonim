@@ -4,20 +4,29 @@ Advanced topics
 Block processing
 ----------------
 
-``homonim`` splits and processes *source* - *reference* image pairs in blocks.  This is done to avoid memory problems when processing large images, and to allow concurrent block processing, improving speed.  The block size (MB) and number of concurrent blocks can be set by the user.  See the relevant sections of the API and CLI docs for more details.
+``homonim`` splits and processes *source* - *reference* image pairs in blocks.  This is done to limit memory usage and allow the processing of large images.  In addition, processing speed is increased by processing blocks concurrently.  The block size (MB) and number of concurrent blocks can be set by the user.  See the relevant sections of the API and CLI docs for more details.
+
+..
+    TO DO: add links to sections, or limit this to CLI
 
 Processing CRS and re-projections
 ---------------------------------
 
-Processing (i.e. model fitting or image comparison) takes place in one of the *source* or *reference* image CRS's (coordinate reference system) and pixel grid.  This CRS and pixel grid is termed the *processing CRS*.  By default ``homonim`` selects the lowest resolution of the *source* and *reference* CRSs as the *processing CRS*.  This follows the `original formulation <https://raw.githubusercontent.com/dugalh/homonim/main/docs/radiometric_homogenisation_preprint.pdf>`_ of the method, and is the recommended setting.  With these defaults, the *processing CRS* will be the *reference* CRS in the majority of cases i.e. where the *reference* is at a coarser resolution than the *source*.  The
+Processing (i.e. model fitting or image comparison) takes place in one of the *source* or *reference* image CRS's (coordinate reference system) and pixel grid.  This CRS and pixel grid is termed the *processing CRS*.  By default ``homonim`` selects the lowest resolution of the *source* and *reference* CRSs as the *processing CRS*.  This follows the `original formulation <https://raw.githubusercontent.com/dugalh/homonim/main/docs/radiometric_homogenisation_preprint.pdf>`_ of the method.  In the majority of cases, the *reference* is at a lower resolution than the *source*, meaning the *processing CRS* will be the *reference* CRS.
 
-In the majority of cases, users should leave the *processing CRS* and *up/downsampling* settings on their defaults.
-
-
-With these defaults, the *processing CRS* will be the *reference* CRS in the majority of cases.  To perform processing, ``homonim`` re-projects one of the *source* or *reference* into the *processing CRS*,
+Before processing ``homonim`` re-projects one of the *source* or *reference* so that both are in the same *processing CRS*.   In the typical case for surface reflectance correction, the *source* image is re-projected to the *reference CRS*.  Then, once calculated, the correction parameters are re-projected back to the *source* CRS, and applied to the *source* image to produce the corrected image.  The diagram below illustrates this process.
 
 .. image:: https://raw.githubusercontent.com/dugalh/homonim/update_docs/docs/fusion_block_diagram.png
    :alt: example
+
+
+Similarly, when comparing images, ``homonim`` would re-project the *source* to the *reference* in the typical case.  The comparison is then performed in this (the *processing CRS*), with no further re-projections.
+
+``homonim`` will also work in the unusual case where the *reference* is at a higher resolution than the *source*, but here the default *processing CRS* is the *source* CRS.
+
+By default ``homonim`` uses *average* resampling when downsampling (re-projecting from high to low resolution), and *cubic spline* resampling when upsampling (re-projecting from low to high resolution).  The reasons for these choices are explained in the `paper <https://raw.githubusercontent.com/dugalh/homonim/main/docs/radiometric_homogenisation_preprint.pdf>`_.
+
+While the defaults settings are recommended, the ``homonim`` CLI and API do allow the user to specify the   *processing CRS*, and resampling methods for *downsampling* and *upsampling*.  See the ?docs? for more details.
 
 ..
     The user can however force the *processing CRS* to higher resolution of the *source* or *reference* CRS's.  This may be useful in certain special cases (e.g. investigating im correction methods).
