@@ -295,7 +295,8 @@ def cli(verbose: int, quiet: int):
     ),  # yapf: disable
     click.option(
         '-k', '--kernel-shape', type=click.Tuple([click.INT, click.INT]), nargs=2, default=(5, 5), show_default=True,
-        metavar='HEIGHT WIDTH', help='Kernel height and width in pixels of the :option:`--proc-crs` image.'
+        metavar='HEIGHT WIDTH', help='Kernel height and width in pixels of the :option:`--proc-crs` image. Larger ' 
+        'kernels are less susceptible to over-fitting, but provide lower resolution correction.'
     ),
     src_bands_option,
     ref_bands_option,

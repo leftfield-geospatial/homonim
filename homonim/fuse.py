@@ -345,7 +345,8 @@ class RasterFuse(MatchedPairReader):
             The surface reflectance correction model to use.  See :class:`~homonim.enums.Model` for details.
         kernel_shape: tuple of int
             The (height, width) of the kernel in pixels of the :attr:`proc_crs` image (the lowest resolution
-            image, if :attr:`proc_crs` is :attr:`~homonim.enums.ProcCrs.auto`).
+            image, if :attr:`proc_crs` is :attr:`~homonim.enums.ProcCrs.auto`).  Larger kernels are less
+            susceptible to over-fitting on noisy data, but provide lower resolution correction.
         param_filename: str, Path, optional
             Path to an optional parameter file to write with correction parameters and *R*\ :sup:`2` values.  By
             default, no parameter file is written.
