@@ -19,6 +19,7 @@
 import logging
 from pathlib import Path
 from typing import List, Tuple, Union, Dict
+import warnings
 
 import numpy as np
 import rasterio as rio
@@ -225,18 +226,21 @@ class MatchedPairReader(RasterPairReader):
                 match_idx = np.array([np.nan] * dist.shape[0])
                 match_dist = np.array([np.nan] * dist.shape[0]) # distances corresponding to the above matches
 
-                # repeat until all src or ref bands have been matched
-                while not all(np.isnan(np.nanmin(dist, axis=1))) or not all(np.isnan(np.nanmin(dist, axis=0))):
-                    # find the row with the smallest distance in it
-                    min_dist = np.nanmin(dist, axis=1)
-                    min_dist_row_idx = np.nanargmin(min_dist)
-                    min_dist_row = dist[min_dist_row_idx, :]
-                    # store match idx and distance for this row
-                    match_idx[min_dist_row_idx] = np.nanargmin(min_dist_row)
-                    match_dist[min_dist_row_idx] = min_dist[min_dist_row_idx]
-                    # set the matched row and col to nan, so that it is not used again
-                    dist[:, int(match_idx[min_dist_row_idx])] = np.nan
-                    dist[min_dist_row_idx, :] = np.nan
+                # suppress runtime warning on all-Nan slice, as it is expected in normal operation
+                with warnings.catch_warnings():
+                    warnings.simplefilter('ignore', category=RuntimeWarning)
+                    # repeat until all src or ref bands have been matched
+                    while not all(np.isnan(np.nanmin(dist, axis=1))) or not all(np.isnan(np.nanmin(dist, axis=0))):
+                        # find the row with the smallest distance in it
+                        min_dist = np.nanmin(dist, axis=1)
+                        min_dist_row_idx = np.nanargmin(min_dist)
+                        min_dist_row = dist[min_dist_row_idx, :]
+                        # store match idx and distance for this row
+                        match_idx[min_dist_row_idx] = np.nanargmin(min_dist_row)
+                        match_dist[min_dist_row_idx] = min_dist[min_dist_row_idx]
+                        # set the matched row and col to nan, so that it is not used again
+                        dist[:, int(match_idx[min_dist_row_idx])] = np.nan
+                        dist[min_dist_row_idx, :] = np.nan
 
                 return match_dist, match_idx
 
