@@ -24,7 +24,7 @@ Any orthorectified, multi-spectral *source* imagery can be used with ``homonim``
 Fusion
 ------
 
-``homonim`` uses spatially varying localised *models* to describe the surface reflectance relationship between *source* and *reference*.  These *models* are fitted at each pixel location, inside a small *kernel* (window), using a fast DFT approach.  After fitting, ``homonim`` produces the *corrected* image by applying the models to the *source*.
+``homonim`` uses spatially varying localised *models* to describe the surface reflectance relationship between *source* and *reference*.  These *models* are fitted at each pixel location, inside a small *kernel* (window), using a fast DFT approach.  After fitting, ``homonim`` produces the *corrected* image by applying the models to the *source* (i.e. "fusing" the *source* with the *reference*.).
 
 From the user perspective, the *kernel shape* (pixel dimensions) and *model* are the main parameters for configuring *fusion*.  When not specified, ``homonim`` uses default values that will provide reasonable results for most use cases.
 

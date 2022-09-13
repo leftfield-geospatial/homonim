@@ -53,27 +53,46 @@ pip
 Quick Start
 -----------
 
-Download the ``homonim`` github repository to get the test imagery. If you have ``git``, you can clone it with:
+Correct `source.tif` to surface reflectance by fusion with `reference.tif`, using the default settings:
 
 .. code:: shell
 
-   git clone https://github.com/dugalh/homonim.git
+    homonim fuse source.tif reference.tif
 
-Alternatively, download it from `here <https://github.com/dugalh/homonim/archive/refs/heads/main.zip>`__, extract the
-zip archive and rename the *homonim-main* directory to *homonim*.
-
-Using the ``gain-blk-offset`` model and a 5 x 5 pixel kernel, correct the aerial images with the Sentinel-2
-reference.
+Correct images matching `source*.tif` to surface reflectance by fusion with `reference.tif`.  Use a 5 x 5 pixel kernel and the ``gain-blk-offset`` model for correction, and place corrected images in the `./corrected` directory:
 
 .. code:: shell
 
-   homonim fuse -m gain-blk-offset -k 5 5 -od . ./homonim/tests/data/source/*rgb_byte*.tif ./homonim/tests/data/reference/sentinel2_b432_byte.tif
+    homonim fuse -k 5 5 -m gain-blk-offset -od ./corrected source*.tif reference.tif
 
-Statistically compare the raw and corrected aerial images with the included Landsat-8 reference.
+Statistically compare `source.tif` and `corrected.tif` with `reference.tif`:
 
 .. code:: shell
 
-   homonim compare ./homonim/tests/data/source/*rgb_byte*.tif ./*FUSE*.tif ./homonim/tests/data/reference/landsat8_byte.tif
+    homonim compare source.tif corrected.tif reference.tif
+
+..
+    Download the ``homonim`` github repository to get the test imagery. If you have ``git``, you can clone it with:
+
+    .. code:: shell
+
+       git clone https://github.com/dugalh/homonim.git
+
+    Alternatively, download it from `here <https://github.com/dugalh/homonim/archive/refs/heads/main.zip>`__, extract the
+    zip archive and rename the *homonim-main* directory to *homonim*.
+
+    Using the ``gain-blk-offset`` model and a 5 x 5 pixel kernel, correct the aerial images with the Sentinel-2
+    reference.
+
+    .. code:: shell
+
+       homonim fuse -m gain-blk-offset -k 5 5 -od . ./homonim/tests/data/source/*rgb_byte*.tif ./homonim/tests/data/reference/sentinel2_b432_byte.tif
+
+    Statistically compare the raw and corrected aerial images with the included Landsat-8 reference.
+
+    .. code:: shell
+
+       homonim compare ./homonim/tests/data/source/*rgb_byte*.tif ./*FUSE*.tif ./homonim/tests/data/reference/landsat8_byte.tif
 
 .. example_start
 
