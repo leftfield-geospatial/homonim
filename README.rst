@@ -21,7 +21,7 @@ It is useful as a pre-processing step for quantitative mapping applications such
 ..
     ``homonim`` is based on the method described in the paper: `Radiometric homogenisation of aerial images by calibrating with satellite data <https://raw.githubusercontent.com/dugalh/homonim/main/docs/radiometric_homogenisation_preprint.pdf>`__.
 
-.. image:: https://raw.githubusercontent.com/dugalh/homonim/update_docs/docs/banner.png
+.. image:: https://raw.githubusercontent.com/dugalh/homonim/update_docs/docs/readme_eg.png
    :alt: example
 
 .. description_end
@@ -57,15 +57,16 @@ pip
 
 .. example_start
 
-Example
--------
+..
+    Example
+    -------
 
-Mosaics of 0.5 m resolution aerial imagery before and after correction with ``homonim``. Correction was performed using the *gain-blk-offset* model and a 5 x 5 pixel kernel, with a Landsat-7 reference image.
+    Mosaics of 0.5 m resolution aerial imagery before and after correction with ``homonim``. Correction was performed using the *gain-blk-offset* model and a 5 x 5 pixel kernel, with a Landsat-7 reference image.
 
-.. image:: https://raw.githubusercontent.com/dugalh/homonim/update_docs/docs/readme_eg.png
-   :alt: example
+    .. image:: https://raw.githubusercontent.com/dugalh/homonim/update_docs/docs/readme_eg.png
+       :alt: example
 
-.. example_end
+    .. example_end
 
 Getting started
 ---------------
