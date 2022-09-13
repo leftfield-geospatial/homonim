@@ -570,11 +570,11 @@ def compare(
             with RasterCompare(
                 src_filename, ref_file, proc_crs=proc_crs, src_bands=src_bands, ref_bands=ref_bands, force=force_match,
             ) as raster_compare:  # yapf: disable
-                stats_dict[str(src_filename)] = raster_compare.compare(**config)
+                stats_dict[str(src_filename)] = raster_compare.process(**config)
             logger.info(f'Completed in {timer() - start_time:.2f} secs')
 
         # print a key for the following tables
-        logger.info(f'\n\n{raster_compare.schema_table}')
+        logger.info(f'\n\n{raster_compare.schema_table()}')
 
         # print a results table per source image file
         summ_dict = {}

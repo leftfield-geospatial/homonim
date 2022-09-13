@@ -68,7 +68,7 @@ def test_api(
     src_file: Path = request.getfixturevalue(src_file)
     ref_file: Path = request.getfixturevalue(ref_file)
     with RasterCompare(src_file, ref_file, src_bands=src_bands, ref_bands=ref_bands, force=force) as raster_compare:
-        res_dict = raster_compare.compare()
+        res_dict = raster_compare.process()
         assert raster_compare.ref_bands == exp_bands
     if not force:
         _test_identical_compare_dict(res_dict, len(exp_bands) + 1)
@@ -77,8 +77,8 @@ def test_api(
 def test_api__thread(src_file_45cm_float, ref_file_100cm_float):
     """ Test compasison results remain the same with different `threads` configurations. """
     with RasterCompare(src_file_45cm_float, ref_file_100cm_float) as raster_compare:
-        res_dict_single = raster_compare.compare(threads=1)
-        res_dict_mult = raster_compare.compare(threads=multiprocessing.cpu_count())
+        res_dict_single = raster_compare.process(threads=1)
+        res_dict_mult = raster_compare.process(threads=multiprocessing.cpu_count())
     assert (len(res_dict_single) == 2)
     assert (len(res_dict_mult) == 2)
     assert (res_dict_mult == res_dict_single)
@@ -95,8 +95,8 @@ def test_api__resampling(src_file: str, ref_file: str, proc_crs: ProcCrs, config
     src_file: Path = request.getfixturevalue(src_file)
     ref_file: Path = request.getfixturevalue(ref_file)
     with RasterCompare(src_file, ref_file, proc_crs=proc_crs) as raster_compare:
-        res_dict_def = raster_compare.compare()  # default configuration results
-        res_dict_lz = raster_compare.compare(**config)  # non-default configuration
+        res_dict_def = raster_compare.process()  # default configuration results
+        res_dict_lz = raster_compare.process(**config)  # non-default configuration
     assert (len(res_dict_def) == 2)
     assert (len(res_dict_lz) == 2)
     # test non-default r2 is similar but different to default r2
@@ -117,8 +117,8 @@ def test_api__max_block_mem(src_file: str, ref_file: str, request: FixtureReques
     src_file: Path = request.getfixturevalue(src_file)
     ref_file: Path = request.getfixturevalue(ref_file)
     with RasterCompare(src_file, ref_file) as compare:
-        stats_dict_band = compare.compare(max_block_mem=100)  # compare by band
-        stats_dict_block = compare.compare(max_block_mem=2e-4)  # compare by small block
+        stats_dict_band = compare.process(max_block_mem=100)  # compare by band
+        stats_dict_block = compare.process(max_block_mem=2e-4)  # compare by small block
     assert (len(stats_dict_band) == 2)
     assert (len(stats_dict_block) == 2)
     # test band-based and block-based results are approx the same
@@ -135,11 +135,11 @@ def test_api__proc_crs(
     low res source with high res reference (proc_crs=src).
     """
     with RasterCompare(src_file_45cm_float, ref_file_100cm_float, proc_crs=ProcCrs.ref) as raster_compare:
-        stats_dict_ref = raster_compare.compare()  # compare by band
+        stats_dict_ref = raster_compare.process()  # compare by band
         assert (raster_compare.proc_crs == ProcCrs.ref)
     assert (len(stats_dict_ref) == 2)
     with RasterCompare(src_file_100cm_float, ref_file_45cm_float, proc_crs=ProcCrs.src) as raster_compare:
-        stats_dict_src = raster_compare.compare()  # compare by band
+        stats_dict_src = raster_compare.process()  # compare by band
         assert (raster_compare.proc_crs == ProcCrs.src)
     assert (len(stats_dict_src) == 2)
     # test ProcCrs.ref and ProcCrs.src results are approx the same

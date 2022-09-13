@@ -89,11 +89,11 @@ class RasterCompare(MatchedPairReader):
     )  # yapf: disable
     """ Dictionary describing the statistics returned by :attr:`RasterCompare.compare`. """
 
-    @property
-    def schema_table(self) -> str:
+    @staticmethod
+    def schema_table() -> str:
         """ Table string describing statistics returned by :attr:`RasterCompare.compare`. """
-        headers = {key: key.upper() for key in list(self.schema.values())[0].keys()}
-        return tabulate(self.schema.values(), headers=headers, tablefmt=utils.table_format)
+        headers = {key: key.upper() for key in list(RasterCompare.schema.values())[0].keys()}
+        return tabulate(RasterCompare.schema.values(), headers=headers, tablefmt=utils.table_format)
 
     @staticmethod
     def create_config(
@@ -207,7 +207,7 @@ class RasterCompare(MatchedPairReader):
         }  # yapf: disable
         return tabulate(stats_list, headers=headers, floatfmt='.3f', stralign='right', tablefmt=utils.table_format)
 
-    def compare(self, **kwargs) -> Dict[str, Dict]:
+    def process(self, **kwargs) -> Dict[str, Dict]:
         """
         Statistically compare source and reference images.
 

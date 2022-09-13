@@ -73,9 +73,9 @@ def test_fuse_compare(
     for (src_file, corr_file) in zip(src_files, corr_files):
         # test corr_file improves on src_file (by comparing both to ref_file)
         with RasterCompare(src_file, ref_file, proc_crs=proc_crs, src_bands=src_bands) as src_compare:
-            src_res = src_compare.compare()
+            src_res = src_compare.process()
         with RasterCompare(corr_file, ref_file, proc_crs=proc_crs) as corr_compare:
-            corr_res = corr_compare.compare()
+            corr_res = corr_compare.process()
         for band, src_dict in src_res.items():
             corr_dict = corr_res[band]
             assert (corr_dict['r2'] > src_dict['r2'])
