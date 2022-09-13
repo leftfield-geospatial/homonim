@@ -21,10 +21,11 @@ It is useful as a pre-processing step for quantitative mapping applications such
 ..
     ``homonim`` is based on the method described in the paper: `Radiometric homogenisation of aerial images by calibrating with satellite data <https://raw.githubusercontent.com/dugalh/homonim/main/docs/radiometric_homogenisation_preprint.pdf>`__.
 
+.. description_end
+
 .. image:: https://raw.githubusercontent.com/dugalh/homonim/update_docs/docs/readme_eg.png
    :alt: example
 
-.. description_end
 
 See the documentation site for more detail: https://homonim.readthedocs.io/.
 
@@ -122,7 +123,7 @@ Example
     from pathlib import Path
     from homonim import RasterFuse, RasterCompare, Model
 
-    # set source and reference paths from test data
+    # set source and reference etc paths from test data
     src_file = Path('tests/data/source/ngi_rgb_byte_2.tif')
     ref_file = Path('tests/data/reference/sentinel2_b432_byte.tif')
     cmp_ref_file = Path('tests/data/reference/landsat8_byte.tif')
@@ -133,7 +134,7 @@ Example
         fuse.process(corr_file, Model.gain_blk_offset, (5, 5), overwrite=True)
 
     # evaluate the change in surface reflectance accuracy by comparing source
-    # (src_file) and corrected (corr_file) images with cmp_ref_file
+    # (src_file) and corrected (corr_file) files with cmp_ref_file
     print('\nComparison key:\n' + RasterCompare.schema_table())
     for cmp_src_file in [src_file, corr_file]:
         print(f'\nComparing {cmp_src_file.name} with {cmp_ref_file.name}:')

@@ -33,7 +33,7 @@ More details on the theoretical basis for the method can be found in the `paper 
 Example
 -------
 
-Mosaics of 0.5 m resolution aerial imagery before and after correction with ``homonim``, using a Landsat-7 reference image.
+Mosaics of 0.5 m resolution aerial imagery before and after correction with a Landsat-7 reference image.
 
 .. image:: https://raw.githubusercontent.com/dugalh/homonim/update_docs/docs/background_eg.png
    :alt: example

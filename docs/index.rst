@@ -19,7 +19,6 @@ Contents
    installation
    background
    advanced
-   example
    cli
    api
 
