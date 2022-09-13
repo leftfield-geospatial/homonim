@@ -76,7 +76,9 @@ class HomonimCommand(cloup.Command):
         def reformat_text(text: str, width: int, **kwargs):
             for sub_key, sub_value in sub_strings.items():
                 text = re.sub(sub_key, sub_value, text, flags=re.DOTALL)
-            return self.wrap_text(text, width, **kwargs)
+            wr_text = self.wrap_text(text, width, **kwargs)
+            # change double newline to single newline separated list
+            return re.sub('\n\n(\s*?)- ', '\n- ', wr_text, flags=re.DOTALL)
 
         cloup.formatting._formatter.wrap_text = reformat_text
         return cloup.Command.get_help(self, ctx)
@@ -286,17 +288,19 @@ def cli(verbose: int, quiet: int):
     click.option(
         '-m', '--model', type=click.Choice([m.value for m in Model], case_sensitive=False),
         default=Model.gain_blk_offset.value, show_default=True, help="""Correction model.
-        \b
         
-        - `gain`: Gain-only model.
-        - `gain-blk-offset`: Gain-only model applied to offset normalised image blocks.
-        - `gain-offset`: Gain and offset model.
+        - `gain`: Gain-only model, suitable for haze-free and zero offset images.
+        
+        - `gain-blk-offset`: Gain-only model applied to offset normalised blocks.  Suitable for most source / reference combinations.
+        
+        - `gain-offset`: Gain and offset model.  The most accurate model, but sensitive to differences between source and reference.
         """,
     ),  # yapf: disable
     click.option(
         '-k', '--kernel-shape', type=click.Tuple([click.INT, click.INT]), nargs=2, default=(5, 5), show_default=True,
-        metavar='HEIGHT WIDTH', help='Kernel height and width in pixels of the :option:`--proc-crs` image. Larger ' 
-        'kernels are less susceptible to over-fitting, but provide lower resolution correction.'
+        metavar='HEIGHT WIDTH', help='Kernel height and width in pixels of the '
+        ':option:`--proc-crs <homonim-fuse --proc-crs>` image. Larger kernels are less susceptible to over-fitting, '
+        'but provide lower resolution correction.'
     ),
     src_bands_option,
     ref_bands_option,
@@ -410,8 +414,8 @@ def fuse(
     Where source and reference images are RGB, or have `center_wavelength` metadata, bands are matched automatically.
     Where there are the same number of source and reference bands, and no `center_wavelength` metadata, bands are
     assumed to be in matching order.  The :option:`--src-band <homonim-fuse --src-band>` and
-    :option:`--ref-band <homonim-fuse --ref-band>` options allow subsets and ordering of input and reference bands to be
-    specified.
+    :option:`--ref-band <homonim-fuse --ref-band>` options allow subsets and ordering of source and reference bands
+    to be specified.
 
     Corrected image(s) are named automatically based on the source file name and option values.
     \b

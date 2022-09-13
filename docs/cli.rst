@@ -1,6 +1,14 @@
 Command line interface
 ----------------------
 
+Getting started
+~~~~~~~~~~~~~~~
+
+.. include:: ../README.rst
+    :start-after: cli_start
+    :end-before: cli_end
+
+
 Usage
 ~~~~~
 
