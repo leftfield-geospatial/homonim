@@ -14,7 +14,7 @@ Correct aerial and satellite imagery to surface reflectance.
 Description
 -----------
 
-``homonim`` provides a command line interface and API for correcting remotely sensed imagery to approximate surface reflectance.  It is a form of *spectral harmonisation*, that adjusts for spatially varying atmospheric and anisotropic (BRDF) effects, by *fusion* with satellite surface reflectance data.  Manual reflectance measurements and target placements are not required.
+``homonim`` provides a command line interface and API for correcting remotely sensed imagery to approximate surface reflectance.  It is a form of *spectral harmonisation*, that adjusts for spatially varying atmospheric and anisotropic (BRDF) effects, by *fusion* with satellite surface reflectance data. Manual reflectance measurements and target placements are not required.
 
 It is useful as a pre-processing step for quantitative mapping applications such as biomass estimation or precision agriculture and for reducing seamlines and other visual artefacts in image mosaics.  It can be applied to multi-spectral drone, aerial and satellite imagery.
 
@@ -95,6 +95,8 @@ and help on a ``homonim`` command with:
 
    homonim <command> --help
 
+.. cli_end
+
 Examples
 ^^^^^^^^
 
@@ -110,6 +112,11 @@ Correct images matching *source\*.tif* to surface reflectance by fusion with *re
 
     homonim fuse -k 5 5 -m gain-blk-offset -od ./corrected source*.tif reference.tif
 
+Statistically compare *source.tif* and *corrected.tif* with *reference.tif*.
+
+.. code:: shell
+
+   homonim compare source.tif corrected.tif reference.tif
 
 
 API
