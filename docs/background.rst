@@ -30,5 +30,13 @@ From the user perspective, the *kernel shape* (pixel dimensions) and *model* are
 
 More details on the theoretical basis for the method can be found in the `paper <https://raw.githubusercontent.com/dugalh/homonim/main/docs/radiometric_homogenisation_preprint.pdf>`_.
 
+Example
+-------
+
+Mosaics of 0.5 m resolution aerial imagery before and after correction with ``homonim``, using a Landsat-7 reference image.
+
+.. image:: https://raw.githubusercontent.com/dugalh/homonim/update_docs/docs/background_eg.png
+   :alt: example
+
 .. |geedim| replace:: ``geedim``
 .. _geedim: https://github.com/dugalh/geedim
