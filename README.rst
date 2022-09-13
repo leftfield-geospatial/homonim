@@ -53,19 +53,19 @@ pip
 Quick Start
 -----------
 
-Correct `source.tif` to surface reflectance by fusion with `reference.tif`, using the default settings:
+Correct *source.tif* to surface reflectance by fusion with *reference.tif*, using the default settings:
 
 .. code:: shell
 
     homonim fuse source.tif reference.tif
 
-Correct images matching `source*.tif` to surface reflectance by fusion with `reference.tif`.  Use a 5 x 5 pixel kernel and the ``gain-blk-offset`` model for correction, and place corrected images in the `./corrected` directory:
+Correct images matching *source\*.tif* to surface reflectance by fusion with *reference.tif*.  Use a 5 x 5 pixel kernel and the ``gain-blk-offset`` model for correction, and place corrected images in the *./corrected* directory:
 
 .. code:: shell
 
     homonim fuse -k 5 5 -m gain-blk-offset -od ./corrected source*.tif reference.tif
 
-Statistically compare `source.tif` and `corrected.tif` with `reference.tif`:
+Statistically compare *source.tif* and *corrected.tif* with *reference.tif*:
 
 .. code:: shell
 
@@ -100,7 +100,6 @@ Example
 -------
 
 Mosaics of 0.5 m resolution aerial imagery before and after correction with ``homonim``. Correction was performed using the *gain-blk-offset* model and a 5 x 5 pixel kernel, with a Landsat-7 reference image.
-
 
 .. image:: https://raw.githubusercontent.com/dugalh/homonim/update_docs/docs/readme_eg.png
    :alt: example
