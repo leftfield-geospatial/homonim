@@ -42,7 +42,7 @@ RasterCompare
 .. autosummary::
     :toctree: _generated
 
-    ~RasterCompare.compare
+    ~RasterCompare.process
     ~RasterCompare.create_config
     ~RasterCompare.stats_table
 

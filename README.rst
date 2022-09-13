@@ -78,9 +78,9 @@ Command line interface
 
 ``homonim`` command line functionality is accessed through the commands:
 
--  ``fuse``: Search for images.
--  ``compare``: Create a composite image.
--  ``stats``: Download image(s).
+-  ``fuse``: Correct image(s) to surface reflectance.
+-  ``compare``: Compare image(s) with a reference.
+-  ``stats``: Report parameter statistics.
 
 Get help on ``homonim`` with:
 
@@ -109,23 +109,20 @@ Correct images matching *source\*.tif* to surface reflectance by fusion with *re
 
     homonim fuse -k 5 5 -m gain-blk-offset -od ./corrected source*.tif reference.tif
 
-Statistically compare *source.tif* and *corrected.tif* with *reference.tif*:
 
-.. code:: shell
 
-    homonim compare source.tif corrected.tif reference.tif
+API
+~~~
+
+Example
+^^^^^^^
+
+.. literalinclude:: docs/examples/api_example.py
+   :language: python
+
 
 ..
     Download the ``homonim`` github repository to get the test imagery. If you have ``git``, you can clone it with:
-
-
-
-
-
-
-
-
-
     .. code:: shell
 
        git clone https://github.com/dugalh/homonim.git
@@ -155,8 +152,7 @@ See the documentation `here <https://homonim.readthedocs.io/>`__.
 Terminology
 -----------
 
-``homonim`` is shorthand for *homogenise image* and is a reference to `the paper <https://raw.githubusercontent.com/dugalh/homonim/main/docs/radiometric_homogenisation_preprint.pdf>`_ on which
-it is based.
+``homonim`` is shorthand for *homogenise image* and is a reference to `the paper <https://raw.githubusercontent.com/dugalh/homonim/main/docs/radiometric_homogenisation_preprint.pdf>`_ on which it is based.
 
 Credits
 -------
@@ -172,7 +168,7 @@ License
 
 ``homonim`` is licensed under the terms of the `AGPLv3 <https://www.gnu.org/licenses/agpl-3.0.en.html>`__. This project
 is developed in collaboration with `InnovUS <https://www.innovus.co.za/>`__ at Stellenbosch University, alternative
-licenses can be arranged by `contacting <mailto:sjdewet@sun.ac.za>`__ them.
+licenses can be arranged by `contacting <mailto:madeleink@sun.ac.za>`__ them.
 
 Citation
 --------
