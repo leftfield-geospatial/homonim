@@ -14,15 +14,20 @@ Correct aerial and satellite imagery to surface reflectance.
 Description
 -----------
 
-``homonim`` provides a command line interface and API for correcting remotely sensed imagery to approximate surface reflectance.  It is a form of *spectral harmonisation*, that adjusts for spatially varying atmospheric and anisotropic (BRDF) effects, by fusion with satellite surface reflectance data.  Manual reflectance measurements and target placements are not required.
+``homonim`` provides a command line interface and API for correcting remotely sensed imagery to approximate surface reflectance.  It is a form of *spectral harmonisation*, that adjusts for spatially varying atmospheric and anisotropic (BRDF) effects, by *fusion* with satellite surface reflectance data.  Manual reflectance measurements and target placements are not required.
 
 It is useful as a pre-processing step for quantitative mapping applications such as biomass estimation or precision agriculture and for reducing seamlines and other visual artefacts in image mosaics.  It can be applied to multi-spectral drone, aerial and satellite imagery.
 
-``homonim`` is based on the method described in the paper: `Radiometric homogenisation of aerial images by calibrating with satellite data <https://raw.githubusercontent.com/dugalh/homonim/main/docs/radiometric_homogenisation_preprint.pdf>`__.
+..
+    ``homonim`` is based on the method described in the paper: `Radiometric homogenisation of aerial images by calibrating with satellite data <https://raw.githubusercontent.com/dugalh/homonim/main/docs/radiometric_homogenisation_preprint.pdf>`__.
+
+.. image:: https://raw.githubusercontent.com/dugalh/homonim/update_docs/docs/banner.png
+   :alt: example
 
 .. description_end
 
 See the documentation site for more detail: https://homonim.readthedocs.io/.
+
 
 .. install_start
 
@@ -50,8 +55,46 @@ pip
 
 .. install_end
 
-Quick Start
------------
+.. example_start
+
+Example
+-------
+
+Mosaics of 0.5 m resolution aerial imagery before and after correction with ``homonim``. Correction was performed using the *gain-blk-offset* model and a 5 x 5 pixel kernel, with a Landsat-7 reference image.
+
+.. image:: https://raw.githubusercontent.com/dugalh/homonim/update_docs/docs/readme_eg.png
+   :alt: example
+
+.. example_end
+
+Getting started
+---------------
+
+Command line interface
+~~~~~~~~~~~~~~~~~~~~~~
+
+.. cli_start
+
+``homonim`` command line functionality is accessed through the commands:
+
+-  ``fuse``: Search for images.
+-  ``compare``: Create a composite image.
+-  ``stats``: Download image(s).
+
+Get help on ``homonim`` with:
+
+.. code:: shell
+
+   homonim --help
+
+and help on a ``homonim`` command with:
+
+.. code:: shell
+
+   homonim <command> --help
+
+Examples
+^^^^^^^^
 
 Correct *source.tif* to surface reflectance by fusion with *reference.tif*, using the default settings:
 
@@ -74,6 +117,14 @@ Statistically compare *source.tif* and *corrected.tif* with *reference.tif*:
 ..
     Download the ``homonim`` github repository to get the test imagery. If you have ``git``, you can clone it with:
 
+
+
+
+
+
+
+
+
     .. code:: shell
 
        git clone https://github.com/dugalh/homonim.git
@@ -94,17 +145,6 @@ Statistically compare *source.tif* and *corrected.tif* with *reference.tif*:
 
        homonim compare ./homonim/tests/data/source/*rgb_byte*.tif ./*FUSE*.tif ./homonim/tests/data/reference/landsat8_byte.tif
 
-.. example_start
-
-Example
--------
-
-Mosaics of 0.5 m resolution aerial imagery before and after correction with ``homonim``. Correction was performed using the *gain-blk-offset* model and a 5 x 5 pixel kernel, with a Landsat-7 reference image.
-
-.. image:: https://raw.githubusercontent.com/dugalh/homonim/update_docs/docs/readme_eg.png
-   :alt: example
-
-.. example_end
 
 Usage
 -----
