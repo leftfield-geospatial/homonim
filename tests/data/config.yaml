@@ -1,16 +1,17 @@
 # See https://github.com/dugalh/homonim/blob/main/docs/usage.rst#advanced-options for detailed documentation
-
+# TODO: update the above link for RTD
 # Correction configuration
 param_image: True
 mask_partial: True
 threads: 0
 max_block_mem: 1
-proc_crs: auto
+force_match: False
 
 # Model configuration
 downsampling: average
 upsampling: cubic_spline
 r2_inpaint_thresh: 0.25
+proc_crs: auto
 
 # Format of output (corrected) image
 driver: GTiff
