@@ -23,8 +23,8 @@ class Model(str, Enum):
     """
     Linear model variants for correcting to surface reflectance.
 
-    Roughly speaking, the model gain compensates for atmospheric absorption and anisotropic (BRDF) effects,
-    and (when present) the offset compensates for atmospheric reflectance and haze.
+    Roughly speaking, gain compensates for atmospheric absorption and anisotropic (BRDF) effects, and offset
+    (when present) compensates for atmospheric reflectance and haze.
     """
     gain = 'gain'
     """ 
@@ -33,7 +33,7 @@ class Model(str, Enum):
     """
     gain_blk_offset = 'gain-blk-offset'
     """ 
-    Gain-only model applied to offset normalised image blocks.  Suitable for most source / reference combinations.
+    Gain-only model applied to offset normalised image blocks.  Suitable for most source-reference combinations.
     """
     gain_offset = 'gain-offset'
     """

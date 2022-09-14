@@ -20,6 +20,7 @@ It is useful as a pre-processing step for quantitative mapping applications such
 
 ..
     ``homonim`` is based on the method described in the paper: `Radiometric homogenisation of aerial images by calibrating with satellite data <https://raw.githubusercontent.com/dugalh/homonim/main/docs/radiometric_homogenisation_preprint.pdf>`__.
+    TO DO: also mention it's use in harmonising and multi-temporal apps
 
 .. description_end
 

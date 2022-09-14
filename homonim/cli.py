@@ -288,12 +288,12 @@ def cli(verbose: int, quiet: int):
     click.option(
         '-m', '--model', type=click.Choice([m.value for m in Model], case_sensitive=False),
         default=Model.gain_blk_offset.value, show_default=True, help="""Correction model.
-        
+
         - `gain`: Gain-only model, suitable for haze-free and zero offset images.
-        
-        - `gain-blk-offset`: Gain-only model applied to offset normalised blocks.  Suitable for most source / reference combinations.
-        
-        - `gain-offset`: Gain and offset model.  The most accurate model, but sensitive to differences between source and reference.
+
+        - `gain-blk-offset`: Gain-only model applied to offset normalised blocks.  Suitable for most source-reference combinations.
+
+        - `gain-offset`: Gain and offset model.  Most accurate model, but sensitive to differences between source and reference.
         """,
     ),  # yapf: disable
     click.option(
