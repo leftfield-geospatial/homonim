@@ -81,6 +81,16 @@ class MatchedPairReader(RasterPairReader):
         self._force = force
         RasterPairReader.__init__(self, src_filename, ref_filename, proc_crs=proc_crs)
 
+    @property
+    def src_bands(self) -> Tuple[int, ...]:
+        """ Matched source band indices (1-based). """
+        return self._src_bands
+
+    @property
+    def ref_bands(self) ->Tuple[int, ...]:
+        """ Matched reference band indices (1-based). """
+        return self._ref_bands
+
     @staticmethod
     def _get_band_info(
         im: rio.DatasetReader, bands: Tuple[int, ...] = None, name: str = None
