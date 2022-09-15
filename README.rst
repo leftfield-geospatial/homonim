@@ -16,7 +16,7 @@ Description
 
 ``homonim`` provides a command line interface and API for correcting remotely sensed imagery to approximate surface reflectance.  It is a form of *spectral harmonisation*, that adjusts for spatially varying atmospheric and anisotropic (BRDF) effects, by *fusion* with satellite surface reflectance data. Manual reflectance measurements and target placements are not required.
 
-It is useful as a pre-processing step for quantitative mapping applications such as biomass estimation or precision agriculture and for reducing seamlines and other visual artefacts in image mosaics.  It can be applied to multi-spectral drone, aerial and satellite imagery.
+``homonim`` is useful as a pre-processing step for quantitative mapping applications such as biomass estimation or precision agriculture, and for reducing seamlines and other visual artefacts in image mosaics.  The consistency of multi-temporal data may be improved by it's use.  It can be applied to multi-spectral drone, aerial and satellite imagery.
 
 ..
     ``homonim`` is based on the method described in the paper: `Radiometric homogenisation of aerial images by calibrating with satellite data <https://raw.githubusercontent.com/dugalh/homonim/main/docs/radiometric_homogenisation_preprint.pdf>`__.
@@ -27,9 +27,7 @@ It is useful as a pre-processing step for quantitative mapping applications such
 .. image:: https://raw.githubusercontent.com/dugalh/homonim/update_docs/docs/readme_eg.png
    :alt: example
 
-
 See the documentation site for more detail: https://homonim.readthedocs.io/.
-
 
 .. install_start
 

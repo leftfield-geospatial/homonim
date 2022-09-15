@@ -4,6 +4,9 @@ Background
 Reference image
 ---------------
 
+.. image:: https://raw.githubusercontent.com/dugalh/homonim/update_docs/docs/background_eg.png
+   :alt: example
+
 ``homonim`` requires a *reference* surface reflectance image with which a *source* image is fused to produce the *corrected* image.  The *reference* is usually a satellite image at a coarser resolution that the *source*.  For best results, the *reference* should be chosen to satisfy the following criteria:
 
 - Co-location: bounds of the *reference* image should cover those of the *source*, and *source* and *reference* should be ortho-rectified / co-registered.
@@ -20,7 +23,6 @@ Source image
 
 Any orthorectified, multi-spectral *source* imagery can be used with ``homonim``, including drone, aerial and satellite imagery. *Source* images should  preferably be provided to ``homonim`` without gamma correction or colour balancing type adjustments.  If this is not possible, ``homonim`` will still improve surface reflectance accuracy.
 
-
 Fusion
 ------
 
@@ -30,13 +32,6 @@ From the user perspective, the *kernel shape* (pixel dimensions) and *model* are
 
 More details on the theoretical basis for the method can be found in the `paper <https://raw.githubusercontent.com/dugalh/homonim/main/docs/radiometric_homogenisation_preprint.pdf>`_.
 
-Example
--------
-
-Mosaics of 0.5 m resolution aerial imagery before and after correction with a Landsat-7 reference image.
-
-.. image:: https://raw.githubusercontent.com/dugalh/homonim/update_docs/docs/background_eg.png
-   :alt: example
 
 .. |geedim| replace:: ``geedim``
 .. _geedim: https://github.com/dugalh/geedim

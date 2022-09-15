@@ -71,7 +71,7 @@ Band matching
 
 ``homonim`` automatically matches *source* to *reference* spectral bands when these images are either RGB or have *center_wavelength* metadata (as is the case with the ``homonim`` test data).  Subsets of *source* and/or *reference* bands to use for matching can be specified with the :option:`--src-band <homonim-fuse --src-band>` and :option:`--ref-band <homonim-fuse --ref-band>` options.
 
-Let's *fuse* the red, green and blue bands of the Landsat-8 reference with the MODIS NBAR reference.  The :option:`--src-band <homonim-fuse --src-band>` option is used to specify the Landsat-8 band numbers corresponding to red, green and blue.  ``homonim`` then finds the matching MODIS NBAR bands.
+Let's *fuse* (harmonise) the red, green and blue bands of the Landsat-8 reference with the MODIS NBAR reference.  The :option:`--src-band <homonim-fuse --src-band>` option is used to specify the Landsat-8 band numbers corresponding to red, green and blue.  ``homonim`` then finds the matching MODIS NBAR bands.
 
 .. code:: shell
 
@@ -106,8 +106,8 @@ Let's repeat the previous example to see how this would look.  Here, we also spe
         gdalinfo ./reference/sentinel2_b432_byte.tif
 
 
-Output image file format
-~~~~~~~~~~~~~~~~~~~~~~~~
+Output file format
+~~~~~~~~~~~~~~~~~~
 
 By default ``homonim`` writes output files as GeoTIFFS with *DEFLATE* compression, *float32* data type and *nan* nodata value.  These options are all configurable.
 

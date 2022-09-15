@@ -18,9 +18,9 @@ Contents
    description
    installation
    background
-   advanced
    cli
    api
+   advanced
 
 * :ref:`genindex`
 
