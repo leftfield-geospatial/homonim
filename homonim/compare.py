@@ -91,7 +91,7 @@ class RasterCompare(MatchedPairReader):
 
     @staticmethod
     def schema_table() -> str:
-        """ Table string describing statistics returned by :attr:`RasterCompare.compare`. """
+        """ Create a table string describing the statistics returned by :attr:`RasterCompare.compare`. """
         headers = {key: key.upper() for key in list(RasterCompare.schema.values())[0].keys()}
         return tabulate(RasterCompare.schema.values(), headers=headers, tablefmt=utils.table_format)
 

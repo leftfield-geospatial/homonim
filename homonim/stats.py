@@ -90,10 +90,10 @@ class ParamStats:
             res_str += f'R\N{SUPERSCRIPT TWO} inpaint threshold: {self._r2_inpaint_thresh}\n'
         return res_str
 
-    @property
-    def schema_table(self) -> str:
-        """ Table string describing statistics returned by :attr:`ParamStats.stats`. """
-        schema_list = [v for k, v in self.schema.items() if 'description' in v]
+    @staticmethod
+    def schema_table() -> str:
+        """ Create a table string describing statistics returned by :attr:`ParamStats.stats`. """
+        schema_list = [v for k, v in ParamStats.schema.items() if 'description' in v]
         schema_list.append(dict(abbrev='*_R2', description='R\N{SUPERSCRIPT TWO} coefficient of determination.'))
         headers = {k: k.upper() for k in schema_list[0].keys()}
         return tabulate(schema_list, headers=headers, tablefmt=utils.table_format)
@@ -195,7 +195,7 @@ class ParamStats:
         """
         Find parameter image statistics.
 
-        Statistics are accumulated over image blocks, allowing large images to be described with limited memory use.
+        Statistics are accumulated over image blocks, limiting memory usage for large images.
 
         Parameters
         ----------

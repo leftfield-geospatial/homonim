@@ -173,7 +173,6 @@ Example
 
        homonim compare ./homonim/tests/data/source/*rgb_byte*.tif ./*FUSE*.tif ./homonim/tests/data/reference/landsat8_byte.tif
 
-
 Usage
 -----
 
