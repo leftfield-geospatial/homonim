@@ -1,8 +1,15 @@
 API
 ===
 
+Getting started
+---------------
+
+
+Reference
+---------
+
 RasterFuse
-----------
+^^^^^^^^^^
 
 .. currentmodule:: homonim
 
@@ -25,12 +32,14 @@ RasterFuse
 .. autosummary::
     :toctree: _generated
 
+    ~RasterFuse.src_bands
+    ~RasterFuse.ref_bands
     ~RasterFuse.proc_crs
     ~RasterFuse.closed
 
 
 RasterCompare
--------------
+^^^^^^^^^^^^^
 
 .. currentmodule:: homonim
 
@@ -44,6 +53,7 @@ RasterCompare
 
     ~RasterCompare.process
     ~RasterCompare.create_config
+    ~RasterCompare.schema_table
     ~RasterCompare.stats_table
 
 .. rubric:: Attributes
@@ -51,14 +61,15 @@ RasterCompare
 .. autosummary::
     :toctree: _generated
 
+    ~RasterCompare.src_bands
+    ~RasterCompare.ref_bands
     ~RasterCompare.schema
-    ~RasterCompare.schema_table
     ~RasterCompare.proc_crs
     ~RasterFuse.closed
 
 
 ParamStats
-----------
+^^^^^^^^^^
 
 .. currentmodule:: homonim
 
@@ -71,6 +82,7 @@ ParamStats
     :toctree: _generated
 
     ~ParamStats.stats
+    ~ParamStats.schema_table
     ~ParamStats.stats_table
 
 .. rubric:: Attributes
@@ -79,16 +91,15 @@ ParamStats
     :toctree: _generated
 
     ~ParamStats.schema
-    ~ParamStats.schema_table
     ~ParamStats.metadata
     ~ParamStats.closed
 
 
 enums
------
+^^^^^
 
 Model
-^^^^^^
+~~~~~
 
 .. currentmodule:: homonim.enums
 
@@ -96,7 +107,7 @@ Model
     :members:
 
 ProcCrs
-^^^^^^^
+~~~~~~~
 
 .. currentmodule:: homonim.enums
 
