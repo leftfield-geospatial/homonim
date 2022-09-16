@@ -1,3 +1,4 @@
+# [correct-start]
 from pathlib import Path
 from homonim import RasterFuse, RasterCompare, Model
 
@@ -18,7 +19,9 @@ corr_file = './corrected.tif'
 # `gain-blk-offset` model and a kernel of 5 x 5 pixels.
 with RasterFuse(src_file, ref_file) as fuse:
     fuse.process(corr_file, Model.gain_blk_offset, (5, 5), overwrite=True)
+# [correct-end]
 
+# [compare-start]
 # url of independent landsat reference for evaluation
 cmp_ref_file = (
     'https://raw.githubusercontent.com/dugalh/homonim/main/'
@@ -37,3 +40,4 @@ for cmp_src_file in [src_file, corr_file]:
     with RasterCompare(cmp_src_file, cmp_ref_file) as compare:
         cmp_stats = compare.process()
         print(compare.stats_table(cmp_stats))
+# [compare-end]
