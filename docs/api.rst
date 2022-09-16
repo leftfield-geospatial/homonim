@@ -4,6 +4,13 @@ API
 Getting started
 ---------------
 
+The example below demonstrates how to use the :class:`~homonim.fuse.RasterFuse` and :class:`~homonim.compare.RasterCompare` classes for surface reflectance correction and validation.
+
+.. include:: ../README.rst
+    :start-after: api_example_start
+    :end-before: api_example_end
+
+You can also take a look at the :ref:`tutorial <Tutorial>` for a more detailed walk through.
 
 Reference
 ---------
@@ -25,7 +32,6 @@ RasterFuse
     ~RasterFuse.create_block_config
     ~RasterFuse.create_out_profile
     ~RasterFuse.process
-
 
 .. rubric:: Attributes
 
@@ -113,3 +119,13 @@ ProcCrs
 
 .. autoclass:: ProcCrs
     :members:
+
+.. _tutorial:
+
+Tutorial
+--------
+
+.. toctree::
+    :maxdepth: 1
+
+    examples/api_tutorial.ipynb
