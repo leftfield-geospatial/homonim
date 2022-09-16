@@ -203,11 +203,11 @@ def _param_file_cb(ctx: click.Context, param: click.Argument, value):
             raise click.BadParameter(f'{filename.name} is not a valid parameter image.', param=param)
     return value
 
-
+# TODO: allow URLS for source and reference
 # define click options and arguments common to more than one command
 # use cloup's argument to auto print argument help on command line
 ref_file_arg = cloup.argument(
-    'ref-file', nargs=1, metavar='REFERENCE', type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
+    'ref-file', nargs=1, metavar='REFERENCE', type=click.Path(exists=False, dir_okay=False, path_type=pathlib.Path),
     help='Path to a reference image.'
 )
 threads_option = click.option(
@@ -277,7 +277,7 @@ def cli(verbose: int, quiet: int):
 @cloup.command(cls=FuseCommand)
 # standard options
 @cloup.argument(
-    'src-file', nargs=-1, metavar='SOURCE...', type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
+    'src-file', nargs=-1, metavar='SOURCE...', type=click.Path(exists=False, dir_okay=False, path_type=pathlib.Path),
     help='Path(s) to source image(s) to be corrected.'
 )
 @ref_file_arg

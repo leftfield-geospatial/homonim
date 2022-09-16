@@ -121,10 +121,9 @@ Statistically compare *source.tif* and *corrected.tif* with *reference.tif*.
 API
 ~~~
 
-Example
-^^^^^^^
-
 .. api_example_start
+
+Surface reflectance correction is implemented in the :class:`~homonim.fuse.RasterFuse` class.  Here we use it to correct an aerial image to surface reflectance, by fusing it with a Sentinel-2 reference.
 
 .. code:: python
 
@@ -148,6 +147,10 @@ Example
     # `gain-blk-offset` model and a kernel of 5 x 5 pixels.
     with RasterFuse(src_file, ref_file) as fuse:
         fuse.process(corr_file, Model.gain_blk_offset, (5, 5), overwrite=True)
+
+Next, we use :class:`~homonim.compare.RasterCompare` to compare both the raw and corrected aerial images with a second reference i.e. a Landsat-8 image.  The comparison results give an indication of the surface reflectance accuracy before and after fusion.
+
+.. code:: python
 
     # url of independent landsat reference for evaluation
     cmp_ref_file = (
