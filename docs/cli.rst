@@ -8,14 +8,16 @@ Getting started
     :start-after: cli_start
     :end-before: cli_end
 
+.. _cli_running_examples:
+
 Running examples
 ~~~~~~~~~~~~~~~~
 
-The examples that follow use the ``homonim`` test data.  You can get this by cloning with `git <https://git-scm.com/downloads>`_:
+The examples that follow use the ``homonim`` test data.  You can get this by doing a partial clone with `git <https://git-scm.com/downloads>`_:
 
 .. code:: shell
 
-    git clone https://github.com/dugalh/homonim.git
+    git clone --filter=blob:none https://github.com/dugalh/homonim.git
 
 Change directories to the data root and make a *corrected* folder:
 
