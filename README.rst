@@ -124,32 +124,51 @@ API
 Example
 ^^^^^^^
 
+.. api_example_start
+
 .. code:: python
 
     from pathlib import Path
     from homonim import RasterFuse, RasterCompare, Model
 
-    # set source and reference paths from test data
-    src_file = Path('tests/data/source/ngi_rgb_byte_1.tif')
-    ref_file = Path('tests/data/reference/sentinel2_b432_byte.tif')
-    # comparison reference
-    cmp_ref_file = Path('tests/data/reference/landsat8_byte.tif')
-    # corrected file
-    corr_file = Path('tests/data/corrected/corrected.tif') #
+    # urls of source and reference test images
+    src_file = (
+        'https://raw.githubusercontent.com/dugalh/homonim/main/'
+        'tests/data/source/ngi_rgb_byte_1.tif'
+    )
+    ref_file = (
+        'https://raw.githubusercontent.com/dugalh/homonim/main/'
+        'tests/data/reference/sentinel2_b432_byte.tif'
+    )
 
-    # Correct src_file to surface reflectance by fusion with ref_file.
-    # Use the `gain-blk-offset` model with a kernel of 5 x 5 pixels.
+    # path to corrected file to create
+    corr_file = './corrected.tif'
+
+    # Correct src_file to surface reflectance by fusion with ref_file, using the
+    # `gain-blk-offset` model and a kernel of 5 x 5 pixels.
     with RasterFuse(src_file, ref_file) as fuse:
         fuse.process(corr_file, Model.gain_blk_offset, (5, 5), overwrite=True)
 
-    # Evaluate the source and corrected surface reflectance similarity with an
-    # independent Landsat reference (cmp_ref_file).
+    # url of independent landsat reference for evaluation
+    cmp_ref_file = (
+        'https://raw.githubusercontent.com/dugalh/homonim/main/'
+        'tests/data/reference/landsat8_byte.tif'
+    )
+
+    # Compare source and corrected similarity with the independent reference,
+    # cmp_ref_file, giving an indication of the improvement in surface reflectance
+    # accuracy.
     print('\nComparison key:\n' + RasterCompare.schema_table())
     for cmp_src_file in [src_file, corr_file]:
-        print(f'\nComparing {cmp_src_file.name} with {cmp_ref_file.name}:')
+        print(
+            f'\nComparing {Path(cmp_src_file).name} with '
+            f'{Path(cmp_ref_file).name}:'
+        )
         with RasterCompare(cmp_src_file, cmp_ref_file) as compare:
             cmp_stats = compare.process()
             print(compare.stats_table(cmp_stats))
+
+.. api_example_end
 
 ..
     Download the ``homonim`` github repository to get the test imagery. If you have ``git``, you can clone it with:
