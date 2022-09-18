@@ -26,7 +26,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 from rasterio.warp import Resampling
 from tabulate import tabulate
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 from homonim import utils
 from homonim.enums import ProcCrs

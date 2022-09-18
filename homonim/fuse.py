@@ -28,7 +28,7 @@ import rasterio
 import rasterio as rio
 from rasterio.enums import Resampling
 from rasterio.io import DatasetWriter
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 from homonim import utils
 from homonim.enums import Model, ProcCrs

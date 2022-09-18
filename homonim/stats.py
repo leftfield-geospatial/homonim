@@ -30,7 +30,7 @@ import rasterio as rio
 import yaml
 from rasterio.windows import get_data_window, intersect, union, Window
 from tabulate import tabulate
-from tqdm import tqdm
+from tqdm.auto import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from homonim import utils, errors
