@@ -57,7 +57,7 @@ To investigate the improvement in surface reflectance "accuracy" we compare the 
 
 The last table printed by this command is:
 
-.. code:: shell
+.. code:: text
 
     ...
     Summary over bands:

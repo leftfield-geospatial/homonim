@@ -4,7 +4,7 @@ API
 Getting started
 ---------------
 
-Surface reflectance correction is implemented in the :class:`~homonim.fuse.RasterFuse` class.  Here we use it to correct an aerial image to surface reflectance, by fusing it with a Sentinel-2 reference.
+Here we use the :class:`~homonim.fuse.RasterFuse` class to correct an aerial image to surface reflectance, by fusing it with a Sentinel-2 reference.  The images are taken from the ``homonim`` test data.
 
 .. code:: python
 
@@ -29,7 +29,7 @@ Surface reflectance correction is implemented in the :class:`~homonim.fuse.Raste
     with RasterFuse(src_file, ref_file) as fuse:
         fuse.process(corr_file, Model.gain_blk_offset, (5, 5), overwrite=True)
 
-Next, we use :class:`~homonim.compare.RasterCompare` to compare the raw and corrected aerial images with a second reference i.e. a Landsat-8 image.  The comparison results give an indication of the accuracy improvement due to fusion.
+Next, we compare the raw and corrected aerial images with a second reference using :class:`~homonim.compare.RasterCompare`.  The displayed results give an indication of surface reflectance accuracy before and after correction.
 
 .. code:: python
 
