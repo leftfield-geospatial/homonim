@@ -79,7 +79,7 @@ def test_api__tables(param_file: Path):
         assert (len(stats.metadata) > 0)
         param_stats = stats.stats()
 
-    schema_table = stats.schema_table
+    schema_table = stats.schema_table()
     assert len(schema_table) > 0
 
     param_table = stats.stats_table(param_stats)
