@@ -31,13 +31,16 @@ cmp_ref_file = (
 # Compare source and corrected similarity with the independent reference,
 # cmp_ref_file, giving an indication of the improvement in surface reflectance
 # accuracy.
-print('\nComparison key:\n' + RasterCompare.schema_table())
-for cmp_src_file in [src_file, corr_file]:
-    print(
-        f'\nComparing {Path(cmp_src_file).name} with '
-        f'{Path(cmp_ref_file).name}:'
-    )
+summ_dict = {}
+for cmp_src_file, cmp_src_label in zip(
+    [src_file, corr_file],
+    ['Source', 'Corrected'],
+):
     with RasterCompare(cmp_src_file, cmp_ref_file) as compare:
-        cmp_stats = compare.process()
-        print(compare.stats_table(cmp_stats))
+        stats_dict = compare.process()
+        summ_dict[cmp_src_label] = stats_dict['Mean']
+
+# print comparison tables
+print(RasterCompare.schema_table())
+print('\n\n' + RasterCompare.stats_table(summ_dict))
 # [compare-end]
