@@ -184,7 +184,8 @@ class RasterCompare(MatchedPairReader):
         image_stats['Mean'] = mean_stats
         return image_stats
 
-    def stats_table(self, stats_dict: Dict[str, Dict], key_header: str = 'band'):
+    @staticmethod
+    def stats_table(stats_dict: Dict[str, Dict], key_header: str = 'band'):
         """
         Create a table string from the provided comparison statistics.
 
@@ -202,7 +203,7 @@ class RasterCompare(MatchedPairReader):
         """
         stats_list = [dict(**{key_header: key}, **val) for key, val in stats_dict.items()]
         headers = {
-            k: self.schema[k]['abbrev'] if k in self.schema else str.capitalize(k)
+            k: RasterCompare.schema[k]['abbrev'] if k in RasterCompare.schema else str.capitalize(k)
             for k in list(stats_list[0].keys())
         }  # yapf: disable
         return tabulate(stats_list, headers=headers, floatfmt='.3f', stralign='right', tablefmt=utils.table_format)
