@@ -4,55 +4,38 @@ API
 Getting started
 ---------------
 
-Here we use the :class:`~homonim.fuse.RasterFuse` class to correct an aerial image to surface reflectance, by fusing it with a Sentinel-2 reference.  The images are taken from the ``homonim`` test data.
+The :class:`~homonim.fuse.RasterFuse` class implements surface reflectance correction.  Here we use it to correct an aerial image to surface reflectance, by fusing it with a Sentinel-2 reference.  The images are taken from the ``homonim`` test data.
 
-.. code:: python
+.. literalinclude:: examples/api_example.py
+    :language: python
+    :start-after: [correct-start]
+    :end-before: [correct-end]
 
-    from pathlib import Path
-    from homonim import RasterFuse, RasterCompare, Model
 
-    # urls of source and reference test images
-    src_file = (
-        'https://raw.githubusercontent.com/dugalh/homonim/main/'
-        'tests/data/source/ngi_rgb_byte_1.tif'
-    )
-    ref_file = (
-        'https://raw.githubusercontent.com/dugalh/homonim/main/'
-        'tests/data/reference/sentinel2_b432_byte.tif'
-    )
+:class:`~homonim.compare.RasterCompare` can be used for comparing two images.  In the next snippet, we use it to compare the source and corrected aerial images with a second reference using :class:`~homonim.compare.RasterCompare`.  The tabulated results give an indication of surface reflectance accuracy before and after correction.
 
-    # path to corrected file to create
-    corr_file = './corrected.tif'
+.. literalinclude:: examples/api_example.py
+    :language: python
+    :start-after: [compare-start]
+    :end-before: [compare-end]
 
-    # Correct src_file to surface reflectance by fusion with ref_file, using the
-    # `gain-blk-offset` model and a kernel of 5 x 5 pixels.
-    with RasterFuse(src_file, ref_file) as fuse:
-        fuse.process(corr_file, Model.gain_blk_offset, (5, 5), overwrite=True)
+The output:
 
-Next, we compare the raw and corrected aerial images with a second reference using :class:`~homonim.compare.RasterCompare`.  The displayed results give an indication of surface reflectance accuracy before and after correction.
+.. code:: text
 
-.. code:: python
+    ABBREV   DESCRIPTION
+    -------- -----------------------------------------
+    r²       Pearson's correlation coefficient squared
+    RMSE     Root Mean Square Error
+    rRMSE    Relative RMSE (RMSE/mean(ref))
+    N        Number of pixels
 
-    # url of independent landsat reference for evaluation
-    cmp_ref_file = (
-        'https://raw.githubusercontent.com/dugalh/homonim/main/'
-        'tests/data/reference/landsat8_byte.tif'
-    )
+         Band    r²   RMSE   rRMSE     N
+    --------- ----- ------ ------- -----
+       Source 0.390 93.517   2.454 28383
+    Corrected 0.924 16.603   0.489 28383
 
-    # Compare source and corrected similarity with the independent reference,
-    # cmp_ref_file, giving an indication of the improvement in surface reflectance
-    # accuracy.
-    print('\nComparison key:\n' + RasterCompare.schema_table())
-    for cmp_src_file in [src_file, corr_file]:
-        print(
-            f'\nComparing {Path(cmp_src_file).name} with '
-            f'{Path(cmp_ref_file).name}:'
-        )
-        with RasterCompare(cmp_src_file, cmp_ref_file) as compare:
-            cmp_stats = compare.process()
-            print(compare.stats_table(cmp_stats))
-
-You can also take a look at the :ref:`tutorial <Tutorial>` for a more detailed walk through the API.
+Take a look at the :ref:`tutorial <Tutorial>` for a more comprehensive example.
 
 Reference
 ---------

@@ -124,7 +124,7 @@ API
 Example
 ^^^^^^^
 
-Correct and validate using images from the ``homonim`` test data.
+Surface reflectance correction of an aerial image, using a Sentinel-2 reference.
 
 .. comment
     The code below is copied from docs/examples/api_example and # [*] comments removed
@@ -154,48 +154,7 @@ Correct and validate using images from the ``homonim`` test data.
     with RasterFuse(src_file, ref_file) as fuse:
         fuse.process(corr_file, Model.gain_blk_offset, (5, 5), overwrite=True)
 
-    # url of independent landsat reference for evaluation
-    cmp_ref_file = (
-        'https://raw.githubusercontent.com/dugalh/homonim/main/'
-        'tests/data/reference/landsat8_byte.tif'
-    )
-
-    # Compare source and corrected similarity with the independent reference,
-    # cmp_ref_file, giving an indication of the improvement in surface reflectance
-    # accuracy.
-    print('\nComparison key:\n' + RasterCompare.schema_table())
-    for cmp_src_file in [src_file, corr_file]:
-        print(
-            f'\nComparing {Path(cmp_src_file).name} with '
-            f'{Path(cmp_ref_file).name}:'
-        )
-        with RasterCompare(cmp_src_file, cmp_ref_file) as compare:
-            cmp_stats = compare.process()
-            print(compare.stats_table(cmp_stats))
-
 .. api_example_end
-
-..
-    Download the ``homonim`` github repository to get the test imagery. If you have ``git``, you can clone it with:
-    .. code:: shell
-
-       git clone https://github.com/dugalh/homonim.git
-
-    Alternatively, download it from `here <https://github.com/dugalh/homonim/archive/refs/heads/main.zip>`__, extract the
-    zip archive and rename the *homonim-main* directory to *homonim*.
-
-    Using the ``gain-blk-offset`` model and a 5 x 5 pixel kernel, correct the aerial images with the Sentinel-2
-    reference.
-
-    .. code:: shell
-
-       homonim fuse -m gain-blk-offset -k 5 5 -od . ./homonim/tests/data/source/*rgb_byte*.tif ./homonim/tests/data/reference/sentinel2_b432_byte.tif
-
-    Statistically compare the raw and corrected aerial images with the included Landsat-8 reference.
-
-    .. code:: shell
-
-       homonim compare ./homonim/tests/data/source/*rgb_byte*.tif ./*FUSE*.tif ./homonim/tests/data/reference/landsat8_byte.tif
 
 Usage
 -----
