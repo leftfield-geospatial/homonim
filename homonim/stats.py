@@ -118,7 +118,7 @@ class ParamStats:
 
     def __enter__(self):
         self._stack = ExitStack()
-        self._stack.enter_context(rio.Env(GDAL_NUM_THREADS='ALL_CPUs'))
+        self._stack.enter_context(rio.Env(GDAL_NUM_THREADS='ALL_CPUs', GTIFF_FORCE_RGBA=False))
         self._stack.enter_context(logging_redirect_tqdm([logging.getLogger(__package__)]))
         self._param_im = rio.open(self._param_filename, 'r')
         self._stack.enter_context(self._param_im)

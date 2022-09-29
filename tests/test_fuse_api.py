@@ -119,7 +119,8 @@ def test_basic_fusion(
         dict(
             driver='GTiff', dtype='float32', nodata=float('nan'),
             creation_options=dict(
-                tiled=True, blockxsize=512, blockysize=512, compress='deflate', interleave='band', photometric=None
+                tiled=True, blockxsize=512, blockysize=512, compress='deflate', interleave='band',
+                photometric='minisblack'
             )
         ),
         dict(

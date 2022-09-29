@@ -461,7 +461,7 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
             Driver specific creation options e.g. ``compression='deflate'`` for a GeoTiff.
             See the `GDAL docs <https://gdal.org/drivers/raster/index.html>`_ for available keys and values.
         """
-        with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
+        with rio.Env(GDAL_NUM_THREADS='ALL_CPUs', GTIFF_FORCE_RGBA=False):
             with rio.open(filename, 'w', driver=driver, **self.profile, **kwargs) as out_im:
                 out_im.write(self._array, indexes=range(1, self.count + 1) if self.count > 1 else 1)
 
