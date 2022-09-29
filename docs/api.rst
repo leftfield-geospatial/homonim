@@ -147,10 +147,11 @@ ProcCrs
 
 .. _tutorial:
 
-Tutorial
---------
+Tutorials
+---------
 
 .. toctree::
     :maxdepth: 1
 
     examples/api_tutorial.ipynb
+    examples/gef_case_study.ipynb
