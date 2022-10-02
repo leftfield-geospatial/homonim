@@ -143,9 +143,10 @@ class RasterFuse(MatchedPairReader):
         """
         # TODO: test effect of photometric=None on full size NGI files with ProcCrs.src param im (is bigtiff
         #  necessary then?).  Also test ovw compress with / w/o compress_overview
+        # TODO: add compress_overview='auto' when gdal >=3.6
         creation_options = creation_options or dict(
             tiled=True, blockxsize=512, blockysize=512, compress='deflate', interleave='band', photometric='minisblack',
-            bigtiff='if_safer', compress_overview='auto',
+            bigtiff='if_safer',
         )
         return dict(driver=driver, dtype=dtype, nodata=nodata, creation_options=creation_options)
 
