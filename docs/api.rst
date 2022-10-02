@@ -35,7 +35,7 @@ The output:
        Source 0.390 93.517   2.454 28383
     Corrected 0.924 16.603   0.489 28383
 
-Take a look at the :ref:`tutorial <Tutorial>` for a more comprehensive example.
+Take a look at the :ref:`tutorials <Tutorials>` for a more comprehensive example.
 
 Reference
 ---------
@@ -145,13 +145,11 @@ ProcCrs
 .. autoclass:: ProcCrs
     :members:
 
-.. _tutorial:
-
 Tutorials
 ---------
 
 .. toctree::
     :maxdepth: 1
 
-    examples/api_tutorial.ipynb
-    examples/gef_case_study.ipynb
+    examples/basic_correction.ipynb
+    examples/regression_modelling.ipynb
