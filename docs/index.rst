@@ -18,6 +18,7 @@ Contents
    description
    installation
    background
+   tutorials
    cli
    api
    advanced
