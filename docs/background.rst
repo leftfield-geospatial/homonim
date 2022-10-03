@@ -18,7 +18,7 @@ Reference image
 
 Satellite programs, such as Landsat, Sentinel-2, and MODIS, provide suitable *reference* surface reflectance imagery freely to the public.  geedim_ is recommended as a companion tool to ``homonim`` for acquiring cloud/shadow-free imagery from these, and other programs.  geedim_ acquired imagery includes metadata that is used by ``homonim`` for automatic matching of spectral bands.  Alternatively, satellite imagery is available from a number of sources, including the `Google <https://developers.google.com/earth-engine/datasets>`_, `Amazon <https://aws.amazon.com/earth/>`_ and `Microsoft <https://planetarycomputer.microsoft.com/catalog>`_ repositories.
 
-The  `regression modelling <examples/regression_modelling.ipynb>`_ tutorial demonstrates the acquisition of a suitable reference using ``geedim``.
+The  `regression modelling <examples/regression_modelling.ipynb>`_ tutorial demonstrates how to use ``geedim`` to acquire a reference image.
 
 Source image
 ------------
@@ -30,7 +30,7 @@ Fusion
 
 ``homonim`` uses spatially varying localised *models* to describe the surface reflectance relationship between *source* and *reference*.  These *models* are fitted at each pixel location, inside a small *kernel* (window), using a fast DFT approach.  After fitting, ``homonim`` produces the *corrected* image by applying the models to the *source* (i.e. "fusing" the *source* with the *reference*).
 
-From the user perspective, the *kernel shape* (pixel dimensions) and *model* are the main parameters for configuring *fusion*.  When not specified, ``homonim`` uses default values that will provide reasonable results for most use cases.
+From the user perspective, the *kernel shape* (pixel dimensions) and *model* are the main parameters for configuring *fusion*.  They can be specified with the :option:`--model <homonim-fuse --model>` and :option:`--kernel-shape <homonim-fuse --kernel-shape>` via the command line; or with the corresponding arguments in the :meth:`homonim.RasterFuse.process` API.  When not specified, ``homonim`` uses default values that will provide reasonable results for most use cases.
 
 More details on the theoretical basis for the method can be found in the `paper <https://raw.githubusercontent.com/dugalh/homonim/main/docs/radiometric_homogenisation_preprint.pdf>`_.
 
