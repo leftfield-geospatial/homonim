@@ -55,7 +55,6 @@ extensions = [
     'sphinx_gallery.load_style',
     'jupyter_sphinx',
     'nbsphinx',
-    'nbsphinx_link',
     # 'sphinx.ext.autosectionlabel',
 ] # yapf: disable
 
