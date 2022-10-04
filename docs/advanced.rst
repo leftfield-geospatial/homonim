@@ -13,7 +13,7 @@ Processing (i.e. model fitting or image comparison) takes place in one of the *s
 
 Before processing ``homonim`` re-projects one of the *source* or *reference* so that both are in the same *processing CRS*.   In the typical case for surface reflectance correction, the *source* image is re-projected to the *reference CRS*.  Then, once calculated, the correction parameters are re-projected back to the *source* CRS, and applied to the *source* image to produce the corrected image.  The diagram below illustrates this process.
 
-.. image:: https://raw.githubusercontent.com/dugalh/homonim/update_docs/docs/fusion_block_diagram.png
+.. image:: fusion_block_diagram.png
    :alt: example
 
 
