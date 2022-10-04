@@ -18,10 +18,10 @@ Contents
    description
    installation
    background
-   tutorials
    cli
    api
    advanced
+   tutorials
 
 * :ref:`genindex`
 

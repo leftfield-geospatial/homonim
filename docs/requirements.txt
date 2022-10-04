@@ -3,3 +3,4 @@ sphinx-click
 sphinx-rtd-theme
 nbsphinx
 ipykernel
+sphinx_gallery < 0.11
