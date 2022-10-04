@@ -1,13 +1,10 @@
-Advanced topics
-===============
+Advanced usage
+==============
 
 Block processing
 ----------------
 
-``homonim`` splits and processes *source* - *reference* image pairs in blocks.  This is done to limit memory usage and allow the processing of large images.  In addition, processing speed is increased by processing blocks concurrently.  The block size (MB) and number of concurrent blocks can be set by the user.  See the relevant sections of the API and CLI docs for more details.
-
-..
-    TO DO: add links to sections, or limit this to CLI
+``homonim`` splits and processes *source* - *reference* image pairs in blocks.  This is done to limit memory usage and allow the processing of large images.  In addition, processing speed is increased by processing blocks concurrently.  The block size (MB) and number of concurrent blocks can be set by the user with the :option:`--max-block-mem <homonim fuse --max-block-mem>` and :option:`--threads <homonim fuse --threads>` command line parameters respectively; and the ``block_config`` parameter of the :meth:`homonim.RasterFuse.process` API.
 
 Processing CRS and re-projections
 ---------------------------------
@@ -26,7 +23,8 @@ Similarly, when comparing images, ``homonim`` would re-project the *source* to t
 
 By default ``homonim`` uses *average* resampling when downsampling (re-projecting from high to low resolution), and *cubic spline* resampling when upsampling (re-projecting from low to high resolution).  The reasons for these choices are explained in the `paper <https://raw.githubusercontent.com/dugalh/homonim/main/docs/radiometric_homogenisation_preprint.pdf>`_.
 
-While the defaults settings are recommended, the ``homonim`` CLI and API do allow the user to specify the   *processing CRS*, and resampling methods for *downsampling* and *upsampling*.  See the ?docs? for more details.
+While the defaults settings are recommended, the ``homonim`` CLI and API do allow the user to specify the *processing CRS*, and resampling methods for *downsampling* and *upsampling*.  On the command line, the relevant parameters are :option:`--proc-crs <homonim fuse --proc-crs>`, :option:`--downsampling <homonim fuse --downsampling>` and :option:`--upsampling <homonim fuse --upsampling>`.  Via the API, the corresponding settings are the ``proc_crs`` argument of :meth:`RasterFuse` and the ``model_config`` argument of :meth:`homonim.RasterFuse.process`.
+
 
 ..
     The user can however force the *processing CRS* to higher resolution of the *source* or *reference* CRS's.  This may be useful in certain special cases (e.g. investigating im correction methods).

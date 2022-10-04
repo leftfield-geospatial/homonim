@@ -18,6 +18,7 @@ Contents
    description
    installation
    background
+   case_studies
    cli
    api
    advanced

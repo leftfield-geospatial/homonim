@@ -1,7 +1,5 @@
-.. _tutorials:
-
-Tutorials
-=========
+Case studies
+============
 
 .. nbgallery::
 
