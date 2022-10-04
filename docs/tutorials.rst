@@ -5,5 +5,5 @@ Tutorials
 
 .. nbgallery::
 
-    examples/basic_correction.ipynb
-    examples/regression_modelling.ipynb
+    tutorials/basic_correction.ipynb
+    tutorials/regression_modelling.ipynb

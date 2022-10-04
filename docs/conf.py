@@ -51,8 +51,11 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.autosummary',
     'sphinx.ext.napoleon',
-    'nbsphinx',
+    'sphinx_copybutton',
     'sphinx_gallery.load_style',
+    'jupyter_sphinx',
+    'nbsphinx',
+    'nbsphinx_link',
     # 'sphinx.ext.autosectionlabel',
 ] # yapf: disable
 
@@ -101,8 +104,15 @@ nbsphinx_prolog = """
 """
 nbsphinx_thumbnails = {
     'background': 'background_eg.png',
-    'background.rst': 'background_eg.png',
+    'case_studies/regression_modelling': 'background_eg.png',
+    # 'background.rst': 'background_eg.png',
 }
+nbsphinx_execute_arguments = [
+    '--InlineBackend.figure_formats={"svg", "pdf"}',
+    '--InlineBackend.rc=figure.dpi=96',
+]
+nbsphinx_widgets_path=''
+nbsphinx_requirejs_path=''
 # -- Workaround for cloup arguments ------------------------------------------
 from sphinx_click import ext
 
