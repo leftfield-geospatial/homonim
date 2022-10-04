@@ -101,7 +101,7 @@ nbsphinx_prolog = """
 """
 nbsphinx_thumbnails = {
     'background': 'background_eg.png',
-    'basic_correction': 'background_eg.png',
+    'background.rst': 'background_eg.png',
 }
 # -- Workaround for cloup arguments ------------------------------------------
 from sphinx_click import ext
