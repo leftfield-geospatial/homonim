@@ -5,6 +5,9 @@ homonim
     :start-after: short_descr_start
     :end-before: short_descr_end
 
+.. image:: readme_eg.png
+   :alt: example
+
 .. include:: description.rst
 
 .. include:: installation.rst

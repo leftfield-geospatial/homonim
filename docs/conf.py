@@ -99,7 +99,9 @@ nbsphinx_prolog = """
    This page was generated from a Jupyter notebook. To run and interact with it, 
    you can download it :download:`here <../{{ env.docname }}.ipynb>`.
 """
-
+nbsphinx_thumbnails = {
+    'background': 'background_eg.png',
+}
 # -- Workaround for cloup arguments ------------------------------------------
 from sphinx_click import ext
 

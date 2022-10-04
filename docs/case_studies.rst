@@ -5,3 +5,4 @@ Case studies
 
     examples/basic_correction.ipynb
     examples/regression_modelling.ipynb
+    background.rst

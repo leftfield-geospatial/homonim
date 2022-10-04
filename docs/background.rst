@@ -4,7 +4,7 @@ Background
 Reference image
 ---------------
 
-.. image:: https://raw.githubusercontent.com/dugalh/homonim/update_docs/docs/background_eg.png
+.. image:: background_eg.png
    :alt: example
 
 ``homonim`` requires a *reference* surface reflectance image with which a *source* image is fused to produce the *corrected* image.  The *reference* is usually a satellite image at a coarser resolution that the *source*.  For best results, the *reference* should be chosen to satisfy the following criteria:
