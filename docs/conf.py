@@ -103,7 +103,8 @@ nbsphinx_prolog = """
 """
 nbsphinx_thumbnails = {
     'background': 'background_eg.png',
-    'case_studies/regression_modelling': 'background_eg.png',
+    'case_studies/regression_modelling': 'case_studies/regression_modelling-eval.png',
+    'case_studies/aerial_mosaic': 'case_studies/aerial_mosaic-corrected_mosaic.png',
     # 'background.rst': 'background_eg.png',
 }
 nbsphinx_execute_arguments = [
