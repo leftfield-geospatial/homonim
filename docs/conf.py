@@ -102,7 +102,6 @@ nbsphinx_prolog = """
    you can download it :download:`here <../{{ env.docname }}.ipynb>`.
 """
 nbsphinx_thumbnails = {
-    'background': 'background_eg.png',
     'case_studies/regression_modelling': 'case_studies/regression_modelling-eval.png',
     'case_studies/aerial_mosaic': 'case_studies/aerial_mosaic-corrected_mosaic.jpg',
     # 'background.rst': 'background_eg.png',
