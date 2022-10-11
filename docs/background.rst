@@ -9,16 +9,17 @@ Reference image
 
 ``homonim`` requires a *reference* surface reflectance image with which a *source* image is fused to produce the *corrected* image.  The *reference* is usually a satellite image at a coarser resolution that the *source*.  For best results, the *reference* should be chosen to satisfy the following criteria:
 
-- Co-location: bounds of the *reference* image should cover those of the *source*, and *source* and *reference* should be ortho-rectified / co-registered.
-- Concurrency: *source* and *reference* capture dates should be close in time, so there is minimal land cover change between them.
-- Spectral similarity: the *reference* should contain bands whose spectral responses overlap with those of the *source*.
+- **Co-location**: bounds of the *reference* image should cover those of the *source*, and *source* and *reference* should be ortho-rectified / co-registered.
+- **Concurrency**: *source* and *reference* capture dates should be close in time, so there is minimal land cover change between them.
+- **Spectral similarity**: the *reference* should contain bands whose spectral responses overlap with those of the *source*.
 
 ..
     While some care should be taken in selecting a *reference*, it is seldom difficult to satisfy these criteria in practice.
 
 Satellite programs, such as Landsat, Sentinel-2, and MODIS, provide suitable *reference* surface reflectance imagery freely to the public.  geedim_ is recommended as a companion tool to ``homonim`` for acquiring cloud/shadow-free imagery from these, and other programs.  geedim_ acquired imagery includes metadata that is used by ``homonim`` for automatic matching of spectral bands.  Alternatively, satellite imagery is available from a number of sources, including the `Google <https://developers.google.com/earth-engine/datasets>`_, `Amazon <https://aws.amazon.com/earth/>`_ and `Microsoft <https://planetarycomputer.microsoft.com/catalog>`_ repositories.
 
-The  `regression modelling <examples/regression_modelling.ipynb>`_ tutorial demonstrates how to use ``geedim`` to acquire a reference image.
+.. note::
+    The  `regression modelling <examples/regression_modelling.ipynb>`_ tutorial demonstrates how to use ``geedim`` to acquire a reference image.
 
 Source image
 ------------

@@ -14,26 +14,30 @@ The mosaic consists of ± 2000 mages, captured over the Little Karoo (South Afri
 Correction
 ----------
 
-A MODIS NBAR (MCD43A4) image, concurrent with the source capture dates, was selected as the reference.  MCD43A4 images are 16-day best pixel composites, and are corrected for atmospheric and BRDF effects.  While the spatial resolution of the image is low (500 m), it satisfies the recommendations discussed in the `background section <../background.rst>`_, and so makes a reasonable choice.  The *source* aerial mosaic is overlaid on the MODIS reference in the figure below.  Seamlines between images, "hot spots", and other colour variations resulting from atmospheric and BRDF effects are clearly visible.
+A MODIS NBAR (MCD43A4) image, concurrent with the source capture dates, was selected as the reference.  While the spatial resolution of the image is low (500 m), it satisfies the recommendations discussed in the `background section <../background.rst>`_, and so makes a reasonable choice.
 
-.. image:: aerial_mosaic-source_mosaic.jpg
+The *source* aerial mosaic is overlaid on the MODIS reference in the figure below.  Seamlines between images, "hot spots", and other colour variations resulting from atmospheric and BRDF effects are clearly visible.
+
+.. figure:: aerial_mosaic-source_mosaic.jpg
     :width: 80%
     :align: center
 
-|
+    **Source mosaic**
 
-Correction was performed with the *gain* model and a kernel of 1 pixel.  The small kernel was chosen to mitigate the effect of large (500 m) MODIS pixels.  The next figure shows the corrected mosaic overlaid on the MODIS reference.  There is a clear improvement on the source mosaic.  Seamlines and other variations are no longer visible, and there is a good match between the corrected images and the MODIS backdrop.
+Correction was performed with the *gain* model and a kernel of 1 pixel.  The small kernel was chosen to mitigate the effect of large (500 m) MODIS pixels.  The next figure shows the corrected mosaic overlaid on the MODIS reference.
 
-.. image:: aerial_mosaic-corrected_mosaic.jpg
+.. figure:: aerial_mosaic-corrected_mosaic.jpg
     :width: 80%
     :align: center
 
-|
+    **Corrected mosaic**
+
+There is a clear improvement from the source mosaic.  Seamlines and other variations are no longer visible, and there is a good match between the corrected images and the MODIS backdrop.
 
 Evaluation
 ----------
 
-A simple way of evaluating the relative improvement in surface reflectance accuracy, is to compare the source and corrected mosaics with a reference image.  Rather than compare with the MODIS NBAR reference, which was used for fitting the correction models, we compared with an "independent" SPOT-5 image.  This 10 m resolution SPOT-5 image covered a portion of the study area.
+A simple way of evaluating the relative improvement in surface reflectance accuracy, is to compare the source and corrected mosaics with a reference image.  Rather than compare with the MODIS NBAR reference (which was used for fitting the correction models), we compared with an "independent" SPOT-5 image.  This 10 m resolution SPOT-5 image covered a portion of the study area.
 
 .. image:: aerial_mosaic-spot5_extent.jpg
     :width: 50 %
@@ -43,8 +47,19 @@ A simple way of evaluating the relative improvement in surface reflectance accur
 
 After correcting the SPOT-5 image to surface reflectance with ATCOR-3, it was statistically compared to the source and corrected mosaics.  SPOT-5 does not have a blue band, so this was omitted from the comparison.
 
-.. image:: aerial_mosaic-source_spot5_scatter.png
+.. figure:: aerial_mosaic-source_spot5_scatter.png
+    :align: center
 
-.. image:: aerial_mosaic-corrected_spot5_scatter.png
+    **Source - reference correlation**
 
-The scatter plots and *R*:sup:`2` values show a sizeable improvement after correction.  Further details and discussions on this example can be found in the `paper <https://raw.githubusercontent.com/dugalh/homonim/main/docs/radiometric_homogenisation_preprint.pdf>`_
+.. figure:: aerial_mosaic-corrected_spot5_scatter.png
+    :align: center
+
+    **Corrected - reference correlation**
+
+The scatter plots and *R*:sup:`2` values show a sizeable improvement after correction.  Further details and discussion on this example can be found in the `paper <https://raw.githubusercontent.com/dugalh/homonim/main/docs/radiometric_homogenisation_preprint.pdf>`_
+
+..
+    TODO: abbreviate this if possible.  I think case studies should be low on technical details.
+
+    MCD43A4 images are 16-day best pixel composites, and are corrected for atmospheric and BRDF effects.
