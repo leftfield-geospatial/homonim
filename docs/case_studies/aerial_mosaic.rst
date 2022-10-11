@@ -16,16 +16,16 @@ Correction
 
 A MODIS NBAR (MCD43A4) image, concurrent with the source capture dates, was selected as the reference.  MCD43A4 images are 16 day best pixel composites, and are corrected for atmospheric and BRDF effects.  While the spatial resolution of the image is low (500 m), it satisfies the recommendations discussed in the `background section <../background.rst>`_, and so makes a reasonable choice.  The *source* aerial mosaic is overlaid on the MODIS reference in the figure below.  Seamlines between images, "hot spots", and other colour variations resulting from atmospheric and BRDF effects are clearly visible.
 
-.. image:: aerial_mosaic-source_mosaic.png
-    :scale: 80 %
+.. image:: aerial_mosaic-source_mosaic.jpg
+    :width: 80%
     :align: center
 
 |
 
 Correction was performed with the *gain-only* model and a kernel of 1 pixel.  The small kernel was chosen to mitigate the effect of large (500 m) MODIS pixels.  The next figure shows the corrected mosaic overlaid on the MODIS reference.  Seamlines and other variations are no longer visible, and there is a good match between the corrected images and the MODIS backdrop.
 
-.. image:: aerial_mosaic-corrected_mosaic.png
-    :scale: 80 %
+.. image:: aerial_mosaic-corrected_mosaic.jpg
+    :width: 80%
     :align: center
 
 |
