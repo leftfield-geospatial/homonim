@@ -57,7 +57,7 @@ After correcting the SPOT-5 image to surface reflectance with ATCOR-3, it was st
 
     **Corrected - reference correlation**
 
-The scatter plots and *R*:sup:`2` values show a sizeable improvement after correction.  Further details and discussion on this example can be found in the `paper <https://raw.githubusercontent.com/dugalh/homonim/main/docs/radiometric_homogenisation_preprint.pdf>`_
+The scatter plots and *r*:sup:`2` values show a sizeable improvement after correction.  Further details and discussion on this example can be found in the `paper <https://raw.githubusercontent.com/dugalh/homonim/main/docs/radiometric_homogenisation_preprint.pdf>`_
 
 ..
     TODO: abbreviate this if possible.  I think case studies should be low on technical details.
