@@ -35,8 +35,8 @@ Evaluation
 
 The source and corrected mosaics were compared with a reference surface reflectance image to evaluate the relative improvement in surface reflectance accuracy.  Rather than compare with the MODIS NBAR reference, which was used for fitting the correction models, an "independent" SPOT-5 image was used.  This 10 m resolution image covered a portion of the study area.
 
-.. image:: aerial_mosaic-spot5_extent.png
-    :scale: 50 %
+.. image:: aerial_mosaic-spot5_extent.jpg
+    :width: 50 %
     :align: center
 
 |
