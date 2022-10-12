@@ -138,11 +138,6 @@ Bibtex::
     }
 
 
-Author
-------
-
-**Dugal Harris** - dugalh@gmail.com
-
 .. |Tests| image:: https://github.com/dugalh/homonim/actions/workflows/run-unit-tests.yml/badge.svg
    :target: https://github.com/dugalh/homonim/actions/workflows/run-unit-tests.yml
 .. |codecov| image:: https://codecov.io/gh/dugalh/homonim/branch/main/graph/badge.svg?token=A01698K96C
