@@ -202,10 +202,6 @@ Bibtex::
         URL = {https://doi.org/10.1080/01431161.2018.1528404},
     }
 
-Author
-------
-
-**Dugal Harris** - dugalh@gmail.com
 
 .. |Tests| image:: https://github.com/dugalh/homonim/actions/workflows/run-unit-tests.yml/badge.svg
    :target: https://github.com/dugalh/homonim/actions/workflows/run-unit-tests.yml
