@@ -21,6 +21,8 @@ Satellite programs, such as Landsat, Sentinel-2, and MODIS, provide suitable *re
 .. note::
     The  `regression modelling <examples/regression_modelling.ipynb>`_ tutorial demonstrates how to use ``geedim`` to acquire a reference image.
 
+.. _background_source::
+
 Source image
 ------------
 
