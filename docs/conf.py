@@ -104,7 +104,7 @@ nbsphinx_prolog = """
 nbsphinx_thumbnails = {
     'case_studies/regression_modelling': 'case_studies/regression_modelling-eval.png',
     'case_studies/aerial_mosaic': 'case_studies/aerial_mosaic-corrected_mosaic.jpg',
-    # 'background.rst': 'background_eg.png',
+    'case_studies/drone_mosaic': 'case_studies/drone_mosaic-src_ref_corr.jpg',
 }
 nbsphinx_execute_arguments = [
     '--InlineBackend.figure_formats={"svg", "pdf"}',

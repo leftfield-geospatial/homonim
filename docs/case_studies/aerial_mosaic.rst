@@ -26,6 +26,8 @@ The *source* aerial mosaic is overlaid on the MODIS reference in the figure belo
 
 Correction was performed with the *gain* model and a kernel of 1 pixel.  The small kernel was chosen to mitigate the effect of large (500 m) MODIS pixels.  The next figure shows the corrected mosaic overlaid on the MODIS reference.
 
+.. _corrected-mosaic:
+
 .. figure:: aerial_mosaic-corrected_mosaic.jpg
     :width: 80%
     :align: center
