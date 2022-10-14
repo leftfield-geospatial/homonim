@@ -1,13 +1,13 @@
 Regression modelling
 ====================
 
-``homonim`` can help improve accuracy and consistency in quantitative remote sensing applications.  This case study demonstrates the use of ``homonim`` to improve the relevance of image features for modelling aboveground carbon (AGC).  The images and ground truth data are taken from an `AGC mapping study <https://github.com/dugalh/map_thicket_agc>`_.  This study investigated mapping AGC in the thicket biome (South Africa) from multi-spectral imagery.
+``homonim`` can help improve accuracy and consistency in quantitative remote sensing applications.  This case study demonstrates the use of ``homonim`` to improve the relevance of image features for modelling aboveground carbon (AGC).  The images and ground truth data are taken from an `AGC mapping study <https://github.com/dugalh/map_thicket_agc>`_.
 
-A small mosaic of 4 `NGI <https://ngi.dalrrd.gov.za/index.php/what-we-do/aerial-photography-and-imagery>`_ aerial images covering the study site were corrected to surface reflectance with ``homonim``.  Correction was performed with the *gain-blk-offset* model, a kernel shape of 15x15 pixels, and a Sentinel-2 reference image.  AGC ground truth data for 85 plots is overlaid on the corrected mosaic in the figure below.
+A small mosaic of 4 `NGI <https://ngi.dalrrd.gov.za/index.php/what-we-do/aerial-photography-and-imagery>`_ aerial images covering the study site were corrected to surface reflectance with ``homonim``.  Correction was performed with the *gain-blk-offset* model, a kernel shape of 15x15 pixels, and a Sentinel-2 reference image.  AGC ground truth data for 85 plots are overlaid on the corrected mosaic in the figure below.
 
 .. image:: regression_modelling-agc_map.jpg
 
-In this example, it turns out NDVI is reasonably good predictor of AGC.  The next figure shows the correlation of NDVI and AGC for each ground truth plot, before and after correction to surface reflectance.
+In this example, it turns out `NDVI <https://en.wikipedia.org/wiki/Normalized_difference_vegetation_index>`_ is reasonably good predictor of AGC.  The next figure shows the correlation of NDVI and AGC for each ground truth plot, before and after correction to surface reflectance.
 
 .. image:: regression_modelling-eval.png
 
