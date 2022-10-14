@@ -16,7 +16,7 @@ Reference image
 ..
     While some care should be taken in selecting a *reference*, it is seldom difficult to satisfy these criteria in practice.
 
-Satellite programs, such as Landsat, Sentinel-2, and MODIS, provide suitable *reference* surface reflectance imagery freely to the public.  geedim_ is recommended as a companion tool to ``homonim`` for acquiring cloud/shadow-free imagery from these, and other programs.  geedim_ acquired imagery includes metadata that is used by ``homonim`` for automatic matching of spectral bands.  Alternatively, satellite imagery is available from a number of sources, including the `Google <https://developers.google.com/earth-engine/datasets>`_, `Amazon <https://aws.amazon.com/earth/>`_ and `Microsoft <https://planetarycomputer.microsoft.com/catalog>`_ repositories.
+Satellite programs, such as Landsat, Sentinel-2, and MODIS, provide suitable *reference* surface reflectance imagery freely to the public.  geedim_ is recommended as a companion tool to ``homonim`` for acquiring cloud/shadow-free imagery from these, and other programs.  ``geedim`` acquired imagery includes metadata that is used by ``homonim`` for automatic matching of spectral bands.  Alternatively, satellite imagery is available from a number of sources, including the `Google <https://developers.google.com/earth-engine/datasets>`_, `Amazon <https://aws.amazon.com/earth/>`_ and `Microsoft <https://planetarycomputer.microsoft.com/catalog>`_ repositories.
 
 .. note::
     The  `regression modelling <examples/regression_modelling.ipynb>`_ tutorial demonstrates how to use ``geedim`` to acquire a reference image.
