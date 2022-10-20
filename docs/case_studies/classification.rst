@@ -7,7 +7,7 @@ There are 4 aerial images with 50 cm spatial resolution and 4 spectral bands (re
 
 - **Spekboom**: a species of succulent shrub.
 - **Tree**: woody trees.
-- **Background**: other vegetation, bare ground etc not included in the other classes.
+- **Background**: other vegetation, bare ground etc.
 
 Some example polygons are shown below, overlaid on an aerial image.
 
@@ -24,7 +24,7 @@ The aerial images were corrected with ``homonim`` using the *gain* model, a 1 x 
 
     **Class densities**
 
-The *spekboom* and *tree* classes appear more compact, and better separated after correction.  That said, it is difficult to say anything conclusively from this figure.
+The *spekboom* and *tree* classes appear more compact, and likely better separated after correction.
 
 To quantify the effect of surface reflectance correction, a per-pixel naive Bayes classifier was evaluated on the source and corrected imagery.  (Evaluation used the raw red, green, blue and NIR band pixel values as features, and a 10-fold cross-validation for training and testing.)  Normalised confusion matrix, accuracy, and AUC (area under the ROC curve) values are tabulated below.
 
