@@ -105,6 +105,7 @@ nbsphinx_thumbnails = {
     'case_studies/regression_modelling': 'case_studies/regression_modelling-eval.png',
     'case_studies/aerial_mosaic': 'case_studies/aerial_mosaic-corrected_mosaic.jpg',
     'case_studies/drone_mosaic': 'case_studies/drone_mosaic-src_ref_corr.jpg',
+    'case_studies/classification': 'case_studies/classification-spectral_kde.jpg',
 }
 nbsphinx_execute_arguments = [
     '--InlineBackend.figure_formats={"svg", "pdf"}',
