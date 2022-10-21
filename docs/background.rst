@@ -1,6 +1,8 @@
 Background
 ==========
 
+.. _reference_image:
+
 Reference image
 ---------------
 
