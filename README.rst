@@ -9,23 +9,19 @@ Correct aerial and satellite imagery to surface reflectance.
 
 .. short_descr_end
 
+.. image:: https://raw.githubusercontent.com/dugalh/homonim/update_docs/docs/readme_eg.png
+   :alt: example
+
 .. description_start
 
 Description
 -----------
 
-``homonim`` provides a command line interface and API for correcting remotely sensed imagery to approximate surface reflectance.  It is a form of *spectral harmonisation*, that adjusts for spatially varying atmospheric and anisotropic (BRDF) effects, by *fusion* with satellite surface reflectance data. Manual reflectance measurements and target placements are not required.
+``homonim`` provides a command line interface and API for correcting remotely sensed imagery to approximate surface reflectance.  It implements a form of *spectral harmonisation*, that adjusts for spatially varying atmospheric and anisotropic (BRDF) effects, by *fusion* with satellite surface reflectance data.  Manual reflectance measurements and target placements are not required.
 
-``homonim`` is useful as a pre-processing step for quantitative mapping applications such as biomass estimation or precision agriculture, and for reducing seamlines and other visual artefacts in image mosaics.  The consistency of multi-temporal data may be improved by it's use.  It can be applied to multi-spectral drone, aerial and satellite imagery.
-
-..
-    ``homonim`` is based on the method described in the paper: `Radiometric homogenisation of aerial images by calibrating with satellite data <https://raw.githubusercontent.com/dugalh/homonim/main/docs/radiometric_homogenisation_preprint.pdf>`__.
-    TO DO: also mention it's use in harmonising and multi-temporal apps
+``homonim`` is useful for pre-processing in quantitative mapping applications,and for reducing seamlines and other visual artefacts in image mosaics.  It can be applied to multi-spectral drone, aerial and satellite imagery.  The consistency of multi-temporal and multi-sensor data can improved through its use.
 
 .. description_end
-
-.. image:: https://raw.githubusercontent.com/dugalh/homonim/update_docs/docs/readme_eg.png
-   :alt: example
 
 See the documentation site for more detail: https://homonim.readthedocs.io/.
 
@@ -54,19 +50,6 @@ pip
    pip install homonim
 
 .. install_end
-
-.. example_start
-
-..
-    Example
-    -------
-
-    Mosaics of 0.5 m resolution aerial imagery before and after correction with ``homonim``. Correction was performed using the *gain-blk-offset* model and a 5 x 5 pixel kernel, with a Landsat-7 reference image.
-
-    .. image:: https://raw.githubusercontent.com/dugalh/homonim/update_docs/docs/readme_eg.png
-       :alt: example
-
-    .. example_end
 
 Getting started
 ---------------
@@ -124,7 +107,7 @@ API
 Example
 ^^^^^^^
 
-Surface reflectance correction of an aerial image, using a Sentinel-2 reference.
+Surface reflectance correction of an aerial image using a Sentinel-2 reference.
 
 .. comment
     The code below is copied from docs/examples/api_example and # [*] comments removed
@@ -159,17 +142,17 @@ Surface reflectance correction of an aerial image, using a Sentinel-2 reference.
 Usage
 -----
 
-See the documentation `here <https://homonim.readthedocs.io/>`__.
+See the documentation `here <https://homonim.readthedocs.io/>`_.
 
 Terminology
 -----------
 
-``homonim`` is shorthand for *homogenise image* and is a reference to `the paper <https://raw.githubusercontent.com/dugalh/homonim/main/docs/radiometric_homogenisation_preprint.pdf>`_ on which it is based.
+``homonim`` is shorthand for *homogenise image* and is a reference to `the paper <https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data>`_ on which it is based.
 
 Credits
 -------
 
-``homonim`` makes use of the following excellent projects:
+``homonim`` relies on these excellent packages:
 
 -  `rasterio <https://github.com/rasterio/rasterio>`__
 -  `opencv <https://github.com/opencv/opencv>`__
