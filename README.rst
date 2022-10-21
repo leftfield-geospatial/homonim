@@ -3,15 +3,15 @@
 homonim
 =======
 
+.. image:: https://raw.githubusercontent.com/dugalh/homonim/update_docs/docs/readme_eg.png
+   :alt: example
+
+
 .. short_descr_start
 
 Correct aerial and satellite imagery to surface reflectance.
 
 .. short_descr_end
-
-.. image:: https://raw.githubusercontent.com/dugalh/homonim/update_docs/docs/readme_eg.png
-   :alt: example
-
 .. description_start
 
 Description
