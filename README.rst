@@ -139,6 +139,12 @@ Surface reflectance correction of an aerial image using a Sentinel-2 reference.
 
 .. api_example_end
 
+Acquiring reference imagery
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+`geedim <https://github.com/dugalh/geedim>`_ can be used as a companion tool for searching and downloading cloud-free reference imagery.
+
+
 Usage
 -----
 
