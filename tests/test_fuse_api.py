@@ -120,7 +120,7 @@ def test_basic_fusion(
             driver='GTiff', dtype='float32', nodata=float('nan'),
             creation_options=dict(
                 tiled=True, blockxsize=512, blockysize=512, compress='deflate', interleave='band',
-                photometric='minisblack'
+                #photometric='minisblack'
             )
         ),
         dict(
