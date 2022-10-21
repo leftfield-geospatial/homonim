@@ -52,4 +52,4 @@ To quantify the effect of surface reflectance correction, a per-pixel naive Baye
 |                |  +----------------+------------+----------+------+  |          |      |
 +----------------+-----------------------------------------------------+----------+------+
 
-There is a useful improvement in accuracy after correction, implying that the corrected surface reflectance is less noisy, and better at describing the vegetation classes.  This case study demonstrates the benefits of pre-processing with ``homonim`` in multi-spectral classification problems.
+There is a useful improvement in accuracy after correction, implying that the corrected surface reflectance is less noisy and better at describing the vegetation classes.  This case study demonstrates the benefits of pre-processing with ``homonim`` in multi-spectral classification problems.

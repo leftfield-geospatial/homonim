@@ -7,19 +7,16 @@ Reference image
 .. image:: background_eg.png
    :alt: example
 
-``homonim`` requires a *reference* surface reflectance image with which a *source* image is fused to produce the *corrected* image.  The *reference* is usually a satellite image at a coarser resolution that the *source*.  For best results, the *reference* should be chosen to satisfy the following criteria:
+``homonim`` fuses a *source* image with a *reference* surface reflectance image to produce the *corrected* image.  The *reference* must be supplied by the user, and is usually a satellite image at a coarser resolution that the *source*.  For best results, the *reference* should satisfy these criteria:
 
 - **Co-location**: bounds of the *reference* image should cover those of the *source*, and *source* and *reference* should be ortho-rectified / co-registered.
-- **Concurrency**: *source* and *reference* capture dates should be close in time, so there is minimal land cover change between them.
+- **Concurrency**: *source* and *reference* capture dates should be close in time, with minimal land cover change between them.
 - **Spectral similarity**: the *reference* should contain bands whose spectral responses overlap with those of the *source*.
 
-..
-    While some care should be taken in selecting a *reference*, it is seldom difficult to satisfy these criteria in practice.
-
-Satellite programs, such as Landsat, Sentinel-2, and MODIS, provide suitable *reference* surface reflectance imagery freely to the public.  geedim_ is recommended as a companion tool to ``homonim`` for acquiring cloud/shadow-free imagery from these, and other programs.  ``geedim`` acquired imagery includes metadata that is used by ``homonim`` for automatic matching of spectral bands.  Alternatively, satellite imagery is available from a number of sources, including the `Google <https://developers.google.com/earth-engine/datasets>`_, `Amazon <https://aws.amazon.com/earth/>`_ and `Microsoft <https://planetarycomputer.microsoft.com/catalog>`_ repositories.
+Satellite programs, such as Landsat, Sentinel-2, and MODIS, provide suitable *reference* surface reflectance imagery freely to the public.  |geedim|_ is recommended as a companion tool to ``homonim`` for acquiring cloud/shadow-free reference imagery from these, and other programs.  |geedim|_ acquired imagery includes metadata that is used by ``homonim`` for automatic matching of spectral bands.  Alternatively, satellite imagery is available from a number of sources, including the `Google <https://developers.google.com/earth-engine/datasets>`_, `Amazon <https://aws.amazon.com/earth/>`_ and `Microsoft <https://planetarycomputer.microsoft.com/catalog>`_ repositories.
 
 .. note::
-    The  `regression modelling <examples/regression_modelling.ipynb>`_ tutorial demonstrates how to use ``geedim`` to acquire a reference image.
+    The `regression modelling <tutorials/regression_modelling.ipynb>`_ and `drone correction <tutorials/drone_correction.ipynb>`_ tutorials include sections showing the use of |geedim|_ for downloading reference imagery.
 
 Source image
 ------------
@@ -33,7 +30,7 @@ Fusion
 
 From the user perspective, the *kernel shape* (pixel dimensions) and *model* are the main parameters for configuring *fusion*.  They can be specified with the :option:`--model <homonim-fuse --model>` and :option:`--kernel-shape <homonim-fuse --kernel-shape>` via the command line; or with the corresponding arguments in the :meth:`homonim.RasterFuse.process` API.  When not specified, ``homonim`` uses default values that will provide reasonable results for most use cases.
 
-More details on the theoretical basis for the method can be found in the `paper <https://raw.githubusercontent.com/dugalh/homonim/main/docs/radiometric_homogenisation_preprint.pdf>`_.
+More details on the theoretical basis for the method can be found in the `paper <https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data>`_.
 
 
 .. |geedim| replace:: ``geedim``

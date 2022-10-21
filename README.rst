@@ -139,10 +139,10 @@ Surface reflectance correction of an aerial image using a Sentinel-2 reference.
 
 .. api_example_end
 
-Acquiring reference imagery
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Reference imagery
+~~~~~~~~~~~~~~~~~
 
-`geedim <https://github.com/dugalh/geedim>`_ can be used as a companion tool for searching and downloading cloud-free reference imagery.
+`geedim <https://github.com/dugalh/geedim>`_ can be used as a companion tool for searching and downloading cloud-free reference imagery.   Alternatively, satellite imagery is available from a number of sources, including the `Google <https://developers.google.com/earth-engine/datasets>`_, `Amazon <https://aws.amazon.com/earth/>`_ and `Microsoft <https://planetarycomputer.microsoft.com/catalog>`_ repositories.
 
 
 Usage
