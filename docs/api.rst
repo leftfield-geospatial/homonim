@@ -4,7 +4,7 @@ API
 Getting started
 ---------------
 
-The :class:`~homonim.fuse.RasterFuse` class implements surface reflectance correction.  Here we use it to correct an aerial image to surface reflectance, by fusing it with a Sentinel-2 reference.  The images are taken from the ``homonim`` test data.
+The :class:`~homonim.fuse.RasterFuse` class implements surface reflectance correction.  This code segment uses it to correct an aerial image by fusing it with a Sentinel-2 reference.  The images are taken from the ``homonim`` test data.
 
 .. literalinclude:: examples/api_example.py
     :language: python
@@ -35,7 +35,7 @@ The output:
        Source 0.390 93.517   2.454 28383
     Corrected 0.924 16.603   0.489 28383
 
-Take a look at the :ref:`tutorials <tutorials>` for a more comprehensive examples.
+Take a look at the :ref:`tutorials <tutorials>` for more examples.
 
 Reference
 ---------

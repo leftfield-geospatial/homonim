@@ -43,7 +43,7 @@ Change directories to the data root and make a *corrected* folder:
 Basic fusion and comparison
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The ``gain-blk-offset`` model with a kernel shape of 5 x 5 pixels are the default fusion settings and work reasonably well for a variety of problems.  Here we specify these settings to correct the test aerial images with the Sentinel-2 reference.  The corrected images are placed in the *corrected* sub-directory.
+The *gain-blk-offset* model with a kernel shape of 5 x 5 pixels are the default fusion settings and work reasonably well for a variety of problems.  Here we specify these settings to correct the test aerial images with the Sentinel-2 reference.  The corrected images are placed in the *corrected* sub-directory.
 
 .. code:: shell
 
@@ -85,7 +85,7 @@ It is possible to combine the above two commands, using the :option:`--compare <
 Band matching
 ~~~~~~~~~~~~~
 
-``homonim`` automatically matches *source* to *reference* spectral bands when these images are either RGB or have *center_wavelength* metadata (as is the case with the ``homonim`` test data).  Subsets of *source* and/or *reference* bands to use for matching can be specified with the :option:`--src-band <homonim-fuse --src-band>` and :option:`--ref-band <homonim-fuse --ref-band>` options.
+``homonim`` automatically matches *source* to *reference* spectral bands when these images are either RGB or have ``center_wavelength`` metadata (as is the case with the ``homonim`` test data).  Subsets of *source* and/or *reference* bands to use for matching can be specified with the :option:`--src-band <homonim-fuse --src-band>` and :option:`--ref-band <homonim-fuse --ref-band>` options.
 
 Let's *fuse* (harmonise) the red, green and blue bands of the Landsat-8 reference with the MODIS NBAR reference.  The :option:`--src-band <homonim-fuse --src-band>` option is used to specify the Landsat-8 band numbers corresponding to red, green and blue.  ``homonim`` then finds the matching MODIS NBAR bands.
 
@@ -107,7 +107,7 @@ With the :option:`--verbose <homonim --verbose>` option specified above, ``homon
     SR_B4     Band 4 (red) surface      0.655  Nadir_Reflectance_Ba  NBAR at local solar      0.645
               reflectance                      nd1                   noon for band 1
 
-In the case where *source* and *reference* are not RGB, and don't have *center_wavelength* metadata, it is up to the user to specify matching bands.  This can be done, simply by providing *source* and *reference* files with the same number of bands in the matching order (i.e. source bands 1, 2, .., N correspond to reference bands 1, 2, ..., N).  Or, matching and ordered subsets of *source* and *reference* bands can be specified with the :option:`--src-band <homonim-fuse --src-band>` and :option:`--ref-band <homonim-fuse --ref-band>` options.
+In the case where *source* and *reference* are not RGB, and don't have ``center_wavelength`` metadata, it is up to the user to specify matching bands.  This can be done simply by providing *source* and *reference* files with the same number of bands in the matching order (i.e. source bands 1, 2, .., N correspond to reference bands 1, 2, ..., N).  Or, matching and ordered subsets of *source* and *reference* bands can be specified with the :option:`--src-band <homonim-fuse --src-band>` and :option:`--ref-band <homonim-fuse --ref-band>` options.
 
 Let's repeat the previous example to see how this would look.  Here, we also specify the matching reference bands with the :option:`--ref-band <homonim-fuse --ref-band>` option.
 
@@ -116,8 +116,9 @@ Let's repeat the previous example to see how this would look.  Here, we also spe
     homonim --verbose fuse --src-band 4 --src-band 3 --src-band 2 --ref-band 1 --ref-band 4 --ref-band 3 -od ./corrected --overwrite ./reference/landsat8_byte.tif ./reference/modis_nbar.tif
 
 .. note::
+    Images downloaded with `geedim <https://github.com/dugalh/geedim>`_ have ``center_wavelength`` metadata compatible with ``homonim``.
 
-    You can use ``gdalinfo`` to inspect the *center_wavelength*, and other metadata of an image.  E.g::
+    You can use ``gdalinfo`` (from the `gdal <https://github.com/OSGeo/gdal>`_ package) to inspect the ``center_wavelength``, and other metadata of an image.  E.g::
 
         gdalinfo ./reference/sentinel2_b432_byte.tif
 
@@ -125,7 +126,7 @@ Let's repeat the previous example to see how this would look.  Here, we also spe
 Output file format
 ~~~~~~~~~~~~~~~~~~
 
-By default ``homonim`` writes output files as GeoTIFFS with *DEFLATE* compression, *float32* data type and *nan* nodata value.  These options are all configurable.
+By default ``homonim`` writes output files as *GeoTIFF*s with *DEFLATE* compression, *float32* data type and *nan* nodata value.  These options are all configurable.
 
 Here we create a corrected image in JPEG format, with *uint8* data type, *0* nodata value, and a *QUALITY* setting of *85*.
 
