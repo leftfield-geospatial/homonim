@@ -54,12 +54,12 @@ class RasterFuse(MatchedPairReader):
         Where source and reference images are RGB, or have `center_wavelength` metadata, bands are matched
         automatically based on wavelength.  Where there are the same number of source and reference bands, and no
         `center_wavelength` metadata, bands are assumed to be in matching order.  Subsets and ordering of source
-        and reference bands can be specified with the ``src_bands`` and ``ref_bands`` parameters.
+        and reference bands can be specified with the `src_bands` and `ref_bands` parameters.
 
         .. note::
 
-            Satellite and other imagery downloaded with `geedim <https://github.com/dugalh/geedim>`_ is populated with
-            ``center_wavelength``, and other metadata.
+            Images downloaded with `geedim <https://github.com/dugalh/geedim>`_ have *center_wavelength* metadata
+            compatible with ``homonim``.
 
         Parameters
         ----------
@@ -70,8 +70,7 @@ class RasterFuse(MatchedPairReader):
         proc_crs: homonim.enums.ProcCrs, optional
             :class:`~homonim.enums.ProcCrs` instance specifying which of the source/reference image spaces will be
             used for processing.  For most use cases, it can be left as the default of
-            :attr:`~homonim.enums.ProcCrs.auto`. In this case it will be resolved to refer to the lowest resolution of
-            the source and reference image CRS's.
+            :attr:`~homonim.enums.ProcCrs.auto` i.e. the lowest resolution of the source and reference image CRS's.
         src_bands: list of int, optional.
             Indexes of source spectral bands to be processed (1 based).  If not specified, all bands with the
             ``center_wavelength`` property, or all non-alpha bands, are used.

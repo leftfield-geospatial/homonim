@@ -63,8 +63,7 @@ class MatchedPairReader(RasterPairReader):
         proc_crs: homonim.enums.ProcCrs, optional
             :class:`~homonim.enums.ProcCrs` instance specifying which of the source/reference image spaces will be
             used for processing.  For most use cases, it can be left as the default of
-            :attr:`~homonim.enums.ProcCrs.auto`. In this case it will be resolved to refer to the lowest resolution of
-            the source and reference image CRS's.
+            :attr:`~homonim.enums.ProcCrs.auto` i.e. the lowest resolution of the source and reference image CRS's.
         src_bands: list of int, optional.
             Indexes of source spectral bands to be processed (1 based).  If not specified, all bands with the
             ``center_wavelength`` property, or all non-alpha bands, are used.
@@ -227,7 +226,7 @@ class MatchedPairReader(RasterPairReader):
             rel_dist = abs_dist / src_wavelengths[:, np.newaxis]
             def greedy_match(dist: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
                 """
-                Greedy matching of src to ref bands based on the provided center wavelength distance matix,
+                Greedy matching of src to ref bands based on the provided center wavelength distance matrix,
                 `dist`. src bands must be down the rows, and ref bands along the cols of `dist`.
                 Will match one ref band for each src band until either all src or all ref bands
                 have been matched.  Works for all cases where len(src_bands) != len(ref_bands).
