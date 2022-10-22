@@ -55,7 +55,7 @@ extensions = [
     'sphinx_gallery.load_style',
     'jupyter_sphinx',
     'nbsphinx',
-    # 'sphinx.ext.autosectionlabel',
+    'sphinx.ext.autosectionlabel',
 ] # yapf: disable
 
 # Add any paths that contain templates here, relative to this directory.
@@ -113,6 +113,7 @@ nbsphinx_execute_arguments = [
 ]
 nbsphinx_widgets_path=''
 nbsphinx_requirejs_path=''
+
 # -- Workaround for cloup arguments ------------------------------------------
 from sphinx_click import ext
 
@@ -136,3 +137,7 @@ ext._format_argument = _format_cloup_argument
 #     'filename_pattern': '.ipynb',
 #     'ignore_pattern': r'api_example.py',
 # }
+
+# -- Options for autosectionlabel ----------------------------------------------------
+# Make sure the target is unique
+autosectionlabel_prefix_document = True
