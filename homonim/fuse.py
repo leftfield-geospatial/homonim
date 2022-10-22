@@ -51,14 +51,14 @@ class RasterFuse(MatchedPairReader):
         Reference image extents must encompass those of the source image.
 
         The reference image should contain bands that are approximate (wavelength) matches to the source image bands.
-        Where source and reference images are RGB, or have `center_wavelength` metadata, bands are matched
+        Where source and reference images are RGB, or have ``center_wavelength`` metadata, bands are matched
         automatically based on wavelength.  Where there are the same number of source and reference bands, and no
-        `center_wavelength` metadata, bands are assumed to be in matching order.  Subsets and ordering of source
-        and reference bands can be specified with the `src_bands` and `ref_bands` parameters.
+        ``center_wavelength`` metadata, bands are assumed to be in matching order.  Subsets and ordering of source
+        and reference bands can be specified with the ``src_bands`` and ``ref_bands`` parameters.
 
         .. note::
 
-            Images downloaded with `geedim <https://github.com/dugalh/geedim>`_ have *center_wavelength* metadata
+            Images downloaded with `geedim <https://github.com/dugalh/geedim>`_ have ``center_wavelength`` metadata
             compatible with ``homonim``.
 
         Parameters

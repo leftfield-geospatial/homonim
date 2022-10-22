@@ -339,7 +339,7 @@ def cli(verbose: int, quiet: int):
     "Advanced options",
     click.option(
         '-pi/-npi', '--param-image/--no-param-image', type=click.BOOL, default=False, show_default=True,
-        help=f'Write the  model parameters and R\N{SUPERSCRIPT TWO} values for each corrected image into a parameter '
+        help=f'Write the  model parameters and R\N{SUPERSCRIPT TWO} values for each corrected image to a parameter '
         f'image file.'
     ),
     click.option(
@@ -411,8 +411,8 @@ def fuse(
     image extents must encompass those of the source image(s).
 
     The reference image should contain bands that are approximate (wavelength) matches to the source image bands.
-    Where source and reference images are RGB, or have `center_wavelength` metadata, bands are matched automatically.
-    Where there are the same number of source and reference bands, and no `center_wavelength` metadata, bands are
+    Where source and reference images are RGB, or have ``center_wavelength`` metadata, bands are matched automatically.
+    Where there are the same number of source and reference bands, and no ``center_wavelength`` metadata, bands are
     assumed to be in matching order.  The :option:`--src-band <homonim-fuse --src-band>` and
     :option:`--ref-band <homonim-fuse --ref-band>` options allow subsets and ordering of source and reference bands
     to be specified.
@@ -540,8 +540,8 @@ def compare(
     those of the input image(s).
 
     The reference image should contain bands that are approximate (wavelength) matches to the input image bands.
-    Where input and reference images are RGB, or have `center_wavelength` metadata, bands are matched automatically.
-    Where there are the same number of input and reference bands, and no `center_wavelength` metadata, bands are
+    Where input and reference images are RGB, or have ``center_wavelength`` metadata, bands are matched automatically.
+    Where there are the same number of input and reference bands, and no ``center_wavelength`` metadata, bands are
     assumed to be in matching order.  The :option:`--src-band <homonim-compare --src-band>` and
     :option:`--ref-band <homonim-compare --ref-band>` options allow subsets and ordering of input and reference bands
     to be specified.

@@ -46,9 +46,9 @@ class RasterCompare(MatchedPairReader):
         encompass those of the input image(s).
 
         The reference image should contain bands that are approximate (wavelength) matches to the source image bands.
-        Where source and reference images are RGB, or have `center_wavelength` metadata, bands are matched
+        Where source and reference images are RGB, or have ``center_wavelength`` metadata, bands are matched
         automatically based on wavelength.  Where there are the same number of source and reference bands, and no
-        `center_wavelength` metadata, bands are assumed to be in matching order.  Subsets and ordering of source
+        ``center_wavelength`` metadata, bands are assumed to be in matching order.  Subsets and ordering of source
         and reference bands can be specified with the ``src_bands`` and ``ref_bands`` parameters.
 
         .. note::
