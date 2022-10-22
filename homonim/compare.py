@@ -90,7 +90,7 @@ class RasterCompare(MatchedPairReader):
 
     @staticmethod
     def schema_table() -> str:
-        """ Create a table string describing the statistics returned by :attr:`RasterCompare.compare`. """
+        """ Return a table string describing the :attr:`RasterCompare.compare` statistics. """
         headers = {key: key.upper() for key in list(RasterCompare.schema.values())[0].keys()}
         return tabulate(RasterCompare.schema.values(), headers=headers, tablefmt=utils.table_format)
 
@@ -100,8 +100,8 @@ class RasterCompare(MatchedPairReader):
         upsampling: Resampling = Resampling.cubic_spline,
     ) -> Dict:
         """
-        Utility method to create a RasterCompare configuration dictionary that can be passed to
-        :meth:`RasterCompare.process`.  Without arguments, the default configuration values are returned.
+        Utility method to create a RasterCompare configuration dictionary whose items can be passed as keyword
+        arguments to :meth:`RasterCompare.process`.  Without arguments, the default configuration values are returned.
 
         Parameters
         ----------
@@ -186,7 +186,7 @@ class RasterCompare(MatchedPairReader):
     @staticmethod
     def stats_table(stats_dict: Dict[str, Dict], key_header: str = 'band'):
         """
-        Create a table string from the provided comparison statistics.
+        Return a table string for the provided comparison statistics.
 
         Parameters
         ----------
@@ -221,7 +221,7 @@ class RasterCompare(MatchedPairReader):
 
         Returns
         -------
-        dict of str: dict
+        dict of dict
             Dict representing the comparison results.
         """
         self._assert_open()

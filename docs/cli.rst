@@ -26,18 +26,14 @@ Change directories to the data root and make a *corrected* folder:
     cd homonim/tests/data
     mkdir corrected
 
-..
-        cd homonim/tests/data
-        mkdir corrected
+Alternatively, you can download the repository directly, and extract it as follows:
 
-    Alternatively, by you can download the repository directly, and set downloading download and extract the repository as follows:
+.. code:: shell
 
-    .. code:: shell
-
-        curl -LO# "https://github.com/dugalh/homonim/archive/refs/heads/main.zip"
-        tar -xf main.zip
-        cd homonim-main/tests/data
-        mkdir corrected
+    curl -LO# "https://github.com/dugalh/homonim/archive/refs/heads/main.zip"
+    tar -xf main.zip
+    cd homonim-main/tests/data
+    mkdir corrected
 
 
 Basic fusion and comparison

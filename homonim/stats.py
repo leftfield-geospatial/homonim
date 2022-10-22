@@ -48,8 +48,9 @@ class ParamStats:
         Parameters
         ----------
         param_filename: pathlib.Path, str
-            Path to a parameter image file, as created by :meth:`homonim.RasterFuse.process` with a specified
-            ``param_filename``.  See the :meth:`homonim.RasterFuse.process` documentation for more details.
+            Path to a parameter image file, as created by :meth:`homonim.RasterFuse.process` ( i.e. with the
+            ``param_filename`` argument specified).  See the :meth:`homonim.RasterFuse.process` documentation for more
+            details.
         """
         self._param_filename = pathlib.Path(param_filename)
 
@@ -92,7 +93,7 @@ class ParamStats:
 
     @staticmethod
     def schema_table() -> str:
-        """ Create a table string describing statistics returned by :attr:`ParamStats.stats`. """
+        """ Return a table string describing statistics returned by :attr:`ParamStats.stats`. """
         schema_list = [v for k, v in ParamStats.schema.items() if 'description' in v]
         schema_list.append(dict(abbrev='*_R2', description='R\N{SUPERSCRIPT TWO} coefficient of determination.'))
         headers = {k: k.upper() for k in schema_list[0].keys()}
@@ -101,7 +102,7 @@ class ParamStats:
     @staticmethod
     def stats_table(stats_list: List[Dict]) -> str:
         """
-        Create a table string from the provided parameter statistics.
+        Return a table string for the provided parameter statistics.
 
         Parameters
         ----------
@@ -195,7 +196,7 @@ class ParamStats:
         """
         Find parameter image statistics.
 
-        Statistics are accumulated over image blocks, limiting memory usage for large images.
+        Statistics are accumulated over image blocks to limit memory usage for large images.
 
         Parameters
         ----------

@@ -104,7 +104,7 @@ class KernelModel:
             from surrounding areas (applies to the :attr:`~homonim.enums.Model.gain_offset` model only).  For
             pixels where the model gives a poor approximation to the data (this can occur in areas where source and
             reference differ due to e.g. shadowing, land cover changes etc.), model offsets are interpolated from
-            surrounding areas, and gains re-estimated.  Set ``r2_inpaint_thresh`` to `None` to turn off in-painting.
+            surrounding areas, and gains re-estimated.  `None` turns off in-painting.
         mask_partial: bool, optional
             Mask output pixels not produced by full kernel or source/reference image coverage.  Useful for ensuring
             strict model validity, and reducing seam-lines between overlapping images.

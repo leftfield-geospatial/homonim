@@ -4,7 +4,7 @@ Advanced usage
 Block processing
 ----------------
 
-``homonim`` splits and processes *source* - *reference* image pairs in blocks.  This is done to limit memory usage and allow the processing of large images.  Processing speed is also increased by processing blocks concurrently.  The block size (MB) and number of concurrent blocks can be set by the user with the :option:`--max-block-mem <homonim fuse --max-block-mem>` and :option:`--threads <homonim fuse --threads>` command line parameters respectively; and the ``block_config`` parameter of the :meth:`homonim.RasterFuse.process` API.
+``homonim`` processes *source* - *reference* image pairs in blocks.  This limits memory usage so that large images can be processed.  Processing speed is increased by processing blocks concurrently.  The block size (MB) and number of concurrent blocks can be set by the user with the :option:`--max-block-mem <homonim fuse --max-block-mem>` and :option:`--threads <homonim fuse --threads>` command line parameters; the corresponding parameters in the meth:`homonim.RasterCompare.process` API; and the ``block_config`` parameter of the :meth:`homonim.RasterFuse.process` API.
 
 Processing CRS and re-projections
 ---------------------------------

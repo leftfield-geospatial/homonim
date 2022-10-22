@@ -119,7 +119,7 @@ class RasterFuse(MatchedPairReader):
         creation_options: Optional[Dict] = None
     ) -> Dict:  # yapf: disable
         """
-        Utility method to create a `rasterio` image profile for the output image(s) that can be passed to
+        Utility method to create a `rasterio` profile for the output image(s) that can be passed to
         :meth:`RasterFuse.process`.  Without arguments, the default profile is returned.
 
         Parameters
@@ -138,7 +138,7 @@ class RasterFuse(MatchedPairReader):
         Returns
         -------
         dict
-            `rasterio` image profile for output images.
+            `rasterio` profile for the output images.
         """
         # TODO: test effect of photometric=None on full size NGI files with ProcCrs.src param im (is bigtiff
         #  necessary then?).  Also test ovw compress with / w/o compress_overview
@@ -333,7 +333,7 @@ class RasterFuse(MatchedPairReader):
         block_config: Optional[Dict] = None,
     ):  # yapf: disable
         r"""
-        Correct the source image to surface reflectance by fusion with the reference.
+        Correct source image to surface reflectance by fusion with the reference.
 
         To improve speed and reduce memory usage, images are divided into blocks for concurrent processing.
 
@@ -342,9 +342,9 @@ class RasterFuse(MatchedPairReader):
         corr_filename: str, Path
             Path to the corrected file to create.
         model: homonim.enums.Model
-            The surface reflectance correction model to use.  See :class:`~homonim.enums.Model` for details.
+            Correction model to use.  See :class:`~homonim.enums.Model` for details.
         kernel_shape: tuple of int
-            The (height, width) of the kernel in pixels of the :attr:`proc_crs` image (the lowest resolution
+            (height, width) of the kernel in pixels of the :attr:`proc_crs` image (the lowest resolution
             image, if :attr:`proc_crs` is :attr:`~homonim.enums.ProcCrs.auto`).  Larger kernels are less
             susceptible to over-fitting on noisy data, but provide lower resolution correction.
         param_filename: str, Path, optional

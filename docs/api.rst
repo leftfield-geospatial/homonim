@@ -96,7 +96,7 @@ RasterCompare
     ~RasterCompare.ref_bands
     ~RasterCompare.schema
     ~RasterCompare.proc_crs
-    ~RasterFuse.closed
+    ~RasterCompare.closed
 
 
 ParamStats
