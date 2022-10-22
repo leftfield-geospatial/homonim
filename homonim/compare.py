@@ -53,8 +53,8 @@ class RasterCompare(MatchedPairReader):
 
         .. note::
 
-            Satellite and other imagery downloaded with `geedim <https://github.com/dugalh/geedim>`_ is populated with
-            ``center_wavelength``, and other metadata.
+            Images downloaded with `geedim <https://github.com/dugalh/geedim>`_ have ``center_wavelength`` metadata
+            compatible with ``homonim``.
 
         Parameters
         ----------
