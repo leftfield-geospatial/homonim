@@ -24,7 +24,7 @@ Some example polygons are shown below, overlaid on an aerial image.
 Correction
 ----------
 
-The aerial images were corrected with ``homonim`` using the :attr:`~homonim.enums.Model.gain` model, a 1 pixel kernel, and a `MODIS NBAR <https://developers.google.com/earth-engine/datasets/catalog/MODIS_006_MCD43A4>`_ reference image.  As with the `aerial mosaic case study <aerial_mosaic.rst>`_, the MODIS image was chosen because it satisfies the :ref:`reference recommendations <reference_image>`, and due to a lack of higher resolution satellite imagery for the source capture dates (22 Jan to 8 Feb 2010).  Class densities (Gaussian kernel density estimates) are shown before and after correction, for the blue and NIR bands below.
+As with the `aerial mosaic case study <aerial_mosaic.rst>`_, correction was performed with the :attr:`~homonim.enums.Model.gain` model, a 1 pixel kernel, and a `MODIS NBAR <https://developers.google.com/earth-engine/datasets/catalog/MODIS_006_MCD43A4>`_  reference image.  Class densities (Gaussian kernel density estimates) are shown before and after correction, for the blue and NIR bands below.
 
 .. figure:: classification-spectral_kde.jpg
     :align: center
@@ -36,7 +36,7 @@ The classes appear more compact, and likely better separated after correction.
 Evaluation
 ----------
 
-To quantify the effect of surface reflectance correction, a per-pixel naive Bayes classifier was evaluated on the source and corrected imagery.  Evaluation used the red, green, blue and NIR band pixel values as features, and a 10-fold cross-validation for training and testing.  This very basic classifier serves to compare the descriptive power of the source and corrected images.  Normalised confusion matrix, accuracy, and AUC (area under the ROC curve) values are tabulated below.
+To quantify the effect of surface reflectance correction, a per-pixel naive Bayes classifier was evaluated on the source and corrected imagery.  Evaluation used the red, green, blue and NIR band pixel values as features, and a 10-fold cross-validation for training and testing.  This basic classifier served to compare the descriptive power of the source and corrected images.  Normalised confusion matrix, accuracy, and AUC (area under the ROC curve) values are tabulated below.
 
 +----------------+-----------------------------------------------------+----------+------+
 |                | Confusion matrix                                    | Accuracy | AUC  |
