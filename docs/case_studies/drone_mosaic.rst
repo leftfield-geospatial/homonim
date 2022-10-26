@@ -14,14 +14,12 @@ A 5 cm resolution, RGB ortho-mosaic was obtained from `Open Aerial Map <https://
 
     **Source, reference & corrected images**
 
-Improvement in surface reflectance is less obvious in this figure, than e.g. the :ref:`aerial mosaic case study <source-mosaic>`, as seamlines and other variations in the source image have been smoothed out by the drone processing software.  Nevertheless, there is a good match between the corrected and reference image colour.
-
-There is a good colour correspondence between the corrected and reference images.  While seamlines and other variations in the source mosaic have been removed by the drone processing software, this does not necessarily imply surface reflectance accuracy.  The evaluation in the next section quantifies the surface reflectance differences between source and corrected images.
+Improvement in surface reflectance is less obvious in this figure, than e.g. the :ref:`aerial mosaic case study <source-mosaic>`, as source mosaic seamlines have been smoothed out by the drone processing software.  Nevertheless, there is a good match between the corrected and reference image colour.  Quantitative results in the next section give a clearer indication of the surface reflectance accuracy.
 
 Evaluation
 ----------
 
-The source and corrected drone images were compared with a second, Landsat-8 reference to better evaluate surface reflectance accuracy.  The scatter plots below show a good improvement in correlation with the reference after correction.
+The source and corrected drone images were compared with a second, Landsat-8 reference to evaluate the improvement in surface reflectance accuracy.  The scatter plots below show a good improvement in correlation with the reference after correction, demonstrating the benefits of processing drone imagery with ``homonim``.
 
 .. figure:: drone_mosaic-eval.png
     :align: center
