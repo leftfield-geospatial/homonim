@@ -3,11 +3,17 @@ Regression modelling
 
 ``homonim`` can improve accuracy and consistency in quantitative remote sensing applications.  This case study demonstrates the use of ``homonim`` to improve the relevance of image features for modelling aboveground carbon (AGC).  The images and ground truth data are taken from an `AGC mapping study <https://github.com/dugalh/map_thicket_agc>`_.
 
+Correction
+----------
+
 A small mosaic of 4 `NGI <https://ngi.dalrrd.gov.za/index.php/what-we-do/aerial-photography-and-imagery>`_ aerial images covering the study site were corrected to surface reflectance using ``homonim`` and a Sentinel-2 reference.  The :attr:`~homonim.enums.Model.gain_blk_offset` model and a kernel shape of 15 x 15 pixels produced the best performance.  AGC ground truth data for 85 plots are overlaid on the corrected mosaic below.
 
 .. figure:: regression_modelling-agc_map.jpg
     :align: center
     :width: 80%
+
+Evaluation
+----------
 
 For this problem, `NDVI <https://en.wikipedia.org/wiki/Normalized_difference_vegetation_index>`_ is reasonably good predictor of AGC.  The next figure shows the correlation between NDVI and AGC in each ground truth plot, before and after correction to surface reflectance.
 
