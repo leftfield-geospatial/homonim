@@ -21,7 +21,7 @@ Some example polygons are shown below, overlaid on an aerial image.
 
     **Class polygons**
 
-The aerial images were corrected with ``homonim`` using the *gain* model, a 1 pixel kernel, and a `MODIS NBAR <https://developers.google.com/earth-engine/datasets/catalog/MODIS_006_MCD43A4>`_ reference image.  As with the `aerial mosaic case study <aerial_mosaic.rst>`_, the MODIS image was chosen because it satisfies the :ref:`reference recommendations <reference_image>`, and due to a lack of higher resolution satellite imagery for the source capture dates (22 Jan to 8 Feb 2010).  Class densities (Gaussian kernel density estimates) are shown before and after correction, for the blue and NIR bands below.
+The aerial images were corrected with ``homonim`` using the :attr:`~homonim.enums.Model.gain` model, a 1 pixel kernel, and a `MODIS NBAR <https://developers.google.com/earth-engine/datasets/catalog/MODIS_006_MCD43A4>`_ reference image.  As with the `aerial mosaic case study <aerial_mosaic.rst>`_, the MODIS image was chosen because it satisfies the :ref:`reference recommendations <reference_image>`, and due to a lack of higher resolution satellite imagery for the source capture dates (22 Jan to 8 Feb 2010).  Class densities (Gaussian kernel density estimates) are shown before and after correction, for the blue and NIR bands below.
 
 .. figure:: classification-spectral_kde.jpg
     :align: center
