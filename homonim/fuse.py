@@ -323,8 +323,8 @@ class RasterFuse(MatchedPairReader):
     def process(
         self,
         corr_filename: Union[Path, str],
-        model: Model,
-        kernel_shape: Tuple[int, int],
+        model: Model = KernelModel.default_model,
+        kernel_shape: Tuple[int, int] = KernelModel.default_kernel_shape,
         param_filename: Optional[Union[Path, str]] = None,
         build_ovw: bool = True,
         overwrite: bool = False,
@@ -341,9 +341,9 @@ class RasterFuse(MatchedPairReader):
         ----------
         corr_filename: str, Path
             Path to the corrected file to create.
-        model: homonim.enums.Model
+        model: homonim.enums.Model, optional
             Correction model to use.  See :class:`~homonim.enums.Model` for details.
-        kernel_shape: tuple of int
+        kernel_shape: tuple of int, optional
             (height, width) of the kernel in pixels of the :attr:`proc_crs` image (the lowest resolution
             image, if :attr:`proc_crs` is :attr:`~homonim.enums.ProcCrs.auto`).  Larger kernels are less
             susceptible to over-fitting on noisy data, but provide lower resolution correction.

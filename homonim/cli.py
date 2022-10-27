@@ -36,6 +36,7 @@ from rasterio.warp import SUPPORTED_RESAMPLING
 from homonim import utils, version, RasterFuse, RasterCompare, ParamStats, ProcCrs, Model
 from homonim.errors import ImageFormatError
 from homonim.raster_array import RasterArray
+from homonim.kernel_model import KernelModel
 
 logger = logging.getLogger(__name__)
 
@@ -287,7 +288,7 @@ def cli(verbose: int, quiet: int):
     # if cloup's mutually exclusive etc. functionality is needed, it should be the latter.
     click.option(
         '-m', '--model', type=click.Choice([m.value for m in Model], case_sensitive=False),
-        default=Model.gain_blk_offset.value, show_default=True, help="""Correction model.
+        default=KernelModel.default_model.value, show_default=True, help="""Correction model.
 
         - `gain`: Gain-only model, suitable for haze-free and zero offset images.
 
@@ -297,10 +298,10 @@ def cli(verbose: int, quiet: int):
         """,
     ),  # yapf: disable
     click.option(
-        '-k', '--kernel-shape', type=click.Tuple([click.INT, click.INT]), nargs=2, default=(5, 5), show_default=True,
-        metavar='HEIGHT WIDTH', help='Kernel height and width in pixels of the '
-        ':option:`--proc-crs <homonim-fuse --proc-crs>` image. Larger kernels are less susceptible to over-fitting, '
-        'but provide lower resolution correction.'
+        '-k', '--kernel-shape', type=click.Tuple([click.INT, click.INT]), nargs=2,
+        default=KernelModel.default_kernel_shape, show_default=True, metavar='HEIGHT WIDTH',
+        help='Kernel height and width in pixels of the :option:`--proc-crs <homonim-fuse --proc-crs>` image. Larger '
+             'kernels are less susceptible to over-fitting, but provide lower resolution correction.'
     ),
     src_bands_option,
     ref_bands_option,

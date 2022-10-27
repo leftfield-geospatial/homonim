@@ -34,7 +34,15 @@ OShape = Optional[Tuple[int, int]]
 
 class KernelModel:
 
-    def __init__(self, model: Model, kernel_shape: Tuple[int, int], find_r2: bool = False, **kwargs):
+    default_kernel_shape = (5, 5)           # default kernel shape
+    default_model = Model.gain_blk_offset   # default model
+
+    def __init__(self,
+        model: Model = default_model,
+        kernel_shape: Tuple[int, int] = default_kernel_shape,
+        find_r2: bool = False,
+        **kwargs
+    ):
         """
         A base class for surface reflectance modelling and correction of blocks of image data.
 
@@ -51,9 +59,9 @@ class KernelModel:
 
         Parameters
         ----------
-        model: homonim.enums.Model
+        model: homonim.enums.Model, optional
             Surface reflectance correction model.
-        kernel_shape: tuple
+        kernel_shape: tuple, optional
             (height, width) of the kernel in pixels.
         find_r2: bool, optional
             Whether to calculate *R*\\ :sup:`2` (coefficient of determination) for each kernel model, and include in
