@@ -368,7 +368,7 @@ class RasterFuse(MatchedPairReader):
 
         # prepare configuration
         model_type = Model(model)
-        kernel_shape = tuple(utils.validate_kernel_shape(kernel_shape, model=model))
+        # kernel_shape = tuple(utils.validate_kernel_shape(kernel_shape, model=model))
         overlap = utils.overlap_for_kernel(kernel_shape)
         model_config = RasterFuse.create_model_config(**(model_config or {}))
         block_config = RasterFuse.create_block_config(**(block_config or {}))

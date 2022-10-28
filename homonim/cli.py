@@ -447,10 +447,10 @@ def fuse(
     """
     # @formatter:on
 
-    try:
-        kernel_shape = utils.validate_kernel_shape(kernel_shape, model=model)
-    except Exception as ex:
-        raise click.BadParameter(str(ex))
+    # try:
+    #     kernel_shape = utils.validate_kernel_shape(kernel_shape, model=model)
+    # except Exception as ex:
+    #     raise click.BadParameter(str(ex))
 
     # build configuration dictionaries for RasterFuse
     block_config = _update_existing_keys(RasterFuse.create_block_config(), **kwargs)
