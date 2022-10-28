@@ -119,8 +119,11 @@ def validate_kernel_shape(kernel_shape: Tuple[int, int], model: Model = Model.ga
     kernel_shape = np.array(kernel_shape).astype(int)
     if not np.all(np.mod(kernel_shape, 2) == 1):
         raise ValueError('`kernel_shape` must be odd in both dimensions.')
-    if model == Model.gain_offset and np.product(kernel_shape) < 25:
-        raise ValueError('`kernel_shape` area should contain at least 25 elements for the gain-offset model.')
+    if model == Model.gain_offset:
+        if np.product(kernel_shape) < 2:
+            raise ValueError('`kernel_shape` area should contain at least 2 elements for the gain-offset model.')
+        elif np.product(kernel_shape) < 25:
+            logger.warning('A `kernel_shape` of at least 25 elements is recommended for the gain-offset model.')
     if not np.all(kernel_shape >= 1):
         raise ValueError('`kernel_shape` must be a minimum of one in both dimensions.')
     return tuple(kernel_shape)
