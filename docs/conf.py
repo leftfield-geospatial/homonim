@@ -141,3 +141,4 @@ ext._format_argument = _format_cloup_argument
 # -- Options for autosectionlabel ----------------------------------------------------
 # Make sure the target is unique
 autosectionlabel_prefix_document = True
+
