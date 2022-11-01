@@ -109,7 +109,7 @@ class KernelModel:
         ----------
         r2_inpaint_thresh: float, optional
             *R*\\ :sup:`2` (coefficient of determination) threshold below which to `in-paint` kernel model parameters
-            from surrounding areas (applies to the :attr:`~homonim.enums.Model.gain_offset` model only).  For
+            from surrounding areas.  Applies to the :attr:`~homonim.enums.Model.gain_offset` model only.  For
             pixels where the model gives a poor approximation to the data (this can occur in areas where source and
             reference differ due to e.g. shadowing, land cover changes etc.), model offsets are interpolated from
             surrounding areas, and gains re-estimated.  `None` turns off in-painting.
