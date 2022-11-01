@@ -75,8 +75,8 @@ class RasterPairReader:
         ref_filename: str, pathlib.Path
             Path to the reference image file.
         proc_crs: homonim.enums.ProcCrs, optional
-            :class:`~homonim.enums.ProcCrs` instance specifying which of the source/reference image spaces will be
-            used for processing.  For most use cases, it can be left as the default of
+            :class:`~homonim.enums.ProcCrs` instance specifying which of the source/reference image CRS and pixel
+            grid to use for processing.  For most use cases, it can be left as the default of
             :attr:`~homonim.enums.ProcCrs.auto` i.e. the lowest resolution of the source and reference image CRS's.
         """
         self._src_filename = Path(src_filename)

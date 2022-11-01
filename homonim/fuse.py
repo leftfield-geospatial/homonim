@@ -68,8 +68,8 @@ class RasterFuse(MatchedPairReader):
         ref_filename: str, Path
             Path to a reference image file.
         proc_crs: homonim.enums.ProcCrs, optional
-            :class:`~homonim.enums.ProcCrs` instance specifying which of the source/reference image spaces will be
-            used for processing.  For most use cases, it can be left as the default of
+            :class:`~homonim.enums.ProcCrs` instance specifying which of the source/reference image CRS and pixel
+            grid to use for processing.  For most use cases, it can be left as the default of
             :attr:`~homonim.enums.ProcCrs.auto` i.e. the lowest resolution of the source and reference image CRS's.
         src_bands: list of int, optional.
             Indexes of source spectral bands to be processed (1 based).  If not specified, all bands with the
@@ -78,7 +78,7 @@ class RasterFuse(MatchedPairReader):
             Indexes of reference spectral bands to match and fuse with source bands (1 based).  Should contain at
             least as many elements as ``src_bands``, or the number of valid bands in the source image file,
             if ``src_bands`` is not specified.  If ``ref_bands`` is not specified, all reference bands with the
-            ``center_wavelength`` property, or all non-alpha bands, are used.
+            ``center_wavelength`` property, or all non-alpha bands are used.
         force: bool, optional
             Bypass auto wavelength matching, and any band-matching errors.  Use with caution.
         """

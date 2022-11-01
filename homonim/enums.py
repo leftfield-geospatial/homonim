@@ -44,7 +44,7 @@ class Model(str, Enum):
 
 class ProcCrs(str, Enum):
     """
-    CRS in which images will be processed.
+    CRS and pixel grid in which images will be processed.
     """
     auto = 'auto'
     """ Lowest resolution of the source and reference image CRS's (recommended). """
