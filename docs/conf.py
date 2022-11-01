@@ -141,4 +141,4 @@ ext._format_argument = _format_cloup_argument
 # -- Options for autosectionlabel ----------------------------------------------------
 # Make sure the target is unique
 autosectionlabel_prefix_document = True
-
+autosectionlabel_maxdepth = 3  # avoid duplicate section labels for CLI examples
