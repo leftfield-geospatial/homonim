@@ -103,7 +103,7 @@ class KernelModel:
         """
         Utility method to create a KernelModel configuration dictionary that can be passed to
         :meth:`KernelModel.__init__` and :meth:`homonim.RasterFuse.process`.  Without arguments, the default
-        configuration values are returned.
+        configuration is returned.
 
         Parameters
         ----------

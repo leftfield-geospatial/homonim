@@ -101,7 +101,7 @@ class RasterCompare(MatchedPairReader):
     ) -> Dict:
         """
         Utility method to create a RasterCompare configuration dictionary whose items can be passed as keyword
-        arguments to :meth:`RasterCompare.process`.  Without arguments, the default configuration values are returned.
+        arguments to :meth:`RasterCompare.process`.  Without arguments, the default configuration is returned.
 
         Parameters
         ----------

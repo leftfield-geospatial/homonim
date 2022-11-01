@@ -429,7 +429,7 @@ def fuse(
         homonim fuse source.tif reference.tif
 
     Correct `source.tif` with `reference.tif` using the `gain-blk-offset` model, a kernel of 5 x 5 pixels,
-    and placing the corrected images in the `corrected` directory::
+    and place the corrected images in the `corrected` directory::
 
         homonim fuse --model gain-blk-offset --kernel-shape 5 5 --out-dir ./corrected source.tif reference.tif
 
