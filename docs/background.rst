@@ -35,9 +35,9 @@ Model
 
 The following linear model variants are available for correcting to surface reflectance.
 
-- *gain* : Gain-only model, suitable for haze-free and zero offset images (i.e. images where a surface reflectance of zero corresponds to a pixel value of ~zero).
-- *gain-blk-offset*: Gain-only model applied to offset normalised image blocks.  Suitable for most source-reference combinations.
-- *gain-offset*: Gain and offset model.  The most accurate model, but sensitive to differences between source and reference, such as shadowing and land cover changes.  Suitable for well-matched source / reference image pairs.
+- *gain* : Gain-only model, suitable for haze-free and zero offset images (i.e. images where a surface reflectance of zero corresponds to a pixel value of ± zero).
+- *gain-blk-offset*: Gain-only model applied to offset normalised image blocks.  Suitable for most *source*-*reference* combinations.
+- *gain-offset*: Gain and offset model.  The most accurate model, but sensitive to differences between *source* and *reference*, such as shadowing and land cover changes.  Suitable for well-matched *source* / *reference* image pairs.
 
 The derivation of the linear model approximation is given in the `paper <https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data>`_.  Broadly speaking, gain compensates for atmospheric absorption and anisotropic (BRDF) effects, and offset (when present) compensates for atmospheric reflectance and haze.  Offset-compensated effects tend to vary gradually and over large spatial scales, while gain-compensated effects vary over smaller spatial scales, especially for low altitude imagery, and where land cover is heterogeneous.  The *gain-blk-offset* option models this behaviour with kernel-scale gain, and block-scale offset.  It can be seen as a compromise between the *gain* and *gain-offset* options.
 
@@ -51,7 +51,7 @@ The *kernel shape* is the (height, width) of the kernel in pixels of the :attr:`
 
 The scale of variation that correction can adjust for is roughly the size of the kernel.  Larger kernels are less susceptible to over-fitting on noisy data, but provide lower resolution correction.
 
-The minimum *kernel shape* is *model* dependent.  For the two parameter :attr:`~homonim.enums.Model.gain_offset` model, the kernel should contain at least two pixels, while it can contain only one pixel for the single parameter :attr:`~homonim.enums.Model.gain` and :attr:`~homonim.enums.Model.gain_blk_offset` models.  The default value of ``(5, 5)`` will work reasonably well with the default :attr:`~homonim.enums.Model.gain_blk_offset` model and most *source* - *reference* image combinations.  In general, kernels larger than ``5 x 5`` pixels are recommended for the :attr:`~homonim.enums.Model.gain_offset` model, to avoid over-fitting.
+The minimum *kernel shape* is *model* dependent.  For the two parameter :attr:`~homonim.enums.Model.gain_offset` model, the kernel should contain at least two pixels.  It can contain only one pixel for the single parameter :attr:`~homonim.enums.Model.gain` and :attr:`~homonim.enums.Model.gain_blk_offset` models.  The default value of ``(5, 5)`` will work reasonably well with the :attr:`~homonim.enums.Model.gain_blk_offset` model and most *source* - *reference* image combinations.  Kernels larger than ``(5, 5)`` are recommended for the :attr:`~homonim.enums.Model.gain_offset` model, to avoid over-fitting.
 
 Kernel shape can be specified with the :option:`--kernel-shape <homonim-fuse --kernel-shape>` option via the command line; or with the corresponding argument in the :meth:`homonim.RasterFuse.process` API.
 
