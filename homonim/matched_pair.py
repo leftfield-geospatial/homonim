@@ -140,12 +140,49 @@ class MatchedPairReader(RasterPairReader):
             for bi in range(1, im.count + 1)
         ])  # yapf: disables
 
-        # if the image appears to an RGB or RGBA image, and it does not have all its center wavelengths,
-        # then populate the missing wavelengths with default RGB values
-        if (len(non_alpha_bands) == 3) and (sum(np.isnan(center_wavelengths)) > 0):
-            for i, rgb_cw in zip(non_alpha_bands - 1, [.650, .560, .480]):
-                center_wavelengths[i] = rgb_cw if np.isnan(center_wavelengths[i]) else center_wavelengths[i]
-            logger.warning(f'Assuming standard RGB center wavelengths (.65, .56 & .48 um) for {name}.')
+        # if the image has 3 non-alpha bands and none of these have center wavelengths, then assume it is RGB,
+        # and populate center wavelengths accordingly
+        if (len(non_alpha_bands) == 3) and (sum(np.isnan(center_wavelengths[non_alpha_bands - 1])) == 3):
+            std_rgb_cws = dict(zip(
+                [ColorInterp.red, ColorInterp.green, ColorInterp.blue], [.650, .560, .480]
+            ))  # yapf: disable
+
+            colorinterps = [im.colorinterp[bi-1] for bi in non_alpha_bands]
+            # if one or more band has an R/G/B colorinterp, then set center wavelength(s) from standard RGB values
+            if len(set(std_rgb_cws.keys()) - set(colorinterps)) < 3:
+                for i in non_alpha_bands - 1:
+                    center_wavelengths[i] = std_rgb_cws.get(im.colorinterp[i], float('nan'))
+                logger.info(f'Assigning standard RGB center wavelengths (.65, .56 & .48 um) for {name}.')
+            else:
+                for i, rgb_cw in zip(non_alpha_bands - 1, std_rgb_cws.values()):
+                    center_wavelengths[i] = rgb_cw
+                logger.warning(
+                    f'Assuming image is RGB, and assigning standard center wavelengths (.65, .56 & .48 um) for {name}.'
+                )
+
+        # # if the image appears to an RGB or RGBA image, and it does not have all its center wavelengths,
+        # # then populate the missing wavelengths with default RGB values
+        # if (len(non_alpha_bands) == 3) and (sum(np.isnan(center_wavelengths)) > 0):
+        #     # maybe we should make this as
+        #         # if there are 3 non alpha bands
+        #             # if there are any existing cw, then leave these as is and exit
+        #             # elif there are any of rgb colorinterp vals, then set cw for those and only those, log info, and exit
+        #             # else (there are no cw and no rgb colorinterp) assume rgb, log warning, set cw and exit
+        #     # otherwise if we are assuming that any left over rgb bands are in a specific order, we may be assuming
+        #     # too much, also if one of egb colorinterp is set, it would typically have all set. and if any of rgb cw
+        #     # is set, typically all would be set
+        #     std_rgb_cws = dict(zip(
+        #         [ColorInterp.red, ColorInterp.green, ColorInterp.blue], [.650, .560, .480]
+        #     ))  # yapf: disable
+        #     rgb_cws = np.array([
+        #         std_rgb_cws.pop(im.colorinterp[i-1], float('nan'))
+        #         if np.isnan(center_wavelengths[i]) else center_wavelengths[i]
+        #         for i in non_alpha_bands
+        #     ])  # yapf: disable
+        #     rgb_cws[np.isnan(rgb_cws)] = list(std_rgb_cws.values())
+        #     for i, rgb_cw in zip(non_alpha_bands - 1, rgb_cws):
+        #         center_wavelengths[i] = rgb_cw if np.isnan(center_wavelengths[i]) else center_wavelengths[i]
+        #     logger.warning(f'Assuming standard RGB center wavelengths (.65, .56 & .48 um) for {name}.')
 
         center_wavelengths = center_wavelengths[bands - 1]
         band_names = np.array([im.descriptions[bi - 1] if im.descriptions[bi - 1] else str(bi) for bi in bands])
