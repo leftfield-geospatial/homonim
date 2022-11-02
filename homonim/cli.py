@@ -197,7 +197,6 @@ def _param_file_cb(ctx: click.Context, param: click.Argument, value):
             raise click.BadParameter(f'{filename.name} is not a valid parameter image.', param=param)
     return value
 
-# TODO: allow URLS for source and reference
 # define click options and arguments common to more than one command
 # use cloup's argument to auto print argument help on command line
 ref_file_arg = cloup.argument(

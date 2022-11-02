@@ -58,10 +58,10 @@ class RasterCompare(MatchedPairReader):
 
         Parameters
         ----------
-        src_filename: str, Path
-            Path to a source image file.
-        ref_filename: str, Path
-            Path to a reference image file.
+        src_filename: str, pathlib.Path
+            Path or URL of the source image file.
+        ref_filename: str, pathlib.Path
+            Path or URL of the reference image file.
         proc_crs: homonim.enums.ProcCrs, optional
             :class:`~homonim.enums.ProcCrs` instance specifying which of the source/reference image CRS and pixel
             grid to use for processing.  For most use cases, it can be left as the default of
