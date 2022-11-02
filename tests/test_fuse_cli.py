@@ -159,7 +159,7 @@ def test_compare_file_exists_error(runner: CliRunner, ref_file_100cm_float, src_
     cli_str = f'fuse  {src_file} {ref_file} --compare unknown.tif'
     result = runner.invoke(cli, cli_str.split())
     assert (result.exit_code != 0)
-    assert ('does not exist' in result.output)
+    assert ('No such file or directory' in result.output)
 
 
 @pytest.mark.parametrize('proc_crs', [ProcCrs.auto, ProcCrs.ref, ProcCrs.src])
