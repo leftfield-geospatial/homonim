@@ -166,13 +166,6 @@ def _nodata_cb(ctx: click.Context, param: click.Option, value):
         return value
 
 
-def _compare_cb(ctx: click.Context, param: click.Option, value):
-    """ click callback to check --compare path exists if specified.  """
-    if value and str(value) != 'ref' and not pathlib.Path(value).exists():
-        raise click.BadParameter(f'Comparison image does not exist: {value}')
-    return value
-
-
 def _creation_options_cb(ctx: click.Context, param: click.Option, value):
     """
     click callback to validate and parse multiple creation options (e.g. `-co KEY1=VAL1 -co KEY2=VAL2).
@@ -209,7 +202,7 @@ def _param_file_cb(ctx: click.Context, param: click.Argument, value):
 # use cloup's argument to auto print argument help on command line
 ref_file_arg = cloup.argument(
     'ref-file', nargs=1, metavar='REFERENCE', type=click.Path(exists=False, dir_okay=False, path_type=pathlib.Path),
-    help='Path to a reference image.'
+    help='Path or URL of a reference image.'
 )
 threads_option = click.option(
     '-t', '--threads', type=click.INT, default=RasterFuse.create_block_config()['threads'], show_default=True,
@@ -279,7 +272,7 @@ def cli(verbose: int, quiet: int):
 # standard options
 @cloup.argument(
     'src-file', nargs=-1, metavar='SOURCE...', type=click.Path(exists=False, dir_okay=False, path_type=pathlib.Path),
-    help='Path(s) to source image(s) to be corrected.'
+    help='Path/URL(s) of source image(s) to be corrected.'
 )
 @ref_file_arg
 @cloup.option_group(
@@ -314,8 +307,9 @@ def cli(verbose: int, quiet: int):
         help='Overwrite existing output file(s).'
     ),
     click.option(
-        '-cmp', '--compare', 'cmp_file', metavar='FILE', type=click.Path(dir_okay=False, path_type=pathlib.Path),
-        is_flag=False, flag_value='ref', default=None, callback=_compare_cb,
+        '-cmp', '--compare', 'cmp_file', metavar='FILE',
+        type=click.Path(exists=False, dir_okay=False, path_type=pathlib.Path), is_flag=False, flag_value='ref',
+        default=None,
         help='Compare source and corrected images with this reference image.  If no ``FILE`` value is given, source '
         'and corrected images are compared with :option:`REFERENCE`.'
     ),
