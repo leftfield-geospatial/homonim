@@ -27,6 +27,7 @@ from pytest import FixtureRequest
 from rasterio import MemoryFile
 from rasterio.enums import Resampling
 from rasterio.windows import Window, union
+from rasterio.errors import RasterioIOError
 
 from homonim.enums import ProcCrs
 from homonim.errors import ImageContentError, BlockSizeError, IoError
@@ -307,3 +308,21 @@ def test_orientation_crs(src_file: str, ref_file: str, proc_crs: ProcCrs, reques
             assert np.nanmean(abs_diff) == pytest.approx(0, abs=1)
             assert np.all(_ref_ra.mask[src_ra.mask])
 
+
+def test_url():
+    """ Test source and reference as URLs rather than files. """
+    src_file = 'https://raw.githubusercontent.com/dugalh/homonim/main/tests/data/source/ngi_rgb_byte_1.tif'
+    ref_file = 'https://raw.githubusercontent.com/dugalh/homonim/main/tests/data/reference/landsat8_byte.tif'
+    with RasterPairReader(src_file, ref_file) as raster_pair:
+        assert not raster_pair.closed
+
+
+def test_file_exists_exception(ngi_src_file, landsat_ref_file):
+    """ Test an error is raised if src/ref file doesn't exist. """
+    for src_file, ref_file in zip(
+        [ngi_src_file, 'dummy.tif'], ['dummy.tif', landsat_ref_file],
+    ):
+        with pytest.raises(RasterioIOError) as ex:
+            with RasterPairReader(src_file, ref_file) as raster_pair:
+                pass
+        assert 'No such file or directory' in str(ex)
