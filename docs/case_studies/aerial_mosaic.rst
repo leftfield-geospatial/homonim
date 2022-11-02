@@ -1,9 +1,9 @@
 Aerial mosaic correction
 ========================
 
-This case study is a summary of the `original presentation of the method <https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data>`_.  It demonstrates the correction and accuracy improvement of a mosaic of `NGI <https://ngi.dalrrd.gov.za/index.php/what-we-do/aerial-photography-and-imagery>`_ aerial images.
+This case study is a summary of the `original presentation <https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data>`_.  It demonstrates the correction and accuracy improvement of a mosaic of `NGI <https://ngi.dalrrd.gov.za/index.php/what-we-do/aerial-photography-and-imagery>`_ aerial images.
 
-The mosaic consists of ± 2000 mages, captured over the Little Karoo (South Africa) from 22 Jan to 8 Feb 2010.  The images have a 50 cm spatial resolution and 4 spectral bands (red, green, blue and near-infrared).
+The mosaic consists of 2228 mages, captured over the Little Karoo (South Africa) from 22 Jan to 8 Feb 2010.  The images have a 50 cm spatial resolution and 4 spectral bands (red, green, blue and near-infrared).
 
 .. figure:: aerial_mosaic-study_area.png
     :scale: 50 %
@@ -25,7 +25,7 @@ The source aerial mosaic is overlaid on the MODIS reference in the figure below.
 
     **Source mosaic**
 
-Assuming additive atmospheric effects were negligible, correction was performed with the :attr:`~homonim.enums.Model.gain` model.  A small kernel of 1 pixel was chosen to mitigate the effect of large (500 m) MODIS pixels.  The next figure shows the corrected mosaic overlaid on the MODIS reference.
+Additive atmospheric effects were assumed negligible, and correction was performed with the :attr:`~homonim.enums.Model.gain` model.  A small kernel of 1 pixel was chosen to mitigate the effect of large (500 m) MODIS pixels.  The next figure shows the corrected mosaic overlaid on the MODIS reference.
 
 .. figure:: aerial_mosaic-corrected_mosaic.jpg
     :width: 80%
