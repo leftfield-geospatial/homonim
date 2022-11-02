@@ -12,7 +12,7 @@ The :class:`~homonim.fuse.RasterFuse` class implements surface reflectance corre
     :end-before: [correct-end]
 
 
-In the next snippet, we use :class:`~homonim.compare.RasterCompare` to compare the source and corrected aerial images with a second reference.  The tabulated results give an indication of surface reflectance accuracy before and after correction.
+In the next segment, we use :class:`~homonim.compare.RasterCompare` to compare the source and corrected aerial images with a second reference.  The tabulated results give an indication of surface reflectance accuracy before and after correction.
 
 .. literalinclude:: examples/api_example.py
     :language: python

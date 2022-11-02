@@ -48,9 +48,8 @@ class ParamStats:
         Parameters
         ----------
         param_filename: pathlib.Path, str
-            Path to a parameter image file, as created by :meth:`homonim.RasterFuse.process` ( i.e. with the
-            ``param_filename`` argument specified).  See the :meth:`homonim.RasterFuse.process` documentation for more
-            details.
+            Path to a parameter image file, as created by :meth:`homonim.RasterFuse.process` with the
+            ``param_filename`` argument specified.
         """
         self._param_filename = pathlib.Path(param_filename)
 
@@ -71,7 +70,7 @@ class ParamStats:
         max=dict(abbrev='Max.'),
         inpaint_p=dict(abbrev='Inpaint (%)', description='Portion of inpainted pixels (%).'),
     )  # yapf: disable
-    """ Dictionary describing the statistics returned by :attr:`ParamStats.stats`. """
+    """ Dictionary describing the statistics returned by :meth:`ParamStats.stats`. """
 
     @property
     def closed(self) -> bool:
@@ -93,7 +92,7 @@ class ParamStats:
 
     @staticmethod
     def schema_table() -> str:
-        """ Return a table string describing statistics returned by :attr:`ParamStats.stats`. """
+        """ Return a table string describing statistics returned by :meth:`ParamStats.stats`. """
         schema_list = [v for k, v in ParamStats.schema.items() if 'description' in v]
         schema_list.append(dict(abbrev='*_R2', description='R\N{SUPERSCRIPT TWO} coefficient of determination.'))
         headers = {k: k.upper() for k in schema_list[0].keys()}

@@ -45,7 +45,7 @@ The *gain-blk-offset* model with a kernel shape of 5 x 5 pixels are the default 
 
    homonim fuse -m gain-blk-offset -k 5 5 -od ./corrected ./source/*rgb_byte*.tif ./reference/sentinel2_b432_byte.tif
 
-To investigate the improvement in surface reflectance "accuracy" we compare the raw and corrected images with a second reference image not used in the fusion above, i.e. a Landsat-8 reference.
+To investigate the improvement in surface reflectance accuracy we compare the raw and corrected images with a second reference image not used in the fusion above, i.e. a Landsat-8 reference.
 
 .. code:: shell
 
@@ -69,7 +69,7 @@ The last table printed by this command is:
     ngi_rgb_byte_3_FUSE_cREF_mGAIN-BLK-OFFSET_k5_5.tif 0.881 15.531   0.456 27676
     ngi_rgb_byte_4_FUSE_cREF_mGAIN-BLK-OFFSET_k5_5.tif 0.897 15.702   0.474 27342
 
-The correlation (r²) between the corrected and reference images is higher than the correlation between the source and reference images, indicating an improvement in similarity with the Landsat-8 reference.
+The correlation (r²) between the corrected and reference images is higher than the correlation between the source and reference images, indicating an improvement in accuracy.
 
 It is possible to combine the above two commands, using the :option:`--compare <homonim-fuse --compare>` option as follows:
 
@@ -114,7 +114,7 @@ Let's repeat the previous example to see how this would look.  Here, we also spe
 .. note::
     Images downloaded with `geedim <https://github.com/dugalh/geedim>`_ have ``center_wavelength`` metadata compatible with ``homonim``.
 
-    You can use ``gdalinfo`` (from the `gdal <https://github.com/OSGeo/gdal>`_ package) to inspect the ``center_wavelength``, and other metadata of an image.  E.g::
+    You can use ``gdalinfo`` (from the `gdal <https://github.com/OSGeo/gdal>`_ package) to inspect the ``center_wavelength``, and other metadata of an image, e.g::
 
         gdalinfo ./reference/sentinel2_b432_byte.tif
 

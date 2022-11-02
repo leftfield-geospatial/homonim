@@ -102,7 +102,7 @@ class RasterFuse(MatchedPairReader):
             0 = use all processors.
         max_block_mem: float, optional
             Maximum size of an image block in megabytes. Note that the total memory consumed by a thread is
-            proportional to, but a number of times larger than this number.
+            proportional to, but larger than this number.
 
         Returns
         -------
@@ -119,8 +119,8 @@ class RasterFuse(MatchedPairReader):
         creation_options: Optional[Dict] = None
     ) -> Dict:  # yapf: disable
         """
-        Utility method to create a `rasterio` profile for the output image(s) that can be passed to
-        :meth:`RasterFuse.process`.  Without arguments, the default profile is returned.
+        Utility method to create a profile for the output image(s) that can be passed to :meth:`RasterFuse.process`.
+        Without arguments, the default profile is returned.
 
         Parameters
         ----------
@@ -132,13 +132,13 @@ class RasterFuse(MatchedPairReader):
         nodata: float, optional
             Output image nodata value.
         creation_options: dict, optional
-            Driver specific creation options e.g. ``dict(compression='deflate')`` for a GeoTIFF.
+            Driver specific creation options e.g. ``dict(compression='deflate')``.
             See the `GDAL docs <https://gdal.org/drivers/raster/index.html>`_ for available keys and values.
 
         Returns
         -------
         dict
-            `rasterio` profile for the output images.
+            Output image profile.
         """
         # TODO: test effect of photometric=None on full size NGI files with ProcCrs.src param im (is bigtiff
         #  necessary then?).  Also test ovw compress with / w/o compress_overview
@@ -333,7 +333,7 @@ class RasterFuse(MatchedPairReader):
         block_config: Optional[Dict] = None,
     ):  # yapf: disable
         r"""
-        Correct source image to surface reflectance by fusion with the reference.
+        Correct source image to surface reflectance by fusion with a reference.
 
         To improve speed and reduce memory usage, images are divided into blocks for concurrent processing.
 
@@ -342,10 +342,10 @@ class RasterFuse(MatchedPairReader):
         corr_filename: str, Path
             Path to the corrected file to create.
         model: homonim.enums.Model, optional
-            Correction model to use.  See :class:`~homonim.enums.Model` for details.
+            Correction model to use.  See :class:`~homonim.enums.Model` for options.
         kernel_shape: tuple of int, optional
             (height, width) of the kernel in pixels of the :attr:`proc_crs` image (the lowest resolution
-            image, if :attr:`proc_crs` is :attr:`~homonim.enums.ProcCrs.auto`).  Larger kernels are less
+            image, if :attr:`proc_crs` = :attr:`~homonim.enums.ProcCrs.auto`).  Larger kernels are less
             susceptible to over-fitting on noisy data, but provide lower resolution correction.
         param_filename: str, Path, optional
             Path to an optional parameter file to write with correction parameters and *R*\ :sup:`2` values.  By
@@ -355,14 +355,14 @@ class RasterFuse(MatchedPairReader):
         overwrite: bool, optional
             Overwrite the output image(s) if they exist.
         model_config: dict, optional
-            Configuration dictionary for the correction model.  See
-            :meth:`create_model_config` for possible keys and default values.
+            Configuration dictionary for the correction model.  See :meth:`create_model_config` for keys and default
+            values.
         out_profile: dict, optional
-            Configuration dictionary for the output image(s).   See :meth:`~RasterFuse.create_out_profile` for
-            possible keys and default values.
+            Configuration dictionary for the output image(s).   See :meth:`~RasterFuse.create_out_profile` for keys and
+            default values.
         block_config: dict, optional
-            Configuration dictionary for block processing.  See :meth:`~RasterFuse.create_block_config` for possible
-            keys and default values.
+            Configuration dictionary for block processing.  See :meth:`~RasterFuse.create_block_config` for keys and
+            default values.
         """
         self._assert_open()
 

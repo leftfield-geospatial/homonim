@@ -122,7 +122,7 @@ class RasterPairReader:
 
     @property
     def proc_crs(self) -> ProcCrs:
-        """ Which of the source and reference image CRS's will be used for processing. """
+        """ Which of the source and reference image CRS and pixel grids will be used for processing. """
         return self._proc_crs
 
     @property

@@ -29,7 +29,7 @@ class Model(str, Enum):
     gain = 'gain'
     """ 
     Gain-only model, suitable for haze-free and zero offset images (i.e. images where a surface reflectance of 
-    zero corresponds to a pixel value of ~zero). 
+    zero corresponds to a pixel value of ± zero). 
     """
     gain_blk_offset = 'gain-blk-offset'
     """ 

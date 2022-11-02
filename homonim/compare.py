@@ -40,10 +40,10 @@ class RasterCompare(MatchedPairReader):
 
     def __init__(self, *args, **kwargs):
         """
-        Class to statistically compare source and reference images.
+        Class to compare source and reference images.
 
-        Reference and input image(s) should be co-located and spectrally similar.  Reference image extents must
-        encompass those of the input image(s).
+        Reference and source image(s) should be co-located and spectrally similar.  Reference image extents must
+        encompass those of the source image(s).
 
         The reference image should contain bands that are approximate (wavelength) matches to the source image bands.
         Where source and reference images are RGB, or have ``center_wavelength`` metadata, bands are matched
@@ -86,11 +86,11 @@ class RasterCompare(MatchedPairReader):
         rrmse=dict(abbrev='rRMSE', description='Relative RMSE (RMSE/mean(ref))', ),
         n=dict(abbrev='N', description='Number of pixels', )
     )  # yapf: disable
-    """ Dictionary describing the statistics returned by :attr:`RasterCompare.compare`. """
+    """ Dictionary describing the statistics returned by :meth:`RasterCompare.process`. """
 
     @staticmethod
     def schema_table() -> str:
-        """ Return a table string describing the :attr:`RasterCompare.compare` statistics. """
+        """ Return a table string describing the :meth:`RasterCompare.process` statistics. """
         headers = {key: key.upper() for key in list(RasterCompare.schema.values())[0].keys()}
         return tabulate(RasterCompare.schema.values(), headers=headers, tablefmt=utils.table_format)
 
@@ -111,7 +111,7 @@ class RasterCompare(MatchedPairReader):
             0 = use all processors.
         max_block_mem: float, optional
             Maximum size of an image block in megabytes. Note that the total memory consumed by a thread is
-            proportional to, but a number of times larger than this number.
+            proportional to, but larger than this number.
         downsampling: rasterio.enums.Resampling, optional
             Resampling method to use when downsampling. See the `rasterio docs
             <https://rasterio.readthedocs.io/en/latest/api/rasterio.enums.html#rasterio.enums.Resampling>`_ for
@@ -191,8 +191,8 @@ class RasterCompare(MatchedPairReader):
         Parameters
         ----------
         stats_dict: dict of str: dict
-            Comparison statistics to tabulate, as returned by :meth:`RasterCompare.compare`.
-        key_headrer: str, optional
+            Comparison statistics to tabulate, as returned by :meth:`RasterCompare.process`.
+        key_header: str, optional
             Table header for the stats_dict key values.
 
         Returns
@@ -209,7 +209,7 @@ class RasterCompare(MatchedPairReader):
 
     def process(self, **kwargs) -> Dict[str, Dict]:
         """
-        Statistically compare source and reference images.
+        Compare source and reference images.
 
         To improve speed and reduce memory usage, images are divided into blocks for concurrent processing.
 
@@ -222,7 +222,7 @@ class RasterCompare(MatchedPairReader):
         Returns
         -------
         dict of dict
-            Dict representing the comparison results.
+            Dict representing the comparison statistics.
         """
         self._assert_open()
         config = self.create_config(**kwargs)
