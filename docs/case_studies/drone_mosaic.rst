@@ -6,7 +6,7 @@ Drone mosaic correction
 Correction
 ----------
 
-A 5 cm resolution, RGB ortho-mosaic was obtained from `Open Aerial Map <https://openaerialmap.org/>`_.  The image covers a complex, heterogeneous area, making it a challenging example.  Correction was performed with a Sentinel-2 reference, the :attr:`~homonim.enums.Model.gain_blk_offset` model, and a kernel shape of 3 x 3 pixels.  Of the tested settings, these produced the best evaluation results.
+A 5 cm resolution, RGB ortho-mosaic was obtained from `Open Aerial Map <https://openaerialmap.org/>`_.  The image covers a complex, heterogeneous area, making it a challenging example.  Correction was performed with a Sentinel-2 reference, the *gain_blk_offset* :ref:`model <background:model>`, and a :ref:`kernel shape <background:kernel shape>` of 3 x 3 pixels.  Of the tested settings, these produced the best evaluation results.
 
 .. figure:: drone_mosaic-src_ref_corr.jpg
     :width: 80%

@@ -6,7 +6,7 @@ Regression modelling
 Correction
 ----------
 
-A small mosaic of 4 `NGI <https://ngi.dalrrd.gov.za/index.php/what-we-do/aerial-photography-and-imagery>`_ aerial images covering the study site were corrected to surface reflectance using ``homonim`` and a Sentinel-2 reference.  The :attr:`~homonim.enums.Model.gain_blk_offset` model and a kernel shape of 15 x 15 pixels produced the best performance.  AGC ground truth data for 85 plots are overlaid on the corrected mosaic below.
+A small mosaic of 4 `NGI <https://ngi.dalrrd.gov.za/index.php/what-we-do/aerial-photography-and-imagery>`_ aerial images covering the study site were corrected to surface reflectance using ``homonim`` and a Sentinel-2 reference.  The *gain_blk_offset* :ref:`model <background:model>` and a :ref:`kernel shape <background:kernel shape>` of 15 x 15 pixels produced the best performance.  AGC ground truth data for 85 plots are overlaid on the corrected mosaic below.
 
 .. figure:: regression_modelling-agc_map.jpg
     :align: center

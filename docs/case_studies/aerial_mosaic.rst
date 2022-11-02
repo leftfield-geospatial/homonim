@@ -25,7 +25,7 @@ The source aerial mosaic is overlaid on the MODIS reference in the figure below.
 
     **Source mosaic**
 
-Additive atmospheric effects were assumed negligible, and correction was performed with the :attr:`~homonim.enums.Model.gain` model.  A small kernel of 1 pixel was chosen to mitigate the effect of large (500 m) MODIS pixels.  The next figure shows the corrected mosaic overlaid on the MODIS reference.
+Additive atmospheric effects were assumed negligible, and correction was performed with the *gain* :ref:`model <background:model>`.  A small :ref:`kernel <background:kernel shape>` of 1 pixel was chosen to mitigate the effect of large (500 m) MODIS pixels.  The next figure shows the corrected mosaic overlaid on the MODIS reference.
 
 .. figure:: aerial_mosaic-corrected_mosaic.jpg
     :width: 80%
