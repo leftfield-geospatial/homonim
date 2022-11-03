@@ -19,6 +19,7 @@
 import logging
 from pathlib import Path
 from typing import List, Tuple, Union, Dict
+import warnings
 
 import numpy as np
 import rasterio as rio
@@ -43,35 +44,34 @@ class MatchedPairReader(RasterPairReader):
         encompass those of the source image.
 
         The reference image should contain bands that are approximate (wavelength) matches to the source image bands.
-        Where source and reference images are RGB, or have `center_wavelength` metadata, bands are matched
+        Where source and reference images are RGB, or have ``center_wavelength`` metadata, bands are matched
         automatically based on wavelength.  Where there are the same number of source and reference bands, and no
-        `center_wavelength` metadata, bands are assumed to be in matching order.  Subsets and ordering of source
+        ``center_wavelength`` metadata, bands are assumed to be in matching order.  Subsets and ordering of source
         and reference bands can be specified with the ``src_bands`` and ``ref_bands`` parameters.
 
         .. note::
 
-            Satellite and other imagery downloaded with `geedim <https://github.com/dugalh/geedim>`_ is populated with
-            ``center_wavelength``, and other metadata.
+            Images downloaded with `geedim <https://github.com/dugalh/geedim>`_ have ``center_wavelength`` metadata
+            compatible with ``homonim``.
 
         Parameters
         ----------
-        src_filename: str, Path
-            Path to a source image file.
-        ref_filename: str, Path
-            Path to a reference image file.
+        src_filename: str, pathlib.Path
+            Path or URL of the source image file.
+        ref_filename: str, pathlib.Path
+            Path or URL of the reference image file.
         proc_crs: homonim.enums.ProcCrs, optional
-            :class:`~homonim.enums.ProcCrs` instance specifying which of the source/reference image spaces will be
-            used for processing.  For most use cases, it can be left as the default of
-            :attr:`~homonim.enums.ProcCrs.auto`. In this case it will be resolved to refer to the lowest resolution of
-            the source and reference image CRS's.
+            :class:`~homonim.enums.ProcCrs` instance specifying which of the source/reference image CRS and pixel
+            grid to use for processing.  For most use cases, it can be left as the default of
+            :attr:`~homonim.enums.ProcCrs.auto` i.e. the lowest resolution of the source and reference image CRS's.
         src_bands: list of int, optional.
             Indexes of source spectral bands to be processed (1 based).  If not specified, all bands with the
             ``center_wavelength`` property, or all non-alpha bands, are used.
         ref_bands: list of int, optional.
-            Indexes of reference spectral bands to match with source bands (1 based).  Should contain at
+            Indexes of reference spectral bands to match and fuse with source bands (1 based).  Should contain at
             least as many elements as ``src_bands``, or the number of valid bands in the source image file,
             if ``src_bands`` is not specified.  If ``ref_bands`` is not specified, all reference bands with the
-            ``center_wavelength`` property, or all non-alpha bands, are used.
+            ``center_wavelength`` property, or all non-alpha bands are used.
         force: bool, optional
             Bypass auto wavelength matching, and any band-matching errors.  Use with caution.
         """
@@ -79,6 +79,16 @@ class MatchedPairReader(RasterPairReader):
         self._ref_bands = ref_bands
         self._force = force
         RasterPairReader.__init__(self, src_filename, ref_filename, proc_crs=proc_crs)
+
+    @property
+    def src_bands(self) -> Tuple[int, ...]:
+        """ Matched source band indices (1-based). """
+        return self._src_bands
+
+    @property
+    def ref_bands(self) ->Tuple[int, ...]:
+        """ Matched reference band indices (1-based). """
+        return self._ref_bands
 
     @staticmethod
     def _get_band_info(
@@ -130,18 +140,36 @@ class MatchedPairReader(RasterPairReader):
             for bi in range(1, im.count + 1)
         ])  # yapf: disables
 
-        # if the image appears to an RGB or RGBA image, and it does not have all its center wavelengths,
-        # then populate the missing wavelengths with default RGB values
-        if (len(non_alpha_bands) == 3) and (sum(np.isnan(center_wavelengths)) > 0):
-            for i, rgb_cw in zip(non_alpha_bands - 1, [.650, .560, .480]):
-                center_wavelengths[i] = rgb_cw if np.isnan(center_wavelengths[i]) else center_wavelengths[i]
-            logger.warning(f'Assuming standard RGB center wavelengths (.65, .56 & .48 um) for {name}.')
+        # assign standard RGB center wavelengths
+        if (len(non_alpha_bands) == 3):
+            std_rgb_cws = dict(zip(
+                [ColorInterp.red, ColorInterp.green, ColorInterp.blue], [.650, .560, .480]
+            ))  # yapf: disable
+            log_list = []
+            # assign standard RGB center wavelengths according to valid colorinterp's
+            for bi in non_alpha_bands:
+                if not np.isnan(center_wavelengths[bi - 1]):
+                    continue    # don't overwrite existing center wavelengths
+                if im.colorinterp[bi - 1] in std_rgb_cws:
+                    center_wavelengths[bi - 1] = std_rgb_cws[im.colorinterp[bi - 1]]
+                    log_list.append(im.colorinterp[bi - 1].name)
+            if len(log_list) > 0:
+                logger.warning(
+                    f'Assigning standard {", ".join(log_list)} center wavelengths for {name}.'
+                )
+
+            # if the image has no valid RGB colorinterp's or center wavelengths
+            if sum(np.isnan(center_wavelengths[non_alpha_bands - 1])) == 3:
+                # assume RGB and assign center wavelengths in that order
+                logger.warning(
+                    f'Assuming image is RGB, and assigning standard center wavelengths for {name}.'
+                )
+                center_wavelengths[non_alpha_bands - 1] = list(std_rgb_cws.values())
 
         center_wavelengths = center_wavelengths[bands - 1]
         band_names = np.array([im.descriptions[bi - 1] if im.descriptions[bi - 1] else str(bi) for bi in bands])
         logger.debug(f'{log_prefix} {list(band_names)}.')
         return bands, band_names, center_wavelengths
-
 
     def _get_pair_band_table(
         self, src_im: rio.DatasetReader, ref_im: rio.DatasetReader, src_bands: Tuple[int, ...] = None,
@@ -186,7 +214,6 @@ class MatchedPairReader(RasterPairReader):
 
         return tabulate(band_list, headers='keys',  maxcolwidths=20, tablefmt='simple')
 
-
     def _match_pair_bands(
         self, src_im: rio.DatasetReader, ref_im: rio.DatasetReader
     ) -> Tuple[Tuple[int], Tuple[int]]:  # yapf: disable
@@ -216,7 +243,7 @@ class MatchedPairReader(RasterPairReader):
             rel_dist = abs_dist / src_wavelengths[:, np.newaxis]
             def greedy_match(dist: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
                 """
-                Greedy matching of src to ref bands based on the provided center wavelength distance matix,
+                Greedy matching of src to ref bands based on the provided center wavelength distance matrix,
                 `dist`. src bands must be down the rows, and ref bands along the cols of `dist`.
                 Will match one ref band for each src band until either all src or all ref bands
                 have been matched.  Works for all cases where len(src_bands) != len(ref_bands).
@@ -225,18 +252,21 @@ class MatchedPairReader(RasterPairReader):
                 match_idx = np.array([np.nan] * dist.shape[0])
                 match_dist = np.array([np.nan] * dist.shape[0]) # distances corresponding to the above matches
 
-                # repeat until all src or ref bands have been matched
-                while not all(np.isnan(np.nanmin(dist, axis=1))) or not all(np.isnan(np.nanmin(dist, axis=0))):
-                    # find the row with the smallest distance in it
-                    min_dist = np.nanmin(dist, axis=1)
-                    min_dist_row_idx = np.nanargmin(min_dist)
-                    min_dist_row = dist[min_dist_row_idx, :]
-                    # store match idx and distance for this row
-                    match_idx[min_dist_row_idx] = np.nanargmin(min_dist_row)
-                    match_dist[min_dist_row_idx] = min_dist[min_dist_row_idx]
-                    # set the matched row and col to nan, so that it is not used again
-                    dist[:, int(match_idx[min_dist_row_idx])] = np.nan
-                    dist[min_dist_row_idx, :] = np.nan
+                # suppress runtime warning on all-Nan slice, as it is expected in normal operation
+                with warnings.catch_warnings():
+                    warnings.simplefilter('ignore', category=RuntimeWarning)
+                    # repeat until all src or ref bands have been matched
+                    while not all(np.isnan(np.nanmin(dist, axis=1))) or not all(np.isnan(np.nanmin(dist, axis=0))):
+                        # find the row with the smallest distance in it
+                        min_dist = np.nanmin(dist, axis=1)
+                        min_dist_row_idx = np.nanargmin(min_dist)
+                        min_dist_row = dist[min_dist_row_idx, :]
+                        # store match idx and distance for this row
+                        match_idx[min_dist_row_idx] = np.nanargmin(min_dist_row)
+                        match_dist[min_dist_row_idx] = min_dist[min_dist_row_idx]
+                        # set the matched row and col to nan, so that it is not used again
+                        dist[:, int(match_idx[min_dist_row_idx])] = np.nan
+                        dist[min_dist_row_idx, :] = np.nan
 
                 return match_dist, match_idx
 
@@ -292,7 +322,7 @@ class MatchedPairReader(RasterPairReader):
                 raise ValueError(
                     f'Could not match {src_name} band(s) {list(src_bands[unmatched])} with {ref_name} '
                     f'band(s) {list(unmatch_ref_band_names)}.  Ensure {src_name} and {ref_name} non-alpha band '
-                    f'counts match, {src_name} and {ref_name} have `center_wavelength` tags for each band, '
+                    f'counts match, {src_name} and {ref_name} have ``center_wavelength`` tags for each band, '
                     f'or set `force` to True.'
                 )
         # Truncate src and ref to reflect the matched bands

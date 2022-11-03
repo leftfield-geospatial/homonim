@@ -36,6 +36,7 @@ from rasterio.warp import SUPPORTED_RESAMPLING
 from homonim import utils, version, RasterFuse, RasterCompare, ParamStats, ProcCrs, Model
 from homonim.errors import ImageFormatError
 from homonim.raster_array import RasterArray
+from homonim.kernel_model import KernelModel
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,9 @@ class HomonimCommand(cloup.Command):
         def reformat_text(text: str, width: int, **kwargs):
             for sub_key, sub_value in sub_strings.items():
                 text = re.sub(sub_key, sub_value, text, flags=re.DOTALL)
-            return self.wrap_text(text, width, **kwargs)
+            wr_text = self.wrap_text(text, width, **kwargs)
+            # change double newline to single newline separated list
+            return re.sub('\n\n(\s*?)- ', '\n- ', wr_text, flags=re.DOTALL)
 
         cloup.formatting._formatter.wrap_text = reformat_text
         return cloup.Command.get_help(self, ctx)
@@ -163,13 +166,6 @@ def _nodata_cb(ctx: click.Context, param: click.Option, value):
         return value
 
 
-def _compare_cb(ctx: click.Context, param: click.Option, value):
-    """ click callback to check --compare path exists if specified.  """
-    if value and str(value) != 'ref' and not pathlib.Path(value).exists():
-        raise click.BadParameter(f'Comparison image does not exist: {value}')
-    return value
-
-
 def _creation_options_cb(ctx: click.Context, param: click.Option, value):
     """
     click callback to validate and parse multiple creation options (e.g. `-co KEY1=VAL1 -co KEY2=VAL2).
@@ -201,12 +197,11 @@ def _param_file_cb(ctx: click.Context, param: click.Argument, value):
             raise click.BadParameter(f'{filename.name} is not a valid parameter image.', param=param)
     return value
 
-
 # define click options and arguments common to more than one command
 # use cloup's argument to auto print argument help on command line
 ref_file_arg = cloup.argument(
-    'ref-file', nargs=1, metavar='REFERENCE', type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
-    help='Path to a reference image.'
+    'ref-file', nargs=1, metavar='REFERENCE', type=click.Path(exists=False, dir_okay=False, path_type=pathlib.Path),
+    help='Path or URL of a reference image.'
 )
 threads_option = click.option(
     '-t', '--threads', type=click.INT, default=RasterFuse.create_block_config()['threads'], show_default=True,
@@ -275,8 +270,8 @@ def cli(verbose: int, quiet: int):
 @cloup.command(cls=FuseCommand)
 # standard options
 @cloup.argument(
-    'src-file', nargs=-1, metavar='SOURCE...', type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
-    help='Path(s) to source image(s) to be corrected.'
+    'src-file', nargs=-1, metavar='SOURCE...', type=click.Path(exists=False, dir_okay=False, path_type=pathlib.Path),
+    help='Path/URL(s) of source image(s) to be corrected.'
 )
 @ref_file_arg
 @cloup.option_group(
@@ -285,17 +280,20 @@ def cli(verbose: int, quiet: int):
     # if cloup's mutually exclusive etc. functionality is needed, it should be the latter.
     click.option(
         '-m', '--model', type=click.Choice([m.value for m in Model], case_sensitive=False),
-        default=Model.gain_blk_offset.value, show_default=True, help="""Correction model.
-        \b
-        
-        - `gain`: Gain-only model.
-        - `gain-blk-offset`: Gain-only model applied to offset normalised image blocks.
-        - `gain-offset`: Gain and offset model.
+        default=KernelModel.default_model.value, show_default=True, help="""Correction model.
+
+        - `gain`: Gain-only model, suitable for haze-free and zero offset images.
+
+        - `gain-blk-offset`: Gain-only model applied to offset normalised blocks.  Suitable for most source-reference combinations.
+
+        - `gain-offset`: Gain and offset model.  Most accurate model, but sensitive to differences between source and reference.
         """,
     ),  # yapf: disable
     click.option(
-        '-k', '--kernel-shape', type=click.Tuple([click.INT, click.INT]), nargs=2, default=(5, 5), show_default=True,
-        metavar='HEIGHT WIDTH', help='Kernel height and width in pixels of the :option:`--proc-crs` image.'
+        '-k', '--kernel-shape', type=click.Tuple([click.INT, click.INT]), nargs=2,
+        default=KernelModel.default_kernel_shape, show_default=True, metavar='HEIGHT WIDTH',
+        help='Kernel height and width in pixels of the :option:`--proc-crs <homonim-fuse --proc-crs>` image. Larger '
+             'kernels are less susceptible to over-fitting, but provide lower resolution correction.'
     ),
     src_bands_option,
     ref_bands_option,
@@ -308,8 +306,9 @@ def cli(verbose: int, quiet: int):
         help='Overwrite existing output file(s).'
     ),
     click.option(
-        '-cmp', '--compare', 'cmp_file', metavar='FILE', type=click.Path(dir_okay=False, path_type=pathlib.Path),
-        is_flag=False, flag_value='ref', default=None, callback=_compare_cb,
+        '-cmp', '--compare', 'cmp_file', metavar='FILE',
+        type=click.Path(exists=False, dir_okay=False, path_type=pathlib.Path), is_flag=False, flag_value='ref',
+        default=None,
         help='Compare source and corrected images with this reference image.  If no ``FILE`` value is given, source '
         'and corrected images are compared with :option:`REFERENCE`.'
     ),
@@ -334,7 +333,7 @@ def cli(verbose: int, quiet: int):
     "Advanced options",
     click.option(
         '-pi/-npi', '--param-image/--no-param-image', type=click.BOOL, default=False, show_default=True,
-        help=f'Write the  model parameters and R\N{SUPERSCRIPT TWO} values for each corrected image into a parameter '
+        help=f'Write the  model parameters and R\N{SUPERSCRIPT TWO} values for each corrected image to a parameter '
         f'image file.'
     ),
     click.option(
@@ -406,11 +405,11 @@ def fuse(
     image extents must encompass those of the source image(s).
 
     The reference image should contain bands that are approximate (wavelength) matches to the source image bands.
-    Where source and reference images are RGB, or have `center_wavelength` metadata, bands are matched automatically.
-    Where there are the same number of source and reference bands, and no `center_wavelength` metadata, bands are
+    Where source and reference images are RGB, or have ``center_wavelength`` metadata, bands are matched automatically.
+    Where there are the same number of source and reference bands, and no ``center_wavelength`` metadata, bands are
     assumed to be in matching order.  The :option:`--src-band <homonim-fuse --src-band>` and
-    :option:`--ref-band <homonim-fuse --ref-band>` options allow subsets and ordering of input and reference bands to be
-    specified.
+    :option:`--ref-band <homonim-fuse --ref-band>` options allow subsets and ordering of source and reference bands
+    to be specified.
 
     Corrected image(s) are named automatically based on the source file name and option values.
     \b
@@ -423,7 +422,7 @@ def fuse(
         homonim fuse source.tif reference.tif
 
     Correct `source.tif` with `reference.tif` using the `gain-blk-offset` model, a kernel of 5 x 5 pixels,
-    and placing the corrected images in the `corrected` directory::
+    and place the corrected images in the `corrected` directory::
 
         homonim fuse --model gain-blk-offset --kernel-shape 5 5 --out-dir ./corrected source.tif reference.tif
 
@@ -441,10 +440,10 @@ def fuse(
     """
     # @formatter:on
 
-    try:
-        kernel_shape = utils.validate_kernel_shape(kernel_shape, model=model)
-    except Exception as ex:
-        raise click.BadParameter(str(ex))
+    # try:
+    #     kernel_shape = utils.validate_kernel_shape(kernel_shape, model=model)
+    # except Exception as ex:
+    #     raise click.BadParameter(str(ex))
 
     # build configuration dictionaries for RasterFuse
     block_config = _update_existing_keys(RasterFuse.create_block_config(), **kwargs)
@@ -535,8 +534,8 @@ def compare(
     those of the input image(s).
 
     The reference image should contain bands that are approximate (wavelength) matches to the input image bands.
-    Where input and reference images are RGB, or have `center_wavelength` metadata, bands are matched automatically.
-    Where there are the same number of input and reference bands, and no `center_wavelength` metadata, bands are
+    Where input and reference images are RGB, or have ``center_wavelength`` metadata, bands are matched automatically.
+    Where there are the same number of input and reference bands, and no ``center_wavelength`` metadata, bands are
     assumed to be in matching order.  The :option:`--src-band <homonim-compare --src-band>` and
     :option:`--ref-band <homonim-compare --ref-band>` options allow subsets and ordering of input and reference bands
     to be specified.
@@ -569,21 +568,21 @@ def compare(
             with RasterCompare(
                 src_filename, ref_file, proc_crs=proc_crs, src_bands=src_bands, ref_bands=ref_bands, force=force_match,
             ) as raster_compare:  # yapf: disable
-                stats_dict[str(src_filename)] = raster_compare.compare(**config)
+                stats_dict[str(src_filename)] = raster_compare.process(**config)
             logger.info(f'Completed in {timer() - start_time:.2f} secs')
 
         # print a key for the following tables
-        logger.info(f'\n\n{raster_compare.schema_table}')
+        logger.info(f'\n\n{raster_compare.schema_table()}')
 
         # print a results table per source image file
         summ_dict = {}
         for src_filename, im_stats_dict in stats_dict.items():
-            logger.info(f'\n\n{str(src_filename)}:\n\n{raster_compare.stats_table(im_stats_dict)}')
+            logger.info(f'\n\n{str(src_filename)}:\n\n{RasterCompare.stats_table(im_stats_dict)}')
             summ_dict[pathlib.Path(src_filename).name] = im_stats_dict['Mean'].copy()
 
         # print a summary results table comparing all source files
         if len(summ_dict) > 1:
-            logger.info(f'\n\nSummary over bands:\n\n{raster_compare.stats_table(summ_dict, key_header="file")}')
+            logger.info(f'\n\nSummary over bands:\n\n{RasterCompare.stats_table(summ_dict, key_header="file")}')
 
         if output is not None:
             stats_dict['Reference'] = str(ref_file)

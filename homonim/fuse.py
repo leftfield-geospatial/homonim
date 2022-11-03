@@ -28,7 +28,7 @@ import rasterio
 import rasterio as rio
 from rasterio.enums import Resampling
 from rasterio.io import DatasetWriter
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 from homonim import utils
 from homonim.enums import Model, ProcCrs
@@ -51,15 +51,15 @@ class RasterFuse(MatchedPairReader):
         Reference image extents must encompass those of the source image.
 
         The reference image should contain bands that are approximate (wavelength) matches to the source image bands.
-        Where source and reference images are RGB, or have `center_wavelength` metadata, bands are matched
+        Where source and reference images are RGB, or have ``center_wavelength`` metadata, bands are matched
         automatically based on wavelength.  Where there are the same number of source and reference bands, and no
-        `center_wavelength` metadata, bands are assumed to be in matching order.  Subsets and ordering of source
+        ``center_wavelength`` metadata, bands are assumed to be in matching order.  Subsets and ordering of source
         and reference bands can be specified with the ``src_bands`` and ``ref_bands`` parameters.
 
         .. note::
 
-            Satellite and other imagery downloaded with `geedim <https://github.com/dugalh/geedim>`_ is populated with
-            ``center_wavelength``, and other metadata.
+            Images downloaded with `geedim <https://github.com/dugalh/geedim>`_ have ``center_wavelength`` metadata
+            compatible with ``homonim``.
 
         Parameters
         ----------
@@ -68,10 +68,9 @@ class RasterFuse(MatchedPairReader):
         ref_filename: str, Path
             Path to a reference image file.
         proc_crs: homonim.enums.ProcCrs, optional
-            :class:`~homonim.enums.ProcCrs` instance specifying which of the source/reference image spaces will be
-            used for processing.  For most use cases, it can be left as the default of
-            :attr:`~homonim.enums.ProcCrs.auto`. In this case it will be resolved to refer to the lowest resolution of
-            the source and reference image CRS's.
+            :class:`~homonim.enums.ProcCrs` instance specifying which of the source/reference image CRS and pixel
+            grid to use for processing.  For most use cases, it can be left as the default of
+            :attr:`~homonim.enums.ProcCrs.auto` i.e. the lowest resolution of the source and reference image CRS's.
         src_bands: list of int, optional.
             Indexes of source spectral bands to be processed (1 based).  If not specified, all bands with the
             ``center_wavelength`` property, or all non-alpha bands, are used.
@@ -79,7 +78,7 @@ class RasterFuse(MatchedPairReader):
             Indexes of reference spectral bands to match and fuse with source bands (1 based).  Should contain at
             least as many elements as ``src_bands``, or the number of valid bands in the source image file,
             if ``src_bands`` is not specified.  If ``ref_bands`` is not specified, all reference bands with the
-            ``center_wavelength`` property, or all non-alpha bands, are used.
+            ``center_wavelength`` property, or all non-alpha bands are used.
         force: bool, optional
             Bypass auto wavelength matching, and any band-matching errors.  Use with caution.
         """
@@ -103,7 +102,7 @@ class RasterFuse(MatchedPairReader):
             0 = use all processors.
         max_block_mem: float, optional
             Maximum size of an image block in megabytes. Note that the total memory consumed by a thread is
-            proportional to, but a number of times larger than this number.
+            proportional to, but larger than this number.
 
         Returns
         -------
@@ -120,8 +119,8 @@ class RasterFuse(MatchedPairReader):
         creation_options: Optional[Dict] = None
     ) -> Dict:  # yapf: disable
         """
-        Utility method to create a `rasterio` image profile for the output image(s) that can be passed to
-        :meth:`RasterFuse.process`.  Without arguments, the default profile is returned.
+        Utility method to create a profile for the output image(s) that can be passed to :meth:`RasterFuse.process`.
+        Without arguments, the default profile is returned.
 
         Parameters
         ----------
@@ -133,19 +132,18 @@ class RasterFuse(MatchedPairReader):
         nodata: float, optional
             Output image nodata value.
         creation_options: dict, optional
-            Driver specific creation options e.g. ``dict(compression='deflate')`` for a GeoTIFF.
+            Driver specific creation options e.g. ``dict(compression='deflate')``.
             See the `GDAL docs <https://gdal.org/drivers/raster/index.html>`_ for available keys and values.
 
         Returns
         -------
         dict
-            `rasterio` image profile for output images.
+            Output image profile.
         """
-        # TODO: test effect of photometric=None on full size NGI files with ProcCrs.src param im (is bigtiff
-        #  necessary then?).  Also test ovw compress with / w/o compress_overview
+        # TODO: add compress_overview='auto' when gdal >=3.6
         creation_options = creation_options or dict(
-            tiled=True, blockxsize=512, blockysize=512, compress='deflate', interleave='band', photometric=None,
-            bigtiff='if_safer', compress_overview='auto',
+            tiled=True, blockxsize=512, blockysize=512, compress='deflate', interleave='band', photometric='minisblack',
+            bigtiff='if_safer',
         )
         return dict(driver=driver, dtype=dtype, nodata=nodata, creation_options=creation_options)
 
@@ -226,8 +224,6 @@ class RasterFuse(MatchedPairReader):
             }  # yapf. disable
             im.update_tags(bi + 1, **corr_meta_dict)
             # copy description from reference if the corrected file does not have one already
-            # TODO: how would it have one already?  And which metadata to copy.  We need the ref scale and offset,
-            #  but doesn't it make better sense to have the src center_wavelength, name and description?
             if im.descriptions[bi] is None:
                 im.set_band_description(bi + 1, self.ref_im.descriptions[ref_bi - 1])
 
@@ -323,8 +319,8 @@ class RasterFuse(MatchedPairReader):
     def process(
         self,
         corr_filename: Union[Path, str],
-        model: Model,
-        kernel_shape: Tuple[int, int],
+        model: Model = KernelModel.default_model,
+        kernel_shape: Tuple[int, int] = KernelModel.default_kernel_shape,
         param_filename: Optional[Union[Path, str]] = None,
         build_ovw: bool = True,
         overwrite: bool = False,
@@ -333,7 +329,7 @@ class RasterFuse(MatchedPairReader):
         block_config: Optional[Dict] = None,
     ):  # yapf: disable
         r"""
-        Correct the source image to surface reflectance by fusion with the reference.
+        Correct source image to surface reflectance by fusion with a reference.
 
         To improve speed and reduce memory usage, images are divided into blocks for concurrent processing.
 
@@ -341,11 +337,12 @@ class RasterFuse(MatchedPairReader):
         ----------
         corr_filename: str, Path
             Path to the corrected file to create.
-        model: homonim.enums.Model
-            The surface reflectance correction model to use.  See :class:`~homonim.enums.Model` for details.
-        kernel_shape: tuple of int
-            The (height, width) of the kernel in pixels of the :attr:`proc_crs` image (the lowest resolution
-            image, if :attr:`proc_crs` is :attr:`~homonim.enums.ProcCrs.auto`).
+        model: homonim.enums.Model, optional
+            Correction model to use.  See :class:`~homonim.enums.Model` for options.
+        kernel_shape: tuple of int, optional
+            (height, width) of the kernel in pixels of the :attr:`proc_crs` image (the lowest resolution
+            image, if :attr:`proc_crs` = :attr:`~homonim.enums.ProcCrs.auto`).  Larger kernels are less
+            susceptible to over-fitting on noisy data, but provide lower resolution correction.
         param_filename: str, Path, optional
             Path to an optional parameter file to write with correction parameters and *R*\ :sup:`2` values.  By
             default, no parameter file is written.
@@ -354,20 +351,20 @@ class RasterFuse(MatchedPairReader):
         overwrite: bool, optional
             Overwrite the output image(s) if they exist.
         model_config: dict, optional
-            Configuration dictionary for the correction model.  See
-            :meth:`create_model_config` for possible keys and default values.
+            Configuration dictionary for the correction model.  See :meth:`create_model_config` for keys and default
+            values.
         out_profile: dict, optional
-            Configuration dictionary for the output image(s).   See :meth:`~RasterFuse.create_out_profile` for
-            possible keys and default values.
+            Configuration dictionary for the output image(s).   See :meth:`~RasterFuse.create_out_profile` for keys and
+            default values.
         block_config: dict, optional
-            Configuration dictionary for block processing.  See :meth:`~RasterFuse.create_block_config` for possible
-            keys and default values.
+            Configuration dictionary for block processing.  See :meth:`~RasterFuse.create_block_config` for keys and
+            default values.
         """
         self._assert_open()
 
         # prepare configuration
         model_type = Model(model)
-        kernel_shape = tuple(utils.validate_kernel_shape(kernel_shape, model=model))
+        # kernel_shape = tuple(utils.validate_kernel_shape(kernel_shape, model=model))
         overlap = utils.overlap_for_kernel(kernel_shape)
         model_config = RasterFuse.create_model_config(**(model_config or {}))
         block_config = RasterFuse.create_block_config(**(block_config or {}))

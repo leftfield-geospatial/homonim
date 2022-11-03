@@ -20,15 +20,20 @@ from enum import Enum
 
 
 class Model(str, Enum):
-    """ Surface reflectance correction model. """
+    """
+    Linear model variants for correcting to surface reflectance.
+
+    Roughly speaking, gain compensates for atmospheric absorption and anisotropic (BRDF) effects, and offset
+    (when present) compensates for atmospheric reflectance and haze.
+    """
     gain = 'gain'
     """ 
     Gain-only model, suitable for haze-free and zero offset images (i.e. images where a surface reflectance of 
-    zero corresponds to a pixel value of ~zero). 
+    zero corresponds to a pixel value of ± zero). 
     """
     gain_blk_offset = 'gain-blk-offset'
     """ 
-    Gain-only model applied to offset normalised image blocks.  Suitable for most source / reference combinations.
+    Gain-only model applied to offset normalised image blocks.  Suitable for most source-reference combinations.
     """
     gain_offset = 'gain-offset'
     """
@@ -39,7 +44,7 @@ class Model(str, Enum):
 
 class ProcCrs(str, Enum):
     """
-    CRS in which images will be processed.
+    CRS and pixel grid in which images will be processed.
     """
     auto = 'auto'
     """ Lowest resolution of the source and reference image CRS's (recommended). """

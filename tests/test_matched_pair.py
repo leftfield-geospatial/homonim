@@ -33,6 +33,7 @@ from homonim.matched_pair import MatchedPairReader
 @pytest.mark.parametrize(['file', 'bands', 'exp_bands', 'exp_band_names', 'exp_wavelengths'], [
     ('file_rgba', None, [1, 2, 3], ['1', '2', '3'], [.650, .560, .480]),
     ('file_rgba', (1, 2, 3), [1, 2, 3], ['1', '2', '3'], [.650, .560, .480]),
+    ('file_rgba', (1, 2, 3), [1, 2, 3], ['1', '2', '3'], [.650, .560, .480]),
     ('file_masked', None, [1], ['1'], [float('nan')]),
     ('src_file_100cm_float', [1], [1], ['1'], [float('nan')]),
     ('s2_ref_file', None, [1, 2, 3], ['B4', 'B3', 'B2'], [0.6645, 0.56, 0.4966]),
@@ -42,6 +43,8 @@ from homonim.matched_pair import MatchedPairReader
         [0.443, 0.482, 0.562, 0.655, 0.865, 1.609, 2.201, 10.895]
     ),
     ('landsat_ref_file', [7, 8], [7, 8], ['SR_B7', 'SR_QA_AEROSOL'], [2.201, float('nan')]),
+    ('file_bgr', None, [1, 2, 3], ['1', '2', '3'], [ .480, .560, .650]),
+    ('file_bgr', (3, 2, 1), [3, 2, 1], ['3', '2', '1'], [.650, .560, .480]),
 ])  # yapf: disable
 def test_get_band_info(
     file: str, bands: Tuple, exp_bands: List, exp_band_names: List, exp_wavelengths: List,

@@ -1,6 +1,9 @@
 homonim
 =======
 
+.. image:: readme_eg.png
+   :alt: example
+
 .. include:: ../README.rst
     :start-after: short_descr_start
     :end-before: short_descr_end
@@ -18,10 +21,11 @@ Contents
    description
    installation
    background
-   preparation
-   example
+   case_studies
    cli
    api
+   advanced
+   tutorials
 
 * :ref:`genindex`
 

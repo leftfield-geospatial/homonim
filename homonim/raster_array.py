@@ -21,6 +21,7 @@ import logging
 import multiprocessing
 import pathlib
 from typing import Tuple, Dict, List, Union, Optional
+import warnings
 
 import numpy
 import numpy as np
@@ -31,6 +32,7 @@ from rasterio.enums import MaskFlags
 from rasterio.transform import TransformMethodsMixin
 from rasterio.warp import reproject, Resampling
 from rasterio.windows import Window, WindowMethodsMixin
+from rasterio.errors import NotGeoreferencedWarning
 
 from homonim import utils
 from homonim.errors import ImageProfileError, ImageFormatError
@@ -459,7 +461,7 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
             Driver specific creation options e.g. ``compression='deflate'`` for a GeoTiff.
             See the `GDAL docs <https://gdal.org/drivers/raster/index.html>`_ for available keys and values.
         """
-        with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
+        with rio.Env(GDAL_NUM_THREADS='ALL_CPUs', GTIFF_FORCE_RGBA=False):
             with rio.open(filename, 'w', driver=driver, **self.profile, **kwargs) as out_im:
                 out_im.write(self._array, indexes=range(1, self.count + 1) if self.count > 1 else 1)
 
@@ -510,11 +512,15 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         else:
             _dst_array = np.zeros(shape, dtype=dtype)
 
-        _, _dst_transform = reproject(
-            self._array, destination=_dst_array, src_crs=self._crs, src_transform=self._transform,
-            src_nodata=self._nodata, dst_crs=crs, dst_transform=transform, dst_nodata=nodata,
-            num_threads=multiprocessing.cpu_count(), resampling=resampling, **kwargs
-        )
+        # suppress NotGeoreferencedWarning which rasterio sometimes raises incorrectly
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', category=NotGeoreferencedWarning)
+
+            _, _dst_transform = reproject(
+                self._array, destination=_dst_array, src_crs=self._crs, src_transform=self._transform,
+                src_nodata=self._nodata, dst_crs=crs, dst_transform=transform, dst_nodata=nodata,
+                num_threads=multiprocessing.cpu_count(), resampling=resampling, **kwargs
+            )
         return RasterArray(_dst_array, crs=crs, transform=_dst_transform, nodata=nodata)
 
 

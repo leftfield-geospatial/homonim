@@ -51,7 +51,12 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.autosummary',
     'sphinx.ext.napoleon',
-    'nbsphinx'
+    'sphinx_copybutton',
+    'sphinx_gallery.load_style',
+    'jupyter_sphinx',
+    # note nbsphinx must be < 0.11 for now - see https://github.com/spatialaudio/nbsphinx/issues/655
+    'nbsphinx',
+    'sphinx.ext.autosectionlabel',
 ] # yapf: disable
 
 # Add any paths that contain templates here, relative to this directory.
@@ -94,10 +99,21 @@ autodoc_typehints = 'both'
 nbsphinx_prolog = """
 .. note::
 
-   This page was generated from a Jupyter notebook. If you want to run and 
-   interact with it, you can download it 
-   :download:`here <../{{ env.docname }}.ipynb>`.
+   This page was generated from a Jupyter notebook. To run and interact with it, 
+   you can download it :download:`here <../{{ env.docname }}.ipynb>`.
 """
+nbsphinx_thumbnails = {
+    'case_studies/regression_modelling': 'case_studies/regression_modelling-eval.png',
+    'case_studies/aerial_mosaic': 'case_studies/aerial_mosaic-corrected_mosaic.jpg',
+    'case_studies/drone_mosaic': 'case_studies/drone_mosaic-src_ref_corr.jpg',
+    'case_studies/classification': 'case_studies/classification-spectral_kde.jpg',
+}
+nbsphinx_execute_arguments = [
+    '--InlineBackend.figure_formats={"svg", "pdf"}',
+    '--InlineBackend.rc=figure.dpi=96',
+]
+nbsphinx_widgets_path=''
+nbsphinx_requirejs_path=''
 
 # -- Workaround for cloup arguments ------------------------------------------
 from sphinx_click import ext
@@ -114,3 +130,8 @@ def _format_cloup_argument(arg):
 
 # overwrite sphinx_click's _format_argument with the one above
 ext._format_argument = _format_cloup_argument
+
+# -- Options for autosectionlabel ----------------------------------------------------
+# Make sure the target is unique
+autosectionlabel_prefix_document = True
+autosectionlabel_maxdepth = 3  # avoid duplicate section labels for CLI examples

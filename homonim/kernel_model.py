@@ -34,7 +34,15 @@ OShape = Optional[Tuple[int, int]]
 
 class KernelModel:
 
-    def __init__(self, model: Model, kernel_shape: Tuple[int, int], find_r2: bool = False, **kwargs):
+    default_kernel_shape = (5, 5)           # default kernel shape
+    default_model = Model.gain_blk_offset   # default model
+
+    def __init__(self,
+        model: Model = default_model,
+        kernel_shape: Tuple[int, int] = default_kernel_shape,
+        find_r2: bool = False,
+        **kwargs
+    ):
         """
         A base class for surface reflectance modelling and correction of blocks of image data.
 
@@ -51,9 +59,9 @@ class KernelModel:
 
         Parameters
         ----------
-        model: homonim.enums.Model
+        model: homonim.enums.Model, optional
             Surface reflectance correction model.
-        kernel_shape: tuple
+        kernel_shape: tuple, optional
             (height, width) of the kernel in pixels.
         find_r2: bool, optional
             Whether to calculate *R*\\ :sup:`2` (coefficient of determination) for each kernel model, and include in
@@ -95,16 +103,16 @@ class KernelModel:
         """
         Utility method to create a KernelModel configuration dictionary that can be passed to
         :meth:`KernelModel.__init__` and :meth:`homonim.RasterFuse.process`.  Without arguments, the default
-        configuration values are returned.
+        configuration is returned.
 
         Parameters
         ----------
         r2_inpaint_thresh: float, optional
             *R*\\ :sup:`2` (coefficient of determination) threshold below which to `in-paint` kernel model parameters
-            from surrounding areas (applies to the :attr:`~homonim.enums.Model.gain_offset` model only).  For
+            from surrounding areas.  Applies to the :attr:`~homonim.enums.Model.gain_offset` model only.  For
             pixels where the model gives a poor approximation to the data (this can occur in areas where source and
             reference differ due to e.g. shadowing, land cover changes etc.), model offsets are interpolated from
-            surrounding areas, and gains re-estimated.  Set ``r2_inpaint_thresh`` to `None` to turn off in-painting.
+            surrounding areas, and gains re-estimated.  `None` turns off in-painting.
         mask_partial: bool, optional
             Mask output pixels not produced by full kernel or source/reference image coverage.  Useful for ensuring
             strict model validity, and reducing seam-lines between overlapping images.

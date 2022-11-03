@@ -17,7 +17,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 import logging
-import pathlib
+from pathlib import Path
 import threading
 from contextlib import ExitStack
 from itertools import product
@@ -58,7 +58,7 @@ class BlockPair(NamedTuple):
 class RasterPairReader:
 
     def __init__(
-        self, src_filename: Union[str, pathlib.Path], ref_filename: Union[str, pathlib.Path],
+        self, src_filename: Union[str, Path], ref_filename: Union[str, Path],
         proc_crs: ProcCrs = ProcCrs.auto,
     ):
         """
@@ -71,17 +71,16 @@ class RasterPairReader:
         Parameters
         ----------
         src_filename: str, pathlib.Path
-            Path to the source image file.
+            Path or URL of the source image file.
         ref_filename: str, pathlib.Path
-            Path to the reference image file.
+            Path or URL of the reference image file.
         proc_crs: homonim.enums.ProcCrs, optional
-            :class:`~homonim.enums.ProcCrs` instance specifying which of the source/reference image spaces will be
-            used for processing.  For most use cases, it can be left as the default of
-            :attr:`~homonim.enums.ProcCrs.auto`. In this case it will be resolved to refer to the lowest resolution of
-            the source and reference image CRS's.
+            :class:`~homonim.enums.ProcCrs` instance specifying which of the source/reference image CRS and pixel
+            grid to use for processing.  For most use cases, it can be left as the default of
+            :attr:`~homonim.enums.ProcCrs.auto` i.e. the lowest resolution of the source and reference image CRS's.
         """
-        self._src_filename = pathlib.Path(src_filename)
-        self._ref_filename = pathlib.Path(ref_filename)
+        self._src_filename = Path(src_filename)
+        self._ref_filename = Path(ref_filename)
 
         with rio.open(self._src_filename, 'r') as src_im, rio.open(self._ref_filename, 'r') as ref_im:
             self._validate_pair_format(src_im, ref_im)
@@ -123,7 +122,7 @@ class RasterPairReader:
 
     @property
     def proc_crs(self) -> ProcCrs:
-        """ Which of the source and reference image CRS's will be used for processing. """
+        """ Which of the source and reference image CRS and pixel grids will be used for processing. """
         return self._proc_crs
 
     @property
@@ -138,8 +137,9 @@ class RasterPairReader:
         def validate_image_format(im: rasterio.DatasetReader):
             """ Validate an open rasterio dataset for use as a source or reference image. """
             # test for 12 bit jpegs
+            name = Path(im.name).name
             twelve_bit_jpeg_error =  errors.UnsupportedImageError(
-                f'Could not read image {im.name}.  JPEG compression with NBITS==12 is not supported, '
+                f'Could not read image {name}.  JPEG compression with NBITS==12 is not supported, '
                 f'you probably need to recompress this image.'
             )
             if 'IMAGE_STRUCTURE' in im.tag_namespaces(1) and 'NBITS' in im.tags(1, 'IMAGE_STRUCTURE'):
@@ -158,19 +158,21 @@ class RasterPairReader:
             is_masked = any([MaskFlags.all_valid not in im.mask_flag_enums[bi] for bi in range(im.count)])
             if im.nodata is None and not is_masked:
                 logger.warning(
-                    f'{im.name} has no mask or nodata value, any invalid pixels should be masked before processing.'
+                    f'{name} has no mask or nodata value, any invalid pixels should be masked before processing.'
                 )
 
             # warn if not standard north-up orientation
             if not utils.north_up(im):
-                logger.warning(f'{im.name} will be re-projected to a standard North-up orientation.')
+                logger.warning(f'{name} will be re-projected to a standard North-up orientation.')
 
         validate_image_format(src_im)
         validate_image_format(ref_im)
         # warn if the source and reference are not in the same CRS
         if src_im.crs.to_proj4() != ref_im.crs.to_proj4():
+            src_name = Path(src_im.name).name
+            ref_name = Path(ref_im.name).name
             logger.warning(
-                f'Source and reference image will be re-projected to the same CRS: {src_im.name} and {ref_im.name}'
+                f'Source and reference image will be re-projected to the same CRS: {src_name} and {ref_name}'
             )
 
     def _match_pair_bands(
@@ -178,15 +180,17 @@ class RasterPairReader:
     ) -> Tuple[Tuple[int], Tuple[int]]:  # yapf: disable
         """ Validate and match source and reference bands. """
         # retrieve non-alpha bands
+        src_name = Path(src_im.name).name
+        ref_name = Path(ref_im.name).name
         src_bands = utils.get_nonalpha_bands(src_im)
-        logger.debug(f'{src_im.name} non-alpha bands: {src_bands}')
+        logger.debug(f'{src_name} non-alpha bands: {src_bands}')
         ref_bands = utils.get_nonalpha_bands(ref_im)
-        logger.debug(f'{ref_im.name} non-alpha bands: {ref_bands}')
+        logger.debug(f'{ref_name} non-alpha bands: {ref_bands}')
 
         # check reference has enough bands
         if len(src_bands) > len(ref_bands):
             raise errors.ImageContentError(
-                f'Reference ({ref_im.name}) has fewer non-alpha bands than source ({src_im.name}).'
+                f'Reference ({ref_name}) has fewer non-alpha bands than source ({src_name}).'
             )
         # warn if source and reference band counts don't match
         if len(src_bands) != len(ref_bands):

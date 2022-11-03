@@ -26,7 +26,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 from rasterio.warp import Resampling
 from tabulate import tabulate
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 from homonim import utils
 from homonim.enums import ProcCrs
@@ -40,41 +40,40 @@ class RasterCompare(MatchedPairReader):
 
     def __init__(self, *args, **kwargs):
         """
-        Class to statistically compare source and reference images.
+        Class to compare source and reference images.
 
-        Reference and input image(s) should be co-located and spectrally similar.  Reference image extents must
-        encompass those of the input image(s).
+        Reference and source image(s) should be co-located and spectrally similar.  Reference image extents must
+        encompass those of the source image(s).
 
         The reference image should contain bands that are approximate (wavelength) matches to the source image bands.
-        Where source and reference images are RGB, or have `center_wavelength` metadata, bands are matched
+        Where source and reference images are RGB, or have ``center_wavelength`` metadata, bands are matched
         automatically based on wavelength.  Where there are the same number of source and reference bands, and no
-        `center_wavelength` metadata, bands are assumed to be in matching order.  Subsets and ordering of source
+        ``center_wavelength`` metadata, bands are assumed to be in matching order.  Subsets and ordering of source
         and reference bands can be specified with the ``src_bands`` and ``ref_bands`` parameters.
 
         .. note::
 
-            Satellite and other imagery downloaded with `geedim <https://github.com/dugalh/geedim>`_ is populated with
-            ``center_wavelength``, and other metadata.
+            Images downloaded with `geedim <https://github.com/dugalh/geedim>`_ have ``center_wavelength`` metadata
+            compatible with ``homonim``.
 
         Parameters
         ----------
-        src_filename: str, Path
-            Path to a source image file.
-        ref_filename: str, Path
-            Path to a reference image file.
+        src_filename: str, pathlib.Path
+            Path or URL of the source image file.
+        ref_filename: str, pathlib.Path
+            Path or URL of the reference image file.
         proc_crs: homonim.enums.ProcCrs, optional
-            :class:`~homonim.enums.ProcCrs` instance specifying which of the source/reference image spaces will be
-            used for processing.  For most use cases, it can be left as the default of
-            :attr:`~homonim.enums.ProcCrs.auto`. In this case it will be resolved to refer to the lowest resolution of
-            the source and reference image CRS's.
+            :class:`~homonim.enums.ProcCrs` instance specifying which of the source/reference image CRS and pixel
+            grid to use for processing.  For most use cases, it can be left as the default of
+            :attr:`~homonim.enums.ProcCrs.auto` i.e. the lowest resolution of the source and reference image CRS's.
         src_bands: list of int, optional.
             Indexes of source spectral bands to be processed (1 based).  If not specified, all bands with the
             ``center_wavelength`` property, or all non-alpha bands, are used.
         ref_bands: list of int, optional.
-            Indexes of reference spectral bands to match and compare with source bands (1 based).  Should contain at
+            Indexes of reference spectral bands to match and fuse with source bands (1 based).  Should contain at
             least as many elements as ``src_bands``, or the number of valid bands in the source image file,
             if ``src_bands`` is not specified.  If ``ref_bands`` is not specified, all reference bands with the
-            ``center_wavelength`` property, or all non-alpha bands, are used.
+            ``center_wavelength`` property, or all non-alpha bands are used.
         force: bool, optional
             Bypass auto wavelength matching, and any band-matching errors.  Use with caution.
         """
@@ -87,13 +86,13 @@ class RasterCompare(MatchedPairReader):
         rrmse=dict(abbrev='rRMSE', description='Relative RMSE (RMSE/mean(ref))', ),
         n=dict(abbrev='N', description='Number of pixels', )
     )  # yapf: disable
-    """ Dictionary describing the statistics returned by :attr:`RasterCompare.compare`. """
+    """ Dictionary describing the statistics returned by :meth:`RasterCompare.process`. """
 
-    @property
-    def schema_table(self) -> str:
-        """ Table string describing statistics returned by :attr:`RasterCompare.compare`. """
-        headers = {key: key.upper() for key in list(self.schema.values())[0].keys()}
-        return tabulate(self.schema.values(), headers=headers, tablefmt=utils.table_format)
+    @staticmethod
+    def schema_table() -> str:
+        """ Return a table string describing the :meth:`RasterCompare.process` statistics. """
+        headers = {key: key.upper() for key in list(RasterCompare.schema.values())[0].keys()}
+        return tabulate(RasterCompare.schema.values(), headers=headers, tablefmt=utils.table_format)
 
     @staticmethod
     def create_config(
@@ -101,8 +100,8 @@ class RasterCompare(MatchedPairReader):
         upsampling: Resampling = Resampling.cubic_spline,
     ) -> Dict:
         """
-        Utility method to create a RasterCompare configuration dictionary that can be passed to
-        :meth:`RasterCompare.process`.  Without arguments, the default configuration values are returned.
+        Utility method to create a RasterCompare configuration dictionary whose items can be passed as keyword
+        arguments to :meth:`RasterCompare.process`.  Without arguments, the default configuration is returned.
 
         Parameters
         ----------
@@ -112,7 +111,7 @@ class RasterCompare(MatchedPairReader):
             0 = use all processors.
         max_block_mem: float, optional
             Maximum size of an image block in megabytes. Note that the total memory consumed by a thread is
-            proportional to, but a number of times larger than this number.
+            proportional to, but larger than this number.
         downsampling: rasterio.enums.Resampling, optional
             Resampling method to use when downsampling. See the `rasterio docs
             <https://rasterio.readthedocs.io/en/latest/api/rasterio.enums.html#rasterio.enums.Resampling>`_ for
@@ -167,10 +166,12 @@ class RasterCompare(MatchedPairReader):
         sum_over_bands = {}
         for band_i, band_sum_dict in enumerate(image_sums):
             band_stats = get_band_stats(**band_sum_dict)
+            # prefer ref band name as key: with multiple source images compared with one reference, this makes the
+            # comparison tables easier to interpret
             band_desc = (
                 self.ref_im.descriptions[self.ref_bands[band_i] - 1] or
                 self.src_im.descriptions[self.src_bands[band_i] - 1] or
-                f'Ref. band {self.ref_bands[band_i]}'    # TODO: naming confusion here, src/ref number?
+                f'Ref. band {self.ref_bands[band_i]}'
             )  # yapf: disable
             image_stats[band_desc] = band_stats
             sum_over_bands = {k: sum_over_bands.get(k, 0) + v for k, v in band_stats.items()}
@@ -184,15 +185,16 @@ class RasterCompare(MatchedPairReader):
         image_stats['Mean'] = mean_stats
         return image_stats
 
-    def stats_table(self, stats_dict: Dict[str, Dict], key_header: str = 'band'):
+    @staticmethod
+    def stats_table(stats_dict: Dict[str, Dict], key_header: str = 'band'):
         """
-        Create a table string from the provided comparison statistics.
+        Return a table string for the provided comparison statistics.
 
         Parameters
         ----------
         stats_dict: dict of str: dict
-            Comparison statistics to tabulate, as returned by :meth:`RasterCompare.compare`.
-        key_headrer: str, optional
+            Comparison statistics to tabulate, as returned by :meth:`RasterCompare.process`.
+        key_header: str, optional
             Table header for the stats_dict key values.
 
         Returns
@@ -202,14 +204,14 @@ class RasterCompare(MatchedPairReader):
         """
         stats_list = [dict(**{key_header: key}, **val) for key, val in stats_dict.items()]
         headers = {
-            k: self.schema[k]['abbrev'] if k in self.schema else str.capitalize(k)
+            k: RasterCompare.schema[k]['abbrev'] if k in RasterCompare.schema else str.capitalize(k)
             for k in list(stats_list[0].keys())
         }  # yapf: disable
         return tabulate(stats_list, headers=headers, floatfmt='.3f', stralign='right', tablefmt=utils.table_format)
 
-    def compare(self, **kwargs) -> Dict[str, Dict]:
+    def process(self, **kwargs) -> Dict[str, Dict]:
         """
-        Statistically compare source and reference images.
+        Compare source and reference images.
 
         To improve speed and reduce memory usage, images are divided into blocks for concurrent processing.
 
@@ -221,8 +223,8 @@ class RasterCompare(MatchedPairReader):
 
         Returns
         -------
-        dict of str: dict
-            Dict representing the comparison results.
+        dict of dict
+            Dict representing the comparison statistics.
         """
         self._assert_open()
         config = self.create_config(**kwargs)
