@@ -22,6 +22,7 @@ with RasterFuse(src_file, ref_file) as fuse:
 
 # [compare-start]
 from homonim import RasterCompare
+
 # url of independent landsat reference for evaluation
 cmp_ref_file = (
     'https://raw.githubusercontent.com/dugalh/homonim/main/'
