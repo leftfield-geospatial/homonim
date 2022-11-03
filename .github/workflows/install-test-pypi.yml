@@ -22,14 +22,13 @@ jobs:
       - name: Install homonim from Test PyPI
         run: |
           python -m pip install --upgrade pip
-          python -m pip install homonim
+          python -m pip install --upgrade homonim
       - name: Test homonim CLI
         timeout-minutes: 5
         run: |
-          pwd
-          ls -R
-          mkdir ./tests/data/corrected/
+          cd tests/data
+          mkdir corrected
           homonim fuse --help
-          homonim fuse -m gain-blk-offset -k 5 5 -od ./tests/data/corrected -o ./tests/data/source/aerial_rgb_byte_1.tif  ./tests/data/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif
-          ls ./tests/data/corrected/*
-          test -f ./tests/data/corrected/aerial_rgb_byte_1_RGB_FUSE_cREF_mGAIN-BLK-OFFSET_k5_5.tif && echo "Test OK"
+          homonim fuse -m gain-blk-offset -k 5 5 -od ./corrected -cmp -o ./source/ngi_rgb_byte_1.tif  ./reference/landsat8_byte.tif
+          ls ./corrected/*
+          test -f ./corrected/ngi_rgb_byte_1_FUSE_cREF_mGAIN-BLK-OFFSET_k5_5.tif && echo "Test OK"
