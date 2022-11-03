@@ -16,24 +16,25 @@ jobs:
         os: [ macos-latest, ubuntu-latest, windows-latest ]
         python-version: [ 3.7, 3.8, 3.9, 3.10 ]
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v2  # for the test data
     - uses: conda-incubator/setup-miniconda@v2
       with:
         python-version: ${{ matrix.python-version }}
+        channels: conda-forge
+        channel-priority: true
         activate-environment: test
+        mamba-version: "*"
     - name: Install homonim
       run: |
-        conda info
-        conda config --add channels conda-forge
-        conda config --set channel_priority strict
-        conda install homonim
-        conda list
+        mamba info
+        mamba list
+        mamba install -c conda-forge homonim>=0.3
+        mamba list
     - name: Test homonim
       run: |
-        pwd
-        ls -R
-        mkdir ./tests/data/corrected/
+        cd tests/data
+        mkdir corrected
         homonim fuse --help
-        homonim fuse -m gain-blk-offset -k 5 5 -od ./tests/data/corrected -o ./tests/data/source/aerial_rgb_byte_1.tif  ./tests/data/reference/LANDSAT-LC08-C02-T1_L2-LC08_171083_20150923_B432_Byte.tif
-        ls ./tests/data/corrected/*
-        test -f ./tests/data/corrected/aerial_rgb_byte_1_RGB_FUSE_cREF_mGAIN-BLK-OFFSET_k5_5.tif && echo "Test OK"
+        homonim fuse -m gain-blk-offset -k 5 5 -od ./corrected -cmp -o ./source/ngi_rgb_byte_1.tif  ./reference/landsat8_byte.tif
+        ls ./corrected/*
+        test -f ./corrected/ngi_rgb_byte_1_FUSE_cREF_mGAIN-BLK-OFFSET_k5_5.tif && echo "Test OK"
