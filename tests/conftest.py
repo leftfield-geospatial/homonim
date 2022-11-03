@@ -245,6 +245,20 @@ def file_rgba(tmp_path: Path, array_byte, profile_byte) -> Path:
 
 
 @pytest.fixture
+def file_bgr(tmp_path: Path, array_byte, profile_byte) -> Path:
+    """ BGR byte geotiff. """
+    array = np.stack((array_byte,) * 3, axis=0)
+    filename = tmp_path.joinpath('bgr.tif')
+    profile = profile_byte.copy()
+    profile.update(count=3, nodata=None,)
+    with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
+        with rio.open(filename, 'w', **profile) as ds:
+            ds.colorinterp = [ColorInterp.blue, ColorInterp.green, ColorInterp.red]
+            ds.write(array, indexes=range(1, 4))
+    return filename
+
+
+@pytest.fixture
 def file_masked(tmp_path: Path, array_byte, profile_byte) -> Path:
     """ Single band byte geotiff with internal mask (i.e. w/o nodata). """
     filename = tmp_path.joinpath('masked.tif')
