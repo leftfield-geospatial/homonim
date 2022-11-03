@@ -54,6 +54,7 @@ extensions = [
     'sphinx_copybutton',
     'sphinx_gallery.load_style',
     'jupyter_sphinx',
+    # note nbsphinx must be < 0.11 for now - see https://github.com/spatialaudio/nbsphinx/issues/655
     'nbsphinx',
     'sphinx.ext.autosectionlabel',
 ] # yapf: disable
