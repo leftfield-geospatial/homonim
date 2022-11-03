@@ -1,5 +1,4 @@
-# See https://github.com/dugalh/homonim/blob/main/docs/usage.rst#advanced-options for detailed documentation
-# TODO: update the above link for RTD
+# See https://homonim.readthedocs.io/en/latest/cli.html#homonim-fuse for documentation on options
 # Correction configuration
 param_image: True
 mask_partial: True
