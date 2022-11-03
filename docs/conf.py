@@ -131,14 +131,6 @@ def _format_cloup_argument(arg):
 # overwrite sphinx_click's _format_argument with the one above
 ext._format_argument = _format_cloup_argument
 
-# Configuration for sphinx gallery
-# sphinx_gallery_conf = {
-#     'examples_dirs': 'examples',   # path to your example scripts
-#     'gallery_dirs': 'auto_examples',  # path to where to save gallery generated output
-#     'filename_pattern': '.ipynb',
-#     'ignore_pattern': r'api_example.py',
-# }
-
 # -- Options for autosectionlabel ----------------------------------------------------
 # Make sure the target is unique
 autosectionlabel_prefix_document = True
