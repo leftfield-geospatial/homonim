@@ -235,11 +235,10 @@ def file_rgba(tmp_path: Path, array_byte, profile_byte) -> Path:
     array[3] = (array[0] != profile_byte['nodata']) * 255
     filename = tmp_path.joinpath('rgba.tif')
     profile = profile_byte.copy()
-    profile.update(
-        count=4, nodata=None, colorinterp=[ColorInterp.red, ColorInterp.green, ColorInterp.blue, ColorInterp.alpha]
-    )
+    profile.update(count=4, nodata=None,)
     with rio.Env(GDAL_NUM_THREADS='ALL_CPUs'):
         with rio.open(filename, 'w', **profile) as ds:
+            ds.colorinterp = [ColorInterp.red, ColorInterp.green, ColorInterp.blue, ColorInterp.alpha]
             ds.write(array, indexes=range(1, 5))
     return filename
 
