@@ -3,7 +3,7 @@
 homonim
 =======
 
-.. image:: https://raw.githubusercontent.com/dugalh/homonim/update_docs/docs/readme_eg.webp
+.. image:: https://raw.githubusercontent.com/dugalh/homonim/main/docs/readme_eg.webp
    :alt: example
 
 
