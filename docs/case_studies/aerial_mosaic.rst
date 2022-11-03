@@ -5,7 +5,7 @@ This case study is a summary of the `original presentation <https://www.research
 
 The mosaic consists of 2228 mages, captured over the Little Karoo (South Africa) from 22 Jan to 8 Feb 2010.  The images have a 50 cm spatial resolution and 4 spectral bands (red, green, blue and near-infrared).
 
-.. figure:: aerial_mosaic-study_area.png
+.. figure:: aerial_mosaic-study_area.webp
     :scale: 50 %
     :align: center
 
@@ -19,7 +19,7 @@ The source aerial mosaic is overlaid on the MODIS reference in the figure below.
 
 .. _source-mosaic:
 
-.. figure:: aerial_mosaic-source_mosaic.jpg
+.. figure:: aerial_mosaic-source_mosaic.webp
     :width: 80%
     :align: center
 
@@ -27,7 +27,7 @@ The source aerial mosaic is overlaid on the MODIS reference in the figure below.
 
 Additive atmospheric effects were assumed negligible, and correction was performed with the *gain* :ref:`model <background:model>`.  A small :ref:`kernel <background:kernel shape>` of 1 pixel was chosen to mitigate the effect of large (500 m) MODIS pixels.  The next figure shows the corrected mosaic overlaid on the MODIS reference.
 
-.. figure:: aerial_mosaic-corrected_mosaic.jpg
+.. figure:: aerial_mosaic-corrected_mosaic.webp
     :width: 80%
     :align: center
 
@@ -40,7 +40,7 @@ Evaluation
 
 To evaluate the relative improvement in surface reflectance accuracy, source and corrected mosaics were compared with a reference.  Rather than compare with the MODIS NBAR reference used for correction (which could positively bias the evaluation in the case of over-fitting), the mosaics were compared with an "independent" SPOT-5 image.  This 10 m resolution SPOT-5 image covered a portion of the study area.
 
-.. figure:: aerial_mosaic-spot5_extent.jpg
+.. figure:: aerial_mosaic-spot5_extent.webp
     :width: 50 %
     :align: center
 
