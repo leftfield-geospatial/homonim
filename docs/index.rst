@@ -1,7 +1,7 @@
 homonim
 =======
 
-.. image:: readme_eg.png
+.. image:: readme_eg.jpg
    :alt: example
 
 .. include:: ../README.rst

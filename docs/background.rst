@@ -6,7 +6,7 @@ Background
 Reference image
 ---------------
 
-.. image:: background_eg.png
+.. image:: background_eg.jpg
    :alt: example
 
 ``homonim`` fuses a *source* image with a *reference* surface reflectance image to produce the *corrected* image.  The *reference* must be supplied by the user, and is usually a satellite image at a coarser resolution that the *source*.  For best results, the *reference* should satisfy these criteria:
