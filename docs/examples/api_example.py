@@ -1,6 +1,5 @@
 # [correct-start]
-from pathlib import Path
-from homonim import RasterFuse, RasterCompare, Model
+from homonim import RasterFuse, Model
 
 # urls of source and reference test images
 src_file = (
@@ -22,6 +21,7 @@ with RasterFuse(src_file, ref_file) as fuse:
 # [correct-end]
 
 # [compare-start]
+from homonim import RasterCompare
 # url of independent landsat reference for evaluation
 cmp_ref_file = (
     'https://raw.githubusercontent.com/dugalh/homonim/main/'
