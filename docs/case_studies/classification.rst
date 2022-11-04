@@ -36,7 +36,9 @@ The classes appear more compact, and likely better separated after correction.
 Evaluation
 ----------
 
-To quantify the effect of surface reflectance correction, a per-pixel naive Bayes classifier was evaluated on the source and corrected imagery.  Evaluation used the red, green, blue and NIR band pixel values as features, and a 10-fold cross-validation for training and testing.  This basic classifier served to compare the descriptive power of the source and corrected images.  Normalised confusion matrix, accuracy, and AUC (area under the ROC curve) values are tabulated below.
+A basic classifier was evaluated on the source and corrected imagery to quantify the effect of surface reflectance correction.  Evaluation used the red, green, blue and NIR pixel values as features in a naive Bayes classifier, and a 10-fold cross-validation for testing.  Accuracy increased from 58% to 67% demonstrating an improvement in the descriptive power of the image.
+
+Normalised confusion matrix, accuracy, and `AUC <https://developers.google.com/machine-learning/crash-course/classification/roc-and-auc>`_ values for source and corrected images are tabulated below.
 
 +----------------+-----------------------------------------------------+----------+------+
 |                | Confusion matrix                                    | Accuracy | AUC  |
@@ -62,4 +64,5 @@ To quantify the effect of surface reflectance correction, a per-pixel naive Baye
 |                |  +----------------+------------+----------+------+  |          |      |
 +----------------+-----------------------------------------------------+----------+------+
 
-There is a useful improvement in accuracy after correction, implying that the corrected surface reflectance is more informative for the vegetation classes.  This case study demonstrates the benefits of pre-processing with ``homonim`` in multi-spectral classification.
+This case study demonstrates the benefits of pre-processing with ``homonim`` in multi-spectral classification.
+
