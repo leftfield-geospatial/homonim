@@ -19,7 +19,7 @@ Improvement in surface reflectance is less obvious in this figure, than e.g. the
 Evaluation
 ----------
 
-The source and corrected drone images were compared with a second, Landsat-8 reference to evaluate the improvement in surface reflectance accuracy.  The scatter plots below show a good improvement in correlation with the reference after correction, demonstrating the benefits of processing drone imagery with ``homonim``.
+The source and corrected drone images were compared with a second, Landsat-8 reference to evaluate the change in surface reflectance accuracy.  The scatter plots below show a good improvement in correlation with the reference after correction, demonstrating the benefits of processing drone imagery with ``homonim``.
 
 .. figure:: drone_mosaic-eval.png
     :align: center
