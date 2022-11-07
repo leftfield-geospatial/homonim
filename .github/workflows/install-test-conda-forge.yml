@@ -16,7 +16,7 @@ jobs:
         os: [ macos-latest, ubuntu-latest, windows-latest ]
         python-version: ['3.7', '3.8', '3.9', '3.10']
     steps:
-    - uses: actions/checkout@v2  # for the test data
+    - uses: actions/checkout@v3  # for the test data
     - uses: conda-incubator/setup-miniconda@v2
       with:
         python-version: ${{ matrix.python-version }}
