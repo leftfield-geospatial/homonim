@@ -3,11 +3,11 @@ from homonim import RasterFuse, Model
 
 # urls of source and reference test images
 src_file = (
-    'https://raw.githubusercontent.com/dugalh/homonim/main/'
+    'https://raw.githubusercontent.com/leftfield-geospatial/homonim/main/'
     'tests/data/source/ngi_rgb_byte_1.tif'
 )
 ref_file = (
-    'https://raw.githubusercontent.com/dugalh/homonim/main/'
+    'https://raw.githubusercontent.com/leftfield-geospatial/homonim/main/'
     'tests/data/reference/sentinel2_b432_byte.tif'
 )
 
@@ -25,7 +25,7 @@ from homonim import RasterCompare
 
 # url of independent landsat reference for evaluation
 cmp_ref_file = (
-    'https://raw.githubusercontent.com/dugalh/homonim/main/'
+    'https://raw.githubusercontent.com/leftfield-geospatial/homonim/main/'
     'tests/data/reference/landsat8_byte.tif'
 )
 

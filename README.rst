@@ -3,7 +3,7 @@
 homonim
 =======
 
-.. image:: https://raw.githubusercontent.com/dugalh/homonim/main/docs/readme_eg.webp
+.. image:: https://raw.githubusercontent.com/leftfield-geospatial/homonim/main/docs/readme_eg.webp
    :alt: example
 
 
@@ -121,11 +121,11 @@ Surface reflectance correction of an aerial image using a Sentinel-2 reference.
 
     # urls of source and reference test images
     src_file = (
-        'https://raw.githubusercontent.com/dugalh/homonim/main/'
+        'https://raw.githubusercontent.com/leftfield-geospatial/homonim/main/'
         'tests/data/source/ngi_rgb_byte_1.tif'
     )
     ref_file = (
-        'https://raw.githubusercontent.com/dugalh/homonim/main/'
+        'https://raw.githubusercontent.com/leftfield-geospatial/homonim/main/'
         'tests/data/reference/sentinel2_b432_byte.tif'
     )
 
@@ -194,8 +194,8 @@ Bibtex::
 
 .. |Tests| image:: https://github.com/leftfield-geospatial/homonim/actions/workflows/run-unit-tests.yml/badge.svg
    :target: https://github.com/leftfield-geospatial/homonim/actions/workflows/run-unit-tests.yml
-.. |codecov| image:: https://codecov.io/gh/dugalh/homonim/branch/main/graph/badge.svg?token=A01698K96C
-   :target: https://codecov.io/gh/dugalh/homonim
+.. |codecov| image:: https://codecov.io/gh/leftfield-geospatial/homonim/branch/main/graph/badge.svg?token=A01698K96C
+   :target: https://codecov.io/gh/leftfield-geospatial/homonim
 .. |License: AGPL v3| image:: https://img.shields.io/badge/License-AGPL_v3-blue.svg
    :target: https://www.gnu.org/licenses/agpl-3.0
 .. |PyPI version| image:: https://img.shields.io/pypi/v/homonim?color=blue

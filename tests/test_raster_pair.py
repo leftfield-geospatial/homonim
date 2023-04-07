@@ -311,7 +311,7 @@ def test_orientation_crs(src_file: str, ref_file: str, proc_crs: ProcCrs, reques
 
 def test_url():
     """ Test source and reference as URLs rather than files. """
-    modis_url = 'https://raw.githubusercontent.com/dugalh/homonim/main/tests/data/reference/modis_nbar.tif'
+    modis_url = 'https://raw.githubusercontent.com/leftfield-geospatial/homonim/main/tests/data/reference/modis_nbar.tif'
     with RasterPairReader(modis_url, modis_url) as raster_pair:
         assert not raster_pair.closed
 
