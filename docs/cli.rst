@@ -112,7 +112,7 @@ Let's repeat the previous example to see how this would look.  Here, we also spe
     homonim --verbose fuse --src-band 4 --src-band 3 --src-band 2 --ref-band 1 --ref-band 4 --ref-band 3 -od ./corrected --overwrite ./reference/landsat8_byte.tif ./reference/modis_nbar.tif
 
 .. note::
-    Images downloaded with `geedim <https://github.com/dugalh/geedim>`_ have ``center_wavelength`` metadata compatible with ``homonim``.
+    Images downloaded with `geedim <https://github.com/leftfield-geospatial/geedim>`_ have ``center_wavelength`` metadata compatible with ``homonim``.
 
     You can use ``gdalinfo`` (from the `gdal <https://github.com/OSGeo/gdal>`_ package) to inspect the ``center_wavelength``, and other metadata of an image, e.g::
 

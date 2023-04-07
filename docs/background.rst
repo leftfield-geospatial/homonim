@@ -57,4 +57,4 @@ Kernel shape can be specified with the :option:`--kernel-shape <homonim-fuse --k
 
 
 .. |geedim| replace:: ``geedim``
-.. _geedim: https://github.com/dugalh/geedim
+.. _geedim: https://github.com/leftfield-geospatial/geedim
