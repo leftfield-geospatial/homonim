@@ -1,4 +1,4 @@
-# See https://github.com/dugalh/homonim/blob/main/docs/usage.rst#advanced-options for detailed documentation
+# See https://github.com/leftfield-geospatial/homonim/blob/main/docs/usage.rst#advanced-options for detailed documentation
 
 # Correction configuration
 param_image: False

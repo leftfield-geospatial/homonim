@@ -40,7 +40,7 @@ test:
     - pip
 
 about:
-  home: https://github.com/dugalh/homonim
+  home: https://github.com/leftfield-geospatial/homonim
   summary: |
     Correct aerial and satellite imagery to surface reflectance.
   license: AGPL-3.0-only
@@ -58,7 +58,7 @@ about:
     reducing seamlines and other visual artefacts in image mosaics.  It can be 
     applied to multi-spectral drone, aerial and satellite imagery.
 
-  dev_url: https://github.com/dugalh/homonim
+  dev_url: https://github.com/leftfield-geospatial/homonim
   doc_url: https://homonim.readthedocs.io
 
 extra:

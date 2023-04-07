@@ -17,7 +17,7 @@ The examples that follow use the ``homonim`` test data.  You can get this by doi
 
 .. code:: shell
 
-    git clone --filter=blob:none https://github.com/dugalh/homonim.git
+    git clone --filter=blob:none https://github.com/leftfield-geospatial/homonim.git
 
 Change directories to the data root and make a *corrected* folder:
 
@@ -30,7 +30,7 @@ Alternatively, you can download the repository directly, and extract it as follo
 
 .. code:: shell
 
-    curl -LO# "https://github.com/dugalh/homonim/archive/refs/heads/main.zip"
+    curl -LO# "https://github.com/leftfield-geospatial/homonim/archive/refs/heads/main.zip"
     tar -xf main.zip
     cd homonim-main/tests/data
     mkdir corrected

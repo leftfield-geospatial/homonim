@@ -47,7 +47,7 @@ setup(
     long_description_content_type='text/x-rst',
     author='Dugal Harris',
     author_email='dugalh@gmail.com',
-    url='https://github.com/dugalh/homonim',
+    url='https://github.com/leftfield-geospatial/homonim',
     license='AGPLv3',
     packages=find_packages(include=['homonim']),
     install_requires=[
@@ -73,6 +73,6 @@ setup(
     entry_points={'console_scripts': ['homonim=homonim.cli:cli']},
     project_urls={
         'Documentation': 'https://homonim.readthedocs.io',
-        'Source': 'https://github.com/dugalh/homonim',
+        'Source': 'https://github.com/leftfield-geospatial/homonim',
     },
 )  # yapf: disable

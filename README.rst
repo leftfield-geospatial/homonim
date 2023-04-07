@@ -192,8 +192,8 @@ Bibtex::
     }
 
 
-.. |Tests| image:: https://github.com/dugalh/homonim/actions/workflows/run-unit-tests.yml/badge.svg
-   :target: https://github.com/dugalh/homonim/actions/workflows/run-unit-tests.yml
+.. |Tests| image:: https://github.com/leftfield-geospatial/homonim/actions/workflows/run-unit-tests.yml/badge.svg
+   :target: https://github.com/leftfield-geospatial/homonim/actions/workflows/run-unit-tests.yml
 .. |codecov| image:: https://codecov.io/gh/dugalh/homonim/branch/main/graph/badge.svg?token=A01698K96C
    :target: https://codecov.io/gh/dugalh/homonim
 .. |License: AGPL v3| image:: https://img.shields.io/badge/License-AGPL_v3-blue.svg
