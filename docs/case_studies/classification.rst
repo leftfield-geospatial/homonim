@@ -64,5 +64,3 @@ Normalised confusion matrix, accuracy, and `AUC <https://developers.google.com/m
 |                |  +----------------+------------+----------+------+  |          |      |
 +----------------+-----------------------------------------------------+----------+------+
 
-This case study demonstrates the benefits of pre-processing with ``homonim`` in multi-spectral classification.
-

@@ -6,7 +6,7 @@ Drone mosaic correction
 Correction
 ----------
 
-A 5 cm resolution, RGB ortho-mosaic was obtained from `Open Aerial Map <https://openaerialmap.org/>`_.  The image covers a complex, heterogeneous area, making it a challenging example.  Correction was performed with a Sentinel-2 reference, the *gain_blk_offset* :ref:`model <background:model>`, and a :ref:`kernel shape <background:kernel shape>` of 3 x 3 pixels.  Of the tested settings, these produced the best evaluation results.
+A 5 cm resolution, RGB ortho-mosaic was obtained from `Open Aerial Map <https://openaerialmap.org/>`_.  The image covers a complex, heterogeneous area.  Correction was performed with a Sentinel-2 reference, the *gain_blk_offset* :ref:`model <background:model>`, and a :ref:`kernel shape <background:kernel shape>` of 3 x 3 pixels.  Of the tested settings, these produced the best evaluation results.
 
 .. figure:: drone_mosaic-src_ref_corr.jpg
     :width: 80%
@@ -14,12 +14,12 @@ A 5 cm resolution, RGB ortho-mosaic was obtained from `Open Aerial Map <https://
 
     **Source, reference & corrected images**
 
-Improvement in surface reflectance is less obvious in this figure, than e.g. the :ref:`aerial mosaic case study <source-mosaic>`, as source mosaic seamlines have been smoothed out by the drone processing software.  Nevertheless, there is a good match between the corrected and reference image colour.  Quantitative results in the next section give a clearer indication of the surface reflectance accuracy.
+Improvement in surface reflectance is less obvious in this figure than the :ref:`aerial mosaic case study <source-mosaic>`, as source mosaic seamlines have already been smoothed by the drone processing software.  Quantitative results in the next section give a clearer indication of the surface reflectance accuracy.
 
 Evaluation
 ----------
 
-The source and corrected drone images were compared with a second, Landsat-8 reference to evaluate the change in surface reflectance accuracy.  The scatter plots below show a good improvement in correlation with the reference after correction, demonstrating the benefits of processing drone imagery with ``homonim``.
+The source and corrected drone images were compared with a second, Landsat-8 reference to evaluate the change in surface reflectance accuracy.  The scatter plots below show an improvement in correlation with the reference after correction.
 
 .. figure:: drone_mosaic-eval.png
     :align: center
