@@ -1,8 +1,6 @@
 Background
 ==========
 
-.. _reference_image:
-
 Reference image
 ---------------
 
@@ -23,7 +21,7 @@ Satellite programs, such as Landsat, Sentinel-2, and MODIS, provide suitable *re
 Source image
 ------------
 
-Any orthorectified, multi-spectral *source* imagery can be used with ``homonim``, including drone, aerial and satellite imagery. *Source* images should  preferably be provided to ``homonim`` without gamma correction or colour balancing type adjustments.  If this is not possible, ``homonim`` will still improve surface reflectance accuracy.
+Any orthorectified, multi-spectral *source* imagery can be used with ``homonim``, including drone, aerial and satellite imagery. *Source* images should  preferably be provided to ``homonim`` without gamma correction or colour balancing type adjustments.  If this is not possible, ``homonim`` should still improve surface reflectance accuracy.
 
 Fusion
 ------

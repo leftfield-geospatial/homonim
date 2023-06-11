@@ -14,7 +14,7 @@ A 5 cm resolution, RGB ortho-mosaic was obtained from `Open Aerial Map <https://
 
     **Source, reference & corrected images**
 
-Improvement in surface reflectance is less obvious in this figure than the :ref:`aerial mosaic case study <source-mosaic>`, as source mosaic seamlines have already been smoothed by the drone processing software.  Quantitative results in the next section give a clearer indication of the surface reflectance accuracy.
+While the corrected and reference colours are similar, improvement in surface reflectance is less obvious in this figure than e.g. the :ref:`aerial mosaic case study<source-mosaic>`.  Quantitative results in the next section give a clearer indication of the surface reflectance accuracy.
 
 Evaluation
 ----------
