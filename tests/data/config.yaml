@@ -1,4 +1,6 @@
+# Configuration file for use with `homonim fuse --conf`.
 # See https://homonim.readthedocs.io/en/latest/cli.html#homonim-fuse for documentation on options
+
 # Correction configuration
 param_image: True
 mask_partial: True
