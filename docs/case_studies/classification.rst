@@ -1,9 +1,9 @@
 Classification
 ==============
 
-This case study uses aerial images and ground truth data from a `vegetation classification study <https://www.researchgate.net/publication/329137175_Regional_mapping_of_spekboom_canopy_cover_using_very_high_resolution_aerial_imagery>`_ to show how ``homonim`` can improve classifier performance.
+This case study aims to show how ``homonim`` can assist in improving classifier performance.  It uses images and ground truth from a `study <https://www.researchgate.net/publication/329137175_Regional_mapping_of_spekboom_canopy_cover_using_very_high_resolution_aerial_imagery>`_ that mapped canopy cover of spekboom (a species of succulent shrub) in the Little Karoo, South Africa.
 
-The data consists of 4 aerial images with 50 cm spatial resolution and 4 spectral bands (red, green, blue and near-infrared).  Aerial imagery was supplied by `NGI <https://ngi.dalrrd.gov.za/index.php/what-we-do/aerial-photography-and-imagery>`_.  Ground truth is made up of 161 polygons with labels for 3 vegetation classes:
+The data consists of 4 raw and corrected `NGI <https://ngi.dalrrd.gov.za/index.php/what-we-do/aerial-photography-and-imagery>`_ images with 50 cm spatial resolution and 4 spectral bands (red, green, blue and near-infrared) .  These images are a sub-set of the mosaics described in the `aerial mosaic correction <aerial_mosaic.rst>`_ case study.  Ground truth is made up of 161 polygons with labels for 3 vegetation classes:
 
 ===============  ==============================================
 **Class**        **Description**
@@ -24,7 +24,7 @@ Some example polygons are shown below, overlaid on an aerial image.
 Correction
 ----------
 
-As with the `aerial mosaic case study <aerial_mosaic.rst>`_, correction was performed with the *gain* :ref:`model <background:model>`, a 1 x 1 pixel :ref:`kernel <background:kernel shape>`, and a `MODIS NBAR <https://developers.google.com/earth-engine/datasets/catalog/MODIS_006_MCD43A4>`_  reference image.  Class densities (Gaussian kernel density estimates) are shown before and after correction, for the blue and NIR bands below.
+The corrected images were produced with a *gain* :ref:`model <background:model>`, a 1 x 1 pixel :ref:`kernel <background:kernel shape>`, and a `MODIS NBAR <https://developers.google.com/earth-engine/datasets/catalog/MODIS_006_MCD43A4>`_  reference image.  Some detail on these choices is given in the `aerial mosaic correction <aerial_mosaic.rst>`_ study.  Using the blue and NIR pixel values as features, class densities (Gaussian kernel density estimates) are shown before and after correction below.
 
 .. figure:: classification-spectral_kde.jpg
     :align: center
