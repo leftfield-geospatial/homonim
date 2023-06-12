@@ -28,7 +28,7 @@ jobs:
       run: |
         mamba info
         mamba list
-        mamba install -c conda-forge homonim>=0.3.1
+        mamba install -c conda-forge homonim>=0.3.2
         mamba list
     - name: Test homonim
       run: |
