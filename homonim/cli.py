@@ -65,7 +65,7 @@ class HomonimCommand(cloup.Command):
         sub_strings = {
             '\b\n': '\n\b',                 # convert from RST friendly to click literal (unwrapped) block marker
             r'\| ': '',                     # strip RST literal (unwrapped) marker in e.g. tables and bullet lists
-            '\n\.\. _.*:\n': '',            # strip RST ref directive '\n.. _<name>:\n'
+            r'\n\.\. _.*:\n': '',            # strip RST ref directive '\n.. _<name>:\n'
             '::': ':',                      # convert from RST '::' to ':'
             '``(.*?)``': r'\g<1>',          # convert from RST '``literal``' to 'literal'
             ':option:`(.*?)( <.*?>)?`': r'\g<1>',   # convert ':option:`--name <group-command --name>`' to '--name'
@@ -79,7 +79,7 @@ class HomonimCommand(cloup.Command):
                 text = re.sub(sub_key, sub_value, text, flags=re.DOTALL)
             wr_text = self.wrap_text(text, width, **kwargs)
             # change double newline to single newline separated list
-            return re.sub('\n\n(\s*?)- ', '\n- ', wr_text, flags=re.DOTALL)
+            return re.sub(r'\n\n(\s*?)- ', '\n- ', wr_text, flags=re.DOTALL)
 
         cloup.formatting._formatter.wrap_text = reformat_text
         return cloup.Command.get_help(self, ctx)
