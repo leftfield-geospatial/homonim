@@ -9,28 +9,33 @@ jobs:
     runs-on: ${{ matrix.os }}
     defaults:
       run:
-        shell: bash -l {0}
+        shell: bash -el {0}
     strategy:
       fail-fast: false
       matrix:
         os: [ macos-latest, ubuntu-latest, windows-latest ]
         python-version: ['3.8', '3.9', '3.10', '3.11']
+
     steps:
-    - uses: actions/checkout@v4  # for the test data
-    - uses: conda-incubator/setup-miniconda@v3
+    - name: Check out repository
+      uses: actions/checkout@v4  # for the test data
+
+    - name: Set up conda
+      uses: conda-incubator/setup-miniconda@v3
       with:
         python-version: ${{ matrix.python-version }}
         channels: conda-forge
-        channel-priority: true
-        activate-environment: test
-        mamba-version: "*"
-    - name: Install homonim
+        channel-priority: strict
+        activate-environment: homonim-test
+        conda-solver: libmamba
+
+    - name: Install package
       run: |
-        mamba info
-        mamba list
-        mamba install -c conda-forge homonim>=0.3.2
-        mamba list
-    - name: Test homonim
+        conda info
+        conda install homonim>=0.3.2
+        conda list
+
+    - name: Run CLI fusion test
       run: |
         cd tests/data
         mkdir corrected
