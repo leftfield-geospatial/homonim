@@ -153,6 +153,8 @@ def _nodata_cb(ctx: click.Context, param: click.Option, value):
         return None
     else:
         # check value is a number and can be cast to output dtype
+        # TODO: there is a bug here if --nodata is specified before --dtype on the CLI (ctx.params['dtype'] does not
+        #  exist)
         try:
             value = float(value.lower())
             if not rio.dtypes.can_cast_dtype(value, ctx.params['dtype']):
@@ -394,6 +396,7 @@ def fuse(
     overwrite: bool, cmp_file: pathlib.Path, cmp_bands: Tuple[int], build_ovw: bool, proc_crs: ProcCrs,
     conf: pathlib.Path, param_image: bool, force_match: bool, **kwargs
 ):
+    # TODO: don't strip Examples heading underline
     # @formatter:off
     """
     Correct image(s) to surface reflectance.
@@ -454,9 +457,9 @@ def fuse(
 
     # iterate over and correct source file(s)
     try:
-        for src_filename in src_file:
+        for src_i, src_filename in enumerate(src_file):
             out_path = pathlib.Path(out_dir) if out_dir is not None else src_filename.parent
-            logger.info(f'\nCorrecting {src_filename.name}')
+            logger.info(f'\nCorrecting {src_filename.name} ({src_i + 1} of {len(src_file)})')
             with RasterFuse(
                 src_filename, ref_file, proc_crs=proc_crs, src_bands=src_bands, ref_bands=ref_bands, force=force_match,
             ) as raster_fuse:  # yapf: disable
@@ -562,8 +565,8 @@ def compare(
             else src_bands
         )  # yapf: disable
         # iterate over source files, comparing with reference
-        for src_filename, src_bands in zip(src_file, src_bands_list):
-            logger.info(f'\nComparing {src_filename.name}')
+        for src_i, (src_filename, src_bands) in enumerate(zip(src_file, src_bands_list)):
+            logger.info(f'\nComparing {src_filename.name} ({src_i + 1} of {len(src_file)})')
             start_time = timer()
             with RasterCompare(
                 src_filename, ref_file, proc_crs=proc_crs, src_bands=src_bands, ref_bands=ref_bands, force=force_match,
@@ -616,8 +619,8 @@ def stats(param_files: Tuple[pathlib.Path, ...], output: pathlib.Path):
         meta_dict = {}
 
         # process parameter file(s), storing results
-        for param_filename in param_files:
-            logger.info(f'\nProcessing {param_filename.name}')
+        for param_i, param_filename in enumerate(param_files):
+            logger.info(f'\nProcessing {param_filename.name} ({param_i + 1} of {len(param_files)})')
             with ParamStats(param_filename) as param_stats:
                 stats_dict[str(param_filename)] = param_stats.stats()
                 meta_dict[str(param_filename)] = param_stats.metadata
