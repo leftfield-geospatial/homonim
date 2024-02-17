@@ -292,7 +292,7 @@ class RasterFuse(MatchedPairReader):
 
     def _process_block(
         self, block_pair: BlockPair, model: KernelModel, corr_im: DatasetWriter,
-        param_im: Optional[DatasetWriter] = None,
+        param_im: Optional[DatasetWriter] = None
     ):
         """
         Thread-safe method to correct an image block to surface reflectance using the supplied correction ``model``.
@@ -303,8 +303,10 @@ class RasterFuse(MatchedPairReader):
         # fit and apply the sliding kernel models
         param_ra = model.fit(src_ra, ref_ra)
         corr_ra = model.apply(src_ra, param_ra)
-        # change the corrected nodata value so that is masked correctly for corr_im
-        corr_ra.nodata = corr_im.nodata
+
+        # convert corrected dtype and change nodata value for corr_im
+        corr_ra.convert_dtype(corr_im.dtypes[0], nodata=corr_im.nodata)
+
         with self._corr_lock:  # write the corrected block
             corr_ra.to_rio_dataset(corr_im, indexes=block_pair.band_i + 1, window=block_pair.src_out_block)
 
