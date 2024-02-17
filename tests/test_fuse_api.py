@@ -349,6 +349,7 @@ def test_tags(tmp_path: Path, ref_file_50cm_float):
         assert (yaml.safe_load(tags['FUSE_MAX_BLOCK_MEM']) == block_config['max_block_mem'])
         assert (yaml.safe_load(tags['FUSE_THREADS']) == block_config['threads'])
 
+
 @pytest.mark.parametrize(
     'src_file, ref_file, src_bands, ref_bands, force, exp_bands', [
         ('file_rgb_50cm_float', 'file_rgb_100cm_float', None, None, False, (1, 2, 3)),

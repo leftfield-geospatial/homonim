@@ -31,6 +31,7 @@ from rasterio.warp import transform_bounds
 
 from homonim.errors import ImageProfileError, ImageFormatError
 from homonim.raster_array import RasterArray
+from homonim import utils
 
 
 def test_read_only_properties(array_byte, profile_byte):
@@ -267,3 +268,71 @@ def test_reprojection(ra_rgb_byte):
     assert (
         reprj_ra.array[:, reprj_ra.mask].mean() == pytest.approx(ra_rgb_byte.array[:, ra_rgb_byte.mask].mean(), abs=.1)
     )
+
+
+@pytest.mark.parametrize('src_dtype, src_nodata, dst_dtype, dst_nodata', [
+    ('float32', float('nan'), 'uint8', 1),
+    ('float32', float('nan'), 'int8', 1),
+    ('float32', float('nan'), 'uint16', 1),
+    ('float32', float('nan'), 'int16', 1),
+    ('float32', float('nan'), 'uint32', 1),
+    ('float32', float('nan'), 'int32', 1),
+    # ('float32', float('nan'), 'int64', 0),  # overflow
+    ('float32', float('nan'), 'float32', float('nan')),
+    ('float32', float('nan'), 'float64', float('nan')),
+    ('float64', float('nan'), 'int32', 1),
+    # ('float64', float('nan'), 'int64', 1),  # overflow
+    ('float64', float('nan'), 'float32', float('nan')),
+    ('float64', float('nan'), 'float64', float('nan')),
+    ('int64', 1, 'int32', 1),
+    ('int64', 1, 'int64', 1),
+    ('int64', 1, 'float32', float('nan')),
+    ('int64', 1, 'float64', float('nan')),
+    ('float32', float('nan'), 'float32', None),  # nodata unchanged
+])
+def test_convert_dtype(profile_100cm_float: dict, src_dtype: str, src_nodata: float, dst_dtype: str, dst_nodata: float):
+    """ Test dtype conversion with combinations covering rounding, clipping (with and w/o type promotion) and
+    re-masking.
+    """
+    src_dtype_info = np.iinfo(src_dtype) if np.issubdtype(src_dtype, np.integer) else np.finfo(src_dtype)
+    dst_dtype_info = np.iinfo(dst_dtype) if np.issubdtype(dst_dtype, np.integer) else np.finfo(dst_dtype)
+
+    # create array that spans the src_dtype range, includes decimals, excludes -1..1 (to allow nodata == +-1),
+    # and is padded with nodata
+    array = np.geomspace(2, src_dtype_info.max, 50, dtype=src_dtype).reshape(5, 10)
+    if src_dtype_info.min != 0:
+        array = np.concatenate((array, np.geomspace(-2, src_dtype_info.min, 50, dtype=src_dtype).reshape(5, 10)))
+    array = np.pad(array, (1, 1), constant_values=src_nodata)
+    src_ra = RasterArray(
+        array, crs=profile_100cm_float['crs'], transform=profile_100cm_float['transform'], nodata=src_nodata
+    )
+
+    # convert src_ra to dtype
+    test_ra = src_ra.copy()
+    test_ra.convert_dtype(dst_dtype, nodata=dst_nodata)
+
+    # create rounded & clipped array in src_dtype to test against
+    test_array = array
+    if np.issubdtype(dst_dtype, np.integer):
+        test_array = np.clip(np.round(test_array), dst_dtype_info.min, dst_dtype_info.max)
+    elif np.issubdtype(src_dtype, np.floating):
+        # don't clip float but set out of range vals to +-inf (as np.astype does)
+        test_array[test_array < dst_dtype_info.min] = float('-inf')
+        test_array[test_array > dst_dtype_info.max] = float('inf')
+        assert np.any(test_array[src_ra.mask] % 1 != 0)  # check contains decimals
+
+    assert test_ra.dtype == dst_dtype
+    if dst_nodata:
+        assert utils.nan_equals(test_ra.nodata, dst_nodata)
+    assert np.any(test_ra.mask)
+    assert np.all(test_ra.mask == src_ra.mask)
+    # use approx test for case of (expected) precision loss e.g. float64->float32 or int64->float32
+    assert test_ra.array[test_ra.mask] == pytest.approx(test_array[src_ra.mask], rel=1e-6)
+
+
+def test_convert_dtype_error(ra_100cm_float: RasterArray):
+    """ Test dtype conversion raises an error when the nodata value cannot be cast to the conversion dtype. """
+    test_ra = ra_100cm_float.copy()
+    with pytest.raises(ValueError) as ex:
+        test_ra.convert_dtype('uint8', nodata=float('nan'))
+    assert 'cast' in str(ex.value)
