@@ -155,6 +155,7 @@ def _nodata_cb(ctx: click.Context, param: click.Option, value):
         # check value is a number and can be cast to output dtype
         # TODO: there is a bug here if --nodata is specified before --dtype on the CLI (ctx.params['dtype'] does not
         #  exist)
+        # TODO: add test for case where --nodata cannot be cast to --dtype
         try:
             value = float(value.lower())
             if not rio.dtypes.can_cast_dtype(value, ctx.params['dtype']):

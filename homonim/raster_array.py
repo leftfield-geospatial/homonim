@@ -64,7 +64,7 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         transform: rasterio.transform.Affine
             ``array`` geo-transform.
         nodata: optional
-            A number or nan, specifying the nodata value to use for masking the array.
+            A number or nan, specifying the nodata value for masking the array.
         window: rasterio.windows.Window, optional
             Optional window into the transform specifying the array region.
         """
@@ -297,6 +297,7 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
     @property
     def mask(self) -> numpy.ndarray:
         """ 2D boolean mask corresponding to valid pixels in the array. """
+        # TODO: cache this and delete if nodata is changed
         if self._nodata is None:
             return np.full(self._array.shape[-2:], True)
         mask = ~utils.nan_equals(self._array, self._nodata)
@@ -465,6 +466,54 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
             with rio.open(filename, 'w', driver=driver, **self.profile, **kwargs) as out_im:
                 out_im.write(self._array, indexes=range(1, self.count + 1) if self.count > 1 else 1)
 
+    def convert_dtype(self, dtype: str, nodata: Union[float, None] = None):
+        """
+        Convert RasterArray ``dtype`` in-place, rounding and clipping values when necessary.
+
+        Parameters
+        ----------
+        dtype: str
+            Data type to convert to.
+        nodata: float, optional
+            A number or nan specifiying the nodata value for masking the converted array.  Should be castable to
+            ``dtype``. If not specified, the array is converted as is and the ``nodata`` property left unchanged.
+        """
+        if nodata is not None and not rio.dtypes.can_cast_dtype(nodata, dtype):
+            raise ValueError(f"'nodata' value: {nodata} cannot be safely cast to '{dtype}'")
+
+        # store nodata mask if rounding, clipping or casting *might* invalidate the current mask
+        mask = None
+        unsafe_cast = not np.can_cast(self.dtype, dtype, casting='safe')
+        if nodata is not None and unsafe_cast:
+            mask = self.mask
+
+        # round if converting from float to integer dtype
+        if unsafe_cast and np.issubdtype(self.dtype, np.floating) and np.issubdtype(dtype, np.integer):
+            np.round(self._array, out=self._array)
+
+        # clip if converting to integer dtype with smaller range than current dtype
+        if unsafe_cast and np.issubdtype(dtype, np.integer):
+            src_info = np.iinfo(self.dtype) if np.issubdtype(self.dtype, np.integer) else np.finfo(self.dtype)
+            dst_info = np.iinfo(dtype)
+            if src_info.min < dst_info.min or src_info.max > dst_info.max:
+                # If necessary and possible, promote source dtype to be able to represent destination dtype exactly.
+                # (This works around the (undocumented?) situation where even if a clipped array contains only values
+                # that can be represented as the destination dtype, there is still casting overflow when these values
+                # are near the dtype limits e.g. float32->int32 should be promoted to float64->int32.  There is no way
+                # of preventing this situation for float*->int64.)
+                self._array = self._array.astype(np.promote_types(self.dtype, dtype), copy=False)
+                np.clip(self._array, dst_info.min, dst_info.max, out=self._array)
+
+        # convert dtype
+        self._array = self._array.astype(dtype, copy=False, casting='unsafe')
+
+        # set new nodata value
+        if mask is not None:
+            self._array[~mask] = nodata
+            self._nodata = nodata
+        elif nodata is not None:
+            self.nodata = nodata
+
     def reproject(
         self, crs: Optional[CRS] = None, transform: Optional[Affine] = None, shape: Optional[Tuple[int, int]] = None,
         nodata: float = default_nodata, dtype: str = default_dtype, resampling: Resampling = Resampling.lanczos,
@@ -498,7 +547,7 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         """
 
         if transform is not None and shape is None:
-            raise ValueError('If `transform` is specified, `shape` must also be specified')
+            raise ValueError('If `transform` is specified, `shape` is required')
 
         if isinstance(resampling, str):
             resampling = Resampling[resampling]
