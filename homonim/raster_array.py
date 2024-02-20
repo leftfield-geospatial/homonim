@@ -524,7 +524,7 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         """
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs', GTIFF_FORCE_RGBA=False):
             with rio.open(filename, 'w', driver=driver, **self.profile, **kwargs) as out_im:
-                out_im.write(array, indexes=range(1, self.count + 1) if self.count > 1 else 1)
+                out_im.write(self._array, indexes=range(1, self.count + 1) if self.count > 1 else 1)
                 if out_im.nodata is None:
                     out_im.write_mask(self.mask)
 
