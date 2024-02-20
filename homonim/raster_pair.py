@@ -142,9 +142,10 @@ class RasterPairReader:
                 f'Could not read image {name}.  JPEG compression with NBITS==12 is not supported, '
                 f'you probably need to recompress this image.'
             )
-            if 'IMAGE_STRUCTURE' in im.tag_namespaces(1) and 'NBITS' in im.tags(1, 'IMAGE_STRUCTURE'):
-                if im.tags(1,'IMAGE_STRUCTURE')['NBITS'] == '12':
-                    raise twelve_bit_jpeg_error
+            # TODO: only throw the exception if/when a gdal/rio exception is thrown.
+            # if 'IMAGE_STRUCTURE' in im.tag_namespaces(1) and 'NBITS' in im.tags(1, 'IMAGE_STRUCTURE'):
+            #     if im.tags(1,'IMAGE_STRUCTURE')['NBITS'] == '12':
+            #         raise twelve_bit_jpeg_error
 
             try:
                 _ = im.read(1, window=im.block_window(1, 0, 0))
@@ -297,7 +298,6 @@ class RasterPairReader:
         self._ref_win = utils.expand_window_to_grid(self._ref_im.window(*self._src_im.bounds))
         self._src_win = utils.expand_window_to_grid(self._src_im.window(*self._ref_im.window_bounds(self._ref_win)))
 
-
     def close(self):
         """ Close the source and reference image datasets. """
         self._src_im.close()
@@ -306,7 +306,11 @@ class RasterPairReader:
     def __enter__(self):
         self._stack = ExitStack()
         # TODO: revert to GDAL_NUM_THREADS='ALL_CPUS' when https://github.com/rasterio/rasterio/issues/2847 is resolved
-        self._stack.enter_context(rio.Env(GDAL_NUM_THREADS=1, GTIFF_FORCE_RGBA=False))
+        self._stack.enter_context(
+            rio.Env(GDAL_NUM_THREADS='ALL_CPUS', GTIFF_FORCE_RGBA=False, GDAL_TIFF_INTERNAL_MASK=True)
+        )
+        # TODO: rio is logging warnings (e.g. with 12 bit jpeg) which don't get redirected.  rather do logging as in
+        #  orthority.
         self._stack.enter_context(logging_redirect_tqdm([logging.getLogger(__package__)]))
         self.open()
         return self
