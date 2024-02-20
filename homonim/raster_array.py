@@ -431,7 +431,7 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         window: Optional[Window] = None, **kwargs
     ):
         """
-        Write the RasterArray into a rasterio dataset.
+        Write the RasterArray into a rasterio dataset, converting data types with rounding and clipping when necessary.
 
         The RasterArray mask is written as an internal mask band when the dataset's nodata is None, otherwise no mask
         is written, and the RasterArray array is written as is.  Note that typically, dataset bounds would encompass
@@ -508,6 +508,9 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         """
         Write the RasterArray to an image file.
 
+        The RasterArray mask is written as an internal mask band when :attr:`~RasterArray.nodata` is None,
+        otherwise the file's nodata property is set, and the RasterArray array is written as is.
+
         Parameters
         ----------
         filename: str, pathlib.Path
@@ -521,7 +524,9 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         """
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs', GTIFF_FORCE_RGBA=False):
             with rio.open(filename, 'w', driver=driver, **self.profile, **kwargs) as out_im:
-                out_im.write(self._array, indexes=range(1, self.count + 1) if self.count > 1 else 1)
+                out_im.write(array, indexes=range(1, self.count + 1) if self.count > 1 else 1)
+                if out_im.nodata is None:
+                    out_im.write_mask(self.mask)
 
     def reproject(
         self, crs: Optional[CRS] = None, transform: Optional[Affine] = None, shape: Optional[Tuple[int, int]] = None,
