@@ -130,7 +130,8 @@ class RasterFuse(MatchedPairReader):
         dtype: str, optional
             Output image data type.  One of: uint8|uint16|int16|uint32|int32|float32|float64.
         nodata: float, optional
-            Output image nodata value.
+            Output image nodata value.  If set to None, an internal mask is written (recommended when
+            ``creation_options`` are configured for lossy, e.g. JPEG, compression).
         creation_options: dict, optional
             Driver specific creation options e.g. ``dict(compression='deflate')``.
             See the `GDAL docs <https://gdal.org/drivers/raster/index.html>`_ for available keys and values.
@@ -304,10 +305,8 @@ class RasterFuse(MatchedPairReader):
         param_ra = model.fit(src_ra, ref_ra)
         corr_ra = model.apply(src_ra, param_ra)
 
-        # convert corrected dtype and change nodata value for corr_im
-        corr_ra.convert_dtype(corr_im.dtypes[0], nodata=corr_im.nodata)
-
-        with self._corr_lock:  # write the corrected block
+        # write the corrected block
+        with self._corr_lock:
             corr_ra.to_rio_dataset(corr_im, indexes=block_pair.band_i + 1, window=block_pair.src_out_block)
 
         if param_im:
