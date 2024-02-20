@@ -124,7 +124,7 @@ def test_basic_fusion(
             )
         ),
         dict(
-            driver='GTiff', dtype='uint8', nodata=0,
+            driver='GTiff', dtype='uint8', nodata=None,
             creation_options=dict(
                 tiled=True, blockxsize=64, blockysize=64, compress='jpeg', interleave='pixel', photometric='ycbcr'
             )
@@ -139,8 +139,10 @@ def test_out_profile(file_rgb_100cm_float, tmp_path: Path, out_profile: Dict):
     with raster_fuse:
         raster_fuse.process(corr_filename, Model.gain_blk_offset, (3, 3), out_profile=out_profile)
     assert (corr_filename.exists())
+
     out_profile.update(**out_profile['creation_options'])
     out_profile.pop('creation_options')
+
     with rio.open(file_rgb_100cm_float, 'r') as src_ds, rio.open(corr_filename, 'r') as fuse_ds:
         # test output image has been set with out_profile properties
         for k, v in out_profile.items():
