@@ -136,26 +136,8 @@ class RasterPairReader:
 
         def validate_image_format(im: rasterio.DatasetReader):
             """ Validate an open rasterio dataset for use as a source or reference image. """
-            # test for 12 bit jpegs
-            name = Path(im.name).name
-            twelve_bit_jpeg_error =  errors.UnsupportedImageError(
-                f'Could not read image {name}.  JPEG compression with NBITS==12 is not supported, '
-                f'you probably need to recompress this image.'
-            )
-            # TODO: only throw the exception if/when a gdal/rio exception is thrown.
-            # if 'IMAGE_STRUCTURE' in im.tag_namespaces(1) and 'NBITS' in im.tags(1, 'IMAGE_STRUCTURE'):
-            #     if im.tags(1,'IMAGE_STRUCTURE')['NBITS'] == '12':
-            #         raise twelve_bit_jpeg_error
-
-            try:
-                _ = im.read(1, window=im.block_window(1, 0, 0))
-            except Exception as ex:
-                if 'compress' in im.profile and im.profile['compress'] == 'jpeg':  # assume it is a 12bit JPEG
-                    raise twelve_bit_jpeg_error
-                else:
-                    raise ex
-
             # warn if there is no nodata or associated mask
+            name = Path(im.name).name
             is_masked = any([MaskFlags.all_valid not in im.mask_flag_enums[bi] for bi in range(im.count)])
             if im.nodata is None and not is_masked:
                 logger.warning(
@@ -309,8 +291,6 @@ class RasterPairReader:
         self._stack.enter_context(
             rio.Env(GDAL_NUM_THREADS='ALL_CPUS', GTIFF_FORCE_RGBA=False, GDAL_TIFF_INTERNAL_MASK=True)
         )
-        # TODO: rio is logging warnings (e.g. with 12 bit jpeg) which don't get redirected.  rather do logging as in
-        #  orthority.
         self._stack.enter_context(logging_redirect_tqdm([logging.getLogger(__package__)]))
         self.open()
         return self
