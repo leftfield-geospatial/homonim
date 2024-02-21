@@ -21,7 +21,7 @@ import json
 import logging
 import pathlib
 import re
-import sys
+import warnings
 from timeit import default_timer as timer
 from typing import Tuple, Dict
 
@@ -123,18 +123,43 @@ def _update_existing_keys(default_dict: Dict, **kwargs) -> Dict:
 
 
 def _configure_logging(verbosity: int):
-    """ Configure python logging level."""
-    # adapted from rasterio https://github.com/rasterio/rasterio
-    log_level = max(10, 20 - 10 * verbosity)
+    """Configure python logging level."""
+    # TODO: change logger.warning to warnings.warn where a client may want to respond to a warning.
+    # TODO: lose PlainInfoFormatter if not needed
 
-    # apply config to package logger, rather than root logger
+    def showwarning(message, category, filename, lineno, file=None, line=None):
+        """Redirect orthority warnings to the source module's logger, otherwise show warning as
+        usual.
+        """
+        # adapted from https://discuss.python.org/t/some-easy-and-pythonic-way-to-bind-warnings-to-loggers/14009/2
+        package_root = pathlib.Path(__file__).parents[1]
+        file_path = pathlib.Path(filename)
+        try:
+            module_path = file_path.relative_to(package_root)
+            is_relative_to = True
+        except ValueError:
+            is_relative_to = False
+
+        if file is not None or not is_relative_to:
+            orig_show_warning(message, category, filename, lineno, file, line)
+        else:
+            module_name = module_path.with_suffix('').as_posix().replace('/', '.')
+            logger = logging.getLogger(module_name)
+            logger.warning(str(message))
+
+    # redirect orthority warnings to module logger
+    orig_show_warning = warnings.showwarning
+    warnings.showwarning = showwarning
+
+    # Configure the package logger, leaving logs from dependencies on their defaults (e.g. for rasterio, they stay
+    # hidden).
+    # Adapted from rasterio: https://github.com/rasterio/rasterio/blob/main/rasterio/rio/main.py.
+    log_level = max(10, 20 - 10 * verbosity)
     pkg_logger = logging.getLogger(__package__)
-    formatter = PlainInfoFormatter()
-    handler = logging.StreamHandler(sys.stderr)
-    handler.setFormatter(formatter)
+    handler = logging.StreamHandler()
+    handler.setFormatter(PlainInfoFormatter())
     pkg_logger.addHandler(handler)
     pkg_logger.setLevel(log_level)
-    logging.captureWarnings(True)
 
 
 def _threads_cb(ctx: click.Context, param: click.Option, value):
@@ -270,7 +295,7 @@ def cli(verbose: int, quiet: int):
 
 
 # fuse command
-@cloup.command(cls=FuseCommand)
+@cli.command(cls=FuseCommand)
 # standard options
 @cloup.argument(
     'src-file', nargs=-1, metavar='SOURCE...', type=click.Path(exists=False, dir_okay=False, path_type=pathlib.Path),
@@ -380,8 +405,9 @@ def cli(verbose: int, quiet: int):
     click.option(
         '--nodata', 'nodata', type=click.STRING, callback=_nodata_cb, metavar='[NUMBER|null|nan]',
         default=RasterFuse.create_out_profile()['nodata'], show_default=True,
-        help=f'Output image nodata value.  Valid for corrected images only, parameter images always use '
-        f'{RasterArray.default_nodata}.'
+        help=f"Output image nodata value.  Valid for corrected images only, parameter images always use "
+        f"{RasterArray.default_nodata}.  If null, an internal mask is written (recommended for lossy "
+        f"compression)."
     ),
     click.option(
         '-co', '--creation-options', metavar='NAME=VALUE', multiple=True, default=(), callback=_creation_options_cb,
@@ -498,11 +524,11 @@ def fuse(
         raise click.Abort()
 
 
-cli.add_command(fuse)
+# cli.add_command(fuse)
 
 
 # compare command
-@cloup.command(cls=HomonimCommand)
+@cli.command(cls=HomonimCommand)
 @cloup.argument(
     'src-file', nargs=-1, metavar='IMAGE...', type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
     help='Path(s) to image(s) to compare with :option:`REFERENCE`.'
@@ -598,10 +624,10 @@ def compare(
         raise click.Abort()
 
 
-cli.add_command(compare)
+# cli.add_command(compare)
 
 
-@cloup.command(cls=HomonimCommand)
+@cli.command(cls=HomonimCommand)
 @cloup.argument(
     'param-files', nargs=-1, metavar='PARAM...', type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
     callback=_param_file_cb, help='Path(s) to parameter image(s).'
@@ -644,6 +670,9 @@ def stats(param_files: Tuple[pathlib.Path, ...], output: pathlib.Path):
         raise click.Abort()
 
 
-cli.add_command(stats)
+# cli.add_command(stats)
+
+if __name__ == '__main__':
+    cli()
 
 ##
