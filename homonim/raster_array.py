@@ -381,8 +381,7 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
                 np.clip(array, dst_info.min, dst_info.max, out=array)
 
         # convert dtype
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore', category=RuntimeWarning)
+        with np.errstate(invalid='ignore'):  # ignore numpy warning for cast of nodata=nan to dtype
             array = array.astype(dtype, copy=False, casting='unsafe')
 
         # set nodata value if it has changed, or may be invalid after rounding, clipping and casting
@@ -499,6 +498,8 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
 
         # convert data type and write to dataset
         array = bounded_ra._convert_array_dtype(rio_dataset.dtypes[0], nodata=rio_dataset.nodata)
+        # TODO: rio is raising warnings when values in the write below are to a 12 bit jpeg and they overflow the 12bit
+        #  bound.  it only does this writing in a thread (?).
         rio_dataset.write(array, window=window, indexes=indexes, **kwargs)
         if rio_dataset.nodata is None and (1 in np.array(indexes)):
             # write internal mask once (for first band) if nodata is None
@@ -576,7 +577,7 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
             _dst_array = np.zeros(shape, dtype=dtype)
 
         # suppress NotGeoreferencedWarning which rasterio sometimes raises incorrectly
-        with warnings.catch_warnings():
+        with warnings.catch_warnings():   # TODO: this is not thread-safe
             warnings.simplefilter('ignore', category=NotGeoreferencedWarning)
 
             _, _dst_transform = reproject(
