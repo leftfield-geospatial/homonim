@@ -18,12 +18,18 @@
 """
 import os
 import pathlib
+import logging
 
 from homonim.compare import RasterCompare
 from homonim.enums import Model, ProcCrs
 from homonim.fuse import RasterFuse
 from homonim.kernel_model import KernelModel
 from homonim.stats import ParamStats
+
+# Add a NullHandler to the package logger to hide logs by default.  Applications can then add
+# their own handler(s).
+log = logging.getLogger(__name__)
+log.addHandler(logging.NullHandler())
 
 if '__file__' in globals():
     root_path = pathlib.Path(__file__).absolute().parents[1]
