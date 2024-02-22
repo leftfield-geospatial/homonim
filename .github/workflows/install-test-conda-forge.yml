@@ -17,29 +17,29 @@ jobs:
         python-version: ['3.8', '3.9', '3.10', '3.11']
 
     steps:
-    - name: Check out repository
-      uses: actions/checkout@v4  # for the test data
+      - name: Check out repository
+        uses: actions/checkout@v4  # for the test data
 
-    - name: Set up conda
-      uses: conda-incubator/setup-miniconda@v3
-      with:
-        python-version: ${{ matrix.python-version }}
-        channels: conda-forge
-        channel-priority: strict
-        activate-environment: homonim-test
-        conda-solver: libmamba
+      - name: Set up conda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          python-version: ${{ matrix.python-version }}
+          channels: conda-forge
+          channel-priority: strict
+          activate-environment: homonim-test
+          conda-solver: libmamba
 
-    - name: Install package
-      run: |
-        conda info
-        conda install homonim>=0.4.0
-        conda list
+      - name: Install package
+        run: |
+          conda info
+          conda install homonim>=0.4.0
+          conda list
 
-    - name: Run CLI fusion test
-      run: |
-        cd tests/data
-        mkdir corrected
-        homonim fuse --help
-        homonim fuse -m gain-blk-offset -k 5 5 -od ./corrected -cmp -o ./source/ngi_rgb_byte_1.tif  ./reference/landsat8_byte.tif
-        ls ./corrected/*
-        test -f ./corrected/ngi_rgb_byte_1_FUSE_cREF_mGAIN-BLK-OFFSET_k5_5.tif && echo "Test OK"
+      - name: Run CLI fusion test
+        run: |
+          cd tests/data
+          mkdir corrected
+          homonim fuse --help
+          homonim fuse -m gain-blk-offset -k 5 5 -od ./corrected -cmp -o ./source/ngi_rgb_byte_1.tif  ./reference/landsat8_byte.tif
+          ls ./corrected/*
+          test -f ./corrected/ngi_rgb_byte_1_FUSE_cREF_mGAIN-BLK-OFFSET_k5_5.tif && echo "Test OK"
