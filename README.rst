@@ -30,17 +30,7 @@ See the documentation site for more detail: https://homonim.readthedocs.io/.
 Installation
 ------------
 
-``homonim`` is available as a python 3 package, via ``pip`` and ``conda``.
-
-conda
-~~~~~
-
-Under Windows, using ``conda`` is the easiest way to resolve binary dependencies. The
-`Miniconda <https://docs.conda.io/en/latest/miniconda.html>`__ installation provides a minimal ``conda``.
-
-.. code:: shell
-
-   conda install -c conda-forge homonim
+``homonim`` is available as a python 3 package, via `pip <https://pip.pypa.io/>`_ or `conda <https://docs.conda.io/projects/miniconda>`_.
 
 pip
 ~~~
@@ -48,6 +38,13 @@ pip
 .. code:: shell
 
    pip install homonim
+
+conda
+~~~~~
+
+.. code:: shell
+
+   conda install -c conda-forge homonim
 
 .. install_end
 
