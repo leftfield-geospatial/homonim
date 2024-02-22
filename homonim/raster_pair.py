@@ -289,7 +289,7 @@ class RasterPairReader:
         self._stack = ExitStack()
         # TODO: revert to GDAL_NUM_THREADS='ALL_CPUS' when https://github.com/rasterio/rasterio/issues/2847 is resolved
         self._stack.enter_context(
-            rio.Env(GDAL_NUM_THREADS='ALL_CPUS', GTIFF_FORCE_RGBA=False, GDAL_TIFF_INTERNAL_MASK=True)
+            rio.Env(GDAL_NUM_THREADS=1, GTIFF_FORCE_RGBA=False, GDAL_TIFF_INTERNAL_MASK=True)
         )
         self._stack.enter_context(logging_redirect_tqdm([logging.getLogger(__package__)]))
         self.open()
