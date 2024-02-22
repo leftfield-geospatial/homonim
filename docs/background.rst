@@ -53,6 +53,5 @@ The minimum *kernel shape* is *model* dependent.  For the two parameter :attr:`~
 
 Kernel shape can be specified with the :option:`--kernel-shape <homonim-fuse --kernel-shape>` option via the command line; or with the corresponding argument in the :meth:`homonim.RasterFuse.process` API.
 
-
 .. |geedim| replace:: ``geedim``
 .. _geedim: https://github.com/leftfield-geospatial/geedim

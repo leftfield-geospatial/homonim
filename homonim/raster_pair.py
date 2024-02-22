@@ -22,6 +22,7 @@ import threading
 from contextlib import ExitStack
 from itertools import product
 from typing import Tuple, NamedTuple, Union, Iterable, List
+import warnings
 
 import numpy as np
 import rasterio
@@ -31,9 +32,11 @@ from rasterio.vrt import WarpedVRT
 from rasterio.warp import Resampling
 from rasterio.windows import Window
 from tqdm.contrib.logging import logging_redirect_tqdm
+from unicodedata import category
 
 from homonim import errors, utils
 from homonim.enums import ProcCrs
+from homonim.errors import ImageFormatWarning, BandMatchWarning, ConfigWarning
 from homonim.raster_array import RasterArray
 
 logger = logging.getLogger(__name__)
@@ -136,34 +139,20 @@ class RasterPairReader:
 
         def validate_image_format(im: rasterio.DatasetReader):
             """ Validate an open rasterio dataset for use as a source or reference image. """
-            # test for 12 bit jpegs
-            name = Path(im.name).name
-            twelve_bit_jpeg_error =  errors.UnsupportedImageError(
-                f'Could not read image {name}.  JPEG compression with NBITS==12 is not supported, '
-                f'you probably need to recompress this image.'
-            )
-            if 'IMAGE_STRUCTURE' in im.tag_namespaces(1) and 'NBITS' in im.tags(1, 'IMAGE_STRUCTURE'):
-                if im.tags(1,'IMAGE_STRUCTURE')['NBITS'] == '12':
-                    raise twelve_bit_jpeg_error
-
-            try:
-                _ = im.read(1, window=im.block_window(1, 0, 0))
-            except Exception as ex:
-                if 'compress' in im.profile and im.profile['compress'] == 'jpeg':  # assume it is a 12bit JPEG
-                    raise twelve_bit_jpeg_error
-                else:
-                    raise ex
-
             # warn if there is no nodata or associated mask
+            name = Path(im.name).name
             is_masked = any([MaskFlags.all_valid not in im.mask_flag_enums[bi] for bi in range(im.count)])
             if im.nodata is None and not is_masked:
-                logger.warning(
-                    f'{name} has no mask or nodata value, any invalid pixels should be masked before processing.'
+                warnings.warn(
+                    f'{name} has no mask or nodata value, any invalid pixels should be masked before processing.',
+                    category=ImageFormatWarning
                 )
 
             # warn if not standard north-up orientation
             if not utils.north_up(im):
-                logger.warning(f'{name} will be re-projected to a standard North-up orientation.')
+                warnings.warn(
+                    f'{name} will be re-projected to a standard North-up orientation.', category=ImageFormatWarning
+                )
 
         validate_image_format(src_im)
         validate_image_format(ref_im)
@@ -171,8 +160,9 @@ class RasterPairReader:
         if src_im.crs.to_proj4() != ref_im.crs.to_proj4():
             src_name = Path(src_im.name).name
             ref_name = Path(ref_im.name).name
-            logger.warning(
-                f'Source and reference image will be re-projected to the same CRS: {src_name} and {ref_name}'
+            warnings.warn(
+                f'Source and reference image will be re-projected to the same CRS: {src_name} and {ref_name}',
+                category=ImageFormatWarning
             )
 
     def _match_pair_bands(
@@ -194,9 +184,9 @@ class RasterPairReader:
             )
         # warn if source and reference band counts don't match
         if len(src_bands) != len(ref_bands):
-            logger.warning(
+            warnings.warn(
                 f'Source and reference image non-alpha band counts don`t match. Using the first {len(src_bands)} '
-                f'non-alpha bands of reference.'
+                f'non-alpha bands of reference.', category=BandMatchWarning
             )
         return src_bands, ref_bands
 
@@ -227,8 +217,9 @@ class RasterPairReader:
             # warn if the proc_crs value does not correspond to the lowest resolution of the source and
             # reference images
             rec_crs_str = ProcCrs.ref if src_pixel_smaller else ProcCrs.src
-            logger.warning(
-                f'proc_crs={rec_crs_str} is recommended when the source pixel size is {cmp_str} than the reference.'
+            warnings.warn(
+                f'proc_crs={rec_crs_str} is recommended when the source pixel size is {cmp_str} than the reference.',
+                category=ConfigWarning
             )
         return proc_crs
 
@@ -271,8 +262,9 @@ class RasterPairReader:
 
         # warn if the block shape in the highest res image is less than a typical tile
         if np.any(block_shape / mem_scale < (256, 256)) and np.any(block_shape < (proc_win.height, proc_win.width)):
-            logger.warning(
-                f'The auto block shape is small: {block_shape}.  Increase `max_block_mem` to improve processing times.'
+            warnings.warn(
+                f'The auto block shape is small: {block_shape}.  Increase `max_block_mem` to improve processing times.',
+                category=ConfigWarning
             )
         return tuple(block_shape)
 
@@ -297,7 +289,6 @@ class RasterPairReader:
         self._ref_win = utils.expand_window_to_grid(self._ref_im.window(*self._src_im.bounds))
         self._src_win = utils.expand_window_to_grid(self._src_im.window(*self._ref_im.window_bounds(self._ref_win)))
 
-
     def close(self):
         """ Close the source and reference image datasets. """
         self._src_im.close()
@@ -306,7 +297,9 @@ class RasterPairReader:
     def __enter__(self):
         self._stack = ExitStack()
         # TODO: revert to GDAL_NUM_THREADS='ALL_CPUS' when https://github.com/rasterio/rasterio/issues/2847 is resolved
-        self._stack.enter_context(rio.Env(GDAL_NUM_THREADS=1, GTIFF_FORCE_RGBA=False))
+        self._stack.enter_context(
+            rio.Env(GDAL_NUM_THREADS=1, GTIFF_FORCE_RGBA=False, GDAL_TIFF_INTERNAL_MASK=True)
+        )
         self._stack.enter_context(logging_redirect_tqdm([logging.getLogger(__package__)]))
         self.open()
         return self

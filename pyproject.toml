@@ -1,3 +1,50 @@
+[project]
+name = 'homonim'
+description = 'Correct aerial and satellite imagery to surface reflectance.'
+readme = 'README.rst'
+requires-python = '>=3.8'
+dependencies = [
+    'rasterio>=1.1',
+    'opencv-python-headless>=4.5',
+    'numpy>=1.19',
+    'click>=8',
+    'tqdm>=4.6',
+    'pyyaml>=5.4',
+    'cloup>=0.15',
+    'tabulate>=0.8',
+]
+authors = [{name = 'Leftfield Geospatial'}]
+license = {text = 'AGPL-3.0-or-later'}
+keywords = [
+    'drone', 'aerial', 'satellite', 'image', 'surface reflectance', 'correction', 'harmonization', 'anisotropy', 'brdf',
+    'atmospheric correction',
+]
+classifiers = [
+    'Programming Language :: Python :: 3',
+    'License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)',
+    'Operating System :: OS Independent',
+]
+dynamic = ['version']
+
+[project.scripts]
+homonim = 'homonim.cli:cli'
+
+[project.optional-dependencies]
+test = ['pytest']
+
+[project.urls]
+Homepage = 'https://github.com/leftfield-geospatial/homonim'
+Source = 'https://github.com/leftfield-geospatial/homonim'
+Documentation = 'https://homonim.readthedocs.io'
+Changelog = 'https://github.com/leftfield-geospatial/homonim/releases'
+Issues = 'https://github.com/leftfield-geospatial/homonim/issues'
+
 [build-system]
-requires = ["setuptools>=42", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ['setuptools']
+build-backend = 'setuptools.build_meta'
+
+[tool.setuptools]
+packages = ['homonim']
+
+[tool.setuptools.dynamic]
+version = {attr = 'homonim.version.__version__'}

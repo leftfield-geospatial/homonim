@@ -128,11 +128,13 @@ class RasterFuse(MatchedPairReader):
             Output format driver.  See the `GDAL docs <https://gdal.org/drivers/raster/index.html>`_ for
             available options.
         dtype: str, optional
-            Output image data type.  One of: uint8|uint16|int16|uint32|int32|float32|float64.
+            Output image data type.  One of: uint8|uint16|int16|uint32|int32|float32|float64.  Data values are rounded
+            and clipped to integer ``dtype`` ranges.
         nodata: float, optional
-            Output image nodata value.
+            Output image nodata value.  If set to None, an internal mask is written (recommended when
+            ``creation_options`` are configured for lossy, e.g. JPEG, compression).
         creation_options: dict, optional
-            Driver specific creation options e.g. ``dict(compression='deflate')``.
+            Driver specific creation options e.g. ``dict(compress='deflate')``.
             See the `GDAL docs <https://gdal.org/drivers/raster/index.html>`_ for available keys and values.
 
         Returns
@@ -140,10 +142,9 @@ class RasterFuse(MatchedPairReader):
         dict
             Output image profile.
         """
-        # TODO: add compress_overview='auto' when gdal >=3.6
         creation_options = creation_options or dict(
             tiled=True, blockxsize=512, blockysize=512, compress='deflate', interleave='band', photometric='minisblack',
-            bigtiff='if_safer',
+            bigtiff='if_safer'
         )
         return dict(driver=driver, dtype=dtype, nodata=nodata, creation_options=creation_options)
 
@@ -292,7 +293,7 @@ class RasterFuse(MatchedPairReader):
 
     def _process_block(
         self, block_pair: BlockPair, model: KernelModel, corr_im: DatasetWriter,
-        param_im: Optional[DatasetWriter] = None,
+        param_im: Optional[DatasetWriter] = None
     ):
         """
         Thread-safe method to correct an image block to surface reflectance using the supplied correction ``model``.
@@ -303,9 +304,9 @@ class RasterFuse(MatchedPairReader):
         # fit and apply the sliding kernel models
         param_ra = model.fit(src_ra, ref_ra)
         corr_ra = model.apply(src_ra, param_ra)
-        # change the corrected nodata value so that is masked correctly for corr_im
-        corr_ra.nodata = corr_im.nodata
-        with self._corr_lock:  # write the corrected block
+
+        # write the corrected block
+        with self._corr_lock:
             corr_ra.to_rio_dataset(corr_im, indexes=block_pair.band_i + 1, window=block_pair.src_out_block)
 
         if param_im:

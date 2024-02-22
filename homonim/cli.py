@@ -21,7 +21,7 @@ import json
 import logging
 import pathlib
 import re
-import sys
+import warnings
 from timeit import default_timer as timer
 from typing import Tuple, Dict
 
@@ -70,7 +70,6 @@ class HomonimCommand(cloup.Command):
             '``(.*?)``': r'\g<1>',          # convert from RST '``literal``' to 'literal'
             ':option:`(.*?)( <.*?>)?`': r'\g<1>',   # convert ':option:`--name <group-command --name>`' to '--name'
             ':option:`(.*?)`': r'\g<1>',    # convert ':option:`--name`' to '--name'
-            '-{4,}': r'',                   # strip '----...'
             '`([^<]*) <([^>]*)>`_': r'\g<1>',  # convert from RST cross-ref '`<name> <<link>>`_' to 'name'
         }  # yapf: disable
 
@@ -123,18 +122,42 @@ def _update_existing_keys(default_dict: Dict, **kwargs) -> Dict:
 
 
 def _configure_logging(verbosity: int):
-    """ Configure python logging level."""
-    # adapted from rasterio https://github.com/rasterio/rasterio
-    log_level = max(10, 20 - 10 * verbosity)
+    """Configure python logging level."""
+    # TODO: lose PlainInfoFormatter if not needed
 
-    # apply config to package logger, rather than root logger
+    def showwarning(message, category, filename, lineno, file=None, line=None):
+        """Redirect orthority warnings to the source module's logger, otherwise show warning as
+        usual.
+        """
+        # adapted from https://discuss.python.org/t/some-easy-and-pythonic-way-to-bind-warnings-to-loggers/14009/2
+        package_root = pathlib.Path(__file__).parents[1]
+        file_path = pathlib.Path(filename)
+        try:
+            module_path = file_path.relative_to(package_root)
+            is_relative_to = True
+        except ValueError:
+            is_relative_to = False
+
+        if file is not None or not is_relative_to:
+            orig_show_warning(message, category, filename, lineno, file, line)
+        else:
+            module_name = module_path.with_suffix('').as_posix().replace('/', '.')
+            logger = logging.getLogger(module_name)
+            logger.warning(str(message))
+
+    # redirect orthority warnings to module logger
+    orig_show_warning = warnings.showwarning
+    warnings.showwarning = showwarning
+
+    # Configure the package logger, leaving logs from dependencies on their defaults (e.g. for rasterio, they stay
+    # hidden).
+    # Adapted from rasterio: https://github.com/rasterio/rasterio/blob/main/rasterio/rio/main.py.
+    log_level = max(10, 20 - 10 * verbosity)
     pkg_logger = logging.getLogger(__package__)
-    formatter = PlainInfoFormatter()
-    handler = logging.StreamHandler(sys.stderr)
-    handler.setFormatter(formatter)
+    handler = logging.StreamHandler()
+    handler.setFormatter(PlainInfoFormatter())
     pkg_logger.addHandler(handler)
     pkg_logger.setLevel(log_level)
-    logging.captureWarnings(True)
 
 
 def _threads_cb(ctx: click.Context, param: click.Option, value):
@@ -146,7 +169,7 @@ def _threads_cb(ctx: click.Context, param: click.Option, value):
     return threads
 
 
-def _nodata_cb(ctx: click.Context, param: click.Option, value):
+def _nodata_cb(ctx: click.Context, param: click.Option, value: str):
     """ click callback to convert --nodata value to None, nan or float. """
     # adapted from rasterio https://github.com/rasterio/rasterio
     if value is None or value.lower() in ['null', 'nil', 'none', 'nada']:
@@ -155,13 +178,8 @@ def _nodata_cb(ctx: click.Context, param: click.Option, value):
         # check value is a number and can be cast to output dtype
         try:
             value = float(value.lower())
-            if not rio.dtypes.can_cast_dtype(value, ctx.params['dtype']):
-                raise click.BadParameter(
-                    f'{value} cannot be cast to the output image data type {ctx.params["dtype"]}', param=param,
-                    param_hint='nodata'
-                )
         except (TypeError, ValueError):
-            raise click.BadParameter(f'{value} is not a number', param=param, param_hint='nodata')
+            raise click.BadParameter(f'{value} is not a number', param=param, param_hint='--nodata')
 
         return value
 
@@ -267,7 +285,7 @@ def cli(verbose: int, quiet: int):
 
 
 # fuse command
-@cloup.command(cls=FuseCommand)
+@cli.command(cls=FuseCommand)
 # standard options
 @cloup.argument(
     'src-file', nargs=-1, metavar='SOURCE...', type=click.Path(exists=False, dir_okay=False, path_type=pathlib.Path),
@@ -371,14 +389,15 @@ def cli(verbose: int, quiet: int):
     click.option(
         '--dtype', type=click.Choice(list(rio.dtypes.dtype_fwd.values())[1:8], case_sensitive=False),
         default=RasterFuse.create_out_profile()['dtype'], show_default=True,
-        help=f'Output image data type.  Valid for corrected images only, parameter images always use '
-        f'{RasterArray.default_dtype}.'
+        help=f'Output image data type.  If an integer type, values are rounded and clipped to its range.  Valid for '
+             f'corrected images only, parameter images always use {RasterArray.default_dtype}.'
     ),
     click.option(
         '--nodata', 'nodata', type=click.STRING, callback=_nodata_cb, metavar='[NUMBER|null|nan]',
         default=RasterFuse.create_out_profile()['nodata'], show_default=True,
-        help=f'Output image nodata value.  Valid for corrected images only, parameter images always use '
-        f'{RasterArray.default_nodata}.'
+        help=f"Output image nodata value.  Valid for corrected images only, parameter images always use "
+        f"{RasterArray.default_nodata}.  If null, an internal mask is written (recommended for lossy "
+        f"compression)."
     ),
     click.option(
         '-co', '--creation-options', metavar='NAME=VALUE', multiple=True, default=(), callback=_creation_options_cb,
@@ -435,16 +454,8 @@ def fuse(
     Correct bands 2 and 3 of `source.tif`, with bands 7 and 8 of `reference.tif`, using the default correction options::
 
         homonim fuse -sb 2 -sb 3 -rb 7 -rb 8 source.tif reference.tif
-
-    ----
     """
     # @formatter:on
-
-    # try:
-    #     kernel_shape = utils.validate_kernel_shape(kernel_shape, model=model)
-    # except Exception as ex:
-    #     raise click.BadParameter(str(ex))
-
     # build configuration dictionaries for RasterFuse
     block_config = _update_existing_keys(RasterFuse.create_block_config(), **kwargs)
     model_config = _update_existing_keys(RasterFuse.create_model_config(), **kwargs)
@@ -454,9 +465,9 @@ def fuse(
 
     # iterate over and correct source file(s)
     try:
-        for src_filename in src_file:
+        for src_i, src_filename in enumerate(src_file):
             out_path = pathlib.Path(out_dir) if out_dir is not None else src_filename.parent
-            logger.info(f'\nCorrecting {src_filename.name}')
+            logger.info(f'\nCorrecting {src_filename.name} ({src_i + 1} of {len(src_file)})')
             with RasterFuse(
                 src_filename, ref_file, proc_crs=proc_crs, src_bands=src_bands, ref_bands=ref_bands, force=force_match,
             ) as raster_fuse:  # yapf: disable
@@ -494,11 +505,11 @@ def fuse(
         raise click.Abort()
 
 
-cli.add_command(fuse)
+# cli.add_command(fuse)
 
 
 # compare command
-@cloup.command(cls=HomonimCommand)
+@cli.command(cls=HomonimCommand)
 @cloup.argument(
     'src-file', nargs=-1, metavar='IMAGE...', type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
     help='Path(s) to image(s) to compare with :option:`REFERENCE`.'
@@ -547,8 +558,6 @@ def compare(
     Compare `source.tif` and `corrected.tif` with `reference.tif`::
 
         homonim compare source.tif corrected.tif reference.tif
-
-    ----
     """
 
     # build configuration dictionary
@@ -562,8 +571,8 @@ def compare(
             else src_bands
         )  # yapf: disable
         # iterate over source files, comparing with reference
-        for src_filename, src_bands in zip(src_file, src_bands_list):
-            logger.info(f'\nComparing {src_filename.name}')
+        for src_i, (src_filename, src_bands) in enumerate(zip(src_file, src_bands_list)):
+            logger.info(f'\nComparing {src_filename.name} ({src_i + 1} of {len(src_file)})')
             start_time = timer()
             with RasterCompare(
                 src_filename, ref_file, proc_crs=proc_crs, src_bands=src_bands, ref_bands=ref_bands, force=force_match,
@@ -594,10 +603,10 @@ def compare(
         raise click.Abort()
 
 
-cli.add_command(compare)
+# cli.add_command(compare)
 
 
-@cloup.command(cls=HomonimCommand)
+@cli.command(cls=HomonimCommand)
 @cloup.argument(
     'param-files', nargs=-1, metavar='PARAM...', type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
     callback=_param_file_cb, help='Path(s) to parameter image(s).'
@@ -616,8 +625,8 @@ def stats(param_files: Tuple[pathlib.Path, ...], output: pathlib.Path):
         meta_dict = {}
 
         # process parameter file(s), storing results
-        for param_filename in param_files:
-            logger.info(f'\nProcessing {param_filename.name}')
+        for param_i, param_filename in enumerate(param_files):
+            logger.info(f'\nProcessing {param_filename.name} ({param_i + 1} of {len(param_files)})')
             with ParamStats(param_filename) as param_stats:
                 stats_dict[str(param_filename)] = param_stats.stats()
                 meta_dict[str(param_filename)] = param_stats.metadata
@@ -640,6 +649,9 @@ def stats(param_files: Tuple[pathlib.Path, ...], output: pathlib.Path):
         raise click.Abort()
 
 
-cli.add_command(stats)
+# cli.add_command(stats)
+
+if __name__ == '__main__':
+    cli()
 
 ##

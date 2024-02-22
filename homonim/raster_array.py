@@ -35,7 +35,7 @@ from rasterio.windows import Window, WindowMethodsMixin
 from rasterio.errors import NotGeoreferencedWarning
 
 from homonim import utils
-from homonim.errors import ImageProfileError, ImageFormatError
+from homonim.errors import ImageProfileError, ImageFormatError, ImageFormatWarning
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         transform: rasterio.transform.Affine
             ``array`` geo-transform.
         nodata: optional
-            A number or nan, specifying the nodata value to use for masking the array.
+            A number or nan, specifying the nodata value for masking the array.
         window: rasterio.windows.Window, optional
             Optional window into the transform specifying the array region.
         """
@@ -90,7 +90,7 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
             raise TypeError("`transform` must be an instance of rasterio.transform.Affine")
 
         self._nodata = nodata
-        self._nodata_mask = None
+        self._mask = None
 
     @classmethod
     def from_profile(cls, array: Optional[np.ndarray], profile: Dict, window: Optional[Window] = None) -> 'RasterArray':
@@ -229,6 +229,7 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
     def array(self, value: numpy.ndarray):
         if np.all(value.shape[-2:] == self._array.shape[-2:]):
             self._array = value
+            self._mask = None
         else:
             raise ValueError("'value' and 'array' shapes must match")
 
@@ -297,19 +298,24 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
     @property
     def mask(self) -> numpy.ndarray:
         """ 2D boolean mask corresponding to valid pixels in the array. """
-        if self._nodata is None:
-            return np.full(self._array.shape[-2:], True)
-        mask = ~utils.nan_equals(self._array, self._nodata)
-        if self._array.ndim > 2:
-            mask = np.any(mask, axis=0)
-        return mask
+        if self._mask is None:
+            if self._nodata is None:
+                self._mask = np.full(self._array.shape[-2:], True)
+            else:
+                self._mask = ~utils.nan_equals(self._array, self._nodata)
+                if self._array.ndim > 2:
+                    self._mask = np.any(self._mask, axis=0)
+        return self._mask
 
     @mask.setter
     def mask(self, value: numpy.ndarray):
+        # TODO: allow nodata=None with a mask or use numpy masked array
         if self._array.ndim == 2:
             self._array[~value] = self._nodata
         else:
             self._array[:, ~value] = self._nodata
+        # force re-calculation of mask (should not set it to value as there may be other pixels == nodata)
+        self._mask = None
 
     @property
     def mask_ra(self) -> 'RasterArray':
@@ -331,6 +337,7 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
             # if new nodata value is None, remove the current mask
             # if current nodata is None, there is no mask, so just set the new nodata value and return
             self._nodata = value
+            self._mask = None
         elif not (utils.nan_equals(value, self._nodata)):
             # if the new nodata value is different to the current nodata,
             # set the mask area in array to the new nodata value and return
@@ -340,6 +347,48 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
             else:
                 self._array[nodata_mask] = value
             self._nodata = value
+            # force re-calculation of mask (there may be pixels other than ~self.mask == new nodata value)
+            self._mask = None
+
+    def _convert_array_dtype(self, dtype: str, nodata: Union[float, None] = None) -> np.array:
+        """ Return the image array converted to ``dtype``, rounding and clipping when ``dtype`` is integer. Passing
+        ``nodata`` will set nodata areas in the returned array to this value.
+        """
+        if nodata is not None and not rio.dtypes.can_cast_dtype(nodata, dtype):
+            raise ValueError(f"'nodata' value: {nodata} cannot be safely cast to '{dtype}'")
+
+        # create a copy of the array if nodata, rounding, clipping or casting might change it
+        unsafe_cast = not np.can_cast(self.dtype, dtype, casting='safe')
+        nodata_change = nodata is not None and not utils.nan_equals(nodata, self.nodata)
+        array = self._array
+        if nodata_change or unsafe_cast:
+            # If necessary and possible, promote source dtype to be able to represent destination dtype exactly.
+            # (This works around the (undocumented?) situation where even if a clipped array contains only values
+            # that can be represented as the destination dtype, there is still casting overflow when these values
+            # are near the dtype limits e.g. float32->int32 should be promoted to float64->int32.  There is no way
+            # of preventing this situation for float*->int64.)
+            array = array.astype(np.promote_types(self.dtype, dtype), copy=True)
+
+        # round if converting from float to integer dtype
+        if unsafe_cast and np.issubdtype(self.dtype, np.floating) and np.issubdtype(dtype, np.integer):
+            np.round(array, out=array)
+
+        # clip if converting to integer dtype with smaller range than current dtype
+        if unsafe_cast and np.issubdtype(dtype, np.integer):
+            src_info = np.iinfo(self.dtype) if np.issubdtype(self.dtype, np.integer) else np.finfo(self.dtype)
+            dst_info = np.iinfo(dtype)
+            if src_info.min < dst_info.min or src_info.max > dst_info.max:
+                np.clip(array, dst_info.min, dst_info.max, out=array)
+
+        # convert dtype
+        with np.errstate(invalid='ignore'):  # ignore numpy warning for cast of nodata=nan to dtype
+            array = array.astype(dtype, copy=False, casting='unsafe')
+
+        # set nodata value if it has changed, or may be invalid after rounding, clipping and casting
+        if nodata_change or (nodata is not None and unsafe_cast):
+            array[~self.mask] = nodata
+
+        return array
 
     def copy(self) -> 'RasterArray':
         """ Create a deep copy of the RasterArray. """
@@ -381,9 +430,10 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         window: Optional[Window] = None, **kwargs
     ):
         """
-        Write the RasterArray into a rasterio dataset.
+        Write the RasterArray into a rasterio dataset, converting data types with rounding and clipping when necessary.
 
-        Note that typically, the dataset bounds would encompass the RasterArray bounds.
+        The RasterArray mask is written as an internal mask band when the ``rio_dataset`` nodata is None, otherwise
+        no mask is written, and the array is written as is.
 
         Parameters
         ----------
@@ -428,6 +478,13 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
                 f'The length of indexes ({len(indexes)}) exceeds the number of bands in the '
                 f'RasterArray ({self.count})'
             )
+        if rio_dataset.nodata is not None and (
+                self.nodata is None or not utils.nan_equals(self.nodata, rio_dataset.nodata)
+        ):
+            warnings.warn(
+                f"The dataset nodata: {rio_dataset.nodata} does not match the RasterArray nodata: {self.nodata}",
+                category=ImageFormatWarning
+            )
 
         if window is None:
             # a window defining the region in the dataset corresponding to the RasterArray extents
@@ -444,11 +501,21 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
                 f'bounds of the RasterArray ({bounded_ra.bounds})'
             )
 
-        rio_dataset.write(bounded_ra.array, window=window, indexes=indexes, **kwargs)
+        # convert data type and write to dataset
+        array = bounded_ra._convert_array_dtype(rio_dataset.dtypes[0], nodata=rio_dataset.nodata)
+        # TODO: rio is raising warnings when values in the write below are to a 12 bit jpeg and they overflow the 12bit
+        #  bound.  it only does this when writing in a thread (?).
+        rio_dataset.write(array, window=window, indexes=indexes, **kwargs)
+        if rio_dataset.nodata is None and (1 in np.array(indexes)):
+            # write internal mask once (for first band) if nodata is None
+            rio_dataset.write_mask(bounded_ra.mask, window=window)
 
     def to_file(self, filename: Union[str, pathlib.Path], driver: str = 'GTiff', **kwargs):
         """
         Write the RasterArray to an image file.
+
+        The RasterArray mask is written as an internal mask band when :attr:`~RasterArray.nodata` is None,
+        otherwise the file's nodata property is set, and the RasterArray array is written as is.
 
         Parameters
         ----------
@@ -464,6 +531,8 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs', GTIFF_FORCE_RGBA=False):
             with rio.open(filename, 'w', driver=driver, **self.profile, **kwargs) as out_im:
                 out_im.write(self._array, indexes=range(1, self.count + 1) if self.count > 1 else 1)
+                if out_im.nodata is None:
+                    out_im.write_mask(self.mask)
 
     def reproject(
         self, crs: Optional[CRS] = None, transform: Optional[Affine] = None, shape: Optional[Tuple[int, int]] = None,
@@ -498,7 +567,7 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         """
 
         if transform is not None and shape is None:
-            raise ValueError('If `transform` is specified, `shape` must also be specified')
+            raise ValueError('If `transform` is specified, `shape` is required')
 
         if isinstance(resampling, str):
             resampling = Resampling[resampling]
@@ -512,15 +581,11 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         else:
             _dst_array = np.zeros(shape, dtype=dtype)
 
-        # suppress NotGeoreferencedWarning which rasterio sometimes raises incorrectly
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore', category=NotGeoreferencedWarning)
-
-            _, _dst_transform = reproject(
-                self._array, destination=_dst_array, src_crs=self._crs, src_transform=self._transform,
-                src_nodata=self._nodata, dst_crs=crs, dst_transform=transform, dst_nodata=nodata,
-                num_threads=multiprocessing.cpu_count(), resampling=resampling, **kwargs
-            )
+        _, _dst_transform = reproject(
+            self._array, destination=_dst_array, src_crs=self._crs, src_transform=self._transform,
+            src_nodata=self._nodata, dst_crs=crs, dst_transform=transform, dst_nodata=nodata,
+            num_threads=multiprocessing.cpu_count(), resampling=resampling, **kwargs
+        )
         return RasterArray(_dst_array, crs=crs, transform=_dst_transform, nodata=nodata)
 
 

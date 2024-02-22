@@ -27,6 +27,7 @@ import yaml
 from click.testing import CliRunner
 from rasterio.warp import Resampling
 from rasterio.vrt import WarpedVRT
+from rasterio.enums import MaskFlags
 
 from homonim import utils
 from homonim.cli import cli
@@ -342,6 +343,7 @@ def test_r2_inpaint_thresh_error(runner: CliRunner, basic_fuse_cli_params: FuseC
         ('GTiff', 'float64', float('nan')),
         ('GTiff', 'uint16', 65535),
         ('PNG', 'uint8', 0),
+        ('GTiff', 'uint8', None),
     ]
 )  # yapf: disable
 def test_out_profile(runner: CliRunner, basic_fuse_cli_params: FuseCliParams, driver: str, dtype: str, nodata: float):
@@ -357,7 +359,8 @@ def test_out_profile(runner: CliRunner, basic_fuse_cli_params: FuseCliParams, dr
     with rio.open(corr_file, 'r') as out_ds:
         assert (out_ds.driver == driver)
         assert (out_ds.dtypes[0] == dtype)
-        assert (utils.nan_equals(out_ds.nodata, nodata))
+        assert out_ds.nodata is None if nodata is None else (utils.nan_equals(out_ds.nodata, nodata))
+        assert out_ds.mask_flag_enums[0] == [MaskFlags.per_dataset] if nodata is None else [MaskFlags.nodata]
 
 
 def test_out_driver_error(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
@@ -381,7 +384,7 @@ def test_out_nodata_error(runner: CliRunner, basic_fuse_cli_params: FuseCliParam
     cli_str = basic_fuse_cli_params.cli_str + f' --dtype uint8 --nodata nan'
     result = runner.invoke(cli, cli_str.split())
     assert (result.exit_code != 0)
-    assert ('Invalid value' in result.output)
+    assert ('nodata' in result.output and 'data type' in result.output)
 
 
 def test_creation_options(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):

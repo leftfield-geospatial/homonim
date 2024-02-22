@@ -46,9 +46,17 @@ class IoError(HomonimError):
     """ Raised when accessing unopened file(s). """
 
 
-class BandCountMismatchWarning(UserWarning):
-    """ Warn when the reference and source band counts don't match. """
+class HomonimWarning(RuntimeWarning):
+    """ Homonim runtime warning. """
 
 
-class NodataMaskWarning(UserWarning):
-    """ Warn when an image has no mask or nodata values. """
+class BandMatchWarning(HomonimWarning):
+    """ Warn about band matching issues. """
+
+
+class ImageFormatWarning(HomonimWarning):
+    """ Warn about image format issues. """
+
+
+class ConfigWarning(HomonimWarning):
+    """ Warn about configuration issues. """
