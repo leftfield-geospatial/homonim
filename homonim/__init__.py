@@ -19,12 +19,17 @@
 import os
 import pathlib
 import logging
+import warnings
 
+from rasterio.errors import NotGeoreferencedWarning
 from homonim.compare import RasterCompare
 from homonim.enums import Model, ProcCrs
 from homonim.fuse import RasterFuse
 from homonim.kernel_model import KernelModel
 from homonim.stats import ParamStats
+
+# suppress NotGeoreferencedWarning which rasterio can raise incorrectly
+warnings.simplefilter('ignore', category=NotGeoreferencedWarning)
 
 # Add a NullHandler to the package logger to hide logs by default.  Applications can then add
 # their own handler(s).
