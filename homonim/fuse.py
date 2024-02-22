@@ -128,12 +128,13 @@ class RasterFuse(MatchedPairReader):
             Output format driver.  See the `GDAL docs <https://gdal.org/drivers/raster/index.html>`_ for
             available options.
         dtype: str, optional
-            Output image data type.  One of: uint8|uint16|int16|uint32|int32|float32|float64.
+            Output image data type.  One of: uint8|uint16|int16|uint32|int32|float32|float64.  Data values are rounded
+            and clipped to integer ``dtype`` ranges.
         nodata: float, optional
             Output image nodata value.  If set to None, an internal mask is written (recommended when
             ``creation_options`` are configured for lossy, e.g. JPEG, compression).
         creation_options: dict, optional
-            Driver specific creation options e.g. ``dict(compression='deflate')``.
+            Driver specific creation options e.g. ``dict(compress='deflate')``.
             See the `GDAL docs <https://gdal.org/drivers/raster/index.html>`_ for available keys and values.
 
         Returns

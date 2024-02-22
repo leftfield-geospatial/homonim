@@ -351,8 +351,8 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
             self._mask = None
 
     def _convert_array_dtype(self, dtype: str, nodata: Union[float, None] = None) -> np.array:
-        """ Return the image array converted to ``dtype``, rounding and clipping when necessary. Passing ``nodata``
-        will set nodata areas in the returned array to this value.
+        """ Return the image array converted to ``dtype``, rounding and clipping when ``dtype`` is integer. Passing
+        ``nodata`` will set nodata areas in the returned array to this value.
         """
         if nodata is not None and not rio.dtypes.can_cast_dtype(nodata, dtype):
             raise ValueError(f"'nodata' value: {nodata} cannot be safely cast to '{dtype}'")
@@ -432,9 +432,8 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         """
         Write the RasterArray into a rasterio dataset, converting data types with rounding and clipping when necessary.
 
-        The RasterArray mask is written as an internal mask band when the dataset's nodata is None, otherwise no mask
-        is written, and the RasterArray array is written as is.  Note that typically, dataset bounds would encompass
-        the RasterArray bounds.
+        The RasterArray mask is written as an internal mask band when the ``rio_dataset`` nodata is None, otherwise
+        no mask is written, and the array is written as is.
 
         Parameters
         ----------

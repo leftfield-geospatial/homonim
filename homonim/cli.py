@@ -124,7 +124,7 @@ def _update_existing_keys(default_dict: Dict, **kwargs) -> Dict:
 
 def _configure_logging(verbosity: int):
     """Configure python logging level."""
-    # TODO: change logger.warning to warnings.warn where a client may want to respond to a warning.
+    # TODO: change logger.warning to warnings.warn where a user may want to respond to a warning.
     # TODO: lose PlainInfoFormatter if not needed
 
     def showwarning(message, category, filename, lineno, file=None, line=None):
@@ -399,8 +399,8 @@ def cli(verbose: int, quiet: int):
     click.option(
         '--dtype', type=click.Choice(list(rio.dtypes.dtype_fwd.values())[1:8], case_sensitive=False),
         default=RasterFuse.create_out_profile()['dtype'], show_default=True,
-        help=f'Output image data type.  Valid for corrected images only, parameter images always use '
-        f'{RasterArray.default_dtype}.'
+        help=f'Output image data type.  If an integer type, values are rounded and clipped to its range.  Valid for '
+             f'corrected images only, parameter images always use {RasterArray.default_dtype}.'
     ),
     click.option(
         '--nodata', 'nodata', type=click.STRING, callback=_nodata_cb, metavar='[NUMBER|null|nan]',
