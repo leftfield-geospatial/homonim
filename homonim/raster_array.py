@@ -35,7 +35,7 @@ from rasterio.windows import Window, WindowMethodsMixin
 from rasterio.errors import NotGeoreferencedWarning
 
 from homonim import utils
-from homonim.errors import ImageProfileError, ImageFormatError
+from homonim.errors import ImageProfileError, ImageFormatError, ImageFormatWarning
 
 logger = logging.getLogger(__name__)
 
@@ -478,7 +478,13 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
                 f'The length of indexes ({len(indexes)}) exceeds the number of bands in the '
                 f'RasterArray ({self.count})'
             )
-        # TODO: warn if nodata doesn't match dataset
+        if rio_dataset.nodata is not None and (
+                self.nodata is None or not utils.nan_equals(self.nodata, rio_dataset.nodata)
+        ):
+            warnings.warn(
+                f"The dataset nodata: {rio_dataset.nodata} does not match the RasterArray nodata: {self.nodata}",
+                category=ImageFormatWarning
+            )
 
         if window is None:
             # a window defining the region in the dataset corresponding to the RasterArray extents
@@ -498,7 +504,7 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         # convert data type and write to dataset
         array = bounded_ra._convert_array_dtype(rio_dataset.dtypes[0], nodata=rio_dataset.nodata)
         # TODO: rio is raising warnings when values in the write below are to a 12 bit jpeg and they overflow the 12bit
-        #  bound.  it only does this writing in a thread (?).
+        #  bound.  it only does this when writing in a thread (?).
         rio_dataset.write(array, window=window, indexes=indexes, **kwargs)
         if rio_dataset.nodata is None and (1 in np.array(indexes)):
             # write internal mask once (for first band) if nodata is None
@@ -575,15 +581,11 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         else:
             _dst_array = np.zeros(shape, dtype=dtype)
 
-        # suppress NotGeoreferencedWarning which rasterio sometimes raises incorrectly
-        with warnings.catch_warnings():   # TODO: this is not thread-safe
-            warnings.simplefilter('ignore', category=NotGeoreferencedWarning)
-
-            _, _dst_transform = reproject(
-                self._array, destination=_dst_array, src_crs=self._crs, src_transform=self._transform,
-                src_nodata=self._nodata, dst_crs=crs, dst_transform=transform, dst_nodata=nodata,
-                num_threads=multiprocessing.cpu_count(), resampling=resampling, **kwargs
-            )
+        _, _dst_transform = reproject(
+            self._array, destination=_dst_array, src_crs=self._crs, src_transform=self._transform,
+            src_nodata=self._nodata, dst_crs=crs, dst_transform=transform, dst_nodata=nodata,
+            num_threads=multiprocessing.cpu_count(), resampling=resampling, **kwargs
+        )
         return RasterArray(_dst_array, crs=crs, transform=_dst_transform, nodata=nodata)
 
 
