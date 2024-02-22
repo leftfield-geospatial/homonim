@@ -123,7 +123,6 @@ def _update_existing_keys(default_dict: Dict, **kwargs) -> Dict:
 
 def _configure_logging(verbosity: int):
     """Configure python logging level."""
-    # TODO: change logger.warning to warnings.warn where a user may want to respond to a warning.
     # TODO: lose PlainInfoFormatter if not needed
 
     def showwarning(message, category, filename, lineno, file=None, line=None):

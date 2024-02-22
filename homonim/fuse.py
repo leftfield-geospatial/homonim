@@ -142,10 +142,9 @@ class RasterFuse(MatchedPairReader):
         dict
             Output image profile.
         """
-        # TODO: add compress_overview='auto' when gdal >=3.6
         creation_options = creation_options or dict(
             tiled=True, blockxsize=512, blockysize=512, compress='deflate', interleave='band', photometric='minisblack',
-            bigtiff='if_safer',
+            bigtiff='if_safer'
         )
         return dict(driver=driver, dtype=dtype, nodata=nodata, creation_options=creation_options)
 
