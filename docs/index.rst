@@ -26,6 +26,7 @@ Contents
    api
    advanced
    tutorials
+   contributing
 
 * :ref:`genindex`
 
