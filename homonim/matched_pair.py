@@ -18,7 +18,7 @@
 """
 import logging
 from pathlib import Path
-from typing import List, Tuple, Union, Dict
+from typing import Tuple, Union, Dict
 import warnings
 
 import numpy as np
@@ -27,8 +27,10 @@ from rasterio.enums import ColorInterp
 from tabulate import tabulate
 from homonim.raster_pair import RasterPairReader
 from homonim.enums import ProcCrs
+from homonim.errors import BandMatchWarning
 
 logger = logging.getLogger(__name__)
+
 
 class MatchedPairReader(RasterPairReader):
     _max_rel_wavelength_diff = .1   # maximum allowed relative distance between center wavelengths for matching
@@ -116,7 +118,10 @@ class MatchedPairReader(RasterPairReader):
         # warn if some but not all bands have center wavelength metadata
         if (bands is not None) and len(refl_bands) and (not set(bands).issubset(refl_bands)):
             non_refl_bands = list(set(bands).difference(refl_bands))
-            logger.warning(f'User specified {name} bands contain non-reflectance band index(es) {non_refl_bands}.')
+            warnings.warn(
+                f'User specified {name} bands contain non-reflectance band index(es) {non_refl_bands}.',
+                category=BandMatchWarning
+            )
 
         log_prefix = f'Using {name} bands '
         if (bands is not None) and (len(bands) > 0):
@@ -154,15 +159,17 @@ class MatchedPairReader(RasterPairReader):
                     center_wavelengths[bi - 1] = std_rgb_cws[im.colorinterp[bi - 1]]
                     log_list.append(im.colorinterp[bi - 1].name)
             if len(log_list) > 0:
-                logger.warning(
-                    f'Assigning standard {", ".join(log_list)} center wavelengths for {name}.'
+                warnings.warn(
+                    f'Assigning standard {", ".join(log_list)} center wavelengths for {name}.',
+                    category=BandMatchWarning
                 )
 
             # if the image has no valid RGB colorinterp's or center wavelengths
             if sum(np.isnan(center_wavelengths[non_alpha_bands - 1])) == 3:
                 # assume RGB and assign center wavelengths in that order
-                logger.warning(
-                    f'Assuming image is RGB, and assigning standard center wavelengths for {name}.'
+                warnings.warn(
+                    f'Assuming image is RGB, and assigning standard center wavelengths for {name}.',
+                    category=BandMatchWarning
                 )
                 center_wavelengths[non_alpha_bands - 1] = list(std_rgb_cws.values())
 
@@ -230,7 +237,7 @@ class MatchedPairReader(RasterPairReader):
             if not self._force:
                 raise ValueError(f'{ref_name} has fewer bands than {src_name}.')
             else:
-                logger.warning(f'{ref_name} has fewer bands than {src_name}.')
+                warnings.warn(f'{ref_name} has fewer bands than {src_name}.', category=BandMatchWarning)
 
         match_bands = np.array([np.nan] * len(src_bands))
         # match src with ref bands based on center wavelength metadata, bypassing if force==True
@@ -313,7 +320,7 @@ class MatchedPairReader(RasterPairReader):
                 # if there are not N unmatched ref bands, truncate unmatched to just match what we can
                 unmatched = np.where(unmatched)[0][:len(unmatch_ref_bands)]
                 match_bands[unmatched] = unmatch_ref_bands
-                logger.warning(
+                logger.debug(
                     f'Matching {src_name} band(s) {list(src_bands[unmatched])} in file order with {ref_name} '
                     f'band(s): {list(unmatch_ref_band_names)}.'
                 )

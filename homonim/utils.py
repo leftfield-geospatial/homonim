@@ -19,6 +19,7 @@
 
 import logging
 import pathlib
+import warnings
 from multiprocessing import cpu_count
 from typing import Tuple, Dict, Union
 from contextlib import contextmanager
@@ -31,7 +32,7 @@ from rasterio.windows import Window
 from tabulate import TableFormat, Line, DataRow, tabulate
 
 from homonim.enums import Model, ProcCrs
-from homonim.errors import ImageFormatError
+from homonim.errors import ImageFormatError, ConfigWarning
 
 logger = logging.getLogger(__name__)
 tabulate.MIN_PADDING = 0
@@ -123,7 +124,10 @@ def validate_kernel_shape(kernel_shape: Tuple[int, int], model: Model = Model.ga
         if np.product(kernel_shape) < 2:
             raise ValueError('`kernel_shape` area should contain at least 2 elements for the gain-offset model.')
         elif np.product(kernel_shape) < 25:
-            logger.warning('A `kernel_shape` of at least 25 elements is recommended for the gain-offset model.')
+            warnings.warn(
+                'A `kernel_shape` of at least 25 elements is recommended for the gain-offset model.',
+                category=ConfigWarning
+            )
     if not np.all(kernel_shape >= 1):
         raise ValueError('`kernel_shape` must be a minimum of one in both dimensions.')
     return tuple(kernel_shape)

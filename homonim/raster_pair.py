@@ -22,6 +22,7 @@ import threading
 from contextlib import ExitStack
 from itertools import product
 from typing import Tuple, NamedTuple, Union, Iterable, List
+import warnings
 
 import numpy as np
 import rasterio
@@ -31,9 +32,11 @@ from rasterio.vrt import WarpedVRT
 from rasterio.warp import Resampling
 from rasterio.windows import Window
 from tqdm.contrib.logging import logging_redirect_tqdm
+from unicodedata import category
 
 from homonim import errors, utils
 from homonim.enums import ProcCrs
+from homonim.errors import ImageFormatWarning, BandMatchWarning, ConfigWarning
 from homonim.raster_array import RasterArray
 
 logger = logging.getLogger(__name__)
@@ -140,13 +143,16 @@ class RasterPairReader:
             name = Path(im.name).name
             is_masked = any([MaskFlags.all_valid not in im.mask_flag_enums[bi] for bi in range(im.count)])
             if im.nodata is None and not is_masked:
-                logger.warning(
-                    f'{name} has no mask or nodata value, any invalid pixels should be masked before processing.'
+                warnings.warn(
+                    f'{name} has no mask or nodata value, any invalid pixels should be masked before processing.',
+                    category=ImageFormatWarning
                 )
 
             # warn if not standard north-up orientation
             if not utils.north_up(im):
-                logger.warning(f'{name} will be re-projected to a standard North-up orientation.')
+                warnings.warn(
+                    f'{name} will be re-projected to a standard North-up orientation.', category=ImageFormatWarning
+                )
 
         validate_image_format(src_im)
         validate_image_format(ref_im)
@@ -154,8 +160,9 @@ class RasterPairReader:
         if src_im.crs.to_proj4() != ref_im.crs.to_proj4():
             src_name = Path(src_im.name).name
             ref_name = Path(ref_im.name).name
-            logger.warning(
-                f'Source and reference image will be re-projected to the same CRS: {src_name} and {ref_name}'
+            warnings.warn(
+                f'Source and reference image will be re-projected to the same CRS: {src_name} and {ref_name}',
+                category=ImageFormatWarning
             )
 
     def _match_pair_bands(
@@ -177,9 +184,9 @@ class RasterPairReader:
             )
         # warn if source and reference band counts don't match
         if len(src_bands) != len(ref_bands):
-            logger.warning(
+            warnings.warn(
                 f'Source and reference image non-alpha band counts don`t match. Using the first {len(src_bands)} '
-                f'non-alpha bands of reference.'
+                f'non-alpha bands of reference.', category=BandMatchWarning
             )
         return src_bands, ref_bands
 
@@ -210,8 +217,9 @@ class RasterPairReader:
             # warn if the proc_crs value does not correspond to the lowest resolution of the source and
             # reference images
             rec_crs_str = ProcCrs.ref if src_pixel_smaller else ProcCrs.src
-            logger.warning(
-                f'proc_crs={rec_crs_str} is recommended when the source pixel size is {cmp_str} than the reference.'
+            warnings.warn(
+                f'proc_crs={rec_crs_str} is recommended when the source pixel size is {cmp_str} than the reference.',
+                category=ConfigWarning
             )
         return proc_crs
 
@@ -254,8 +262,9 @@ class RasterPairReader:
 
         # warn if the block shape in the highest res image is less than a typical tile
         if np.any(block_shape / mem_scale < (256, 256)) and np.any(block_shape < (proc_win.height, proc_win.width)):
-            logger.warning(
-                f'The auto block shape is small: {block_shape}.  Increase `max_block_mem` to improve processing times.'
+            warnings.warn(
+                f'The auto block shape is small: {block_shape}.  Increase `max_block_mem` to improve processing times.',
+                category=ConfigWarning
             )
         return tuple(block_shape)
 

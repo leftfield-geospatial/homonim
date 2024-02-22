@@ -478,7 +478,7 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
                 f'The length of indexes ({len(indexes)}) exceeds the number of bands in the '
                 f'RasterArray ({self.count})'
             )
-        # TODO: warn if nodata doesn't match (switch logger.warning -> warnings.warn at same time)
+        # TODO: warn if nodata doesn't match dataset
 
         if window is None:
             # a window defining the region in the dataset corresponding to the RasterArray extents
