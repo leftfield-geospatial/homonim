@@ -1,8 +1,8 @@
 Command line interface
-----------------------
+======================
 
 Getting started
-^^^^^^^^^^^^^^^
+---------------
 
 .. include:: ../README.rst
     :start-after: cli_start
@@ -11,7 +11,7 @@ Getting started
 .. _cli_running_examples:
 
 Running examples
-~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^
 
 The examples that follow use the ``homonim`` test images.  You can get these by downloading the repository directly:
 
@@ -37,7 +37,7 @@ The commands that follow use relative paths, and should be run from *<homonim ro
 
 
 Basic fusion and comparison
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The *gain-blk-offset* model and kernel shape of 5 x 5 pixels are the default fusion settings and work reasonably well for a variety of problems.  Here we specify these settings to correct the test aerial images with the Sentinel-2 reference.
 
@@ -81,7 +81,7 @@ It is possible to combine the above *fuse* and *compare* commands, using the :op
 
 
 Band matching
-~~~~~~~~~~~~~
+^^^^^^^^^^^^^
 
 ``homonim`` automatically matches *source* to *reference* spectral bands when these images are either RGB or have ``center_wavelength`` metadata (as is the case with the ``homonim`` test data).  Subsets of *source* and/or *reference* bands to use for matching can be specified with the :option:`--src-band <homonim-fuse --src-band>` and :option:`--ref-band <homonim-fuse --ref-band>` options.
 
@@ -122,19 +122,34 @@ Let's repeat the previous example to see how this would look.  Here, we also spe
 
 
 Output file format
-~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^
 
 By default ``homonim`` writes output files as *GeoTIFF*\s with *DEFLATE* compression, *float32* data type and *nan* nodata value.  These options are all configurable.
 
-Here we create a corrected image in *JPEG* format, with *uint8* data type, *0* nodata value, and a *QUALITY* setting of *85*.
+Here we create a *JPEG* compressed image in *GeoTIFF* format, with *uint8* data type:
 
 .. code:: shell
 
-    homonim fuse -od ./corrected  --driver JPEG --dtype uint8 --nodata 0 -co QUALITY=85 ./source/ngi_rgb_byte_4.tif ./reference/sentinel2_b432_byte.tif
+    homonim fuse -od ./corrected --driver GTiff --dtype uint8 --nodata null -co COMPRESS=JPEG -co INTERLEAVE=PIXEL -co PHOTOMETRIC=YCBCR ./source/ngi_rgb_byte_4.tif ./reference/sentinel2_b432_byte.tif
 
+Setting nodata to *null* forces the writing of an internal mask.  This avoids lossy compression `transparency artifacts <https://gis.stackexchange.com/questions/114370/compression-artifacts-and-gdal>`__.  JPEG compression is configured to sub-sample YCbCr colour space values with the ``-co INTERLEAVE=PIXEL -co PHOTOMETRIC=YCBCR`` creation options.
+
+Next, the corrected image is formatted as a 12 bit JPEG compressed GeoTIFF.  A *null* nodata value is used again to write an internal mask, and the *uint16* data type gets truncated to 12 bits:
+
+.. code:: shell
+
+    homonim fuse -od ./corrected --driver GTiff --dtype uint16 --nodata null -co COMPRESS=JPEG -co NBITS=12 ./source/ngi_rgb_byte_4.tif ./reference/sentinel2_b432_byte.tif
+
+The ``-co INTERLEAVE=PIXEL -co PHOTOMETRIC=YCBCR`` creation options could also be used with this example, to further compress the RGB image.
+
+.. note::
+
+    Support for 12 bit JPEG compression is `rasterio <https://rasterio.readthedocs.io/en/stable>`__ build / package dependent.
+
+See the `GDAL docs <https://gdal.org/drivers/raster/index.html>`__ for available drivers and their parameters.
 
 Usage
-^^^^^
+-----
 
 .. click:: homonim.cli:cli
   :prog: homonim
