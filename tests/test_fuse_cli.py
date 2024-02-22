@@ -384,7 +384,7 @@ def test_out_nodata_error(runner: CliRunner, basic_fuse_cli_params: FuseCliParam
     cli_str = basic_fuse_cli_params.cli_str + f' --dtype uint8 --nodata nan'
     result = runner.invoke(cli, cli_str.split())
     assert (result.exit_code != 0)
-    assert ('Invalid value' in result.output)
+    assert ('nodata' in result.output and 'data type' in result.output)
 
 
 def test_creation_options(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
