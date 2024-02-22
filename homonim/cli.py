@@ -70,7 +70,6 @@ class HomonimCommand(cloup.Command):
             '``(.*?)``': r'\g<1>',          # convert from RST '``literal``' to 'literal'
             ':option:`(.*?)( <.*?>)?`': r'\g<1>',   # convert ':option:`--name <group-command --name>`' to '--name'
             ':option:`(.*?)`': r'\g<1>',    # convert ':option:`--name`' to '--name'
-            '-{4,}': r'',                   # strip '----...'
             '`([^<]*) <([^>]*)>`_': r'\g<1>',  # convert from RST cross-ref '`<name> <<link>>`_' to 'name'
         }  # yapf: disable
 
@@ -171,25 +170,17 @@ def _threads_cb(ctx: click.Context, param: click.Option, value):
     return threads
 
 
-def _nodata_cb(ctx: click.Context, param: click.Option, value):
+def _nodata_cb(ctx: click.Context, param: click.Option, value: str):
     """ click callback to convert --nodata value to None, nan or float. """
     # adapted from rasterio https://github.com/rasterio/rasterio
     if value is None or value.lower() in ['null', 'nil', 'none', 'nada']:
         return None
     else:
         # check value is a number and can be cast to output dtype
-        # TODO: there is a bug here if --nodata is specified before --dtype on the CLI (ctx.params['dtype'] does not
-        #  exist)
-        # TODO: add test for case where --nodata cannot be cast to --dtype
         try:
             value = float(value.lower())
-            if not rio.dtypes.can_cast_dtype(value, ctx.params['dtype']):
-                raise click.BadParameter(
-                    f'{value} cannot be cast to the output image data type {ctx.params["dtype"]}', param=param,
-                    param_hint='nodata'
-                )
         except (TypeError, ValueError):
-            raise click.BadParameter(f'{value} is not a number', param=param, param_hint='nodata')
+            raise click.BadParameter(f'{value} is not a number', param=param, param_hint='--nodata')
 
         return value
 
@@ -423,7 +414,6 @@ def fuse(
     overwrite: bool, cmp_file: pathlib.Path, cmp_bands: Tuple[int], build_ovw: bool, proc_crs: ProcCrs,
     conf: pathlib.Path, param_image: bool, force_match: bool, **kwargs
 ):
-    # TODO: don't strip Examples heading underline
     # @formatter:off
     """
     Correct image(s) to surface reflectance.
@@ -465,16 +455,8 @@ def fuse(
     Correct bands 2 and 3 of `source.tif`, with bands 7 and 8 of `reference.tif`, using the default correction options::
 
         homonim fuse -sb 2 -sb 3 -rb 7 -rb 8 source.tif reference.tif
-
-    ----
     """
     # @formatter:on
-
-    # try:
-    #     kernel_shape = utils.validate_kernel_shape(kernel_shape, model=model)
-    # except Exception as ex:
-    #     raise click.BadParameter(str(ex))
-
     # build configuration dictionaries for RasterFuse
     block_config = _update_existing_keys(RasterFuse.create_block_config(), **kwargs)
     model_config = _update_existing_keys(RasterFuse.create_model_config(), **kwargs)
@@ -577,8 +559,6 @@ def compare(
     Compare `source.tif` and `corrected.tif` with `reference.tif`::
 
         homonim compare source.tif corrected.tif reference.tif
-
-    ----
     """
 
     # build configuration dictionary
