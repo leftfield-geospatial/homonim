@@ -1,5 +1,3 @@
-# Test installing from conda-forge
-
 name: Install & test conda-forge package
 on: 
   workflow_dispatch:
