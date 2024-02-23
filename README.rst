@@ -9,7 +9,7 @@ homonim
 
 .. short_descr_start
 
-Correct aerial and satellite imagery to surface reflectance.
+Correct drone, aerial and satellite imagery to surface reflectance.
 
 .. short_descr_end
 .. description_start
