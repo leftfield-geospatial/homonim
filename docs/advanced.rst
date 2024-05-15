@@ -24,7 +24,7 @@ Similarly, when comparing images, ``homonim`` will re-project the source to the 
 
 ``homonim`` uses *average* resampling when downsampling (re-projecting from high to low resolution), and *cubic spline* resampling when upsampling (re-projecting from low to high resolution), by default.  The reasons for these choices are explained in the `paper <https://raw.githubusercontent.com/leftfield-geospatial/homonim/main/docs/radiometric_homogenisation_preprint.pdf>`_.
 
-While the default settings are recommended, the ``homonim`` CLI and API allow the user to specify the *processing CRS*, and resampling methods for *downsampling* and *upsampling*.  On the :ref:`command line <cli:usage>`, the relevant parameters are ``--proc-crs``, ``--downsampling`` and ``--upsampling``.  Corresponding arguments can be found in the :class:`~homonim.RasterFuse` and :class:`~homonim.RasterCompare` APIs.
+While the default settings are recommended, the ``homonim`` CLI and API allow the user to specify the *processing CRS*, and resampling methods for *downsampling* and *upsampling*.  On the :ref:`command line <cli:usage>`, the relevant parameters are ``--proc-crs``, ``--downsampling`` and ``--upsampling``.  Corresponding arguments can be found in the :class:`~homonim.RasterFuse` and :class:`~homonim.RasterCompare` API's.
 
 ..
     TO DO: a why use homonim section with its advantages over other methods? speed (DFT & block proc), spatially varying correction &
