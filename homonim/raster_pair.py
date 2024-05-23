@@ -157,7 +157,7 @@ class RasterPairReader:
         validate_image_format(src_im)
         validate_image_format(ref_im)
         # warn if the source and reference are not in the same CRS
-        if src_im.crs.to_proj4() != ref_im.crs.to_proj4():
+        if src_im.crs != ref_im.crs:
             src_name = Path(src_im.name).name
             ref_name = Path(ref_im.name).name
             warnings.warn(

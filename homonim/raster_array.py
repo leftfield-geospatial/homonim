@@ -462,7 +462,7 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         if self.crs != rio_dataset.crs:
             raise ImageFormatError(
                 f'The dataset CRS does not match that of the RasterArray. '
-                f'Dataset CRS: {rio_dataset.crs.to_proj4()}, RasterArray CRS: {self.crs.to_proj4()}'
+                f'Dataset CRS: {rio_dataset.crs}, RasterArray CRS: {self.crs}'
             )
 
         if indexes is None:

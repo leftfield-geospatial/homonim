@@ -195,7 +195,7 @@ def same_orientation_crs(
     """
     # Note: without transform etc arguments, WarpedVRT re-projects to north-up
     resampling = Resampling.bilinear
-    same_crs = src_im.crs.to_proj4() == ref_im.crs.to_proj4()
+    same_crs = src_im.crs == ref_im.crs
     if (not north_up(src_im)) and (same_crs or proc_crs != ProcCrs.src):
         src_im = WarpedVRT(src_im, crs=src_im.crs, resampling=resampling)
     if (not north_up(ref_im)) and (same_crs or proc_crs == ProcCrs.src):
