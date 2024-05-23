@@ -4,6 +4,6 @@ sphinx-rtd-theme
 nbsphinx
 ipykernel
 ipywidgets
-sphinx_gallery >= 0.14
+sphinx-gallery >= 0.14
 sphinx-copybutton
 jupyter-sphinx
