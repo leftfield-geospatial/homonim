@@ -21,7 +21,7 @@
 #
 # This file only contains a selection of the most common options. For a full
 # list see the documentation:
-# https://www.sphinx-doc.org/en/master/usage/configuration.html
+# https://www.sphinx-doc.org/en/master/usage/configufexration.html
 
 # -- Path setup --------------------------------------------------------------
 
@@ -34,7 +34,7 @@ from homonim.version import __version__
 # -- Project information -----------------------------------------------------
 
 project = 'homonim'
-copyright = '2022-2023, Leftfield Geospatial'
+copyright = 'Leftfield Geospatial'
 author = 'Leftfield Geospatial'
 
 # The full version, including alpha/beta/rc tags
@@ -65,7 +65,9 @@ templates_path = ['_templates']
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+exclude_patterns = [
+    '_build', 'Thumbs.db', '.DS_Store', 'tutorials/classification.ipynb', 'tutorials/comparison.ipynb'
+]
 
 
 # -- Options for HTML output -------------------------------------------------
@@ -112,8 +114,8 @@ nbsphinx_execute_arguments = [
     '--InlineBackend.figure_formats={"svg", "pdf"}',
     '--InlineBackend.rc=figure.dpi=96',
 ]
-nbsphinx_widgets_path=''
-nbsphinx_requirejs_path=''
+nbsphinx_widgets_path = ''
+nbsphinx_requirejs_path = ''
 
 # -- Workaround for cloup arguments ------------------------------------------
 from sphinx_click import ext
