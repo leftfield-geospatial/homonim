@@ -32,6 +32,7 @@ import rasterio as rio
 import yaml
 from click.core import ParameterSource
 from rasterio.warp import SUPPORTED_RESAMPLING
+from rasterio.errors import NotGeoreferencedWarning
 
 from homonim import utils, version, RasterFuse, RasterCompare, ParamStats, ProcCrs, Model
 from homonim.errors import ImageFormatError
@@ -144,6 +145,9 @@ def _configure_logging(verbosity: int):
             module_name = module_path.with_suffix('').as_posix().replace('/', '.')
             logger = logging.getLogger(module_name)
             logger.warning(str(message))
+
+    # suppress NotGeoreferencedWarning which rasterio can raise incorrectly
+    warnings.simplefilter('ignore', category=NotGeoreferencedWarning)
 
     # redirect orthority warnings to module logger
     orig_show_warning = warnings.showwarning
