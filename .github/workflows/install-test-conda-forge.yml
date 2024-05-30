@@ -30,7 +30,7 @@ jobs:
       - name: Install package
         run: |
           conda info
-          conda install homonim>=0.4.0
+          conda install homonim>=0.4.1
           conda list
 
       - name: Run CLI fusion test

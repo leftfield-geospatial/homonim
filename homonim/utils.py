@@ -121,9 +121,9 @@ def validate_kernel_shape(kernel_shape: Tuple[int, int], model: Model = Model.ga
     if not np.all(np.mod(kernel_shape, 2) == 1):
         raise ValueError('`kernel_shape` must be odd in both dimensions.')
     if model == Model.gain_offset:
-        if np.product(kernel_shape) < 2:
+        if np.prod(kernel_shape) < 2:
             raise ValueError('`kernel_shape` area should contain at least 2 elements for the gain-offset model.')
-        elif np.product(kernel_shape) < 25:
+        elif np.prod(kernel_shape) < 25:
             warnings.warn(
                 'A `kernel_shape` of at least 25 elements is recommended for the gain-offset model.',
                 category=ConfigWarning
@@ -155,6 +155,8 @@ def overlap_for_kernel(kernel_shape: Tuple[int, int]) -> Tuple[int, int]:
 
 def validate_threads(threads: int) -> int:
     """ Parse number of threads parameter. """
+    # TODO: Memory increases ~linearly with number of threads, but does processing speed?  The bottleneck is often
+    #  file IO & I am not sure >2 threads as a default is justified.
     _cpu_count = cpu_count()
     threads = _cpu_count if threads == 0 else threads
     if threads > _cpu_count:

@@ -230,8 +230,8 @@ class RasterPairReader:
         proc_win = self._ref_win if self.proc_crs == ProcCrs.ref else self._src_win
         # adjust max_block_mem to represent the size of a block in the highest resolution image, but scaled to the
         # equivalent in proc_crs.
-        src_pix_area = np.product(np.abs(self._src_im.res))
-        ref_pix_area = np.product(np.abs(self._ref_im.res))
+        src_pix_area = np.prod(np.abs(self._src_im.res))
+        ref_pix_area = np.prod(np.abs(self._ref_im.res))
         if self.proc_crs == ProcCrs.ref:
             mem_scale = src_pix_area / ref_pix_area if ref_pix_area > src_pix_area else 1.
         elif self.proc_crs == ProcCrs.src:
@@ -247,7 +247,7 @@ class RasterPairReader:
         block_shape = np.array((proc_win.height, proc_win.width)).astype('float')
 
         # keep halving the block_shape along the longest dimension until it satisfies max_block_mem
-        while (np.product(block_shape) * dtype_size) > max_block_mem:
+        while (np.prod(block_shape) * dtype_size) > max_block_mem:
             div_dim = np.argmax(block_shape)
             block_shape[div_dim] /= 2
 
