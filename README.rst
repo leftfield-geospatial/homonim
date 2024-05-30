@@ -113,8 +113,7 @@ Surface reflectance correction of an aerial image using a Sentinel-2 reference.
 
 .. code:: python
 
-    from pathlib import Path
-    from homonim import RasterFuse, RasterCompare, Model
+    from homonim import RasterFuse, Model
 
     # urls of source and reference test images
     src_file = (
