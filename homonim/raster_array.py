@@ -478,13 +478,6 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
                 f'The length of indexes ({len(indexes)}) exceeds the number of bands in the '
                 f'RasterArray ({self.count})'
             )
-        if rio_dataset.nodata is not None and (
-                self.nodata is None or not utils.nan_equals(self.nodata, rio_dataset.nodata)
-        ):
-            warnings.warn(
-                f"The dataset nodata: {rio_dataset.nodata} does not match the RasterArray nodata: {self.nodata}",
-                category=ImageFormatWarning
-            )
 
         if window is None:
             # a window defining the region in the dataset corresponding to the RasterArray extents

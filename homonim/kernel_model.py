@@ -188,7 +188,7 @@ class KernelModel:
             # The above can be expanded and expressed in terms of cv.boxFilter kernel sums as:
             ss_res_array = (
                 ((param_array[0] ** 2) * src2_sum) +
-                (2 * np.product(param_array[:2], axis=0) * src_sum) -
+                (2 * np.prod(param_array[:2], axis=0) * src_sum) -
                 (2 * param_array[0] * src_ref_sum) -
                 (2 * param_array[1] * ref_sum) +
                 ref2_sum + (mask_sum * (param_array[1] ** 2))

@@ -248,6 +248,7 @@ class MatchedPairReader(RasterPairReader):
             # absolute & relative distance matrix between src and ref center wavelengths
             abs_dist = np.abs(src_wavelengths[:, np.newaxis] - ref_wavelengths[np.newaxis, :])
             rel_dist = abs_dist / src_wavelengths[:, np.newaxis]
+
             def greedy_match(dist: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
                 """
                 Greedy matching of src to ref bands based on the provided center wavelength distance matrix,
@@ -257,30 +258,29 @@ class MatchedPairReader(RasterPairReader):
                 """
                 # match_idx[i] is the index of the ref band that matches with the ith src band
                 match_idx = np.array([np.nan] * dist.shape[0])
-                match_dist = np.array([np.nan] * dist.shape[0]) # distances corresponding to the above matches
+                match_dist = np.array([np.nan] * dist.shape[0])  # distances corresponding to the above matches
 
-                # suppress runtime warning on all-Nan slice, as it is expected in normal operation
-                with warnings.catch_warnings():
-                    warnings.simplefilter('ignore', category=RuntimeWarning)
-                    # repeat until all src or ref bands have been matched
-                    while not all(np.isnan(np.nanmin(dist, axis=1))) or not all(np.isnan(np.nanmin(dist, axis=0))):
-                        # find the row with the smallest distance in it
-                        min_dist = np.nanmin(dist, axis=1)
-                        min_dist_row_idx = np.nanargmin(min_dist)
-                        min_dist_row = dist[min_dist_row_idx, :]
-                        # store match idx and distance for this row
-                        match_idx[min_dist_row_idx] = np.nanargmin(min_dist_row)
-                        match_dist[min_dist_row_idx] = min_dist[min_dist_row_idx]
-                        # set the matched row and col to nan, so that it is not used again
-                        dist[:, int(match_idx[min_dist_row_idx])] = np.nan
-                        dist[min_dist_row_idx, :] = np.nan
+                # use masked array rather than nan pass-through to avoid all-nan slice warnings
+                dist = np.ma.array(dist, mask=np.isnan(dist))
+
+                # repeat until all src or ref bands have been matched
+                while not dist.mask.all():
+                    # find the row with the smallest distance in it
+                    min_dist = dist.min(axis=1)
+                    min_dist_row_idx = np.ma.argmin(min_dist)
+                    min_dist_row = dist[min_dist_row_idx, :]
+                    # store match idx and distance for this row
+                    match_idx[min_dist_row_idx] = np.ma.argmin(min_dist_row)
+                    match_dist[min_dist_row_idx] = min_dist[min_dist_row_idx]
+                    # set the matched row and col to nan, so that it is not used again
+                    dist[:, int(match_idx[min_dist_row_idx])] = np.ma.masked
+                    dist[min_dist_row_idx, :] = np.ma.masked
 
                 return match_dist, match_idx
 
             match_dist, match_idx = greedy_match(rel_dist)
 
-            # if any of the matched distances are greater than a threshold, raise an informative error,
-            # or log a warning, depending on `self._force`
+            # if any of the matched distances are greater than a threshold, raise an informative error
             if any(match_dist > MatchedPairReader._max_rel_wavelength_diff):
                 err_idx = match_dist > MatchedPairReader._max_rel_wavelength_diff
                 src_err_band_names = list(src_band_names[err_idx])
