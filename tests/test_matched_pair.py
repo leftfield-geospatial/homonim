@@ -18,16 +18,16 @@
 """
 
 from pathlib import Path
-from typing import Tuple, List, Dict
+from typing import Tuple, List
+import warnings
 
 import numpy as np
 import pytest
 import rasterio as rio
-from rasterio import Affine
-from rasterio.windows import Window
 
 from homonim import utils
 from homonim.matched_pair import MatchedPairReader
+from homonim.errors import HomonimWarning
 
 
 @pytest.mark.parametrize(['file', 'bands', 'exp_bands', 'exp_band_names', 'exp_wavelengths'], [
@@ -104,9 +104,15 @@ def test_match(
     """ Test matching of different source and reference files. """
     src_file: Path = request.getfixturevalue(src_file)
     ref_file: Path = request.getfixturevalue(ref_file)
-    with MatchedPairReader(src_file, ref_file, src_bands=src_bands, ref_bands=ref_bands, force=force) as matched_pair:
-        assert all(np.array(matched_pair.src_bands) == exp_src_bands)
-        assert all(np.array(matched_pair.ref_bands) == exp_ref_bands)
+
+    with warnings.catch_warnings():
+        # test there are no all-nan warnings by turning them RuntimeWarning into an error, while allowing
+        # HomonimWarning which sub-classes RuntimeWarning
+        warnings.simplefilter("error", category=RuntimeWarning)
+        warnings.simplefilter("default", category=HomonimWarning)
+        with MatchedPairReader(src_file, ref_file, src_bands=src_bands, ref_bands=ref_bands, force=force) as matched_pair:
+            assert all(np.array(matched_pair.src_bands) == exp_src_bands)
+            assert all(np.array(matched_pair.ref_bands) == exp_ref_bands)
 
 
 def test_match_fewer_ref_bands_error(s2_ref_file, landsat_ref_file):
