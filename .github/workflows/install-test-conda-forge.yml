@@ -33,6 +33,12 @@ jobs:
           conda install homonim>=0.4.1
           conda list
 
+      - name: Install OpenCV Linux dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libopengl0
+
       - name: Run CLI fusion test
         run: |
           cd tests/data
