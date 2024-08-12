@@ -362,11 +362,7 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         nodata_change = nodata is not None and not utils.nan_equals(nodata, self.nodata)
         array = self._array
         if nodata_change or unsafe_cast:
-            # If necessary and possible, promote source dtype to be able to represent destination dtype exactly.
-            # (This works around the (undocumented?) situation where even if a clipped array contains only values
-            # that can be represented as the destination dtype, there is still casting overflow when these values
-            # are near the dtype limits e.g. float32->int32 should be promoted to float64->int32.  There is no way
-            # of preventing this situation for float*->int64.)
+            # promote dtype to be able to represent destination dtype exactly (if possible) to clip correctly
             array = array.astype(np.promote_types(self.dtype, dtype), copy=True)
 
         # round if converting from float to integer dtype
@@ -380,8 +376,8 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
             if src_info.min < dst_info.min or src_info.max > dst_info.max:
                 np.clip(array, dst_info.min, dst_info.max, out=array)
 
-        # convert dtype
-        with np.errstate(invalid='ignore'):  # ignore numpy warning for cast of nodata=nan to dtype
+        # convert dtype (ignoring numpy warnings for float overflow or cast of nan to integer)
+        with np.errstate(invalid='ignore', over='ignore'):
             array = array.astype(dtype, copy=False, casting='unsafe')
 
         # set nodata value if it has changed, or may be invalid after rounding, clipping and casting

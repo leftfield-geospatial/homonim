@@ -361,6 +361,7 @@ class RasterFuse(MatchedPairReader):
             Configuration dictionary for block processing.  See :meth:`~RasterFuse.create_block_config` for keys and
             default values.
         """
+        # TODO: is it possible to have an auto block_config that adjusts threads and block mem to available memory
         self._assert_open()
 
         # prepare configuration
