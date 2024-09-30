@@ -19,7 +19,7 @@ While the corrected and reference colours are similar, improvement in surface re
 Evaluation
 ----------
 
-The source and corrected drone images were compared with a second, Landsat-8 reference to evaluate the change in surface reflectance accuracy.  The scatter plots below show an improvement in correlation with the reference after correction.
+The source and corrected drone images were compared with a second, Landsat-8 reference to evaluate the change in surface reflectance accuracy.  The scatter plots below show a meaningful improvement in correlation with the reference after correction.
 
 .. figure:: drone_mosaic-eval.png
     :align: center

@@ -199,9 +199,10 @@ class RasterFuse(MatchedPairReader):
             raise IoError(f'The raster dataset is closed: {im.name}')
 
         kwargs_meta_dict = {f'FUSE_{k.upper()}': v.name if hasattr(v, 'name') else v for k, v in kwargs.items()}
+        src_name = Path(self._src_filename).name
+        ref_name = Path(self._ref_filename).name
         meta_dict = dict(
-            FUSE_SRC_FILE=self._src_filename.name, FUSE_REF_FILE=self._ref_filename.name,
-            FUSE_PROC_CRS=self.proc_crs.name, **kwargs_meta_dict,
+            FUSE_SRC_FILE=src_name, FUSE_REF_FILE=ref_name, FUSE_PROC_CRS=self.proc_crs.name, **kwargs_meta_dict,
         )
         im.update_tags(**meta_dict)
 

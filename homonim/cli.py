@@ -221,6 +221,7 @@ def _param_file_cb(ctx: click.Context, param: click.Argument, value):
 
 # define click options and arguments common to more than one command
 # use cloup's argument to auto print argument help on command line
+# TODO: rasterio 1.4 does not accept Path wrapped URLs
 ref_file_arg = cloup.argument(
     'ref-file', nargs=1, metavar='REFERENCE', type=click.Path(exists=False, dir_okay=False, path_type=pathlib.Path),
     help='Path or URL of a reference image.'
@@ -327,6 +328,7 @@ def cli(verbose: int, quiet: int):
         '-o', '--overwrite', is_flag=True, type=click.BOOL, default=False, show_default=True,
         help='Overwrite existing output file(s).'
     ),
+    # TODO: does this work in front of an argument?  or should it be handles like oty rpc's --gcp-refine?
     click.option(
         '-cmp', '--compare', 'cmp_file', metavar='FILE',
         type=click.Path(exists=False, dir_okay=False, path_type=pathlib.Path), is_flag=False, flag_value='ref',

@@ -82,8 +82,8 @@ class RasterPairReader:
             grid to use for processing.  For most use cases, it can be left as the default of
             :attr:`~homonim.enums.ProcCrs.auto` i.e. the lowest resolution of the source and reference image CRS's.
         """
-        self._src_filename = Path(src_filename)
-        self._ref_filename = Path(ref_filename)
+        self._src_filename = src_filename
+        self._ref_filename = ref_filename
 
         with rio.open(self._src_filename, 'r') as src_im, rio.open(self._ref_filename, 'r') as ref_im:
             self._validate_pair_format(src_im, ref_im)
@@ -271,8 +271,10 @@ class RasterPairReader:
     def _assert_open(self):
         """ Raise an IoError if the source and reference images are not open. """
         if self.closed:
+            src_name = Path(self._src_filename).name
+            ref_name = Path(self._ref_filename).name
             raise errors.IoError(
-                f'The raster pair has not been opened: {self._src_filename.name} and {self._ref_filename.name}'
+                f'The raster pair has not been opened: {src_name} and {ref_name}'
             )
 
     def open(self):
