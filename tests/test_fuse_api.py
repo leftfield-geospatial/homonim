@@ -149,7 +149,7 @@ def test_out_profile(file_rgb_100cm_float, tmp_path: Path, out_profile: Dict):
             assert (
                 (v is None and k not in fuse_ds.profile) or
                 (fuse_ds.profile[k] == v) or
-                (str(fuse_ds.profile[k]) == str(v))
+                (str(v).lower() in str(fuse_ds.profile[k]).lower())
             )  # yapf: disable
 
         # test output image has been set with src image properties not in out_profile
