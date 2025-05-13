@@ -31,13 +31,13 @@ import numpy as np
 import rasterio as rio
 import yaml
 from click.core import ParameterSource
-from rasterio.warp import SUPPORTED_RESAMPLING
 from rasterio.errors import NotGeoreferencedWarning
+from rasterio.warp import SUPPORTED_RESAMPLING
 
 from homonim import utils, version, RasterFuse, RasterCompare, ParamStats, ProcCrs, Model
 from homonim.errors import ImageFormatError
-from homonim.raster_array import RasterArray
 from homonim.kernel_model import KernelModel
+from homonim.raster_array import RasterArray
 
 logger = logging.getLogger(__name__)
 
@@ -262,7 +262,7 @@ ref_bands_option = click.option(
     help=f'Reference band index(es) to match with source band(s) (1 based).'
 )
 force_match_option = click.option(
-    '-f', '--force-match',  is_flag=True, type=click.BOOL, default=False, show_default=True,
+    '-f', '--force-match',  is_flag=True,default=False, show_default=True,
     help=f'Bypass auto wavelength matching, and any band-matching errors.  Use with caution.'
 )
 """ cloup context settings to print help in 'linear' layout with heading/option emphasis. """
@@ -325,7 +325,7 @@ def cli(verbose: int, quiet: int):
         show_default='source image directory.', help='Directory in which to place corrected image(s).'
     ),
     click.option(
-        '-o', '--overwrite', is_flag=True, type=click.BOOL, default=False, show_default=True,
+        '-o', '--overwrite', is_flag=True, default=False, show_default=True,
         help='Overwrite existing output file(s).'
     ),
     # TODO: does this work in front of an argument?  or should it be handles like oty rpc's --gcp-refine?
