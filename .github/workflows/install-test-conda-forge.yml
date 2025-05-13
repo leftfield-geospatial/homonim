@@ -30,7 +30,7 @@ jobs:
       - name: Install package
         run: |
           conda info
-          conda install homonim>=0.4.1
+          conda install homonim>=0.4.2
           conda list
 
       - name: Install OpenCV Linux dependencies
