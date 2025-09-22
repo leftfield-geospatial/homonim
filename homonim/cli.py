@@ -250,7 +250,7 @@ upsampling_option = click.option(
 )
 output_option = click.option(
     '-op', '--output', type=click.Path(exists=False, dir_okay=False, writable=True, path_type=pathlib.Path),
-    help='Write results to this json file.'
+    default=None, help='Write results to this json file.'
 )
 src_bands_option = click.option(
     '-sb', '--src-band', 'src_bands', type=click.INT, multiple=True, default=None,
@@ -332,7 +332,6 @@ def cli(verbose: int, quiet: int):
     click.option(
         '-cmp', '--compare', 'cmp_file', metavar='FILE',
         type=click.Path(exists=False, dir_okay=False, path_type=pathlib.Path), is_flag=False, flag_value='ref',
-        default=None,
         help='Compare source and corrected images with this reference image.  If no ``FILE`` value is given, source '
         'and corrected images are compared with :option:`REFERENCE`.'
     ),
