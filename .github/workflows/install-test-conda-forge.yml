@@ -16,7 +16,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4  # for the test data
+        uses: actions/checkout@v6  # for the test data
 
       - name: Set up conda
         uses: conda-incubator/setup-miniconda@v3
