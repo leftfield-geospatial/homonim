@@ -494,7 +494,7 @@ class RefSpaceModel(KernelModel):
             # find the mask of fully covered pixels in reference CRS and grid
             mask_ra = self._full_coverage_mask(src_ra.mask_ra, _param_ra)
             # re-project the mask to source CRS and grid, and apply to the parameters
-            mask_us_ra = mask_ra.reproject(**src_ra.proj_profile, nodata=0, resampling=Resampling.nearest)
+            mask_us_ra = mask_ra.reproject(**src_ra.proj_profile, nodata=None, resampling=Resampling.nearest)
             param_us_ra.mask = mask_us_ra.array.astype('bool', copy=False)
         else:
             param_us_ra.mask = src_ra.mask

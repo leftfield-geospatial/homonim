@@ -238,7 +238,7 @@ def test_ref_masking(
         mask_ra = src_ra.mask_ra.reproject(**param_ra.proj_profile, nodata=None, resampling=Resampling.average)
         mask = (mask_ra.array >= 1).astype('uint8', copy=False)  # ref pixels fully covered by src
         mask_ra.array = cv2.erode(mask, np.ones(np.add(kernel_shape, 2)))
-        test_mask_ra = mask_ra.reproject(**src_ra.proj_profile, nodata=0, resampling=Resampling.nearest)
+        test_mask_ra = mask_ra.reproject(**src_ra.proj_profile, nodata=None, resampling=Resampling.nearest)
         assert (test_mask_ra.array == out_ra.mask).all()
 
 
