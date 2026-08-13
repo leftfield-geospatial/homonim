@@ -175,7 +175,7 @@ class MatchedPairReader(RasterPairReader):
 
         center_wavelengths = center_wavelengths[bands - 1]
         band_names = np.array([im.descriptions[bi - 1] if im.descriptions[bi - 1] else str(bi) for bi in bands])
-        logger.debug(f'{log_prefix} {list(band_names)}.')
+        logger.debug(f'{log_prefix} {band_names.tolist()}.')
         return bands, band_names, center_wavelengths
 
     def _get_pair_band_table(
@@ -295,9 +295,9 @@ class MatchedPairReader(RasterPairReader):
             src_matched = ~np.isnan(match_idx)
             match_bands[src_matched] = ref_bands[np.int64(match_idx[src_matched])]
             logger.debug(
-                f'Matching {src_name} band(s) {list(src_band_names[src_matched])} with {ref_name} band(s) '
-                f'{list(ref_band_names[np.int64(match_idx[src_matched])])}, at center wavelength difference(s) of '
-                f'{list(match_dist[src_matched].round(3))} (um) respectively.'
+                f'Matching {src_name} band(s) {src_band_names[src_matched].tolist()} with {ref_name} band(s) '
+                f'{ref_band_names[np.int64(match_idx[src_matched])].tolist()}, at center wavelength difference(s) of '
+                f'{match_dist[src_matched].round(3).tolist()} (um) respectively.'
             )
 
         # match any remaining bands that don't have center wavelength metadata
@@ -310,8 +310,8 @@ class MatchedPairReader(RasterPairReader):
                 # assume unmatched src and ref image bands are in matching order
                 match_bands[unmatched] = unmatch_ref_bands
                 logger.debug(
-                    f'Matching {src_name} band(s) {list(src_band_names[unmatched])} in file order with'
-                    f' {ref_name} band(s) {list(unmatch_ref_band_names)}.'
+                    f'Matching {src_name} band(s) {src_band_names[unmatched].tolist()} in file order with'
+                    f' {ref_name} band(s) {unmatch_ref_band_names.tolist()}.'
                 )
             elif self._force:
                 # match the remaining N src bands with the first N unmatched ref bands (N=sum(unmatched))
@@ -321,14 +321,14 @@ class MatchedPairReader(RasterPairReader):
                 unmatched = np.where(unmatched)[0][:len(unmatch_ref_bands)]
                 match_bands[unmatched] = unmatch_ref_bands
                 logger.debug(
-                    f'Matching {src_name} band(s) {list(src_bands[unmatched])} in file order with {ref_name} '
-                    f'band(s): {list(unmatch_ref_band_names)}.'
+                    f'Matching {src_name} band(s) {src_bands[unmatched].tolist()} in file order with {ref_name} '
+                    f'band(s): {unmatch_ref_band_names.tolist()}.'
                 )
             else:
                 # raise an error when remaining unmatched bands counts do not match and `self._force` is False
                 raise ValueError(
-                    f'Could not match {src_name} band(s) {list(src_bands[unmatched])} with {ref_name} '
-                    f'band(s) {list(unmatch_ref_band_names)}.  Ensure {src_name} and {ref_name} non-alpha band '
+                    f'Could not match {src_name} band(s) {src_bands[unmatched].tolist()} with {ref_name} '
+                    f'band(s) {unmatch_ref_band_names.tolist()}.  Ensure {src_name} and {ref_name} non-alpha band '
                     f'counts match, {src_name} and {ref_name} have ``center_wavelength`` tags for each band, '
                     f'or set `force` to True.'
                 )

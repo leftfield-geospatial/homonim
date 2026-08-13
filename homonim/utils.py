@@ -77,7 +77,7 @@ def expand_window_to_grid(win: Window, expand_pixels: Tuple[int, int] = (0, 0)) 
     row_off, row_frac = np.divmod(win.row_off - expand_pixels[0], 1)
     width = np.ceil(win.width + 2 * expand_pixels[1] + col_frac)
     height = np.ceil(win.height + 2 * expand_pixels[0] + row_frac)
-    exp_win = Window(col_off.astype('int'), row_off.astype('int'), width.astype('int'), height.astype('int'))
+    exp_win = Window(int(col_off), int(row_off), int(width), int(height))
     return exp_win
 
 

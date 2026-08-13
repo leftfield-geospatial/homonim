@@ -207,8 +207,8 @@ class RasterPairReader:
             # set proc_crs to the lowest resolution of the source and reference images
             proc_crs = ProcCrs.ref if src_pixel_smaller else ProcCrs.src
             logger.debug(
-                f'Source pixel size {np.round(src_im.res, decimals=3)} is {cmp_str} than the reference '
-                f'{np.round(ref_im.res, decimals=3)}. Using proc_crs=`{proc_crs}`.'
+                f'Source pixel size {np.round(src_im.res, decimals=3).tolist()} is {cmp_str} than the reference '
+                f'{np.round(ref_im.res, decimals=3).tolist()}. Using proc_crs=`{proc_crs}`.'
             )
         elif (
             (proc_crs == ProcCrs.src and src_pixel_smaller) or
@@ -252,11 +252,11 @@ class RasterPairReader:
             block_shape[div_dim] /= 2
 
         if np.any(block_shape < (1, 1)):
-            raise errors.BlockSizeError(f"The auto block shape is smaller than a pixel.  Increase 'max_block_mem'.")
+            raise errors.BlockSizeError("The auto block shape is smaller than a pixel.  Increase 'max_block_mem'.")
 
         block_shape = np.ceil(block_shape).astype('int')
         logger.debug(
-            f'Auto block shape: {block_shape}, of image shape: {[proc_win.height, proc_win.width]}'
+            f'Auto block shape: {block_shape.tolist()}, of image shape: {[proc_win.height, proc_win.width]}'
             f' ({self.proc_crs.name} pixels)'
         )
 
@@ -361,7 +361,7 @@ class RasterPairReader:
         overlap = np.array(overlap).astype('int')
         block_shape = self._auto_block_shape(max_block_mem=max_block_mem)
         if np.any(block_shape <= overlap):
-            raise errors.BlockSizeError(f'The auto block shape is smaller than the overlap.  Increase `max_block_mem`.')
+            raise errors.BlockSizeError('The auto block shape is smaller than the overlap.  Increase `max_block_mem`.')
         logger.debug(f'Block overlap: {overlap} ({self.proc_crs.name} pixels)')
 
         # initialise block formation variables
