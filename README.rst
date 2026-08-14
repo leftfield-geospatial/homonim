@@ -32,20 +32,6 @@ Installation
 
 ``homonim`` is available as a Python 3 package, via `PyPI <https://pypi.org/project/homonim/>`__ and `conda-forge <https://anaconda.org/conda-forge/homonim>`__:
 
-.. tabs::
-
-   .. tab:: pip
-
-      .. code:: shell
-
-         pip install homonim
-
-   .. tab:: conda
-
-      .. code:: shell
-
-         conda install -c conda-forge homonim
-
 pip
 ~~~
 
@@ -152,13 +138,12 @@ Surface reflectance correction of an aerial image using a Sentinel-2 reference:
 Reference imagery
 ~~~~~~~~~~~~~~~~~
 
-`geedim <https://github.com/leftfield-geospatial/geedim>`_ can be used as a companion tool for searching and downloading cloud-free reference imagery.   Alternatively, satellite imagery is available from a number of sources, including the `Google <https://developers.google.com/earth-engine/datasets>`_, `Amazon <https://aws.amazon.com/earth/>`_ and `Microsoft <https://planetarycomputer.microsoft.com/catalog>`_ repositories.
+`geedim <https://github.com/leftfield-geospatial/geedim>`_ can be used as a companion tool for searching and downloading cloud-free reference imagery.  Alternatively, satellite imagery is available from a number of sources, including the `Google <https://developers.google.com/earth-engine/datasets>`_, `Amazon <https://aws.amazon.com/earth/>`_ and `Microsoft <https://planetarycomputer.microsoft.com/catalog>`_ repositories.
 
+Documentation
+-------------
 
-Usage
------
-
-See the documentation `here <https://homonim.readthedocs.io/>`_.
+Documentation is hosted at `https://homonim.readthedocs.io <https://homonim.readthedocs.io/>`__.
 
 Terminology
 -----------
