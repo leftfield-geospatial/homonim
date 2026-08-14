@@ -17,9 +17,9 @@ Correct drone, aerial and satellite imagery to surface reflectance.
 Description
 -----------
 
-``homonim`` provides a command line interface and API for correcting remotely sensed imagery to approximate surface reflectance.  It implements a form of *spectral harmonisation*, that adjusts for spatially varying atmospheric and anisotropic (BRDF) effects, by *fusion* with satellite surface reflectance data.  Manual reflectance measurements and target placements are not required.
+``homonim`` provides a command line interface and Python API for correcting remotely sensed imagery to approximate surface reflectance.  It implements a form of spectral harmonisation, that adjusts for spatially varying atmospheric and anisotropic (BRDF) effects, by fusion with satellite surface reflectance data.
 
-``homonim`` is useful for pre-processing in quantitative mapping applications, and for reducing seamlines and other visual artefacts in image mosaics.  It can be applied to multi-spectral drone, aerial and satellite imagery.  The consistency of multi-temporal and multi-sensor data can improved through its use.
+``homonim`` is useful for creating analysis-ready data e.g. for machine learning, and for reducing seamlines and other visual artefacts in image mosaics.  It can be applied to multi-spectral drone, aerial and satellite imagery.
 
 .. description_end
 
@@ -30,7 +30,21 @@ See the documentation site for more detail: https://homonim.readthedocs.io/.
 Installation
 ------------
 
-``homonim`` is available as a python 3 package, via `pip <https://pip.pypa.io/>`_ or `conda <https://docs.conda.io/projects/miniconda>`_.
+``homonim`` is available as a Python 3 package, via `PyPI <https://pypi.org/project/homonim/>`__ and `conda-forge <https://anaconda.org/conda-forge/homonim>`__:
+
+.. tabs::
+
+   .. tab:: pip
+
+      .. code:: shell
+
+         pip install homonim
+
+   .. tab:: conda
+
+      .. code:: shell
+
+         conda install -c conda-forge homonim
 
 pip
 ~~~
@@ -104,9 +118,9 @@ API
 Example
 ^^^^^^^
 
-Surface reflectance correction of an aerial image using a Sentinel-2 reference.
+Surface reflectance correction of an aerial image using a Sentinel-2 reference:
 
-.. comment
+..
     The code below is copied from docs/examples/api_example and # [*] comments removed
 
 .. api_example_start
@@ -151,19 +165,10 @@ Terminology
 
 ``homonim`` is shorthand for *homogenise image* and is a reference to `the paper <https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data>`_ on which it is based.
 
-Credits
--------
-
-``homonim`` relies on these excellent packages:
-
--  `rasterio <https://github.com/rasterio/rasterio>`__
--  `opencv <https://github.com/opencv/opencv>`__
--  `numpy <https://github.com/numpy/numpy>`__
-
 License
 -------
 
-``homonim`` is licensed under the terms of the `AGPLv3 <https://www.gnu.org/licenses/agpl-3.0.en.html>`__. This project is developed in collaboration with `InnovUS <https://www.innovus.co.za/>`__ at Stellenbosch University, alternative licenses can be arranged by `contacting <mailto:madeleink@sun.ac.za>`__ them.
+``homonim`` is licensed under the terms of the `AGPLv3 <https://www.gnu.org/licenses/agpl-3.0.en.html>`__. This project is developed in collaboration with `InnovUS <https://www.innovus.co.za/>`__ at Stellenbosch University, alternative licenses can be arranged by `contacting <mailto:info@innovus.co.za>`__ them.
 
 Citation
 --------
