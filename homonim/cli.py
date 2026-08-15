@@ -388,8 +388,8 @@ def cli(verbose: int, quiet: int):
         '--driver',
         type=click.Choice(tuple(set(rio.drivers.raster_driver_extensions().values())), case_sensitive=False),
         default=RasterFuse.create_out_profile()['driver'], show_default=True, metavar='TEXT',
-        help='Output image format driver.  See the `GDAL docs <https://gdal.org/drivers/raster/index.html>`_ for '
-        'details.'
+        help='Output image format driver.  See the `GDAL docs '
+             '<https://gdal.org/en/stable/drivers/raster/index.html>`_ for details.'
     ),  # yapf: disable
     click.option(
         '--dtype', type=click.Choice(list(rio.dtypes.dtype_fwd.values())[1:8], case_sensitive=False),
@@ -407,7 +407,7 @@ def cli(verbose: int, quiet: int):
     click.option(
         '-co', '--creation-options', metavar='NAME=VALUE', multiple=True, default=(), callback=_creation_options_cb,
         help='Driver specific image creation option(s) for the output image(s).  See the `GDAL docs '
-        '<https://gdal.org/drivers/raster/index.html>`_ for details.'
+        '<https://gdal.org/en/stable/drivers/raster/index.html>`_ for details.'
     ),
     force_match_option,  # yapf:disable
 )

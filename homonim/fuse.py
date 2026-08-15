@@ -58,8 +58,8 @@ class RasterFuse(MatchedPairReader):
 
         .. note::
 
-            Images downloaded with `geedim <https://github.com/leftfield-geospatial/geedim>`_ have ``center_wavelength`` metadata
-            compatible with ``homonim``.
+            Images downloaded with `geedim <https://github.com/leftfield-geospatial/geedim>`_ have ``center_wavelength``
+            metadata compatible with ``homonim``.
 
         Parameters
         ----------
@@ -125,7 +125,7 @@ class RasterFuse(MatchedPairReader):
         Parameters
         ----------
         driver: str, optional
-            Output format driver.  See the `GDAL docs <https://gdal.org/drivers/raster/index.html>`_ for
+            Output format driver.  See the `GDAL docs <https://gdal.org/en/stable/drivers/raster/index.html>`_ for
             available options.
         dtype: str, optional
             Output image data type.  One of: uint8|uint16|int16|uint32|int32|float32|float64.  Data values are rounded
@@ -135,7 +135,7 @@ class RasterFuse(MatchedPairReader):
             ``creation_options`` are configured for lossy, e.g. JPEG, compression).
         creation_options: dict, optional
             Driver specific creation options e.g. ``dict(compress='deflate')``.
-            See the `GDAL docs <https://gdal.org/drivers/raster/index.html>`_ for available keys and values.
+            See the `GDAL docs <https://gdal.org/en/stable/drivers/raster/index.html>`_ for available keys and values.
 
         Returns
         -------

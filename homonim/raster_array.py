@@ -511,11 +511,11 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         filename: str, pathlib.Path
             Name of the file to create.
         driver: str, optional
-            Valid rasterio short format driver name - See the `GDAL docs <https://gdal.org/drivers/raster/index.html>`_
-            for available options.
+            Valid rasterio short format driver name - See the `GDAL docs
+            <https://gdal.org/en/stable/drivers/raster/index.html>`_ for available options.
         kwargs: dict, optional
             Driver specific creation options e.g. ``compression='deflate'`` for a GeoTiff.
-            See the `GDAL docs <https://gdal.org/drivers/raster/index.html>`_ for available keys and values.
+            See the `GDAL docs <https://gdal.org/en/stable/drivers/raster/index.html>`_ for available keys and values.
         """
         with rio.Env(GDAL_NUM_THREADS='ALL_CPUs', GTIFF_FORCE_RGBA=False):
             with rio.open(filename, 'w', driver=driver, **self.profile, **kwargs) as out_im:
