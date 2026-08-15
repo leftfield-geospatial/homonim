@@ -1,7 +1,7 @@
 Aerial mosaic correction
 ========================
 
-This case study is a summary of the `original presentation <https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data>`_.  It demonstrates the correction and accuracy improvement of a mosaic of `NGI <https://ngi.dalrrd.gov.za/index.php/what-we-do/aerial-photography-and-imagery>`_ aerial images.
+This case study is a summary of the results presented in the `paper <https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data>`_.  It demonstrates the correction and accuracy improvement of a mosaic of `NGI <https://ngi.dlrrd.gov.za/index.php/what-we-do/aerial-photography-and-imagery>`_ aerial images.
 
 The mosaic consists of 2228 mages, captured over the Little Karoo (South Africa) from 22 Jan to 8 Feb 2010.  The images have a 50 cm spatial resolution and 4 spectral bands (red, green, blue and near-infrared).
 
@@ -13,7 +13,7 @@ The mosaic consists of 2228 mages, captured over the Little Karoo (South Africa)
 Correction
 ----------
 
-A `MODIS NBAR <https://developers.google.com/earth-engine/datasets/catalog/MODIS_006_MCD43A4>`_ image was chosen for the reference.  The spatial resolution of the image is low (500 m), but it satisfies the recommendations discussed in the :ref:`background <background:reference image>` and so makes a reasonable choice.
+A `MODIS NBAR <https://developers.google.com/earth-engine/datasets/catalog/MODIS_061_MCD43A4>`_ image was chosen for the reference.  The spatial resolution of the image is low (500 m), but it satisfies the recommendations discussed in the :ref:`background <background:reference image>` and so makes a reasonable choice.
 
 The source aerial mosaic is overlaid on the MODIS reference in the figure below.  Seamlines between images, "hot spots", and other variations resulting from atmospheric and BRDF effects are visible.
 
@@ -53,4 +53,4 @@ After correcting the SPOT-5 image to surface reflectance with ATCOR-3, it was co
 
     **Source / corrected - reference correlation**
 
-The correlation densities and *r*:sup:`2` coefficients show a useful improvement after correction.  Further details and discussion on this example can be found in the `paper <https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data>`_
+The correlation densities and *r*:sup:`2` coefficients show a useful improvement after correction.
