@@ -7,7 +7,7 @@ Reference image
 .. image:: background_eg.webp
    :alt: example
 
-``homonim`` fuses a *source* image with a *reference* surface reflectance image to produce the *corrected* image.  The *reference* must be supplied by the user, and is usually a satellite image at a coarser resolution that the *source*.  For best results, the *reference* should satisfy these criteria:
+``homonim`` fuses a *source* image with a *reference* surface reflectance image to produce the *corrected* image.  The *reference* must be supplied by the user, and is usually a satellite image at a coarser resolution than the *source*.  For best results, the *reference* should satisfy these criteria:
 
 - **Co-location**: bounds of the *reference* image should cover those of the *source*, and *source* and *reference* should be ortho-rectified / co-registered.
 - **Concurrency**: *source* and *reference* capture dates should be close in time, with minimal land cover change between them.
@@ -26,7 +26,7 @@ Any orthorectified, multi-spectral *source* imagery can be used with ``homonim``
 Fusion
 ------
 
-``homonim`` uses spatially varying localised *models* to describe the surface reflectance relationship between *source* and *reference*.  These *models* are fitted at each pixel location, inside a small *kernel* (window), using a fast `DFT <https://en.wikipedia.org/wiki/Discrete_Fourier_transform>`_ approach.  After fitting, ``homonim`` produces the *corrected* image by applying the models to the *source* (i.e. "fusing" the *source* with the *reference*).  From the user perspective, the *model* and *kernel shape* are the main parameters for configuring *fusion*.
+Models describing the surface reflectance relationship between *source* and *reference* are fitted at each pixel location inside a small *kernel* (window).  After fitting, ``homonim`` produces the *corrected* image by applying the models to the *source*.  From the user perspective, the *model* and *kernel shape* are the main parameters for configuring fusion.
 
 Model
 ~~~~~
@@ -37,9 +37,11 @@ The following linear model variants are available for correcting to surface refl
 - *gain-blk-offset*: Gain-only model applied to offset normalised image blocks.  Suitable for most *source*-*reference* combinations.
 - *gain-offset*: Gain and offset model.  The most accurate model, but sensitive to differences between *source* and *reference*, such as shadowing and land cover changes.  Suitable for well-matched *source* / *reference* image pairs.
 
-The derivation of the linear model approximation is given in the `paper <https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data>`_.  Broadly speaking, gain compensates for atmospheric absorption and anisotropic (BRDF) effects, and offset (when present) compensates for atmospheric reflectance and haze.  Offset-compensated effects tend to vary gradually and over large spatial scales, while gain-compensated effects vary over smaller spatial scales, especially for low altitude imagery, and where land cover is heterogeneous.  The *gain-blk-offset* option models this behaviour with kernel-scale gain, and block-scale offset.  It can be seen as a compromise between the *gain* and *gain-offset* options.
+The derivation of the linear model approximation is given in the `paper <https://www.researchgate.net/publication/328317307_Radiometric_homogenisation_of_aerial_images_by_calibrating_with_satellite_data>`_.
 
-The model type can be specified with the :option:`--model <homonim-fuse --model>` option via the command line; or with the corresponding arguments in the :meth:`homonim.RasterFuse.process` API.
+Broadly speaking, gain compensates for atmospheric absorption and anisotropic (BRDF) effects, and offset (when present) compensates for atmospheric reflectance and haze.  Offset-compensated effects tend to vary gradually and over large spatial scales.  Gain-compensated effects vary over smaller spatial scales, especially for low altitude imagery and heterogeneous land cover.  The *gain-blk-offset* option models this behaviour with kernel-scale gain, and block-scale offset.  It can be seen as a compromise between the *gain* and *gain-offset* options.
+
+The model type can be specified with the :option:`--model <homonim-fuse --model>` option via the command line; or with the corresponding argument in the :meth:`homonim.RasterFuse.process` API.
 
 
 Kernel shape
