@@ -1,11 +1,11 @@
 [project]
 name = 'homonim'
-description = 'Correct aerial and satellite imagery to surface reflectance.'
+description = 'Correct drone, aerial and satellite imagery to surface reflectance.'
 readme = 'README.rst'
-requires-python = '>=3.9'
+requires-python = '>=3.10'
 dependencies = [
     'rasterio>=1.1',
-    'opencv-python-headless>=4.5',
+    'opencv-python>=4.5',
     'numpy>=1.19',
     'click>=8',
     'tqdm>=4.6',
@@ -13,15 +13,15 @@ dependencies = [
     'cloup>=0.15',
     'tabulate>=0.8',
 ]
-authors = [{name = 'Leftfield Geospatial'}]
-license = {text = 'AGPL-3.0-or-later'}
+authors = [{ name = 'Leftfield Geospatial' }]
+license = 'AGPL-3.0-or-later'
+license-files = ['LICENCSE']
 keywords = [
-    'drone', 'aerial', 'satellite', 'image', 'surface reflectance', 'correction', 'harmonization', 'anisotropy', 'brdf',
-    'atmospheric correction',
+    'drone', 'aerial', 'satellite', 'surface reflectance', 'correction',
+    'harmonization', 'brdf', 'pan-sharpen',
 ]
 classifiers = [
     'Programming Language :: Python :: 3',
-    'License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)',
     'Operating System :: OS Independent',
 ]
 dynamic = ['version']
@@ -29,8 +29,9 @@ dynamic = ['version']
 [project.scripts]
 homonim = 'homonim.cli:cli'
 
-[project.optional-dependencies]
-test = ['pytest']
+[dependency-groups]
+tests = ['pytest', 'pytest-xdist', 'pytest-cov']
+docs = ['sphinx', 'furo', 'sphinx-click', 'sphinx-copybutton', 'nbsphinx']
 
 [project.urls]
 Homepage = 'https://github.com/leftfield-geospatial/homonim'
@@ -47,4 +48,22 @@ build-backend = 'setuptools.build_meta'
 packages = ['homonim']
 
 [tool.setuptools.dynamic]
-version = {attr = 'homonim.version.__version__'}
+version = { attr = 'homonim.version.__version__' }
+
+[tool.setuptools.package-data]
+homonim = ['py.typed']
+
+[tool.ruff]
+line-length = 88
+format = { quote-style = 'single' }
+
+[tool.ruff.lint]
+select = [
+    'B', # flake8-bugbear
+    'E', # pycodestyle error
+    'F', # pyflakes
+    'I', # isort
+    'UP', # pyupgrade
+    'W', # pycodestyle warning
+    'RUF'
+]
