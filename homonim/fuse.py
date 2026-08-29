@@ -14,6 +14,7 @@
 # Homonim. If not, see <https://www.gnu.org/licenses/>.
 
 import logging
+import os
 import threading
 import warnings
 from collections.abc import Iterator
@@ -110,8 +111,8 @@ class RasterFuse(MatchedPairReader):
 
         .. deprecated:: 0.5.0
 
-            This method will be removed in a future release. Please pass the
-            arguments to :meth:`~RasterFuse.process` directly.
+            This method is deprecated and will be removed in a future release. Please
+            pass the arguments to :meth:`~RasterFuse.process` directly.
 
         :param r2_inpaint_thresh:
             R\N{SUPERSCRIPT TWO} (coefficient of determination) threshold below which to
@@ -131,8 +132,8 @@ class RasterFuse(MatchedPairReader):
             Model configuration.
         """
         warnings.warn(
-            'This method will be removed in a future release. Please pass the '
-            "arguments to 'RasterFuse.process()' directly.",
+            'This method is deprecated and will be removed in a future release. '
+            "Please pass the arguments to 'RasterFuse.process()' directly.",
             category=DeprecationWarning,
             stacklevel=2,
         )
@@ -153,8 +154,8 @@ class RasterFuse(MatchedPairReader):
 
         .. deprecated:: 0.5.0
 
-            This method will be removed in a future release. Please pass the
-            arguments to :meth:`~RasterFuse.process` directly.
+            This method is deprecated and will be removed in a future release. Please
+            pass the arguments to :meth:`~RasterFuse.process` directly.
 
         :param threads:
             Number of image blocks to process concurrently.  ``0`` will use the
@@ -166,8 +167,8 @@ class RasterFuse(MatchedPairReader):
             Configuration dictionary.
         """
         warnings.warn(
-            'This method will be removed in a future release. Please pass the '
-            "arguments to 'RasterFuse.process()' directly.",
+            'This method is deprecated and will be removed in a future release. '
+            "Please pass the arguments to 'RasterFuse.process()' directly.",
             category=DeprecationWarning,
             stacklevel=2,
         )
@@ -188,8 +189,8 @@ class RasterFuse(MatchedPairReader):
 
         .. deprecated:: 0.5.0
 
-            This method will be removed in a future release. Please pass the
-            arguments to :meth:`~RasterFuse.process` directly.
+            This method is deprecated and will be removed in a future release. Please
+            pass the arguments to :meth:`~RasterFuse.process` directly.
 
         :param driver:
             Format driver.  See the `GDAL docs
@@ -212,8 +213,8 @@ class RasterFuse(MatchedPairReader):
             Profile dictionary.
         """
         warnings.warn(
-            'This method will be removed in a future release. Please pass the '
-            "arguments to 'RasterFuse.process()' directly.",
+            'This method is deprecated and will be removed in a future release. '
+            "Please pass the arguments to 'RasterFuse.process()' directly.",
             category=DeprecationWarning,
             stacklevel=2,
         )
@@ -476,6 +477,17 @@ class RasterFuse(MatchedPairReader):
         model_config: dict[str, Any] | None = None,
         out_profile: dict[str, Any] | None = None,
         block_config: dict[str, Any] | None = None,
+        *,
+        r2_inpaint_thresh: float = 0.25,
+        mask_partial: bool = False,
+        downsampling: Resampling = Resampling.average,
+        upsampling: Resampling = Resampling.cubic_spline,
+        driver: str = 'GTiff',
+        dtype: str = RasterArray.default_dtype,
+        nodata: float = RasterArray.default_nodata,
+        creation_options: dict[str, Any] | None = None,
+        threads: int = 0,
+        max_block_mem: float = 100,
     ):
         """
         Correct the source image to surface reflectance.
@@ -520,6 +532,42 @@ class RasterFuse(MatchedPairReader):
 
                 This parameter will be removed in a future release.  Please pass the
                 :meth:`create_block_config` arguments to this method directly.
+
+        :param r2_inpaint_thresh:
+            R\N{SUPERSCRIPT TWO} (coefficient of determination) threshold below which to
+            interpolate ("in-paint") model offsets from surrounding values.  Applies
+            to the :attr:`~enums.Model.gain_offset` model only.  If ``None``, no
+            interpolation is performed.
+        :param mask_partial:
+            Whether to mask corrected pixels not produced by full kernel or source /
+            reference image coverage.  Can help reduce seam-lines between overlapping
+            images.
+        :param downsampling:
+             Resampling method to use when downsampling.
+        :param upsampling:
+            Resampling method to use when upsampling.
+        :param driver:
+            Corrected image format driver.  See the `GDAL docs
+            <https://gdal.org/en/stable/drivers/raster/index.html>`__ for available
+            options.
+        :param dtype:
+            Corrected image data type (``uint8``, ``uint16``, ``int16``, ``uint32``,
+            ``int32``, ``float32`` or ``float64``).
+        :param nodata:
+            Corrected image nodata value.  If ``None``, an internal mask is written
+            (recommended when ``creation_options`` are configured for lossy,
+            e.g. JPEG, compression).
+        :param creation_options:
+             Driver specific creation options for the corrected image as a dictionary
+             of ``name: value`` pairs.  See the `GDAL docs
+             <https://gdal.org/en/stable/drivers/raster/index.html>`__ corresponding
+             to ``driver`` for available options.  If ``None``, default options are
+             set when ``driver`` is ``GTiff``, otherwise no defaults are set.
+        :param threads:
+            Number of image blocks to process concurrently.  ``0`` will use the
+            number of CPUs.
+        :param max_block_mem:
+            Maximum size of an image block in megabytes.
         """
         # TODO: is it possible to have an auto block_config that adjusts threads and
         #  block mem to available memory
@@ -529,8 +577,48 @@ class RasterFuse(MatchedPairReader):
         model_type = Model(model)
         # kernel_shape = tuple(utils.validate_kernel_shape(kernel_shape, model=model))
         overlap = utils.overlap_for_kernel(kernel_shape)
-        model_config = RasterFuse.create_model_config(**(model_config or {}))
-        block_config = RasterFuse.create_block_config(**(block_config or {}))
+        warn_msg = (
+            "The '{}' parameter is deprecated and will be removed in a future "
+            'release. Please pass its items as keyword arguments to '
+            "'RasterFuse.process()' directly."
+        )
+        if model_config:
+            warnings.warn(
+                warn_msg.format('model_config'),
+                category=DeprecationWarning,
+                stacklevel=2,
+            )
+            model_config = self.create_model_config(**(model_config or {}))
+        else:
+            model_config = dict(
+                r2_inpaint_thresh=r2_inpaint_thresh,
+                mask_partial=mask_partial,
+                downsampling=downsampling,
+                upsampling=upsampling,
+            )
+        if out_profile:
+            warnings.warn(
+                warn_msg.format('out_profile'),
+                category=DeprecationWarning,
+                stacklevel=2,
+            )
+        else:
+            out_profile = dict(
+                driver=driver,
+                dtype=dtype,
+                nodata=nodata,
+                creation_options=creation_options,
+            )
+        if block_config:
+            warnings.warn(
+                warn_msg.format('block_config'),
+                category=DeprecationWarning,
+                stacklevel=2,
+            )
+            block_config = self.create_block_config(**(block_config or {}))
+        else:
+            threads = threads or os.cpu_count()
+            block_config = dict(threads=threads, max_block_mem=max_block_mem)
 
         # create the KernelModel according to proc_crs
         model_cls = SrcSpaceModel if self.proc_crs == ProcCrs.src else RefSpaceModel
