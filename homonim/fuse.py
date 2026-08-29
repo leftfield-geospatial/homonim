@@ -97,7 +97,51 @@ class RasterFuse(MatchedPairReader):
         self._corr_lock = threading.Lock()
         self._param_lock = threading.Lock()
 
-    create_model_config = KernelModel.create_config
+    @staticmethod
+    def create_model_config(
+        r2_inpaint_thresh: float = 0.25,
+        mask_partial: bool = False,
+        downsampling: Resampling = Resampling.average,
+        upsampling: Resampling = Resampling.cubic_spline,
+    ) -> dict[str, Any]:
+        """
+        Return a model configuration that can be passed as the ``model_config``
+        argument to :meth:`~RasterFuse.process`.
+
+        .. deprecated:: 0.5.0
+
+            This method will be removed in a future release. Please pass the
+            arguments to :meth:`~RasterFuse.process` directly.
+
+        :param r2_inpaint_thresh:
+            R\N{SUPERSCRIPT TWO} (coefficient of determination) threshold below which to
+            interpolate ("in-paint") model offsets from surrounding values.  Applies
+            to the :attr:`~enums.Model.gain_offset` model only.  If ``None``, no
+            interpolation is performed.
+        :param mask_partial:
+            Whether to mask corrected pixels not produced by full kernel or source /
+            reference image coverage.  Can help reduce seam-lines between overlapping
+            images.
+        :param downsampling:
+             Resampling method to use when downsampling.
+        :param upsampling:
+            Resampling method to use when upsampling.
+
+        :return:
+            Model configuration.
+        """
+        warnings.warn(
+            'This method will be removed in a future release. Please pass the '
+            "arguments to 'RasterFuse.process()' directly.",
+            category=DeprecationWarning,
+            stacklevel=2,
+        )
+        return dict(
+            r2_inpaint_thresh=r2_inpaint_thresh,
+            mask_partial=mask_partial,
+            downsampling=downsampling,
+            upsampling=upsampling,
+        )
 
     @staticmethod
     def create_block_config(
@@ -436,7 +480,8 @@ class RasterFuse(MatchedPairReader):
         """
         Correct the source image to surface reflectance.
 
-        Bands in the corrected image are written in the :attr:`src_bands` order.
+        TODO: note the default format of the corrected file, including ordering of
+        bands.
 
         :param corr_filename:
             Path or URI of the corrected image.
