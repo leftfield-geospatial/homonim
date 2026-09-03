@@ -600,78 +600,67 @@ def fuse(
     comp_files = []
 
     # iterate over and correct source file(s)
-    try:
-        for src_i, src_filename in enumerate(src_file):
-            out_path = (
-                pathlib.Path(out_dir) if out_dir is not None else src_filename.parent
+    for src_i, src_filename in enumerate(src_file):
+        out_path = pathlib.Path(out_dir) if out_dir is not None else src_filename.parent
+        tqdm.write(f'\nCorrecting {src_filename.name} ({src_i + 1} of {len(src_file)})')
+        with RasterFuse(
+            src_filename,
+            ref_file,
+            proc_crs=proc_crs,
+            src_bands=src_bands,
+            ref_bands=ref_bands,
+            force=force_match,
+        ) as raster_fuse:
+            # construct output filenames
+            post_fix = utils.create_out_postfix(
+                raster_fuse.proc_crs,
+                model=model,
+                kernel_shape=kernel_shape,
+                driver=kwargs.get('driver', 'GTiff'),
             )
-            tqdm.write(
-                f'\nCorrecting {src_filename.name} ({src_i + 1} of {len(src_file)})'
+            corr_filename = out_path.joinpath(src_filename.stem + post_fix)
+            param_filename = (
+                utils.create_param_filename(corr_filename) if param_image else None
             )
-            with RasterFuse(
-                src_filename,
-                ref_file,
-                proc_crs=proc_crs,
-                src_bands=src_bands,
-                ref_bands=ref_bands,
-                force=force_match,
-            ) as raster_fuse:
-                # construct output filenames
-                post_fix = utils.create_out_postfix(
-                    raster_fuse.proc_crs,
-                    model=model,
-                    kernel_shape=kernel_shape,
-                    driver=kwargs.get('driver', 'GTiff'),
-                )
-                corr_filename = out_path.joinpath(src_filename.stem + post_fix)
-                param_filename = (
-                    utils.create_param_filename(corr_filename) if param_image else None
-                )
 
-                start_time = timer()
-                raster_fuse.process(
-                    corr_filename,
-                    Model(model),
-                    kernel_shape,
-                    param_filename=param_filename,
-                    build_ovw=build_ovw,
-                    overwrite=overwrite,
-                    **kwargs,
-                )
-
-            tqdm.write(f'Completed in {timer() - start_time:.2f} secs')
-            comp_files += [
-                src_filename,
+            start_time = timer()
+            raster_fuse.process(
                 corr_filename,
-            ]  # build a list of files to pass to compare
-
-        # compare source and corrected files with reference (invokes compare command with relevant parameters)
-        if cmp_file:
-            if str(cmp_file) == 'ref':
-                cmp_file = ref_file
-                cmp_bands = (
-                    ref_bands if not cmp_bands or not len(cmp_bands) else cmp_bands
-                )
-
-            cmp_cfg = {
-                k: kwargs[k]
-                for k, v in RasterCompare.create_config().items()
-                if k in kwargs
-            }
-            ctx.invoke(
-                compare,
-                src_file=comp_files,
-                ref_file=cmp_file,
-                proc_crs=proc_crs,
-                src_bands=[src_bands, None] * len(src_file),
-                ref_bands=cmp_bands,
-                force_match=force_match,
-                **cmp_cfg,
+                Model(model),
+                kernel_shape,
+                param_filename=param_filename,
+                build_ovw=build_ovw,
+                overwrite=overwrite,
+                **kwargs,
             )
 
-    except Exception:
-        logger.exception('Exception caught during processing.')  # log exception info
-        raise click.Abort() from None
+        tqdm.write(f'Completed in {timer() - start_time:.2f} secs')
+        comp_files += [
+            src_filename,
+            corr_filename,
+        ]  # build a list of files to pass to compare
+
+    # compare source and corrected files with reference (invokes compare command with relevant parameters)
+    if cmp_file:
+        if str(cmp_file) == 'ref':
+            cmp_file = ref_file
+            cmp_bands = ref_bands if not cmp_bands or not len(cmp_bands) else cmp_bands
+
+        cmp_cfg = {
+            k: kwargs[k]
+            for k, v in RasterCompare.create_config().items()
+            if k in kwargs
+        }
+        ctx.invoke(
+            compare,
+            src_file=comp_files,
+            ref_file=cmp_file,
+            proc_crs=proc_crs,
+            src_bands=[src_bands, None] * len(src_file),
+            ref_bands=cmp_bands,
+            force_match=force_match,
+            **cmp_cfg,
+        )
 
 
 # compare command
@@ -747,60 +736,52 @@ def compare(
 
     # build configuration dictionary
     config = RasterCompare.create_config(**kwargs)
-    try:
-        stats_dict = {}
-        # if src_bands comes from compare CLI, convert to list[src_bands, ...] with one element for each source file
-        src_bands_list = (
-            [src_bands] * len(src_file)
-            if not src_bands
-            or all([isinstance(src_band, int) for src_band in src_bands])
-            else src_bands
+    stats_dict = {}
+    # if src_bands comes from compare CLI, convert to list[src_bands, ...] with one element for each source file
+    src_bands_list = (
+        [src_bands] * len(src_file)
+        if not src_bands or all([isinstance(src_band, int) for src_band in src_bands])
+        else src_bands
+    )
+    # iterate over source files, comparing with reference
+    for src_i, (src_filename, src_bands) in enumerate(
+        zip(src_file, src_bands_list, strict=True)
+    ):
+        tqdm.write(f'\nComparing {src_filename.name} ({src_i + 1} of {len(src_file)})')
+        start_time = timer()
+        with RasterCompare(
+            src_filename,
+            ref_file,
+            proc_crs=proc_crs,
+            src_bands=src_bands,
+            ref_bands=ref_bands,
+            force=force_match,
+        ) as raster_compare:
+            stats_dict[str(src_filename)] = raster_compare.process(**config)
+        tqdm.write(f'Completed in {timer() - start_time:.2f} secs')
+
+    # print a key for the following tables
+    tqdm.write(f'\n\n{raster_compare.schema_table()}')
+
+    # print a results table per source image file
+    summ_dict = {}
+    for src_filename, im_stats_dict in stats_dict.items():
+        tqdm.write(
+            f'\n\n{src_filename!s}:\n\n{RasterCompare.stats_table(im_stats_dict)}'
         )
-        # iterate over source files, comparing with reference
-        for src_i, (src_filename, src_bands) in enumerate(
-            zip(src_file, src_bands_list, strict=True)
-        ):
-            tqdm.write(
-                f'\nComparing {src_filename.name} ({src_i + 1} of {len(src_file)})'
-            )
-            start_time = timer()
-            with RasterCompare(
-                src_filename,
-                ref_file,
-                proc_crs=proc_crs,
-                src_bands=src_bands,
-                ref_bands=ref_bands,
-                force=force_match,
-            ) as raster_compare:
-                stats_dict[str(src_filename)] = raster_compare.process(**config)
-            tqdm.write(f'Completed in {timer() - start_time:.2f} secs')
+        summ_dict[pathlib.Path(src_filename).name] = im_stats_dict['Mean'].copy()
 
-        # print a key for the following tables
-        tqdm.write(f'\n\n{raster_compare.schema_table()}')
+    # print a summary results table comparing all source files
+    if len(summ_dict) > 1:
+        tqdm.write(
+            f'\n\nSummary over bands:\n\n'
+            f'{RasterCompare.stats_table(summ_dict, key_header="file")}'
+        )
 
-        # print a results table per source image file
-        summ_dict = {}
-        for src_filename, im_stats_dict in stats_dict.items():
-            tqdm.write(
-                f'\n\n{src_filename!s}:\n\n{RasterCompare.stats_table(im_stats_dict)}'
-            )
-            summ_dict[pathlib.Path(src_filename).name] = im_stats_dict['Mean'].copy()
-
-        # print a summary results table comparing all source files
-        if len(summ_dict) > 1:
-            tqdm.write(
-                f'\n\nSummary over bands:\n\n'
-                f'{RasterCompare.stats_table(summ_dict, key_header="file")}'
-            )
-
-        if output is not None:
-            stats_dict['Reference'] = str(ref_file)
-            with open(output, 'w') as file:
-                json.dump(stats_dict, file)
-
-    except Exception:
-        logger.exception('Exception caught during processing')
-        raise click.Abort() from None
+    if output is not None:
+        stats_dict['Reference'] = str(ref_file)
+        with open(output, 'w') as file:
+            json.dump(stats_dict, file)
 
 
 @cli.command(cls=HomonimCommand)
@@ -820,38 +801,30 @@ def stats(param_files: tuple[pathlib.Path, ...], output: pathlib.Path):
     Report the minimum, maximum, mean etc. values of a parameter image generated with the
     :option:`--param-image <homonim-fuse --param-image>` option of the ``fuse`` command.
     """
+    stats_dict = {}
+    meta_dict = {}
 
-    try:
-        stats_dict = {}
-        meta_dict = {}
+    # process parameter file(s), storing results
+    for param_i, param_filename in enumerate(param_files):
+        tqdm.write(
+            f'\nProcessing {param_filename.name} ({param_i + 1} of {len(param_files)})'
+        )
+        with ParamStats(param_filename) as param_stats:
+            stats_dict[str(param_filename)] = param_stats.stats()
+            meta_dict[str(param_filename)] = param_stats.metadata
 
-        # process parameter file(s), storing results
-        for param_i, param_filename in enumerate(param_files):
-            tqdm.write(
-                f'\nProcessing {param_filename.name} ({param_i + 1} of {len(param_files)})'
-            )
-            with ParamStats(param_filename) as param_stats:
-                stats_dict[str(param_filename)] = param_stats.stats()
-                meta_dict[str(param_filename)] = param_stats.metadata
+    # print a key for the following tables
+    tqdm.write(f'\n\n{param_stats.schema_table}')
 
-        # print a key for the following tables
-        tqdm.write(f'\n\n{param_stats.schema_table}')
+    # iterate over stored result(s) and print
+    for param_filename in stats_dict.values():
+        tqdm.write(f'\n{pathlib.Path(param_filename).name}:\n')
+        tqdm.write(meta_dict[param_filename])
+        tqdm.write(f'Stats:\n\n{ParamStats.stats_table(stats_dict[param_filename])}\n')
 
-        # iterate over stored result(s) and print
-        for param_filename in stats_dict.values():
-            tqdm.write(f'\n{pathlib.Path(param_filename).name}:\n')
-            tqdm.write(meta_dict[param_filename])
-            tqdm.write(
-                f'Stats:\n\n{ParamStats.stats_table(stats_dict[param_filename])}\n'
-            )
-
-        if output is not None:
-            with open(output, 'w') as file:
-                json.dump(stats_dict, file, allow_nan=True)
-
-    except Exception:
-        logger.exception('Exception caught during processing')
-        raise click.Abort() from None
+    if output is not None:
+        with open(output, 'w') as file:
+            json.dump(stats_dict, file, allow_nan=True)
 
 
 if __name__ == '__main__':
