@@ -12,13 +12,14 @@
 #
 # You should have received a copy of the GNU Affero General Public License along with
 # Homonim. If not, see <https://www.gnu.org/licenses/>.
+import warnings
 
 import cv2 as cv
 import numpy as np
 from rasterio.enums import Resampling
 from rasterio.fill import fillnodata
 
-from homonim import utils
+from homonim import errors, utils
 from homonim.enums import Model
 from homonim.raster_array import RasterArray
 
@@ -107,7 +108,26 @@ class KernelModel:
             Resampling method to use when upsampling.
         """
         self._model = Model(model)
-        self._kernel_shape = utils.validate_kernel_shape(kernel_shape, model=model)
+        kernel_shape = np.array(kernel_shape)
+        if not np.all(kernel_shape >= 1) or not np.all(kernel_shape % 2 == 1):
+            raise errors.HomonimError(
+                "'kernel_shape' must integer, greater than or equal to one, and odd "
+                'in both dimensions.'
+            )
+        if self._model is Model.gain_offset:
+            if np.prod(kernel_shape) < 2:
+                raise errors.HomonimError(
+                    "'kernel_shape' should consist at least 2 pixels for the "
+                    "'gain-offset' model."
+                )
+            elif np.prod(kernel_shape) < 25:
+                warnings.warn(
+                    "A 'kernel_shape' consiting of at least 25 pixels is recommended "
+                    "for the 'gain-offset' model.",
+                    category=errors.HomonimWarning,
+                    stacklevel=2,
+                )
+        self._kernel_shape = tuple(kernel_shape.astype('int').tolist())
         self._find_r2 = find_r2
         self._r2_inpaint_thresh = r2_inpaint_thresh
         self._mask_partial = mask_partial
@@ -122,7 +142,7 @@ class KernelModel:
     @property
     def kernel_shape(self) -> tuple[int, int]:
         """Kernel (height, width) in pixels."""
-        return tuple(self._kernel_shape)
+        return self._kernel_shape
 
     @property
     def find_r2(self) -> bool:
