@@ -10,15 +10,14 @@ dependencies = [
     'click>=8',
     'tqdm>=4.6',
     'pyyaml>=5.4',
-    'cloup>=0.15',
     'tabulate>=0.8',
 ]
 authors = [{ name = 'Leftfield Geospatial' }]
 license = 'AGPL-3.0-or-later'
 license-files = ['LICENCSE']
 keywords = [
-    'drone', 'aerial', 'satellite', 'surface reflectance', 'correction',
-    'harmonization', 'brdf', 'pan-sharpen',
+    'drone', 'aerial', 'satellite', 'image', 'surface reflectance', 'correction',
+    'harmonization', 'brdf', 'atmospheric'
 ]
 classifiers = [
     'Programming Language :: Python :: 3',

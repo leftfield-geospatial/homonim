@@ -22,12 +22,10 @@ from contextlib import contextmanager
 from timeit import default_timer as timer
 
 import click
-import cloup
 import numpy as np
 import rasterio as rio
 import yaml
 from click.core import ParameterSource
-from rasterio.errors import NotGeoreferencedWarning
 from tqdm.auto import tqdm
 from tqdm.contrib.logging import _TqdmLoggingHandler
 
@@ -47,8 +45,8 @@ from homonim.version import __version__
 logger = logging.getLogger(__name__)
 
 
-class HomonimCommand(cloup.Command):
-    """cloup.Command subclass for formatting help with RST markup."""
+class HomonimCommand(click.Command):
+    """click.Command subclass for formatting help with RST markup."""
 
     def get_help(self, ctx: click.Context):
         """Strip some RST markup from the help text for CLI display.  Will not work with grid tables."""
@@ -56,7 +54,7 @@ class HomonimCommand(cloup.Command):
         # Note that this can't easily be done in __init__, as each sub-command's __init__ gets called,
         # which ends up re-assigning self.wrap_text to reformat_text
         if not hasattr(self, 'wrap_text'):
-            self.wrap_text = cloup.formatting._formatter.wrap_text
+            self.wrap_text = click.formatting.wrap_text
         sub_strings = {
             '\b\n': '\n\b',  # convert from RST friendly to click literal (unwrapped) block marker
             r'\| ': '',  # strip RST literal (unwrapped) marker in e.g. tables and bullet lists
@@ -75,8 +73,8 @@ class HomonimCommand(cloup.Command):
             # change double newline to single newline separated list
             return re.sub(r'\n\n(\s*?)- ', '\n- ', wr_text, flags=re.DOTALL)
 
-        cloup.formatting._formatter.wrap_text = reformat_text
-        return cloup.Command.get_help(self, ctx)
+        click.formatting.wrap_text = reformat_text
+        return click.Command.get_help(self, ctx)
 
 
 class FuseCommand(HomonimCommand):
@@ -224,14 +222,13 @@ def _param_file_cb(ctx: click.Context, param: click.Argument, value):
 
 
 # define click options and arguments common to more than one command
-# use cloup's argument to auto print argument help on command line
 # TODO: rasterio 1.4 does not accept Path wrapped URLs
-ref_file_arg = cloup.argument(
+ref_file_arg = click.argument(
     'ref-file',
     nargs=1,
     metavar='REFERENCE',
     type=click.Path(exists=False, dir_okay=False, path_type=pathlib.Path),
-    help='Path or URL of a reference image.',
+    # help='Path/URI of a reference image.',
 )
 threads_option = click.option(
     '-t',
@@ -309,21 +306,10 @@ force_match_option = click.option(
     show_default=True,
     help='Bypass auto wavelength matching, and any band-matching errors.  Use with caution.',
 )
-""" cloup context settings to print help in 'linear' layout with heading/option emphasis. """
-context_settings = cloup.Context.settings(
-    formatter_settings=cloup.HelpFormatter.settings(
-        col2_min_width=np.inf,
-        theme=cloup.HelpTheme(
-            invoked_command=cloup.Style(fg='bright_white', bold=True),
-            heading=cloup.Style(fg='bright_white', bold=True),
-            col1=cloup.Style(fg='bright_white'),
-        ),
-    )
-)
 
 
 # define the click CLI
-@cloup.group(context_settings=context_settings)
+@click.group()
 @click.option('--verbose', '-v', count=True, help='Increase verbosity.')
 @click.option('--quiet', '-q', count=True, help='Decrease verbosity.')
 @click.version_option(version=__version__, message='%(version)s')
@@ -336,199 +322,186 @@ def cli(ctx: click.Context, verbose: int, quiet: int):
 # fuse command
 @cli.command(cls=FuseCommand)
 # standard options
-@cloup.argument(
+@click.argument(
     'src-file',
     nargs=-1,
     metavar='SOURCE...',
     type=click.Path(exists=False, dir_okay=False, path_type=pathlib.Path),
-    help='Path/URL(s) of source image(s) to be corrected.',
+    # help='Path/URI(s) of source image(s) to be corrected.',
 )
 @ref_file_arg
-@cloup.option_group(
-    'Standard options',
-    # note: either use click.option(...), or cloup.option(..., help=inspect.cleandoc(...)) for RST help strings,
-    # if cloup's mutually exclusive etc. functionality is needed, it should be the latter.
-    click.option(
-        '-m',
-        '--model',
-        type=click.Choice([m.value for m in Model], case_sensitive=False),
-        default=KernelModel.default_model.value,
-        show_default=True,
-        help="""Correction model.
+@click.option(
+    '-m',
+    '--model',
+    type=click.Choice([m.value for m in Model], case_sensitive=False),
+    default=KernelModel.default_model.value,
+    show_default=True,
+    help="""Correction model.
 
-        - `gain`: Gain-only model, suitable for haze-free and zero offset images.
+    - `gain`: Gain-only model, suitable for haze-free and zero offset images.
 
-        - `gain-blk-offset`: Gain-only model applied to offset normalised blocks.  Suitable for most source-reference combinations.
+    - `gain-blk-offset`: Gain-only model applied to offset normalised blocks.  Suitable for most source-reference combinations.
 
-        - `gain-offset`: Gain and offset model.  Most accurate model, but sensitive to differences between source and reference.
-        """,
-    ),
-    click.option(
-        '-k',
-        '--kernel-shape',
-        type=click.Tuple([click.INT, click.INT]),
-        nargs=2,
-        default=KernelModel.default_kernel_shape,
-        show_default=True,
-        metavar='HEIGHT WIDTH',
-        help='Kernel height and width in pixels of the :option:`--proc-crs <homonim-fuse --proc-crs>` image. Larger '
-        'kernels are less susceptible to over-fitting, but provide lower resolution correction.',
-    ),
-    src_bands_option,
-    ref_bands_option,
-    # TODO: allow URIs?
-    click.option(
-        '-od',
-        '--out-dir',
-        type=click.Path(exists=True, file_okay=False, writable=True),
-        show_default='source image directory.',
-        help='Directory in which to place corrected image(s).',
-    ),
-    click.option(
-        '-o',
-        '--overwrite',
-        is_flag=True,
-        default=False,
-        show_default=True,
-        help='Overwrite existing output file(s).',
-    ),
-    # TODO: does this work in front of an argument?  or should it be handles like oty rpc's --gcp-refine?
-    click.option(
-        '-cmp',
-        '--compare',
-        'cmp_file',
-        metavar='FILE',
-        type=click.Path(exists=False, dir_okay=False, path_type=pathlib.Path),
-        is_flag=False,
-        flag_value='ref',
-        help='Compare source and corrected images with this reference image.  If no ``FILE`` value is given, source '
-        'and corrected images are compared with :option:`REFERENCE`.',
-    ),
-    click.option(
-        '-cb',
-        '--cmp-band',
-        'cmp_bands',
-        type=click.INT,
-        multiple=True,
-        default=None,
-        show_default='all spectral or non-alpha bands.',
-        help='Comparison reference band index(es) that correspond (spectrally) to '
-        ':option:`--src-band <homonim-fuse --src-band>` (s).',
-    ),
-    click.option(
-        '-bo/-nbo',
-        '--build-ovw/--no-build-ovw',
-        type=click.BOOL,
-        default=True,
-        show_default=True,
-        help='Build overviews for the output image(s).',
-    ),
-    click.option(
-        '-c',
-        '--conf',
-        type=click.Path(
-            exists=True, dir_okay=False, readable=True, path_type=pathlib.Path
-        ),
-        required=False,
-        default=None,
-        show_default=True,
-        help='Path to a yaml configuration file specifying advanced options (as follow below).',
-    ),
+    - `gain-offset`: Gain and offset model.  Most accurate model, but sensitive to differences between source and reference.
+    """,
 )
-# advanced options
-@cloup.option_group(
-    'Advanced options',
-    click.option(
-        '-pi/-npi',
-        '--param-image/--no-param-image',
-        type=click.BOOL,
-        default=False,
-        show_default=True,
-        help='Write the  model parameters and R\N{SUPERSCRIPT TWO} values for each corrected image to a parameter '
-        'image file.',
-    ),
-    click.option(
-        '-mp/-nmp',
-        '--mask-partial/--no-mask-partial',
-        type=click.BOOL,
-        default=RasterFuse.create_model_config()['mask_partial'],
-        show_default=True,
-        help='Mask output pixels produced from partial kernel or source / reference image coverage.',
-    ),
-    threads_option,
-    max_block_mem_option,
-    downsampling_option,
-    upsampling_option,
-    click.option(
-        '-rit',
-        '--r2-inpaint-thresh',
-        type=click.FloatRange(min=0, max=1),
-        default=RasterFuse.create_model_config()['r2_inpaint_thresh'],
-        show_default=True,
-        metavar='FLOAT 0-1',
-        help='R\N{SUPERSCRIPT TWO} threshold below which to inpaint model parameters from surrounding areas '
-        '(0 = turn off inpainting). Valid for `gain-offset` :option:`--model` only.',
-    ),
-    click.option(
-        '-pc',
-        '--proc-crs',
-        type=click.Choice([pc.value for pc in ProcCrs], case_sensitive=False),
-        default=ProcCrs.auto.value,
-        show_default=True,
-        help="""The image CRS in which to estimate correction parameters.
-        \b
-
-        - `auto`: lowest resolution of the source and reference CRS's (recommended).
-        - `src`: source image CRS.
-        - `ref`: reference image CRS.
-        """,
-    ),
-    click.option(
-        '--driver',
-        type=click.Choice(
-            tuple(set(rio.drivers.raster_driver_extensions().values())),
-            case_sensitive=False,
-        ),
-        default=RasterFuse.create_out_profile()['driver'],
-        show_default=True,
-        metavar='TEXT',
-        help='Output image format driver.  See the `GDAL docs '
-        '<https://gdal.org/en/stable/drivers/raster/index.html>`_ for details.',
-    ),
-    click.option(
-        '--dtype',
-        type=click.Choice(
-            list(rio.dtypes.dtype_fwd.values())[1:8], case_sensitive=False
-        ),
-        default=RasterFuse.create_out_profile()['dtype'],
-        show_default=True,
-        help=f'Output image data type.  If an integer type, values are rounded and clipped to its range.  Valid for '
-        f'corrected images only, parameter images always use {RasterArray.default_dtype}.',
-    ),
-    click.option(
-        '--nodata',
-        'nodata',
-        type=click.STRING,
-        callback=_nodata_cb,
-        metavar='[NUMBER|null|nan]',
-        default=RasterFuse.create_out_profile()['nodata'],
-        show_default=True,
-        help=f'Output image nodata value.  Valid for corrected images only, parameter images always use '
-        f'{RasterArray.default_nodata}.  If null, an internal mask is written (recommended for lossy '
-        f'compression).',
-    ),
-    click.option(
-        '-co',
-        '--creation-options',
-        metavar='NAME=VALUE',
-        multiple=True,
-        default=(),
-        callback=_creation_options_cb,
-        help='Driver specific image creation option(s) for the output image(s).  See the `GDAL docs '
-        '<https://gdal.org/en/stable/drivers/raster/index.html>`_ for details.',
-    ),
-    force_match_option,
+@click.option(
+    '-k',
+    '--kernel-shape',
+    type=click.Tuple([click.INT, click.INT]),
+    nargs=2,
+    default=KernelModel.default_kernel_shape,
+    show_default=True,
+    metavar='HEIGHT WIDTH',
+    help='Kernel height and width in pixels of the :option:`--proc-crs <homonim-fuse --proc-crs>` image. Larger '
+    'kernels are less susceptible to over-fitting, but provide lower resolution correction.',
 )
+@src_bands_option
+@ref_bands_option
+# TODO: allow URIs?
+@click.option(
+    '-od',
+    '--out-dir',
+    type=click.Path(exists=True, file_okay=False, writable=True),
+    show_default='source image directory.',
+    help='Directory in which to place corrected image(s).',
+)
+@click.option(
+    '-o',
+    '--overwrite',
+    is_flag=True,
+    default=False,
+    show_default=True,
+    help='Overwrite existing output file(s).',
+)
+# TODO: does this work in front of an argument?  or should it be handles like oty rpc's --gcp-refine?
+@click.option(
+    '-cmp',
+    '--compare',
+    'cmp_file',
+    metavar='FILE',
+    type=click.Path(exists=False, dir_okay=False, path_type=pathlib.Path),
+    is_flag=False,
+    flag_value='ref',
+    help='Compare source and corrected images with this reference image.  If no ``FILE`` value is given, source '
+    'and corrected images are compared with :option:`REFERENCE`.',
+)
+@click.option(
+    '-cb',
+    '--cmp-band',
+    'cmp_bands',
+    type=click.INT,
+    multiple=True,
+    default=None,
+    show_default='all spectral or non-alpha bands.',
+    help='Comparison reference band index(es) that correspond (spectrally) to '
+    ':option:`--src-band <homonim-fuse --src-band>` (s).',
+)
+@click.option(
+    '-bo/-nbo',
+    '--build-ovw/--no-build-ovw',
+    type=click.BOOL,
+    default=True,
+    show_default=True,
+    help='Build overviews for the output image(s).',
+)
+@click.option(
+    '-c',
+    '--conf',
+    type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path),
+    required=False,
+    default=None,
+    show_default=True,
+    help='Path to a yaml configuration file specifying advanced options (as follow below).',
+)
+@click.option(
+    '-pi/-npi',
+    '--param-image/--no-param-image',
+    type=click.BOOL,
+    default=False,
+    show_default=True,
+    help='Write the  model parameters and R\N{SUPERSCRIPT TWO} values for each corrected image to a parameter '
+    'image file.',
+)
+@click.option(
+    '-mp/-nmp',
+    '--mask-partial/--no-mask-partial',
+    type=click.BOOL,
+    default=RasterFuse.create_model_config()['mask_partial'],
+    show_default=True,
+    help='Mask output pixels produced from partial kernel or source / reference image coverage.',
+)
+@threads_option
+@max_block_mem_option
+@downsampling_option
+@upsampling_option
+@click.option(
+    '-rit',
+    '--r2-inpaint-thresh',
+    type=click.FloatRange(min=0, max=1),
+    default=RasterFuse.create_model_config()['r2_inpaint_thresh'],
+    show_default=True,
+    metavar='FLOAT 0-1',
+    help='R\N{SUPERSCRIPT TWO} threshold below which to inpaint model parameters from surrounding areas '
+    '(0 = turn off inpainting). Valid for `gain-offset` :option:`--model` only.',
+)
+@click.option(
+    '-pc',
+    '--proc-crs',
+    type=click.Choice([pc.value for pc in ProcCrs], case_sensitive=False),
+    default=ProcCrs.auto.value,
+    show_default=True,
+    help="""The image CRS in which to estimate correction parameters.
+    \b
+
+    - `auto`: lowest resolution of the source and reference CRS's (recommended).
+    - `src`: source image CRS.
+    - `ref`: reference image CRS.
+    """,
+)
+@click.option(
+    '--driver',
+    type=click.Choice(
+        tuple(set(rio.drivers.raster_driver_extensions().values())),
+        case_sensitive=False,
+    ),
+    default=RasterFuse.create_out_profile()['driver'],
+    show_default=True,
+    metavar='TEXT',
+    help='Output image format driver.  See the `GDAL docs '
+    '<https://gdal.org/en/stable/drivers/raster/index.html>`_ for details.',
+)
+@click.option(
+    '--dtype',
+    type=click.Choice(list(rio.dtypes.dtype_fwd.values())[1:8], case_sensitive=False),
+    default=RasterFuse.create_out_profile()['dtype'],
+    show_default=True,
+    help=f'Output image data type.  If an integer type, values are rounded and clipped to its range.  Valid for '
+    f'corrected images only, parameter images always use {RasterArray.default_dtype}.',
+)
+@click.option(
+    '--nodata',
+    'nodata',
+    type=click.STRING,
+    callback=_nodata_cb,
+    metavar='[NUMBER|null|nan]',
+    default=RasterFuse.create_out_profile()['nodata'],
+    show_default=True,
+    help=f'Output image nodata value.  Valid for corrected images only, parameter images always use '
+    f'{RasterArray.default_nodata}.  If null, an internal mask is written (recommended for lossy '
+    f'compression).',
+)
+@click.option(
+    '-co',
+    '--creation-options',
+    metavar='NAME=VALUE',
+    multiple=True,
+    default=(),
+    callback=_creation_options_cb,
+    help='Driver specific image creation option(s) for the output image(s).  See the `GDAL docs '
+    '<https://gdal.org/en/stable/drivers/raster/index.html>`_ for details.',
+)
+@force_match_option
 @click.pass_context
 def fuse(
     ctx: click.Context,
@@ -665,39 +638,36 @@ def fuse(
 
 # compare command
 @cli.command(cls=HomonimCommand)
-@cloup.argument(
+@click.argument(
     'src-file',
     nargs=-1,
     metavar='IMAGE...',
     type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
-    help='Path(s) to image(s) to compare with :option:`REFERENCE`.',
+    # help='Path/URI(s) of image(s) to compare with :option:`REFERENCE`.',
 )
 @ref_file_arg
-@cloup.option_group(
-    'Standard options', src_bands_option, ref_bands_option, output_option
-)
-@cloup.option_group(
-    'Advanced options',
-    threads_option,
-    max_block_mem_option,
-    downsampling_option,
-    upsampling_option,
-    click.option(
-        '-pc',
-        '--proc-crs',
-        type=click.Choice([pc.value for pc in ProcCrs], case_sensitive=False),
-        default=ProcCrs.auto.value,
-        show_default=True,
-        help="""The image CRS in which to compare images.
-    \b
+@src_bands_option
+@ref_bands_option
+@output_option
+@threads_option
+@max_block_mem_option
+@downsampling_option
+@upsampling_option
+@click.option(
+    '-pc',
+    '--proc-crs',
+    type=click.Choice([pc.value for pc in ProcCrs], case_sensitive=False),
+    default=ProcCrs.auto.value,
+    show_default=True,
+    help="""The image CRS in which to compare images.
+\b
 
-    - `auto`: lowest resolution of the source and reference CRS's (recommended).
-    - `src`: source image CRS.
-    - `ref`: reference image CRS.
-    """,
-    ),
-    force_match_option,
+- `auto`: lowest resolution of the source and reference CRS's (recommended).
+- `src`: source image CRS.
+- `ref`: reference image CRS.
+""",
 )
+@force_match_option
 def compare(
     src_file: tuple[pathlib.Path, ...],
     ref_file: pathlib.Path,
@@ -785,13 +755,13 @@ def compare(
 
 
 @cli.command(cls=HomonimCommand)
-@cloup.argument(
+@click.argument(
     'param-files',
     nargs=-1,
     metavar='PARAM...',
     type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
     callback=_param_file_cb,
-    help='Path(s) to parameter image(s).',
+    # help='Path/URI(s) of the parameter image(s).',
 )
 @output_option
 def stats(param_files: tuple[pathlib.Path, ...], output: pathlib.Path):
@@ -817,7 +787,7 @@ def stats(param_files: tuple[pathlib.Path, ...], output: pathlib.Path):
     tqdm.write(f'\n\n{param_stats.schema_table}')
 
     # iterate over stored result(s) and print
-    for param_filename in stats_dict.values():
+    for param_filename in stats_dict.keys():
         tqdm.write(f'\n{pathlib.Path(param_filename).name}:\n')
         tqdm.write(meta_dict[param_filename])
         tqdm.write(f'Stats:\n\n{ParamStats.stats_table(stats_dict[param_filename])}\n')
