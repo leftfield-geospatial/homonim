@@ -33,6 +33,7 @@ from tqdm.auto import tqdm
 
 from homonim import utils
 from homonim.enums import Driver, Model, ProcCrs
+from homonim.errors import HomonimError
 from homonim.kernel_model import KernelModel, RefSpaceModel, SrcSpaceModel
 from homonim.matched_pair import MatchedPairReader
 from homonim.raster_array import RasterArray
@@ -120,7 +121,7 @@ class RasterFuse(MatchedPairReader):
         """Return a RasterIO profile for the corrected image."""
         driver = Driver(driver.lower())
         if nodata is not None and not can_cast_dtype(nodata, dtype):
-            raise ValueError(
+            raise HomonimError(
                 f"'nodata' value: {nodata} cannot be safely cast to 'dtype': '{dtype}'"
             )
         creation_options = creation_options or (
@@ -167,6 +168,9 @@ class RasterFuse(MatchedPairReader):
 
     def _set_corr_band_tags(self, im: DatasetWriter):
         """Copy band tags from the reference to the corrected image."""
+        # TODO: should tags not first come from the source if they exist,
+        #  then from the reference otherwise?  also for parameter band descriptions
+        #  below...
         geedim_tags = ['center_wavelength', 'name', 'description']
         for corr_band, ref_band in enumerate(self.ref_bands, start=1):
             im.set_band_description(corr_band, self.ref_im.descriptions[ref_band - 1])
@@ -295,10 +299,11 @@ class RasterFuse(MatchedPairReader):
             pass the arguments to :meth:`~RasterFuse.process` directly.
 
         :param threads:
-            Number of image blocks to process concurrently.  ``0`` will use the
-            number of CPUs.
+            Number of image blocks to process concurrently.  If ``0``, the number of
+            CPUs is used.
         :param max_block_mem:
-            Maximum size of an image block in megabytes.
+            Maximum size of an image block in megabytes.  If ``0``, a block will
+            correspond to a whole image band.
 
         :return:
             Configuration dictionary.
@@ -456,16 +461,21 @@ class RasterFuse(MatchedPairReader):
             #creation -options>`__ documentation for details on the options for those
             drivers.  If ``None``, default options are used.
         :param threads:
-            Number of image blocks to process concurrently.  ``0`` will use the
-            number of CPUs.
+            Number of image blocks to process concurrently.  If ``0``, the number of
+            CPUs is used.
         :param max_block_mem:
-            Maximum size of an image block in megabytes.
+            Maximum size of an image block in megabytes.  If ``0``, a block will
+            correspond to the whole image band.
         """
         # TODO: is it possible to have an auto block_config that adjusts threads and
         #  block mem to available memory
         self._assert_open()
         model_type = Model(model)
-        threads = threads or os.cpu_count()
+        if threads > os.cpu_count():
+            raise HomonimError(
+                "'threads' should be less than or equal to the number of CPUs"
+            )
+        threads = threads if threads > 0 else os.cpu_count()
 
         # convert deprecated *_config argument items to keyword arguments
         warn_msg = (
