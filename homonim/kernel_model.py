@@ -111,7 +111,7 @@ class KernelModel:
         kernel_shape = np.array(kernel_shape)
         if not np.all(kernel_shape >= 1) or not np.all(kernel_shape % 2 == 1):
             raise errors.HomonimError(
-                "'kernel_shape' must integer, greater than or equal to one, and odd "
+                "'kernel_shape' must integer, greater than or equal to one and odd "
                 'in both dimensions.'
             )
         if self._model is Model.gain_offset:
@@ -206,9 +206,13 @@ class KernelModel:
         if ref_sum is None:
             ref_sum = cv.boxFilter(ref_array, -1, kernel_shape[::-1], **filter_args)
         if ref2_sum is None:
-            ref2_sum = cv.sqrBoxFilter(ref_array, -1, kernel_shape[::-1], **filter_args)
+            ref2_sum = cv.sqrBoxFilter(
+                ref_array, cv.CV_32F, kernel_shape[::-1], **filter_args
+            )
         if src2_sum is None:
-            src2_sum = cv.sqrBoxFilter(src_array, -1, kernel_shape[::-1], **filter_args)
+            src2_sum = cv.sqrBoxFilter(
+                src_array, cv.CV_32F, kernel_shape[::-1], **filter_args
+            )
         if src_ref_sum is None:
             src_ref_sum = cv.boxFilter(
                 src_array * ref_array, -1, kernel_shape[::-1], **filter_args
@@ -259,9 +263,10 @@ class KernelModel:
                 dtype=RasterArray.default_dtype,
             )
 
-        # find R2 = 1 - RSS/TSS, and write into dest_array
-        np.divide(ss_res_array, ss_tot_array, out=dest_array, where=mask)
-        np.subtract(1, dest_array, out=dest_array, where=mask)
+        # find R2 = 1 - RSS/TSS, and write into dest_array, avoiding divide by 0
+        where_mask = mask & (ss_tot_array != 0)
+        np.divide(ss_res_array, ss_tot_array, out=dest_array, where=where_mask)
+        np.subtract(1, dest_array, out=dest_array, where=where_mask)
         return dest_array
 
     @staticmethod
@@ -275,7 +280,7 @@ class KernelModel:
         norm_model = [0.0, 0.0]
         mask = ref_ra.mask & src_ra.mask
         if not np.any(mask):
-            return norm_model
+            return tuple(norm_model)
         masked_src = src_ra.array[mask]
         masked_ref = ref_ra.array[mask]
         norm_model[0] = np.std(masked_ref) / np.std(masked_src)
@@ -316,7 +321,6 @@ class KernelModel:
 
         # convolve the kernel with src_array and ref_array to get kernel sums (uses
         # DFT for large kernels)
-        # common opencv arguments
         filter_args = dict(normalize=False, borderType=cv.BORDER_CONSTANT)
         src_sum = cv.boxFilter(src_array, -1, kernel_shape[::-1], **filter_args)
         ref_sum = cv.boxFilter(ref_array, -1, kernel_shape[::-1], **filter_args)
@@ -326,7 +330,7 @@ class KernelModel:
         param_ra.array[1, mask] = 0  # set offsets to 0
 
         # find sliding kernel gains, avoiding divide by 0
-        np.divide(ref_sum, src_sum, out=param_ra.array[0], where=mask)
+        np.divide(ref_sum, src_sum, out=param_ra.array[0], where=mask & (src_sum != 0))
 
         if self._find_r2:
             # Find R2 of the sliding kernel models
@@ -420,14 +424,17 @@ class KernelModel:
         m_num_array = (mask_sum * src_ref_sum) - (src_sum * ref_sum)
 
         # find the denominator for the gain i.e. N*var(src)
-        src2_sum = cv.sqrBoxFilter(src_array, -1, kernel_shape[::-1], **filter_args)
+        src2_sum = cv.sqrBoxFilter(
+            src_array, cv.CV_32F, kernel_shape[::-1], **filter_args
+        )
         m_den_array = (mask_sum * src2_sum) - (src_sum**2)
 
         # create parameter RasterArray filled with nodata
         param_ra = RasterArray.from_profile(None, param_profile)
 
         # find the gain = cov(ref, src) / var(src), avoiding divide by 0
-        np.divide(m_num_array, m_den_array, out=param_ra.array[0], where=mask)
+        where_mask = mask & (m_den_array != 0)
+        np.divide(m_num_array, m_den_array, out=param_ra.array[0], where=where_mask)
 
         # solve for the offset c = y - mx, given that the linear model passes through
         # (mean(ref_array), mean(src_array))
@@ -435,7 +442,7 @@ class KernelModel:
             ref_sum - (param_ra.array[0] * src_sum),
             mask_sum,
             out=param_ra.array[1],
-            where=mask,
+            where=where_mask,
         )
 
         if find_r2:
@@ -456,6 +463,8 @@ class KernelModel:
 
         if self._r2_inpaint_thresh is not None:
             # fill/inpaint low R2 and negative gain areas in the offset parameter
+            # TODO: exclude the mask is False areas from being filled, then don't
+            #  remask after filling
             r2_mask = (
                 (param_ra.array[2] > self._r2_inpaint_thresh)
                 & (param_ra.array[0] > 0)
@@ -466,14 +475,14 @@ class KernelModel:
             param_ra.array[1] = fillnodata(param_ra.array[1], r2_mask)
             param_ra.mask = mask  # re-mask as nodata areas will have been filled above
 
-            # recalculate the gain for the filled areas using m = (y - c)/x and and
-            # the point (mean(ref_array), mean(src_array))
+            # recalculate the gain for the filled areas using m = (y - c)/x and the
+            # point (mean(ref_array), mean(src_array)), avoiding divide by 0
             r2_mask = ~r2_mask & mask
             np.divide(
                 ref_sum - mask_sum * param_ra.array[1],
                 src_sum,
                 out=param_ra.array[0],
-                where=r2_mask,
+                where=r2_mask & (src_sum != 0),
             )
 
         return param_ra
