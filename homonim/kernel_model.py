@@ -327,10 +327,13 @@ class KernelModel:
 
         # create parameter RasterArray filled with nodata
         param_ra = RasterArray.from_profile(None, param_profile)
-        param_ra.array[1, mask] = 0  # set offsets to 0
 
         # find sliding kernel gains, avoiding divide by 0
-        np.divide(ref_sum, src_sum, out=param_ra.array[0], where=mask & (src_sum != 0))
+        where_mask = mask & (src_sum != 0)
+        np.divide(ref_sum, src_sum, out=param_ra.array[0], where=where_mask)
+
+        # set offsets to 0
+        param_ra.array[1, where_mask] = 0
 
         if self._find_r2:
             # Find R2 of the sliding kernel models
@@ -462,28 +465,32 @@ class KernelModel:
             )
 
         if self._r2_inpaint_thresh is not None:
-            # fill/inpaint low R2 and negative gain areas in the offset parameter
-            # TODO: exclude the mask is False areas from being filled, then don't
-            #  remask after filling
-            r2_mask = (
+            # fill/inpaint the offset parameter in low R2, negative gain and
+            # divide by 0 (nan parameter) areas
+
+            # mask of pixels to fill from (excludes parameter nans)
+            fill_mask = (
                 (param_ra.array[2] > self._r2_inpaint_thresh)
                 & (param_ra.array[0] > 0)
                 & mask
             )
             # NOTE: fillnodata does not release the GIL, so this can slow down
             # processing, especially for proc_crs=src
-            param_ra.array[1] = fillnodata(param_ra.array[1], r2_mask)
-            param_ra.mask = mask  # re-mask as nodata areas will have been filled above
+            param_ra.array[1] = fillnodata(param_ra.array[1], fill_mask)
 
             # recalculate the gain for the filled areas using m = (y - c)/x and the
             # point (mean(ref_array), mean(src_array)), avoiding divide by 0
-            r2_mask = ~r2_mask & mask
+            param_mask = mask & (src_sum != 0)
             np.divide(
                 ref_sum - mask_sum * param_ra.array[1],
                 src_sum,
                 out=param_ra.array[0],
-                where=r2_mask & (src_sum != 0),
+                where=~fill_mask & param_mask,
             )
+
+            # re-mask valid parameters (fillnodata() will have filled mask is False
+            # areas)
+            param_ra.mask = param_mask
 
         return param_ra
 
