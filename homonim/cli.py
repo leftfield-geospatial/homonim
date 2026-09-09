@@ -22,12 +22,12 @@ from contextlib import contextmanager
 from timeit import default_timer as timer
 
 import click
-import numpy as np
 import rasterio as rio
 import yaml
-from click.core import ParameterSource
+from rasterio.errors import RasterioIOError
 from tqdm.auto import tqdm
 from tqdm.contrib.logging import _TqdmLoggingHandler
+from yaml import YAMLError
 
 from homonim import (
     Model,
@@ -37,7 +37,7 @@ from homonim import (
     RasterFuse,
     utils,
 )
-from homonim.errors import ImageFormatError
+from homonim.errors import HomonimError, ImageFormatError
 from homonim.kernel_model import KernelModel
 from homonim.raster_array import RasterArray
 from homonim.version import __version__
@@ -77,49 +77,6 @@ class HomonimCommand(click.Command):
         return click.Command.get_help(self, ctx)
 
 
-class FuseCommand(HomonimCommand):
-    """click.Command subclass for setting fuse command parameters from a yaml config file."""
-
-    def invoke(self, ctx: click.Context):
-        """Merge config file with command line and default parameter values."""
-        # adapted from https://stackoverflow.com/questions/46358797/python-click-supply-arguments-and-options-from-a
-        # -configuration-file/46391887
-        config_file = ctx.params['conf']
-        if config_file is not None:
-            # read the config file into a dict
-            with open(config_file) as f:
-                config_dict = yaml.safe_load(f)
-
-            for conf_key, conf_value in config_dict.items():
-                if conf_key not in ctx.params:
-                    raise click.BadParameter(
-                        f'Unknown config file parameter "{conf_key}"',
-                        ctx=ctx,
-                        param_hint='conf',
-                    )
-                else:
-                    param_src = ctx.get_parameter_source(conf_key)
-                    # overwrite parameters not specified on command line with config file values
-                    if (
-                        ctx.params[conf_key] is None
-                        or param_src == ParameterSource.DEFAULT
-                    ):
-                        ctx.params[conf_key] = conf_value
-                        ctx.set_parameter_source(conf_key, ParameterSource.COMMANDLINE)
-
-        # Set the default creation_options if no other driver or creation_options have been specified.
-        # This can't be done in a callback as it depends on --driver.
-        if (
-            ctx.get_parameter_source('driver') == ParameterSource.DEFAULT
-            and ctx.get_parameter_source('creation_options') == ParameterSource.DEFAULT
-        ):
-            ctx.params['creation_options'] = RasterFuse.create_out_profile()[
-                'creation_options'
-            ]
-
-        return click.Command.invoke(self, ctx)
-
-
 def _update_existing_keys(default_dict: dict, **kwargs) -> dict:
     """Update values in a dict with args from matching keys in **kwargs."""
     return {k: kwargs.get(k, v) for k, v in default_dict.items()}
@@ -155,6 +112,28 @@ def _configure_logging(verbosity: int):
         warnings.showwarning = warnings_showwarning
         pkg_logger.removeHandler(handler)
         pkg_logger.setLevel(pkg_log_level)
+
+
+def _conf_cb(ctx: click.Context, param: click.Option, value):
+    """Click callback set default option values from a YAML configuration file."""
+    if value is None:
+        return
+    with open(value) as f:
+        try:
+            conf_dict = yaml.safe_load(f)
+        except YAMLError as ex:
+            raise click.BadParameter(str(ex)) from None
+
+    # transform creation_options to a list of NAME=VALUE strings for parsing in
+    # _creation_options_cb()
+    creation_options = conf_dict.get('creation_options', {})
+    if not isinstance(creation_options, dict):
+        raise click.BadParameter(
+            "'creation_options' should be a dictionary of NAME: VALUE pairs."
+        ) from None
+    conf_dict['creation_options'] = [f'{k}={v}' for k, v in creation_options.items()]
+
+    ctx.default_map = conf_dict
 
 
 def _threads_cb(ctx: click.Context, param: click.Option, value):
@@ -222,7 +201,8 @@ def _param_file_cb(ctx: click.Context, param: click.Argument, value):
 
 
 # define click options and arguments common to more than one command
-# TODO: rasterio 1.4 does not accept Path wrapped URLs
+# TODO: allow URIs for all image options/args?
+# TODO: test for path/URI existence here or leave it to called code?
 ref_file_arg = click.argument(
     'ref-file',
     nargs=1,
@@ -320,7 +300,7 @@ def cli(ctx: click.Context, verbose: int, quiet: int):
 
 
 # fuse command
-@cli.command(cls=FuseCommand)
+@cli.command(cls=HomonimCommand)
 # standard options
 @click.argument(
     'src-file',
@@ -358,7 +338,6 @@ def cli(ctx: click.Context, verbose: int, quiet: int):
 )
 @src_bands_option
 @ref_bands_option
-# TODO: allow URIs?
 @click.option(
     '-od',
     '--out-dir',
@@ -409,10 +388,10 @@ def cli(ctx: click.Context, verbose: int, quiet: int):
     '-c',
     '--conf',
     type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path),
-    required=False,
-    default=None,
-    show_default=True,
-    help='Path to a yaml configuration file specifying advanced options (as follow below).',
+    callback=_conf_cb,
+    expose_value=False,
+    is_eager=True,
+    help='Path to a YAML option configuration file.',
 )
 @click.option(
     '-pi/-npi',
@@ -517,7 +496,6 @@ def fuse(
     cmp_bands: tuple[int],
     build_ovw: bool,
     proc_crs: ProcCrs,
-    conf: pathlib.Path,
     param_image: bool,
     force_match: bool,
     **kwargs,
@@ -576,36 +554,39 @@ def fuse(
     for src_i, src_filename in enumerate(src_file):
         out_path = pathlib.Path(out_dir) if out_dir is not None else src_filename.parent
         tqdm.write(f'\nCorrecting {src_filename.name} ({src_i + 1} of {len(src_file)})')
-        with RasterFuse(
-            src_filename,
-            ref_file,
-            proc_crs=proc_crs,
-            src_bands=src_bands,
-            ref_bands=ref_bands,
-            force=force_match,
-        ) as raster_fuse:
-            # construct output filenames
-            post_fix = utils.create_out_postfix(
-                raster_fuse.proc_crs,
-                model=model,
-                kernel_shape=kernel_shape,
-                driver=kwargs.get('driver', 'GTiff'),
-            )
-            corr_filename = out_path.joinpath(src_filename.stem + post_fix)
-            param_filename = (
-                utils.create_param_filename(corr_filename) if param_image else None
-            )
+        try:
+            with RasterFuse(
+                src_filename,
+                ref_file,
+                proc_crs=proc_crs,
+                src_bands=src_bands,
+                ref_bands=ref_bands,
+                force=force_match,
+            ) as raster_fuse:
+                # construct output filenames
+                post_fix = utils.create_out_postfix(
+                    raster_fuse.proc_crs,
+                    model=model,
+                    kernel_shape=kernel_shape,
+                    driver=kwargs.get('driver', 'GTiff'),
+                )
+                corr_filename = out_path.joinpath(src_filename.stem + post_fix)
+                param_filename = (
+                    utils.create_param_filename(corr_filename) if param_image else None
+                )
 
-            start_time = timer()
-            raster_fuse.process(
-                corr_filename,
-                Model(model),
-                kernel_shape,
-                param_filename=param_filename,
-                build_ovw=build_ovw,
-                overwrite=overwrite,
-                **kwargs,
-            )
+                start_time = timer()
+                raster_fuse.process(
+                    corr_filename,
+                    Model(model),
+                    kernel_shape,
+                    param_filename=param_filename,
+                    build_ovw=build_ovw,
+                    overwrite=overwrite,
+                    **kwargs,
+                )
+        except (RasterioIOError, FileExistsError, HomonimError) as ex:
+            raise click.UsageError(str(ex)) from None
 
         tqdm.write(f'Completed in {timer() - start_time:.2f} secs')
         comp_files += [
@@ -719,16 +700,19 @@ def compare(
     ):
         tqdm.write(f'\nComparing {src_filename.name} ({src_i + 1} of {len(src_file)})')
         start_time = timer()
-        with RasterCompare(
-            src_filename,
-            ref_file,
-            proc_crs=proc_crs,
-            src_bands=src_bands,
-            ref_bands=ref_bands,
-            force=force_match,
-        ) as raster_compare:
-            stats_dict[str(src_filename)] = raster_compare.process(**config)
-        tqdm.write(f'Completed in {timer() - start_time:.2f} secs')
+        try:
+            with RasterCompare(
+                src_filename,
+                ref_file,
+                proc_crs=proc_crs,
+                src_bands=src_bands,
+                ref_bands=ref_bands,
+                force=force_match,
+            ) as raster_compare:
+                stats_dict[str(src_filename)] = raster_compare.process(**config)
+            tqdm.write(f'Completed in {timer() - start_time:.2f} secs')
+        except (RasterioIOError, HomonimError) as ex:
+            raise click.UsageError(str(ex)) from None
 
     # print a key for the following tables
     tqdm.write(f'\n\n{raster_compare.schema_table()}')
@@ -779,9 +763,12 @@ def stats(param_files: tuple[pathlib.Path, ...], output: pathlib.Path):
         tqdm.write(
             f'\nProcessing {param_filename.name} ({param_i + 1} of {len(param_files)})'
         )
-        with ParamStats(param_filename) as param_stats:
-            stats_dict[str(param_filename)] = param_stats.stats()
-            meta_dict[str(param_filename)] = param_stats.metadata
+        try:
+            with ParamStats(param_filename) as param_stats:
+                stats_dict[str(param_filename)] = param_stats.stats()
+                meta_dict[str(param_filename)] = param_stats.metadata
+        except RasterioIOError as ex:
+            raise click.UsageError(str(ex)) from None
 
     # print a key for the following tables
     tqdm.write(f'\n\n{param_stats.schema_table}')
