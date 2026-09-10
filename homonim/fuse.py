@@ -28,6 +28,7 @@ import numpy as np
 import rasterio as rio
 from rasterio.dtypes import can_cast_dtype
 from rasterio.enums import Resampling
+from rasterio.errors import NotGeoreferencedWarning
 from rasterio.io import DatasetWriter
 from tqdm.auto import tqdm
 
@@ -120,10 +121,12 @@ class RasterFuse(MatchedPairReader):
     ) -> dict[str, Any]:
         """Return a RasterIO profile for the corrected image."""
         driver = Driver(driver.lower())
-        if nodata is not None and not can_cast_dtype(nodata, dtype):
-            raise HomonimError(
-                f"'nodata' value: {nodata} cannot be safely cast to 'dtype': '{dtype}'"
-            )
+        with np.errstate(invalid='ignore'):
+            if nodata is not None and not can_cast_dtype(nodata, dtype):
+                raise HomonimError(
+                    f"'nodata' value: {nodata} cannot be safely cast to 'dtype': '"
+                    f"{dtype}'"
+                )
         creation_options = creation_options or (
             _gtiff_creation_options if driver is Driver.gtiff else _cog_creation_options
         )
@@ -568,6 +571,10 @@ class RasterFuse(MatchedPairReader):
                 self._set_param_band_tags(param_im)
             else:
                 param_im = None
+
+            # ignore NotGeoreferencedWarning from RasterArray.reproject()
+            stack.enter_context(warnings.catch_warnings())
+            warnings.simplefilter('ignore', category=NotGeoreferencedWarning)
 
             # correct blocks in a thread pool
             overlap = utils.overlap_for_kernel(kernel_shape)
