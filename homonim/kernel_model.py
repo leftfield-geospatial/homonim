@@ -13,6 +13,7 @@
 # You should have received a copy of the GNU Affero General Public License along with
 # Homonim. If not, see <https://www.gnu.org/licenses/>.
 import warnings
+from typing import Any, ClassVar
 
 import cv2 as cv
 import numpy as np
@@ -67,18 +68,24 @@ def full_coverage_mask(
 
 
 class KernelModel:
-    default_kernel_shape = (5, 5)
-    default_model = Model.gain_blk_offset
+    _default_config: ClassVar[dict[str, Any]] = dict(
+        model=Model.gain_blk_offset,
+        kernel_shape=(5, 5),
+        r2_inpaint_thresh=0.25,
+        mask_partial=False,
+        downsampling=Resampling.average,
+        upsampling=Resampling.cubic_spline,
+    )
 
     def __init__(
         self,
-        model: Model = default_model,
-        kernel_shape: tuple[int, int] = default_kernel_shape,
+        model: Model = _default_config['model'],
+        kernel_shape: tuple[int, int] = _default_config['model'],
         find_r2: bool = False,
-        r2_inpaint_thresh: float = 0.25,
-        mask_partial: bool = False,
-        downsampling: Resampling = Resampling.average,
-        upsampling: Resampling = Resampling.cubic_spline,
+        r2_inpaint_thresh: float = _default_config['r2_inpaint_thresh'],
+        mask_partial: bool = _default_config['mask_partial'],
+        downsampling: Resampling = _default_config['downsampling'],
+        upsampling: Resampling = _default_config['upsampling'],
     ):
         """
         Base class for estimating and applying kernel model parameters, where the

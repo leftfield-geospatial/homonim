@@ -22,7 +22,7 @@ from contextlib import ExitStack
 from itertools import product
 from os import PathLike, fspath
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 import numpy as np
 import rasterio as rio
@@ -58,6 +58,13 @@ _cog_creation_options = dict(
 
 
 class RasterFuse(MatchedPairReader):
+    # default values for RasterFuse.process()
+    _default_config: ClassVar[dict[str, Any]] = dict(
+        driver=Driver.gtiff,
+        threads=0,
+        max_block_mem=100,
+    )
+
     def __init__(
         self,
         src_filename: str | PathLike,
@@ -244,10 +251,10 @@ class RasterFuse(MatchedPairReader):
 
     @staticmethod
     def create_model_config(
-        r2_inpaint_thresh: float = 0.25,
-        mask_partial: bool = False,
-        downsampling: Resampling = Resampling.average,
-        upsampling: Resampling = Resampling.cubic_spline,
+        r2_inpaint_thresh: float = KernelModel._default_config['r2_inpaint_thresh'],
+        mask_partial: bool = KernelModel._default_config['mask_partial'],
+        downsampling: Resampling = KernelModel._default_config['downsampling'],
+        upsampling: Resampling = KernelModel._default_config['upsampling'],
     ) -> dict[str, Any]:
         """
         Return a model configuration that can be passed as the ``model_config``
@@ -290,7 +297,8 @@ class RasterFuse(MatchedPairReader):
 
     @staticmethod
     def create_block_config(
-        threads: int = 0, max_block_mem: float = 100
+        threads: int = _default_config['threads'],
+        max_block_mem: float = _default_config['max_block_mem'],
     ) -> dict[str, Any]:
         """
         Return a block processing configuration that can be passed as the
@@ -323,7 +331,7 @@ class RasterFuse(MatchedPairReader):
 
     @staticmethod
     def create_out_profile(
-        driver: str | Driver = Driver.gtiff,
+        driver: str | Driver = _default_config['driver'],
         dtype: str = RasterArray.default_dtype,
         nodata: int | float | None = RasterArray.default_nodata,
         creation_options: dict[str, Any] | None = None,
@@ -373,8 +381,8 @@ class RasterFuse(MatchedPairReader):
     def process(
         self,
         corr_filename: str | PathLike,
-        model: Model = KernelModel.default_model,
-        kernel_shape: tuple[int, int] = KernelModel.default_kernel_shape,
+        model: Model = KernelModel._default_config['model'],
+        kernel_shape: tuple[int, int] = KernelModel._default_config['kernel_shape'],
         param_filename: str | PathLike | None = None,
         build_ovw: bool = True,
         overwrite: bool = False,
@@ -382,16 +390,16 @@ class RasterFuse(MatchedPairReader):
         out_profile: dict[str, Any] | None = None,
         block_config: dict[str, Any] | None = None,
         *,
-        r2_inpaint_thresh: float = 0.25,
-        mask_partial: bool = False,
-        downsampling: Resampling = Resampling.average,
-        upsampling: Resampling = Resampling.cubic_spline,
-        driver: str | Driver = Driver.gtiff,
+        r2_inpaint_thresh: float = KernelModel._default_config['r2_inpaint_thresh'],
+        mask_partial: bool = KernelModel._default_config['mask_partial'],
+        downsampling: Resampling = KernelModel._default_config['downsampling'],
+        upsampling: Resampling = KernelModel._default_config['upsampling'],
+        driver: str | Driver = _default_config['driver'],
         dtype: str = RasterArray.default_dtype,
         nodata: int | float | None = RasterArray.default_nodata,
         creation_options: dict[str, Any] | None = None,
-        threads: int = 0,
-        max_block_mem: float = 100,
+        threads: int = _default_config['threads'],
+        max_block_mem: float = _default_config['max_block_mem'],
     ):
         """
         Correct the source image to surface reflectance.
