@@ -15,21 +15,23 @@
 
 import json
 import logging
-import pathlib
 import re
 import warnings
 from contextlib import contextmanager
+from pathlib import Path
 from timeit import default_timer as timer
 
 import click
 import rasterio as rio
 import yaml
+from rasterio.dtypes import dtype_fwd
 from rasterio.errors import RasterioIOError
 from tqdm.auto import tqdm
 from tqdm.contrib.logging import _TqdmLoggingHandler
 from yaml import YAMLError
 
 from homonim import (
+    Driver,
     Model,
     ParamStats,
     ProcCrs,
@@ -116,6 +118,7 @@ def _configure_logging(verbosity: int):
 
 def _conf_cb(ctx: click.Context, param: click.Option, value):
     """Click callback set default option values from a YAML configuration file."""
+    # adapted from: https://jwodder.github.io/kbits/posts/click-config/
     if value is None:
         return
     with open(value) as f:
@@ -190,7 +193,7 @@ def _creation_options_cb(ctx: click.Context, param: click.Option, value):
 def _param_file_cb(ctx: click.Context, param: click.Argument, value):
     """click callback to validate parameter image file(s)."""
     for filename in value:
-        filename = pathlib.Path(filename)
+        filename = Path(filename)
         try:
             utils.validate_param_image(filename)
         except (FileNotFoundError, ImageFormatError):
@@ -207,14 +210,13 @@ ref_file_arg = click.argument(
     'ref-file',
     nargs=1,
     metavar='REFERENCE',
-    type=click.Path(exists=False, dir_okay=False, path_type=pathlib.Path),
-    # help='Path/URI of a reference image.',
+    type=click.Path(exists=False, dir_okay=False, path_type=Path),
 )
 threads_option = click.option(
     '-t',
     '--threads',
     type=click.INT,
-    default=RasterFuse.create_block_config()['threads'],
+    default=RasterFuse._default_config['threads'],
     show_default=True,
     callback=_threads_cb,
     help='Number of image blocks to process concurrently (0 = use all processors).',
@@ -223,7 +225,7 @@ max_block_mem_option = click.option(
     '-mbm',
     '--max-block-mem',
     type=click.FLOAT,
-    default=RasterFuse.create_block_config()['max_block_mem'],
+    default=RasterFuse._default_config['max_block_mem'],
     show_default=True,
     help='Maximum image block size in megabytes (0 = block corresponds to a whole band).',
 )
@@ -231,7 +233,7 @@ downsampling_option = click.option(
     '-ds',
     '--downsampling',
     type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
-    default=RasterFuse.create_model_config()['downsampling'].name,
+    default=KernelModel._default_config['downsampling'].name,
     show_default=True,
     help='Resampling method for re-projecting from high to low resolution.  See the `rasterio docs '
     '<https://rasterio.readthedocs.io/en/latest/api/rasterio.enums.html#rasterio.enums.Resampling>`_ for '
@@ -241,7 +243,7 @@ upsampling_option = click.option(
     '-us',
     '--upsampling',
     type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
-    default=RasterFuse.create_model_config()['upsampling'].name,
+    default=KernelModel._default_config['downsampling'].name,
     show_default=True,
     help='Resampling method for re-projecting from low to high resolution.  See the `rasterio docs '
     '<https://rasterio.readthedocs.io/en/latest/api/rasterio.enums.html#rasterio.enums.Resampling>`_ for '
@@ -250,10 +252,7 @@ upsampling_option = click.option(
 output_option = click.option(
     '-op',
     '--output',
-    type=click.Path(
-        exists=False, dir_okay=False, writable=True, path_type=pathlib.Path
-    ),
-    default=None,
+    type=click.Path(exists=False, dir_okay=False, writable=True, path_type=Path),
     help='Write results to this json file.',
 )
 src_bands_option = click.option(
@@ -262,7 +261,6 @@ src_bands_option = click.option(
     'src_bands',
     type=click.INT,
     multiple=True,
-    default=None,
     show_default='all spectral or non-alpha bands.',
     help='Source band index(es) to process (1 based).',
 )
@@ -272,7 +270,6 @@ ref_bands_option = click.option(
     'ref_bands',
     type=click.INT,
     multiple=True,
-    default=None,
     show_default='all spectral or non-alpha bands.',
     help='Reference band index(es) to match with source band(s) (1 based).',
 )
@@ -303,18 +300,17 @@ def cli(ctx: click.Context, verbose: int, quiet: int):
 @cli.command(cls=HomonimCommand)
 # standard options
 @click.argument(
-    'src-file',
+    'src_files',
     nargs=-1,
     metavar='SOURCE...',
-    type=click.Path(exists=False, dir_okay=False, path_type=pathlib.Path),
-    # help='Path/URI(s) of source image(s) to be corrected.',
+    type=click.Path(exists=False, dir_okay=False, path_type=Path),
 )
 @ref_file_arg
 @click.option(
     '-m',
     '--model',
-    type=click.Choice([m.value for m in Model], case_sensitive=False),
-    default=KernelModel.default_model.value,
+    type=click.Choice(Model, case_sensitive=False),
+    default=KernelModel._default_config['model'],
     show_default=True,
     help="""Correction model.
 
@@ -330,7 +326,7 @@ def cli(ctx: click.Context, verbose: int, quiet: int):
     '--kernel-shape',
     type=click.Tuple([click.INT, click.INT]),
     nargs=2,
-    default=KernelModel.default_kernel_shape,
+    default=KernelModel._default_config['kernel_shape'],
     show_default=True,
     metavar='HEIGHT WIDTH',
     help='Kernel height and width in pixels of the :option:`--proc-crs <homonim-fuse --proc-crs>` image. Larger '
@@ -343,7 +339,7 @@ def cli(ctx: click.Context, verbose: int, quiet: int):
     '--out-dir',
     type=click.Path(exists=True, file_okay=False, writable=True),
     show_default='source image directory.',
-    help='Directory in which to place corrected image(s).',
+    help='Path of the output image directory.',
 )
 @click.option(
     '-o',
@@ -351,7 +347,7 @@ def cli(ctx: click.Context, verbose: int, quiet: int):
     is_flag=True,
     default=False,
     show_default=True,
-    help='Overwrite existing output file(s).',
+    help='Overwrite existing output images(s).',
 )
 # TODO: does this work in front of an argument?  or should it be handles like oty rpc's --gcp-refine?
 @click.option(
@@ -359,7 +355,7 @@ def cli(ctx: click.Context, verbose: int, quiet: int):
     '--compare',
     'cmp_file',
     metavar='FILE',
-    type=click.Path(exists=False, dir_okay=False, path_type=pathlib.Path),
+    type=click.Path(exists=False, dir_okay=False, path_type=Path),
     is_flag=False,
     flag_value='ref',
     help='Compare source and corrected images with this reference image.  If no ``FILE`` value is given, source '
@@ -371,7 +367,6 @@ def cli(ctx: click.Context, verbose: int, quiet: int):
     'cmp_bands',
     type=click.INT,
     multiple=True,
-    default=None,
     show_default='all spectral or non-alpha bands.',
     help='Comparison reference band index(es) that correspond (spectrally) to '
     ':option:`--src-band <homonim-fuse --src-band>` (s).',
@@ -387,7 +382,7 @@ def cli(ctx: click.Context, verbose: int, quiet: int):
 @click.option(
     '-c',
     '--conf',
-    type=click.Path(exists=True, dir_okay=False, readable=True, path_type=pathlib.Path),
+    type=click.Path(exists=True, dir_okay=False, readable=True, path_type=Path),
     callback=_conf_cb,
     expose_value=False,
     is_eager=True,
@@ -406,7 +401,7 @@ def cli(ctx: click.Context, verbose: int, quiet: int):
     '-mp/-nmp',
     '--mask-partial/--no-mask-partial',
     type=click.BOOL,
-    default=RasterFuse.create_model_config()['mask_partial'],
+    default=KernelModel._default_config['mask_partial'],
     show_default=True,
     help='Mask output pixels produced from partial kernel or source / reference image coverage.',
 )
@@ -418,7 +413,7 @@ def cli(ctx: click.Context, verbose: int, quiet: int):
     '-rit',
     '--r2-inpaint-thresh',
     type=click.FloatRange(min=0, max=1),
-    default=RasterFuse.create_model_config()['r2_inpaint_thresh'],
+    default=KernelModel._default_config['r2_inpaint_thresh'],
     show_default=True,
     metavar='FLOAT 0-1',
     help='R\N{SUPERSCRIPT TWO} threshold below which to inpaint model parameters from surrounding areas '
@@ -427,8 +422,8 @@ def cli(ctx: click.Context, verbose: int, quiet: int):
 @click.option(
     '-pc',
     '--proc-crs',
-    type=click.Choice([pc.value for pc in ProcCrs], case_sensitive=False),
-    default=ProcCrs.auto.value,
+    type=click.Choice(ProcCrs, case_sensitive=False),
+    default=ProcCrs.auto,
     show_default=True,
     help="""The image CRS in which to estimate correction parameters.
     \b
@@ -440,20 +435,15 @@ def cli(ctx: click.Context, verbose: int, quiet: int):
 )
 @click.option(
     '--driver',
-    type=click.Choice(
-        tuple(set(rio.drivers.raster_driver_extensions().values())),
-        case_sensitive=False,
-    ),
-    default=RasterFuse.create_out_profile()['driver'],
+    type=click.Choice(Driver, case_sensitive=False),
+    default=RasterFuse._default_config['driver'],
     show_default=True,
-    metavar='TEXT',
-    help='Output image format driver.  See the `GDAL docs '
-    '<https://gdal.org/en/stable/drivers/raster/index.html>`_ for details.',
+    help='Corrected image format driver.',
 )
 @click.option(
     '--dtype',
-    type=click.Choice(list(rio.dtypes.dtype_fwd.values())[1:8], case_sensitive=False),
-    default=RasterFuse.create_out_profile()['dtype'],
+    type=click.Choice(list(dtype_fwd.values())[1:8], case_sensitive=False),
+    default=RasterArray.default_dtype,
     show_default=True,
     help=f'Output image data type.  If an integer type, values are rounded and clipped to its range.  Valid for '
     f'corrected images only, parameter images always use {RasterArray.default_dtype}.',
@@ -464,7 +454,7 @@ def cli(ctx: click.Context, verbose: int, quiet: int):
     type=click.STRING,
     callback=_nodata_cb,
     metavar='[NUMBER|null|nan]',
-    default=RasterFuse.create_out_profile()['nodata'],
+    default=RasterArray.default_nodata,
     show_default=True,
     help=f'Output image nodata value.  Valid for corrected images only, parameter images always use '
     f'{RasterArray.default_nodata}.  If null, an internal mask is written (recommended for lossy '
@@ -476,23 +466,27 @@ def cli(ctx: click.Context, verbose: int, quiet: int):
     metavar='NAME=VALUE',
     multiple=True,
     default=(),
+    show_default='auto',
     callback=_creation_options_cb,
-    help='Driver specific image creation option(s) for the output image(s).  See the `GDAL docs '
-    '<https://gdal.org/en/stable/drivers/raster/index.html>`_ for details.',
+    help='Corrected image :option:`--driver` specific creation option(s).  If '
+    'supplied, no defaults are set, and these are the only options used.  See the '
+    'GDAL `GTiff <https://gdal.org/en/latest/drivers/raster/gtiff.html#creation'
+    '-options>`__ and `COG <https://gdal.org/en/latest/drivers/raster/cog.html'
+    '#creation-options>`__ docs for available options.',
 )
 @force_match_option
 @click.pass_context
 def fuse(
     ctx: click.Context,
-    src_file: tuple[pathlib.Path, ...],
-    ref_file: pathlib.Path,
+    src_files: tuple[Path, ...],
+    ref_file: Path,
     model: Model,
     kernel_shape: tuple[int, int],
     src_bands: tuple[int],
     ref_bands: tuple[int],
-    out_dir: pathlib.Path,
+    out_dir: Path,
     overwrite: bool,
-    cmp_file: pathlib.Path,
+    cmp_file: Path,
     cmp_bands: tuple[int],
     build_ovw: bool,
     proc_crs: ProcCrs,
@@ -541,46 +535,39 @@ def fuse(
 
         homonim fuse -sb 2 -sb 3 -rb 7 -rb 8 source.tif reference.tif
     """
-    # build configuration dictionaries for RasterFuse
-    # block_config = _update_existing_keys(RasterFuse.create_block_config(), **kwargs)
-    # model_config = _update_existing_keys(RasterFuse.create_model_config(), **kwargs)
-    # out_profile = _update_existing_keys(RasterFuse.create_out_profile(), **kwargs)
-    # config = dict(
-    #     block_config=block_config, model_config=model_config, out_profile=out_profile
-    # )
-    comp_files = []
+    cmp_src_files = []
 
     # iterate over and correct source file(s)
-    for src_i, src_filename in enumerate(src_file):
-        out_path = pathlib.Path(out_dir) if out_dir is not None else src_filename.parent
-        tqdm.write(f'\nCorrecting {src_filename.name} ({src_i + 1} of {len(src_file)})')
+    for src_i, src_file in enumerate(src_files):
+        tqdm.write(f'\nCorrecting {src_file.name} ({src_i + 1} of {len(src_files)})')
+        out_path = Path(out_dir) if out_dir else src_file.parent
         try:
             with RasterFuse(
-                src_filename,
+                src_file,
                 ref_file,
                 proc_crs=proc_crs,
                 src_bands=src_bands,
                 ref_bands=ref_bands,
                 force=force_match,
-            ) as raster_fuse:
+            ) as fuse:
                 # construct output filenames
-                post_fix = utils.create_out_postfix(
-                    raster_fuse.proc_crs,
-                    model=model,
-                    kernel_shape=kernel_shape,
-                    driver=kwargs.get('driver', 'GTiff'),
+                postfix = (
+                    f'FUSE_c{fuse.proc_crs.upper()}_m{model.upper()}_'
+                    f'k{kernel_shape[0]}_{kernel_shape[1]}'
                 )
-                corr_filename = out_path.joinpath(src_filename.stem + post_fix)
-                param_filename = (
-                    utils.create_param_filename(corr_filename) if param_image else None
+                corr_file = out_path.joinpath(f'{src_file.stem}_{postfix}.tif')
+                param_file = (
+                    out_path.joinpath(f'{corr_file.stem}_PARAM.tif')
+                    if param_image
+                    else None
                 )
 
                 start_time = timer()
-                raster_fuse.process(
-                    corr_filename,
+                fuse.process(
+                    corr_file,
                     Model(model),
                     kernel_shape,
-                    param_filename=param_filename,
+                    param_filename=param_file,
                     build_ovw=build_ovw,
                     overwrite=overwrite,
                     **kwargs,
@@ -589,10 +576,8 @@ def fuse(
             raise click.UsageError(str(ex)) from None
 
         tqdm.write(f'Completed in {timer() - start_time:.2f} secs')
-        comp_files += [
-            src_filename,
-            corr_filename,
-        ]  # build a list of files to pass to compare
+        # build a list of files to pass to compare
+        cmp_src_files += [src_file, corr_file]
 
     # compare source and corrected files with reference (invokes compare command with relevant parameters)
     if cmp_file:
@@ -601,16 +586,14 @@ def fuse(
             cmp_bands = ref_bands if not cmp_bands or not len(cmp_bands) else cmp_bands
 
         cmp_cfg = {
-            k: kwargs[k]
-            for k, v in RasterCompare.create_config().items()
-            if k in kwargs
+            k: kwargs[k] for k in RasterCompare._default_config.keys() if k in kwargs
         }
         ctx.invoke(
             compare,
-            src_file=comp_files,
+            src_files=cmp_src_files,
             ref_file=cmp_file,
             proc_crs=proc_crs,
-            src_bands=[src_bands, None] * len(src_file),
+            src_bands=[src_bands, None] * len(src_files),
             ref_bands=cmp_bands,
             force_match=force_match,
             **cmp_cfg,
@@ -620,11 +603,10 @@ def fuse(
 # compare command
 @cli.command(cls=HomonimCommand)
 @click.argument(
-    'src-file',
+    'src_files',
     nargs=-1,
     metavar='IMAGE...',
-    type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
-    # help='Path/URI(s) of image(s) to compare with :option:`REFERENCE`.',
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
 @ref_file_arg
 @src_bands_option
@@ -637,8 +619,8 @@ def fuse(
 @click.option(
     '-pc',
     '--proc-crs',
-    type=click.Choice([pc.value for pc in ProcCrs], case_sensitive=False),
-    default=ProcCrs.auto.value,
+    type=click.Choice(ProcCrs, case_sensitive=False),
+    default=ProcCrs.auto,
     show_default=True,
     help="""The image CRS in which to compare images.
 \b
@@ -650,11 +632,11 @@ def fuse(
 )
 @force_match_option
 def compare(
-    src_file: tuple[pathlib.Path, ...],
-    ref_file: pathlib.Path,
+    src_files: tuple[Path, ...],
+    ref_file: Path,
     src_bands: tuple[int],
     ref_bands: tuple[int],
-    output: pathlib.Path,
+    output: Path,
     proc_crs: ProcCrs,
     force_match,
     **kwargs,
@@ -684,32 +666,29 @@ def compare(
 
         homonim compare source.tif corrected.tif reference.tif
     """
-
-    # build configuration dictionary
-    config = RasterCompare.create_config(**kwargs)
     stats_dict = {}
     # if src_bands comes from compare CLI, convert to list[src_bands, ...] with one element for each source file
     src_bands_list = (
-        [src_bands] * len(src_file)
+        [src_bands] * len(src_files)
         if not src_bands or all([isinstance(src_band, int) for src_band in src_bands])
         else src_bands
     )
     # iterate over source files, comparing with reference
-    for src_i, (src_filename, src_bands) in enumerate(
-        zip(src_file, src_bands_list, strict=True)
+    for src_i, (src_file, src_bands) in enumerate(
+        zip(src_files, src_bands_list, strict=True)
     ):
-        tqdm.write(f'\nComparing {src_filename.name} ({src_i + 1} of {len(src_file)})')
+        tqdm.write(f'\nComparing {src_file.name} ({src_i + 1} of {len(src_files)})')
         start_time = timer()
         try:
             with RasterCompare(
-                src_filename,
+                src_file,
                 ref_file,
                 proc_crs=proc_crs,
                 src_bands=src_bands,
                 ref_bands=ref_bands,
                 force=force_match,
             ) as raster_compare:
-                stats_dict[str(src_filename)] = raster_compare.process(**config)
+                stats_dict[str(src_file)] = raster_compare.process(**kwargs)
             tqdm.write(f'Completed in {timer() - start_time:.2f} secs')
         except (RasterioIOError, HomonimError) as ex:
             raise click.UsageError(str(ex)) from None
@@ -719,17 +698,15 @@ def compare(
 
     # print a results table per source image file
     summ_dict = {}
-    for src_filename, im_stats_dict in stats_dict.items():
-        tqdm.write(
-            f'\n\n{src_filename!s}:\n\n{RasterCompare.stats_table(im_stats_dict)}'
-        )
-        summ_dict[pathlib.Path(src_filename).name] = im_stats_dict['Mean'].copy()
+    for src_file, im_stats_dict in stats_dict.items():
+        tqdm.write(f'\n\n{src_file!s}:\n\n{RasterCompare.stats_table(im_stats_dict)}')
+        summ_dict[Path(src_file).name] = im_stats_dict['Mean'].copy()
 
     # print a summary results table comparing all source files
     if len(summ_dict) > 1:
         tqdm.write(
             f'\n\nSummary over bands:\n\n'
-            f'{RasterCompare.stats_table(summ_dict, key_header="file")}'
+            f'{RasterCompare.stats_table(summ_dict, key_heading="file")}'
         )
 
     if output is not None:
@@ -743,12 +720,11 @@ def compare(
     'param-files',
     nargs=-1,
     metavar='PARAM...',
-    type=click.Path(exists=True, dir_okay=False, path_type=pathlib.Path),
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
     callback=_param_file_cb,
-    # help='Path/URI(s) of the parameter image(s).',
 )
 @output_option
-def stats(param_files: tuple[pathlib.Path, ...], output: pathlib.Path):
+def stats(param_files: tuple[Path, ...], output: Path):
     """
     Report parameter statistics.
 
@@ -775,7 +751,7 @@ def stats(param_files: tuple[pathlib.Path, ...], output: pathlib.Path):
 
     # iterate over stored result(s) and print
     for param_filename in stats_dict.keys():
-        tqdm.write(f'\n{pathlib.Path(param_filename).name}:\n')
+        tqdm.write(f'\n{Path(param_filename).name}:\n')
         tqdm.write(meta_dict[param_filename])
         tqdm.write(f'Stats:\n\n{ParamStats.stats_table(stats_dict[param_filename])}\n')
 
