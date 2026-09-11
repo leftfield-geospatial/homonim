@@ -79,11 +79,6 @@ class HomonimCommand(click.Command):
         return click.Command.get_help(self, ctx)
 
 
-def _update_existing_keys(default_dict: dict, **kwargs) -> dict:
-    """Update values in a dict with args from matching keys in **kwargs."""
-    return {k: kwargs.get(k, v) for k, v in default_dict.items()}
-
-
 @contextmanager
 def _configure_logging(verbosity: int):
     """Context manager to configure logging level, redirect warnings to the logger
@@ -139,36 +134,24 @@ def _conf_cb(ctx: click.Context, param: click.Option, value):
     ctx.default_map = conf_dict
 
 
-def _threads_cb(ctx: click.Context, param: click.Option, value):
-    """click callback to validate --threads."""
-    try:
-        threads = utils.validate_threads(value)
-    except Exception as ex:
-        raise click.BadParameter(str(ex)) from None
-    return threads
-
-
 def _nodata_cb(ctx: click.Context, param: click.Option, value: str):
     """click callback to convert --nodata value to None, nan or float."""
     # adapted from rasterio https://github.com/rasterio/rasterio
-    if value is None or value.lower() in ['null', 'nil', 'none', 'nada']:
+    if value is None or value.lower() in ['null', 'nil', 'none']:
         return None
     else:
-        # check value is a number and can be cast to output dtype
         try:
             value = float(value.lower())
         except (TypeError, ValueError):
             raise click.BadParameter(
                 f'{value} is not a number', param=param, param_hint='--nodata'
             ) from None
-
         return value
 
 
 def _creation_options_cb(ctx: click.Context, param: click.Option, value):
-    """
-    click callback to validate and parse multiple creation options (e.g. `-co KEY1=VAL1 -co KEY2=VAL2).
-    Note: `==VAL` breaks this as `str.split('=', 1)` is used.
+    """click callback to validate and parse multiple creation options (e.g. -co
+    KEY1=VAL1 -co KEY2=VAL2).
     """
     # adapted from rasterio https://github.com/rasterio/rasterio
     if not value:
@@ -183,31 +166,16 @@ def _creation_options_cb(ctx: click.Context, param: click.Option, value):
                 k = k.lower()
                 v = v.lower()
                 out[k] = (
-                    None
-                    if v.lower() in ['none', 'null', 'nil', 'nada']
-                    else yaml.safe_load(v)
+                    None if v.lower() in ['none', 'null', 'nil'] else yaml.safe_load(v)
                 )
         return out
-
-
-def _param_file_cb(ctx: click.Context, param: click.Argument, value):
-    """click callback to validate parameter image file(s)."""
-    for filename in value:
-        filename = Path(filename)
-        try:
-            utils.validate_param_image(filename)
-        except (FileNotFoundError, ImageFormatError):
-            raise click.BadParameter(
-                f'{filename.name} is not a valid parameter image.', param=param
-            ) from None
-    return value
 
 
 # define click options and arguments common to more than one command
 # TODO: allow URIs for all image options/args?
 # TODO: test for path/URI existence here or leave it to called code?
 ref_file_arg = click.argument(
-    'ref-file',
+    'ref_file',
     nargs=1,
     metavar='REFERENCE',
     type=click.Path(exists=False, dir_okay=False, path_type=Path),
@@ -218,7 +186,6 @@ threads_option = click.option(
     type=click.INT,
     default=RasterFuse._default_config['threads'],
     show_default=True,
-    callback=_threads_cb,
     help='Number of image blocks to process concurrently (0 = use all processors).',
 )
 max_block_mem_option = click.option(
@@ -717,11 +684,10 @@ def compare(
 
 @cli.command(cls=HomonimCommand)
 @click.argument(
-    'param-files',
+    'param_files',
     nargs=-1,
     metavar='PARAM...',
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    callback=_param_file_cb,
 )
 @output_option
 def stats(param_files: tuple[Path, ...], output: Path):
@@ -743,7 +709,7 @@ def stats(param_files: tuple[Path, ...], output: Path):
             with ParamStats(param_filename) as param_stats:
                 stats_dict[str(param_filename)] = param_stats.stats()
                 meta_dict[str(param_filename)] = param_stats.metadata
-        except RasterioIOError as ex:
+        except (RasterioIOError, HomonimError) as ex:
             raise click.UsageError(str(ex)) from None
 
     # print a key for the following tables
