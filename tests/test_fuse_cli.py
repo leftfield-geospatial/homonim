@@ -364,7 +364,10 @@ def test_r2_inpaint_thresh(
     with rio.open(basic_fuse_cli_params.corr_file, 'r') as out_ds:
         tags_dict = out_ds.tags()
         assert 'FUSE_R2_INPAINT_THRESH' in tags_dict
-        assert yaml.safe_load(tags_dict['FUSE_R2_INPAINT_THRESH']) == r2_inpaint_thresh
+        r2_inpaint_thresh_tag = yaml.safe_load(tags_dict['FUSE_R2_INPAINT_THRESH'])
+        assert r2_inpaint_thresh_tag == (
+            'None' if r2_inpaint_thresh == 0 else r2_inpaint_thresh
+        )
 
 
 @pytest.mark.parametrize('bad_r2_inpaint_thresh', [-1, 2])

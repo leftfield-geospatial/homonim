@@ -134,6 +134,11 @@ def _conf_cb(ctx: click.Context, param: click.Option, value):
     ctx.default_map = conf_dict
 
 
+def _r2_inpaint_thresh_cb(ctx: click.Context, param: click.Option, value: float):
+    """click callback to convert --r2-inpaint-thresh 0 value to None."""
+    return None if value == 0 else value
+
+
 def _nodata_cb(ctx: click.Context, param: click.Option, value: str):
     """click callback to convert --nodata value to None, nan or float."""
     # adapted from rasterio https://github.com/rasterio/rasterio
@@ -366,9 +371,9 @@ def cli(ctx: click.Context, verbose: int, quiet: int):
     '-rit',
     '--r2-inpaint-thresh',
     type=click.FloatRange(min=0, max=1),
+    callback=_r2_inpaint_thresh_cb,
     default=KernelModel._default_config['r2_inpaint_thresh'],
     show_default=True,
-    # TODO: add callback to convert 0->None, and test for this too
     help='R\N{SUPERSCRIPT TWO} threshold below which to inpaint model offsets from '
     'surrounding values. Valid for the ``gain-offset`` :option:`--model` only.  '
     'If ``0``, no inpainting is done.',
