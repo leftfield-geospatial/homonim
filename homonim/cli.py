@@ -306,14 +306,11 @@ def cli(ctx: click.Context, verbose: int, quiet: int):
     show_default=True,
     help='Overwrite existing output images.',
 )
-# TODO: does this work in front of an argument?  or should it be handles like oty rpc's --gcp-refine?
 @click.option(
     '-cmp',
     '--compare',
     'cmp_file',
     type=click.Path(exists=False, dir_okay=False, path_type=Path),
-    is_flag=False,
-    flag_value='ref',
     help="Path of an image to compare source and corrected images with. If ``'ref'``,"
     ' source and corrected images are compared with the REFERENCE.',
 )
@@ -412,13 +409,13 @@ def cli(ctx: click.Context, verbose: int, quiet: int):
 )
 @click.option(
     '-co',
-    # TODO: rename to --creation-option
     '--creation-options',
     metavar='NAME=VALUE',
+    type=click.STRING,
     multiple=True,
+    callback=_creation_options_cb,
     default=(),
     show_default='auto',
-    callback=_creation_options_cb,
     help='Corrected image :option:`--driver` specific creation options.  If '
     'supplied, no defaults are set, and these are the only options used.  See the '
     'GDAL `GTiff <https://gdal.org/en/latest/drivers/raster/gtiff.html#creation'
@@ -510,7 +507,7 @@ def fuse(
     # compare source and corrected files with reference (invokes compare command with
     # relevant parameters)
     if cmp_file:
-        if str(cmp_file) == 'ref':
+        if str(cmp_file).lower() == 'ref':
             cmp_file = ref_file
             if cmp_bands:
                 warnings.warn(
