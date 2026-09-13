@@ -26,7 +26,7 @@ from rasterio.warp import Resampling
 
 from homonim import utils
 from homonim.cli import cli
-from homonim.enums import Model, ProcCrs
+from homonim.enums import Driver, Model, ProcCrs
 from homonim.fuse import RasterFuse
 from tests.conftest import FuseCliParams, str_contain_no_space
 
@@ -81,6 +81,7 @@ def test_fuse_defaults(runner: CliRunner, default_fuse_cli_params: FuseCliParams
     assert default_fuse_cli_params.corr_file.exists()
 
 
+# TODO: remove re-testing of click functionality
 def test_method_error(runner: CliRunner, default_fuse_cli_params: FuseCliParams):
     """Test unknown model generates an error."""
     cli_str = default_fuse_cli_params.cli_str + ' -m unk'
@@ -131,12 +132,12 @@ def test_overwrite(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
 
 
 def test_compare(runner: CliRunner, ref_file_100cm_float, src_file_100cm_float):
-    """Test --compare, in flag and value configurations, against expected output."""
+    """Test --compare against expected output."""
     ref_file = ref_file_100cm_float
     src_file = src_file_100cm_float
     # test --compare in flag (no value), and value configuration
     cli_strs = [
-        f'fuse  {src_file} {ref_file} --compare',
+        f'fuse  {src_file} {ref_file} --compare ref',
         f'fuse {src_file} {ref_file} --compare {ref_file_100cm_float} -o',
     ]
     for cli_str in cli_strs:
@@ -384,35 +385,38 @@ def test_r2_inpaint_thresh_error(
 @pytest.mark.parametrize(
     'driver, dtype, nodata',
     [
-        ('GTiff', 'float64', float('nan')),
-        ('GTiff', 'uint16', 65535),
-        ('COG', 'uint8', 0),
-        ('GTiff', 'uint8', None),
+        (Driver.gtiff, 'float64', float('nan')),
+        (Driver.gtiff, 'uint16', 65535),
+        (Driver.cog, 'uint8', 0),
+        (Driver.gtiff, 'uint8', None),
     ],
 )
-def test_out_profile(
+def test_corr_profile(
     runner: CliRunner,
     basic_fuse_cli_params: FuseCliParams,
-    driver: str,
+    driver: Driver,
     dtype: str,
     nodata: float,
 ):
-    """Test --out-* options generate a correctly configured output."""
+    """Test the --driver, --dtype and --nodata options generate a correctly configured
+    image.
+    """
     cli_str = (
         basic_fuse_cli_params.cli_str
         + f' --driver {driver} --dtype {dtype} --nodata {nodata}'
     )
-    ext_dict = rio.drivers.raster_driver_extensions()
-    ext_idx = list(ext_dict.values()).index(driver)
-    ext = list(ext_dict.keys())[ext_idx]
-    corr_file = basic_fuse_cli_params.corr_file.parent.joinpath(
-        f'{basic_fuse_cli_params.corr_file.stem}.{ext}'
-    )
+
     result = runner.invoke(cli, cli_str.split())
     assert result.exit_code == 0
-    assert corr_file.exists()
-    with rio.open(corr_file, 'r') as out_ds:
-        assert out_ds.driver == driver
+    assert basic_fuse_cli_params.corr_file.exists()
+    with rio.open(basic_fuse_cli_params.corr_file, 'r') as out_ds:
+        assert out_ds.driver.lower() == 'gtiff'
+        if driver is Driver.cog:
+            # TODO: GDAL 3.13.3 sets LAYOUT=COG for any GeoTIFF with 1 tile so this
+            #  this test will pass for --driver gtiff too
+            im_struct = out_ds.tags(ns='IMAGE_STRUCTURE')
+            assert im_struct['LAYOUT'].lower() == 'cog'
+
         assert out_ds.dtypes[0] == dtype
         assert (
             out_ds.nodata is None
@@ -551,7 +555,9 @@ def test_src_ref_cmp_bands(
         cli_str += ''.join([' -rb ' + str(bi) for bi in ref_bands])
     if force:
         cli_str += ' -f'
-    cli_str += ' -cmp' if cmp_ref else f' -cmp {default_fuse_rgb_cli_params.ref_file!s}'
+    cli_str += (
+        ' -cmp ref' if cmp_ref else f' -cmp {default_fuse_rgb_cli_params.ref_file!s}'
+    )
     if cmp_bands:
         cli_str += ''.join([' -cb ' + str(bi) for bi in cmp_bands])
 
