@@ -58,7 +58,7 @@ _cog_creation_options = dict(
 
 
 class RasterFuse(MatchedPairReader):
-    # default values for RasterFuse.process()
+    # default values for process() kwargs
     _default_config: ClassVar[dict[str, Any]] = dict(
         driver=Driver.gtiff,
         threads=0,
@@ -180,7 +180,7 @@ class RasterFuse(MatchedPairReader):
         """Copy band tags from the reference to the corrected image."""
         # TODO: should tags not first come from the source if they exist,
         #  then from the reference otherwise?  also for parameter band descriptions
-        #  below...
+        #  below...  keep in mind the --compare option and command.
         geedim_tags = ['center_wavelength', 'name', 'description']
         for corr_band, ref_band in enumerate(self.ref_bands, start=1):
             im.set_band_description(corr_band, self.ref_im.descriptions[ref_band - 1])
@@ -267,7 +267,7 @@ class RasterFuse(MatchedPairReader):
 
         :param r2_inpaint_thresh:
             R\N{SUPERSCRIPT TWO} (coefficient of determination) threshold below which
-            to interpolate ("in-paint") model offsets from surrounding values.
+            to interpolate ("inpaint") model offsets from surrounding values.
             Applies to the :attr:`~homonim.enums.Model.gain_offset` model only.  If
             ``None``, no interpolation is performed.
         :param mask_partial:
@@ -444,7 +444,7 @@ class RasterFuse(MatchedPairReader):
 
         :param r2_inpaint_thresh:
             R\N{SUPERSCRIPT TWO} (coefficient of determination) threshold below which
-            to interpolate ("in-paint") model offsets from surrounding values.
+            to interpolate ("inpaint") model offsets from surrounding values.
             Applies to the :attr:`~homonim.enums.Model.gain_offset` model only.  If
             ``None``, no interpolation is performed.
         :param mask_partial:
@@ -456,7 +456,7 @@ class RasterFuse(MatchedPairReader):
         :param upsampling:
             Resampling method to use when upsampling.
         :param driver:
-            Corrected image format driver.
+            Corrected image driver.
         :param dtype:
             Corrected image data type (``uint8``, ``uint16``, ``int16``, ``uint32``,
             ``int32``, ``float32`` or ``float64``).
@@ -584,8 +584,12 @@ class RasterFuse(MatchedPairReader):
             stack.enter_context(warnings.catch_warnings())
             warnings.simplefilter('ignore', category=NotGeoreferencedWarning)
 
+            # block overlap should be at least half the kernel_shape to ensure full
+            # kernel coverage at block edges, and a minimum of (1, 1) to avoid
+            # including extrapolated (rather than interpolated) pixels when upsampling
+            overlap = np.ceil(np.array(kernel_shape) / 2).astype('int')
+
             # correct blocks in a thread pool
-            overlap = utils.overlap_for_kernel(kernel_shape)
             executor = stack.enter_context(ThreadPoolExecutor(max_workers=threads))
             futures = [
                 executor.submit(
