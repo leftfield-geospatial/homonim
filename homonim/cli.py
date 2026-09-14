@@ -30,18 +30,13 @@ from tqdm.auto import tqdm
 from tqdm.contrib.logging import _TqdmLoggingHandler
 from yaml import YAMLError
 
-from homonim import (
-    Driver,
-    HomonimWarning,
-    Model,
-    ParamStats,
-    ProcCrs,
-    RasterCompare,
-    RasterFuse,
-)
-from homonim.errors import HomonimError
+from homonim.compare import RasterCompare
+from homonim.enums import Driver, Model, ProcCrs
+from homonim.errors import HomonimError, HomonimWarning
+from homonim.fuse import RasterFuse
 from homonim.kernel_model import KernelModel
 from homonim.raster_array import RasterArray
+from homonim.stats import ParamStats
 from homonim.version import __version__
 
 logger = logging.getLogger(__name__)
@@ -299,8 +294,8 @@ def cli(ctx: click.Context, verbose: int, quiet: int):
     '-od',
     '--out-dir',
     type=click.Path(exists=True, file_okay=False, writable=True),
-    # TODO: change to cwd
-    show_default='source image directory.',
+    default=Path.cwd(),
+    show_default='current directory',
     help='Path of the output image directory.',
 )
 @click.option(
