@@ -189,6 +189,8 @@ src_file_arg = click.argument(
 threads_option = click.option(
     '-t',
     '--threads',
+    # TODO: make this range 0 to num_cpus?  the docs range will render to the
+    #  num_cpus of the docs building server though.
     type=click.INT,
     default=RasterFuse._default_config['threads'],
     show_default=True,
@@ -293,9 +295,9 @@ def cli(ctx: click.Context, verbose: int, quiet: int):
 @click.option(
     '-od',
     '--out-dir',
-    type=click.Path(exists=True, file_okay=False, writable=True),
+    type=click.Path(exists=True, file_okay=False, writable=True, path_type=Path),
     default=Path.cwd(),
-    show_default='current directory',
+    show_default='current working directory',
     help='Path of the output image directory.',
 )
 @click.option(
@@ -467,7 +469,6 @@ def fuse(
     # iterate over and correct source files
     for src_i, src_file in enumerate(src_files):
         tqdm.write(f'\nCorrecting {src_file.name} ({src_i + 1} of {len(src_files)})')
-        out_path = Path(out_dir) if out_dir else src_file.parent
         try:
             with RasterFuse(
                 src_file,
@@ -482,9 +483,9 @@ def fuse(
                     f'FUSE_c{fuse.proc_crs.upper()}_m{model.upper()}_'
                     f'k{kernel_shape[0]}_{kernel_shape[1]}'
                 )
-                corr_file = out_path.joinpath(f'{src_file.stem}_{postfix}.tif')
+                corr_file = out_dir.joinpath(f'{src_file.stem}_{postfix}.tif')
                 param_file = (
-                    out_path.joinpath(f'{corr_file.stem}_PARAM.tif')
+                    out_dir.joinpath(f'{corr_file.stem}_PARAM.tif')
                     if param_image
                     else None
                 )
@@ -572,7 +573,7 @@ def compare(
     output: Path,
     proc_crs: ProcCrs,
     force_match,
-    # non command line option that allows compare() to be invoked with a list of per
+    # non-commandline option that allows compare() to be invoked with a list of per
     # source file bands
     src_bands_list: list[tuple[int, ...]] | None = None,
     **kwargs,

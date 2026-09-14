@@ -112,7 +112,7 @@ def test_file_exists_error(runner: CliRunner, basic_fuse_cli_params: FuseCliPara
     assert result.exit_code != 0
     assert 'exists' in result.output
 
-    os.remove(basic_fuse_cli_params.corr_file)
+    basic_fuse_cli_params.corr_file.unlink()
     basic_fuse_cli_params.param_file.touch()
     cli_str = basic_fuse_cli_params.cli_str + ' --param-image'
     result = runner.invoke(cli, cli_str.split())
@@ -131,14 +131,12 @@ def test_overwrite(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
     assert basic_fuse_cli_params.param_file.exists()
 
 
-def test_compare(runner: CliRunner, ref_file_100cm_float, src_file_100cm_float):
+def test_compare(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
     """Test --compare against expected output."""
-    ref_file = ref_file_100cm_float
-    src_file = src_file_100cm_float
-    # test --compare in flag (no value), and value configuration
     cli_strs = [
-        f'fuse  {src_file} {ref_file} --compare ref',
-        f'fuse {src_file} {ref_file} --compare {ref_file_100cm_float} -o',
+        basic_fuse_cli_params.cli_str + ' --compare ref',
+        basic_fuse_cli_params.cli_str
+        + f' -o --compare {basic_fuse_cli_params.ref_file}',
     ]
     for cli_str in cli_strs:
         result = runner.invoke(cli, cli_str.split())
@@ -150,7 +148,7 @@ def test_compare(runner: CliRunner, ref_file_100cm_float, src_file_100cm_float):
            Mean 1.000  0.000   0.000 144"""
         assert str_contain_no_space(src_cmp_str, result.output)
 
-        corr_cmp_str = """float_100cm_src_FUSE_cREF_mGAIN-BLK-OFFSET_k5_5.tif:
+        corr_cmp_str = """float_100cm_src_FUSE_cREF_mGAIN-BLK-OFFSET_k3_3.tif:
            Band      r²   RMSE   rRMSE   N
     ----------- ----- ------ ------- ---
     Ref. band 1 1.000  0.000   0.000 144
@@ -160,51 +158,33 @@ def test_compare(runner: CliRunner, ref_file_100cm_float, src_file_100cm_float):
         sum_cmp_str = """File    r²   RMSE   rRMSE   N
     --------------------------------------------------- ----- ------ ------- ---
                                     float_100cm_src.tif 1.000  0.000   0.000 144
-    float_100cm_src_FUSE_cREF_mGAIN-BLK-OFFSET_k5_5.tif 1.000  0.000   0.000 144"""
+    float_100cm_src_FUSE_cREF_mGAIN-BLK-OFFSET_k3_3.tif 1.000  0.000   0.000 144"""
         assert str_contain_no_space(sum_cmp_str, result.output)
 
 
 def test_compare_file_exists_error(
-    runner: CliRunner, ref_file_100cm_float, src_file_100cm_float
+    runner: CliRunner, basic_fuse_cli_params: FuseCliParams
 ):
     """Test --compare raises an exception when the specified file does not exist."""
-    ref_file = ref_file_100cm_float
-    src_file = src_file_100cm_float
-    # test --compare in flag (no value), and value configurayion
-    cli_str = f'fuse  {src_file} {ref_file} --compare unknown.tif'
+    cli_str = basic_fuse_cli_params.cli_str + ' --compare unknown.tif'
     result = runner.invoke(cli, cli_str.split())
     assert result.exit_code != 0
     assert 'No such file or directory' in result.output
 
 
-@pytest.mark.parametrize('proc_crs', [ProcCrs.auto, ProcCrs.ref, ProcCrs.src])
+@pytest.mark.parametrize('proc_crs', [ProcCrs.auto])
 def test_proc_crs(
-    tmp_path: Path,
-    runner: CliRunner,
-    ref_file_100cm_float,
-    src_file_100cm_float,
-    proc_crs: ProcCrs,
+    runner: CliRunner, default_fuse_cli_params: FuseCliParams, proc_crs: ProcCrs
 ):
     """Test valid --proc-crs settings generate an output with correct metadata."""
-    ref_file = ref_file_100cm_float
-    src_file = src_file_100cm_float
-    model = Model.gain_blk_offset
-    kernel_shape = (3, 3)
-    res_proc_crs = ProcCrs.ref if proc_crs == ProcCrs.auto else proc_crs
-    post_fix = utils.create_out_postfix(
-        res_proc_crs, model, kernel_shape, RasterFuse.create_out_profile()['driver']
-    )
-    corr_file = tmp_path.joinpath(src_file.stem + post_fix)
-    cli_str = (
-        f'fuse -m {model.value} -k {kernel_shape[0]} {kernel_shape[1]} -od {tmp_path} '
-        f'-pc {proc_crs.value} {src_file} {ref_file}'
-    )
+    res_proc_crs = ProcCrs.ref if proc_crs is ProcCrs.auto else proc_crs
+    cli_str = default_fuse_cli_params.cli_str + f' -pc {proc_crs}'
     result = runner.invoke(cli, cli_str.split())
     assert result.exit_code == 0
-    assert corr_file.exists()
+    assert default_fuse_cli_params.corr_file.exists()
 
-    with rio.open(corr_file, 'r') as out_ds:
-        assert out_ds.tags()['FUSE_PROC_CRS'] == res_proc_crs.name
+    with rio.open(default_fuse_cli_params.corr_file, 'r') as out_ds:
+        assert out_ds.tags()['FUSE_PROC_CRS'] == res_proc_crs
 
 
 def test_conf_file(
@@ -243,7 +223,7 @@ def test_conf_file(
             assert src_mask[out_mask].all()
             assert src_mask.sum() > out_mask.sum()
             # test proc_crs
-            assert out_ds.tags()['FUSE_PROC_CRS'] == basic_fuse_cli_params.proc_crs.name
+            assert out_ds.tags()['FUSE_PROC_CRS'] == basic_fuse_cli_params.proc_crs
 
 
 def test_param_image(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
@@ -287,6 +267,12 @@ def test_threads(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
     assert result.exit_code == 0
     assert basic_fuse_cli_params.corr_file.exists()
 
+    # test that threads > os.cpu_count() raises an error
+    cli_str = basic_fuse_cli_params.cli_str + f' -o -threads {os.cpu_count() + 1}'
+    result = runner.invoke(cli, cli_str.split())
+    assert result.exit_code != 0
+    assert 'threads' in result.output
+
 
 def test_max_block_mem(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
     """Test --max-block-mem."""
@@ -295,14 +281,14 @@ def test_max_block_mem(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
     assert result.exit_code == 0
     assert basic_fuse_cli_params.corr_file.exists()
 
-    # test that max_block_mem too small raises a BlockSizeError
+    # test that max_block_mem too small raises an error
     cli_str = basic_fuse_cli_params.cli_str + ' -o -mbm 1e-6'
     result = runner.invoke(cli, cli_str.split())
     assert result.exit_code != 0
     assert 'max_block_mem' in result.output
 
 
-@pytest.mark.parametrize('upsampling', [r.name for r in rio.warp.SUPPORTED_RESAMPLING])
+@pytest.mark.parametrize('upsampling', ['cubic', 'bilinear'])
 def test_upsampling(
     runner: CliRunner, basic_fuse_cli_params: FuseCliParams, upsampling: Resampling
 ):
@@ -314,12 +300,10 @@ def test_upsampling(
     with rio.open(basic_fuse_cli_params.corr_file, 'r') as out_ds:
         tags_dict = out_ds.tags()
         assert 'FUSE_UPSAMPLING' in tags_dict
-        assert yaml.safe_load(tags_dict['FUSE_UPSAMPLING']) == upsampling
+        assert tags_dict['FUSE_UPSAMPLING'] == upsampling
 
 
-@pytest.mark.parametrize(
-    'downsampling', [r.name for r in rio.warp.SUPPORTED_RESAMPLING]
-)
+@pytest.mark.parametrize('downsampling', ['bilinear', 'nearest'])
 def test_downsampling(
     runner: CliRunner, basic_fuse_cli_params: FuseCliParams, downsampling: Resampling
 ):
@@ -331,7 +315,7 @@ def test_downsampling(
     with rio.open(basic_fuse_cli_params.corr_file, 'r') as out_ds:
         tags_dict = out_ds.tags()
         assert 'FUSE_DOWNSAMPLING' in tags_dict
-        assert yaml.safe_load(tags_dict['FUSE_DOWNSAMPLING']) == downsampling
+        assert tags_dict['FUSE_DOWNSAMPLING'] == downsampling
 
 
 def test_upsampling_error(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
@@ -433,7 +417,7 @@ def test_corr_profile(
         )
 
 
-def test_out_driver_error(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
+def test_driver_error(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
     """Test --driver with invalid value raises an error."""
     cli_str = basic_fuse_cli_params.cli_str + ' --driver unk'
     result = runner.invoke(cli, cli_str.split())
@@ -441,7 +425,7 @@ def test_out_driver_error(runner: CliRunner, basic_fuse_cli_params: FuseCliParam
     assert 'Invalid value' in result.output
 
 
-def test_out_dtype_error(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
+def test_dtype_error(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
     """Test --dtype with invalid value raises an error."""
     cli_str = basic_fuse_cli_params.cli_str + ' --dtype unk'
     result = runner.invoke(cli, cli_str.split())
@@ -449,7 +433,7 @@ def test_out_dtype_error(runner: CliRunner, basic_fuse_cli_params: FuseCliParams
     assert 'Invalid value' in result.output
 
 
-def test_out_nodata_error(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
+def test_nodata_error(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
     """Test --nodata with invalid value (cannot be cast to --dtype) raises an error."""
     cli_str = basic_fuse_cli_params.cli_str + ' --dtype uint8 --nodata nan'
     result = runner.invoke(cli, cli_str.split())
@@ -479,13 +463,13 @@ def test_creation_options(runner: CliRunner, basic_fuse_cli_params: FuseCliParam
     ],
 )
 def test_src_ref_bands(
+    runner: CliRunner,
+    tmp_path: Path,
     src_bands: tuple[int],
     ref_bands: tuple[int],
     force: bool,
     exp_bands: tuple[int],
     default_fuse_rgb_cli_params: FuseCliParams,
-    tmp_path: Path,
-    runner: CliRunner,
 ):
     """Test fuse with --src_band, --ref_band and --force-match parameters."""
     cli_str = default_fuse_rgb_cli_params.cli_str
@@ -499,7 +483,7 @@ def test_src_ref_bands(
     result = runner.invoke(cli, cli_str.split())
     assert result.exit_code == 0
     assert default_fuse_rgb_cli_params.corr_file.exists()
-    with WarpedVRT(rio.open(default_fuse_rgb_cli_params.src_file, 'r')) as src_ds:
+    with rio.open(default_fuse_rgb_cli_params.src_file, 'r') as src_ds:
         with rio.open(default_fuse_rgb_cli_params.corr_file, 'r') as out_ds:
             src_array = src_ds.read(indexes=exp_bands)
             src_mask = src_ds.dataset_mask().astype('bool', copy=False)
@@ -524,6 +508,8 @@ def test_src_ref_bands(
     ],
 )
 def test_src_ref_cmp_bands(
+    runner: CliRunner,
+    tmp_path: Path,
     src_bands: tuple[int],
     ref_bands: tuple[int],
     cmp_bands: tuple[int],
@@ -531,8 +517,6 @@ def test_src_ref_cmp_bands(
     cmp_ref: bool,
     exp_bands: tuple[int],
     default_fuse_rgb_cli_params: FuseCliParams,
-    tmp_path: Path,
-    runner: CliRunner,
 ):
     """Test fuse --compare with --src_band, --ref_band, --force-match and --cmp-band
     parameters.
@@ -580,8 +564,9 @@ def test_src_ref_cmp_bands(
             assert out_array[:, out_mask] == pytest.approx(
                 src_array[:, src_mask], abs=2
             )
+
     test_str = """File    r²   RMSE   rRMSE   N
 -------------------------------------------------- ----- ------ ------- ---
                                 float_50cm_rgb.tif 1.000  0.000   0.000 144
-float_50cm_rgb_FUSE_cREF_mGAIN-BLK-OFFSET_k5_5.tif 1.000  0.000   0.000 144"""  # noqa: E501
+float_50cm_rgb_FUSE_cREF_mGAIN-BLK-OFFSET_k5_5.tif 1.000  0.000   0.000 144"""
     assert str_contain_no_space(test_str, result.output)
