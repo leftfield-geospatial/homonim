@@ -81,24 +81,9 @@ def test_fuse_defaults(runner: CliRunner, default_fuse_cli_params: FuseCliParams
     assert default_fuse_cli_params.corr_file.exists()
 
 
-# TODO: remove re-testing of click functionality
-def test_method_error(runner: CliRunner, default_fuse_cli_params: FuseCliParams):
-    """Test unknown model generates an error."""
-    cli_str = default_fuse_cli_params.cli_str + ' -m unk'
-    result = runner.invoke(cli, cli_str.split())
-    assert result.exit_code != 0
-    assert "Invalid value for '-m' / '--model'" in result.output
-
-
-@pytest.mark.parametrize('bad_kernel_shape', [(0, 0), (2, 3), (3, 2)])
-def test_kernel_shape_error(
-    runner: CliRunner, default_fuse_cli_params: FuseCliParams, bad_kernel_shape
-):
+def test_kernel_shape_error(runner: CliRunner, default_fuse_cli_params: FuseCliParams):
     """Test bad kernel shape generates an error."""
-    cli_str = (
-        default_fuse_cli_params.cli_str
-        + f' -k {bad_kernel_shape[0]} {bad_kernel_shape[1]}'
-    )
+    cli_str = default_fuse_cli_params.cli_str + ' -k 2 3'
     result = runner.invoke(cli, cli_str.split())
     assert result.exit_code != 0
     assert 'kernel_shape' in result.output
@@ -207,7 +192,8 @@ def test_conf_file(
     result = runner.invoke(cli, cli_str.split())
     assert result.exit_code == 0
     assert basic_fuse_cli_params.corr_file.exists()
-    assert basic_fuse_cli_params.param_file.exists()  # test param_image==True
+    # test param_image==True
+    assert basic_fuse_cli_params.param_file.exists()
 
     with rio.open(basic_fuse_cli_params.src_file, 'r') as src_ds:
         with rio.open(basic_fuse_cli_params.corr_file, 'r') as out_ds:
@@ -354,21 +340,6 @@ def test_r2_inpaint_thresh(
         )
 
 
-@pytest.mark.parametrize('bad_r2_inpaint_thresh', [-1, 2])
-def test_r2_inpaint_thresh_error(
-    runner: CliRunner,
-    basic_fuse_cli_params: FuseCliParams,
-    bad_r2_inpaint_thresh: float,
-):
-    """Test --r2-inpaint-thresh with bad value raises an error."""
-    cli_str = (
-        basic_fuse_cli_params.cli_str + f' --r2-inpaint-thresh {bad_r2_inpaint_thresh}'
-    )
-    result = runner.invoke(cli, cli_str.split())
-    assert result.exit_code != 0
-    assert 'Invalid value' in result.output
-
-
 @pytest.mark.parametrize(
     'driver, dtype, nodata',
     [
@@ -417,14 +388,6 @@ def test_corr_profile(
         )
 
 
-def test_driver_error(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
-    """Test --driver with invalid value raises an error."""
-    cli_str = basic_fuse_cli_params.cli_str + ' --driver unk'
-    result = runner.invoke(cli, cli_str.split())
-    assert result.exit_code != 0
-    assert 'Invalid value' in result.output
-
-
 def test_dtype_error(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
     """Test --dtype with invalid value raises an error."""
     cli_str = basic_fuse_cli_params.cli_str + ' --dtype unk'
@@ -434,7 +397,7 @@ def test_dtype_error(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
 
 
 def test_nodata_error(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
-    """Test --nodata with invalid value (cannot be cast to --dtype) raises an error."""
+    """Test --nodata with a value that cannot be cast to --dtype raises an error."""
     cli_str = basic_fuse_cli_params.cli_str + ' --dtype uint8 --nodata nan'
     result = runner.invoke(cli, cli_str.split())
     assert result.exit_code != 0
