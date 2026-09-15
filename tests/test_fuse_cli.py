@@ -14,8 +14,11 @@
 # Homonim. If not, see <https://www.gnu.org/licenses/>.
 
 import os
+from dataclasses import dataclass, field
 from pathlib import Path
 
+import cached_property
+import numpy as np
 import pytest
 import rasterio as rio
 import yaml
@@ -28,6 +31,7 @@ from homonim import utils
 from homonim.cli import cli
 from homonim.enums import Driver, Model, ProcCrs
 from homonim.fuse import RasterFuse
+from homonim.kernel_model import KernelModel
 from tests.conftest import FuseCliParams, str_contain_no_space
 
 
@@ -48,6 +52,7 @@ def test_fuse(
     kernel_shape: tuple[int, int],
 ):
     """Test fuse cli output with different methods and kernel shapes."""
+    # TODO: use default_fuse_cli_params
     ref_file = file_rgb_100cm_float
     src_file = file_rgb_50cm_float
     post_fix = utils.create_out_postfix(
@@ -89,39 +94,39 @@ def test_kernel_shape_error(runner: CliRunner, default_fuse_cli_params: FuseCliP
     assert 'kernel_shape' in result.output
 
 
-def test_file_exists_error(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
+def test_file_exists_error(runner: CliRunner, default_fuse_cli_params: FuseCliParams):
     """Test that attempting to overwrite an existing output file generates an error."""
-    basic_fuse_cli_params.corr_file.touch()
-    cli_str = basic_fuse_cli_params.cli_str
+    default_fuse_cli_params.corr_file.touch()
+    cli_str = default_fuse_cli_params.cli_str
     result = runner.invoke(cli, cli_str.split())
     assert result.exit_code != 0
     assert 'exists' in result.output
 
-    basic_fuse_cli_params.corr_file.unlink()
-    basic_fuse_cli_params.param_file.touch()
-    cli_str = basic_fuse_cli_params.cli_str + ' --param-image'
+    default_fuse_cli_params.corr_file.unlink()
+    default_fuse_cli_params.param_file.touch()
+    cli_str = default_fuse_cli_params.cli_str + ' --param-image'
     result = runner.invoke(cli, cli_str.split())
     assert result.exit_code != 0
     assert 'exists' in result.output
 
 
-def test_overwrite(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
+def test_overwrite(runner: CliRunner, default_fuse_cli_params: FuseCliParams):
     """Test overwriting existing output file(s) with -o."""
-    basic_fuse_cli_params.corr_file.touch()
-    basic_fuse_cli_params.param_file.touch()
-    cli_str = basic_fuse_cli_params.cli_str + ' --param-image -o'
+    default_fuse_cli_params.corr_file.touch()
+    default_fuse_cli_params.param_file.touch()
+    cli_str = default_fuse_cli_params.cli_str + ' --param-image -o'
     result = runner.invoke(cli, cli_str.split())
     assert result.exit_code == 0
-    assert basic_fuse_cli_params.corr_file.exists()
-    assert basic_fuse_cli_params.param_file.exists()
+    assert default_fuse_cli_params.corr_file.exists()
+    assert default_fuse_cli_params.param_file.exists()
 
 
-def test_compare(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
+def test_compare(runner: CliRunner, default_fuse_cli_params: FuseCliParams):
     """Test --compare against expected output."""
     cli_strs = [
-        basic_fuse_cli_params.cli_str + ' --compare ref',
-        basic_fuse_cli_params.cli_str
-        + f' -o --compare {basic_fuse_cli_params.ref_file}',
+        default_fuse_cli_params.cli_str + ' --compare ref',
+        default_fuse_cli_params.cli_str
+        + f' -o --compare {default_fuse_cli_params.ref_file}',
     ]
     for cli_str in cli_strs:
         result = runner.invoke(cli, cli_str.split())
@@ -133,7 +138,7 @@ def test_compare(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
            Mean 1.000  0.000   0.000 144"""
         assert str_contain_no_space(src_cmp_str, result.output)
 
-        corr_cmp_str = """float_100cm_src_FUSE_cREF_mGAIN-BLK-OFFSET_k3_3.tif:
+        corr_cmp_str = """float_100cm_src_FUSE_cREF_mGAIN-BLK-OFFSET_k5_5.tif:
            Band      r²   RMSE   rRMSE   N
     ----------- ----- ------ ------- ---
     Ref. band 1 1.000  0.000   0.000 144
@@ -143,21 +148,21 @@ def test_compare(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
         sum_cmp_str = """File    r²   RMSE   rRMSE   N
     --------------------------------------------------- ----- ------ ------- ---
                                     float_100cm_src.tif 1.000  0.000   0.000 144
-    float_100cm_src_FUSE_cREF_mGAIN-BLK-OFFSET_k3_3.tif 1.000  0.000   0.000 144"""
+    float_100cm_src_FUSE_cREF_mGAIN-BLK-OFFSET_k5_5.tif 1.000  0.000   0.000 144"""
         assert str_contain_no_space(sum_cmp_str, result.output)
 
 
 def test_compare_file_exists_error(
-    runner: CliRunner, basic_fuse_cli_params: FuseCliParams
+    runner: CliRunner, default_fuse_cli_params: FuseCliParams
 ):
     """Test --compare raises an exception when the specified file does not exist."""
-    cli_str = basic_fuse_cli_params.cli_str + ' --compare unknown.tif'
+    cli_str = default_fuse_cli_params.cli_str + ' --compare unknown.tif'
     result = runner.invoke(cli, cli_str.split())
     assert result.exit_code != 0
     assert 'No such file or directory' in result.output
 
 
-@pytest.mark.parametrize('proc_crs', [ProcCrs.auto])
+@pytest.mark.parametrize('proc_crs', [ProcCrs.auto, ProcCrs.ref])
 def test_proc_crs(
     runner: CliRunner, default_fuse_cli_params: FuseCliParams, proc_crs: ProcCrs
 ):
@@ -173,7 +178,7 @@ def test_proc_crs(
 
 
 def test_conf_file(
-    tmp_path: Path, runner: CliRunner, basic_fuse_cli_params: FuseCliParams
+    tmp_path: Path, runner: CliRunner, default_fuse_cli_params: FuseCliParams
 ):
     """Test passing a configuration file results in a correctly configured output."""
     # create test configuration file
@@ -188,15 +193,15 @@ def test_conf_file(
     with open(conf_file, 'w') as f:
         yaml.dump(conf_dict, f)
 
-    cli_str = basic_fuse_cli_params.cli_str + f' -c {conf_file}'
+    cli_str = default_fuse_cli_params.cli_str + f' -c {conf_file}'
     result = runner.invoke(cli, cli_str.split())
     assert result.exit_code == 0
-    assert basic_fuse_cli_params.corr_file.exists()
+    assert default_fuse_cli_params.corr_file.exists()
     # test param_image==True
-    assert basic_fuse_cli_params.param_file.exists()
+    assert default_fuse_cli_params.param_file.exists()
 
-    with rio.open(basic_fuse_cli_params.src_file, 'r') as src_ds:
-        with rio.open(basic_fuse_cli_params.corr_file, 'r') as out_ds:
+    with rio.open(default_fuse_cli_params.src_file, 'r') as src_ds:
+        with rio.open(default_fuse_cli_params.corr_file, 'r') as out_ds:
             # test nodata, dtype and creation_options
             assert out_ds.nodata == conf_dict['nodata']
             assert out_ds.dtypes[0] == conf_dict['dtype']
@@ -209,36 +214,36 @@ def test_conf_file(
             assert src_mask[out_mask].all()
             assert src_mask.sum() > out_mask.sum()
             # test proc_crs
-            assert out_ds.tags()['FUSE_PROC_CRS'] == basic_fuse_cli_params.proc_crs
+            assert out_ds.tags()['FUSE_PROC_CRS'] == default_fuse_cli_params.proc_crs
 
 
-def test_param_image(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
+def test_param_image(runner: CliRunner, default_fuse_cli_params: FuseCliParams):
     """Test --param-image."""
     # test that cli without --param-image generates no parameter image
-    cli_str = basic_fuse_cli_params.cli_str
+    cli_str = default_fuse_cli_params.cli_str
     result = runner.invoke(cli, cli_str.split())
     assert result.exit_code == 0
-    assert basic_fuse_cli_params.corr_file.exists()
-    assert not basic_fuse_cli_params.param_file.exists()
+    assert default_fuse_cli_params.corr_file.exists()
+    assert not default_fuse_cli_params.param_file.exists()
 
     # test --param-image generates a valid parameter image
-    cli_str = basic_fuse_cli_params.cli_str + ' --param-image -o'
+    cli_str = default_fuse_cli_params.cli_str + ' --param-image -o'
     result = runner.invoke(cli, cli_str.split())
     assert result.exit_code == 0
-    assert basic_fuse_cli_params.corr_file.exists()
-    assert basic_fuse_cli_params.param_file.exists()
-    utils.validate_param_image(basic_fuse_cli_params.param_file)
+    assert default_fuse_cli_params.corr_file.exists()
+    assert default_fuse_cli_params.param_file.exists()
+    utils.validate_param_image(default_fuse_cli_params.param_file)
 
 
-def test_mask_partial(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
+def test_mask_partial(runner: CliRunner, default_fuse_cli_params: FuseCliParams):
     """Test --mask-partial."""
-    cli_str = basic_fuse_cli_params.cli_str + ' --mask-partial'
+    cli_str = default_fuse_cli_params.cli_str + ' --mask-partial'
     result = runner.invoke(cli, cli_str.split())
     assert result.exit_code == 0
-    assert basic_fuse_cli_params.corr_file.exists()
+    assert default_fuse_cli_params.corr_file.exists()
 
-    with rio.open(basic_fuse_cli_params.src_file, 'r') as src_ds:
-        with rio.open(basic_fuse_cli_params.corr_file, 'r') as out_ds:
+    with rio.open(default_fuse_cli_params.src_file, 'r') as src_ds:
+        with rio.open(default_fuse_cli_params.corr_file, 'r') as out_ds:
             # test that the output mask is contained by and smaller than the src mask
             src_mask = src_ds.dataset_mask().astype('bool', copy=False)
             out_mask = out_ds.dataset_mask().astype('bool', copy=False)
@@ -246,29 +251,33 @@ def test_mask_partial(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
             assert src_mask.sum() > out_mask.sum()
 
 
-def test_threads(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
+def test_threads(runner: CliRunner, default_fuse_cli_params: FuseCliParams):
     """Test --threads."""
-    cli_str = basic_fuse_cli_params.cli_str + ' --threads 1'
+    cli_str = default_fuse_cli_params.cli_str + ' --threads 1'
     result = runner.invoke(cli, cli_str.split())
     assert result.exit_code == 0
-    assert basic_fuse_cli_params.corr_file.exists()
+    assert default_fuse_cli_params.corr_file.exists()
 
     # test that threads > os.cpu_count() raises an error
-    cli_str = basic_fuse_cli_params.cli_str + f' -o -threads {os.cpu_count() + 1}'
+    cli_str = default_fuse_cli_params.cli_str + f' -o -threads {os.cpu_count() + 1}'
     result = runner.invoke(cli, cli_str.split())
     assert result.exit_code != 0
     assert 'threads' in result.output
 
 
-def test_max_block_mem(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
+def test_max_block_mem(runner: CliRunner, default_fuse_cli_params: FuseCliParams):
     """Test --max-block-mem."""
-    cli_str = basic_fuse_cli_params.cli_str + ' -mbm 1e-4'
+    max_block_mem = 123
+    cli_str = default_fuse_cli_params.cli_str + f' -mbm {max_block_mem}'
     result = runner.invoke(cli, cli_str.split())
     assert result.exit_code == 0
-    assert basic_fuse_cli_params.corr_file.exists()
+    assert default_fuse_cli_params.corr_file.exists()
+
+    with rio.open(default_fuse_cli_params.corr_file, 'r') as out_ds:
+        assert yaml.safe_load(out_ds.tags()['FUSE_MAX_BLOCK_MEM']) == max_block_mem
 
     # test that max_block_mem too small raises an error
-    cli_str = basic_fuse_cli_params.cli_str + ' -o -mbm 1e-6'
+    cli_str = default_fuse_cli_params.cli_str + ' -o -mbm 1e-6'
     result = runner.invoke(cli, cli_str.split())
     assert result.exit_code != 0
     assert 'max_block_mem' in result.output
@@ -276,14 +285,14 @@ def test_max_block_mem(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
 
 @pytest.mark.parametrize('upsampling', ['cubic', 'bilinear'])
 def test_upsampling(
-    runner: CliRunner, basic_fuse_cli_params: FuseCliParams, upsampling: Resampling
+    runner: CliRunner, default_fuse_cli_params: FuseCliParams, upsampling: Resampling
 ):
     """Test --upsampling with valid values generates output with correct metadata."""
-    cli_str = basic_fuse_cli_params.cli_str + f' --upsampling {upsampling}'
+    cli_str = default_fuse_cli_params.cli_str + f' --upsampling {upsampling}'
     result = runner.invoke(cli, cli_str.split())
     assert result.exit_code == 0
-    assert basic_fuse_cli_params.corr_file.exists()
-    with rio.open(basic_fuse_cli_params.corr_file, 'r') as out_ds:
+    assert default_fuse_cli_params.corr_file.exists()
+    with rio.open(default_fuse_cli_params.corr_file, 'r') as out_ds:
         tags_dict = out_ds.tags()
         assert 'FUSE_UPSAMPLING' in tags_dict
         assert tags_dict['FUSE_UPSAMPLING'] == upsampling
@@ -291,47 +300,47 @@ def test_upsampling(
 
 @pytest.mark.parametrize('downsampling', ['bilinear', 'nearest'])
 def test_downsampling(
-    runner: CliRunner, basic_fuse_cli_params: FuseCliParams, downsampling: Resampling
+    runner: CliRunner, default_fuse_cli_params: FuseCliParams, downsampling: Resampling
 ):
     """Test --downsampling with valid values generates output with correct metadata."""
-    cli_str = basic_fuse_cli_params.cli_str + f' --downsampling {downsampling}'
+    cli_str = default_fuse_cli_params.cli_str + f' --downsampling {downsampling}'
     result = runner.invoke(cli, cli_str.split())
     assert result.exit_code == 0
-    assert basic_fuse_cli_params.corr_file.exists()
-    with rio.open(basic_fuse_cli_params.corr_file, 'r') as out_ds:
+    assert default_fuse_cli_params.corr_file.exists()
+    with rio.open(default_fuse_cli_params.corr_file, 'r') as out_ds:
         tags_dict = out_ds.tags()
         assert 'FUSE_DOWNSAMPLING' in tags_dict
         assert tags_dict['FUSE_DOWNSAMPLING'] == downsampling
 
 
-def test_upsampling_error(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
+def test_upsampling_error(runner: CliRunner, default_fuse_cli_params: FuseCliParams):
     """Test --upsampling with bad value raises an error."""
-    cli_str = basic_fuse_cli_params.cli_str + ' --upsampling unknown'
+    cli_str = default_fuse_cli_params.cli_str + ' --upsampling unknown'
     result = runner.invoke(cli, cli_str.split())
     assert result.exit_code != 0
     assert "Invalid value for '-us' / '--upsampling'" in result.output
 
 
-def test_downsampling_error(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
+def test_downsampling_error(runner: CliRunner, default_fuse_cli_params: FuseCliParams):
     """Test --downsampling with bad value raises an error."""
-    cli_str = basic_fuse_cli_params.cli_str + ' --downsampling unknown'
+    cli_str = default_fuse_cli_params.cli_str + ' --downsampling unknown'
     result = runner.invoke(cli, cli_str.split())
     assert result.exit_code != 0
     assert "Invalid value for '-ds' / '--downsampling'" in result.output
 
 
-@pytest.mark.parametrize('r2_inpaint_thresh', [0, 0.5, 1])
+@pytest.mark.parametrize('r2_inpaint_thresh', [0, 0.5])
 def test_r2_inpaint_thresh(
-    runner: CliRunner, basic_fuse_cli_params: FuseCliParams, r2_inpaint_thresh: float
+    runner: CliRunner, default_fuse_cli_params: FuseCliParams, r2_inpaint_thresh: float
 ):
     """Test --r2-inpaint-thresh generates an output with correct metadata."""
     cli_str = (
-        basic_fuse_cli_params.cli_str + f' --r2-inpaint-thresh {r2_inpaint_thresh}'
+        default_fuse_cli_params.cli_str + f' --r2-inpaint-thresh {r2_inpaint_thresh}'
     )
     result = runner.invoke(cli, cli_str.split())
     assert result.exit_code == 0
-    assert basic_fuse_cli_params.corr_file.exists()
-    with rio.open(basic_fuse_cli_params.corr_file, 'r') as out_ds:
+    assert default_fuse_cli_params.corr_file.exists()
+    with rio.open(default_fuse_cli_params.corr_file, 'r') as out_ds:
         tags_dict = out_ds.tags()
         assert 'FUSE_R2_INPAINT_THRESH' in tags_dict
         r2_inpaint_thresh_tag = yaml.safe_load(tags_dict['FUSE_R2_INPAINT_THRESH'])
@@ -351,7 +360,7 @@ def test_r2_inpaint_thresh(
 )
 def test_corr_profile(
     runner: CliRunner,
-    basic_fuse_cli_params: FuseCliParams,
+    default_fuse_cli_params: FuseCliParams,
     driver: Driver,
     dtype: str,
     nodata: float,
@@ -360,14 +369,14 @@ def test_corr_profile(
     image.
     """
     cli_str = (
-        basic_fuse_cli_params.cli_str
+        default_fuse_cli_params.cli_str
         + f' --driver {driver} --dtype {dtype} --nodata {nodata}'
     )
 
     result = runner.invoke(cli, cli_str.split())
     assert result.exit_code == 0
-    assert basic_fuse_cli_params.corr_file.exists()
-    with rio.open(basic_fuse_cli_params.corr_file, 'r') as out_ds:
+    assert default_fuse_cli_params.corr_file.exists()
+    with rio.open(default_fuse_cli_params.corr_file, 'r') as out_ds:
         assert out_ds.driver.lower() == 'gtiff'
         if driver is Driver.cog:
             # TODO: GDAL 3.13.3 sets LAYOUT=COG for any GeoTIFF with 1 tile so this
@@ -388,31 +397,32 @@ def test_corr_profile(
         )
 
 
-def test_dtype_error(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
+def test_dtype_error(runner: CliRunner, default_fuse_cli_params: FuseCliParams):
     """Test --dtype with invalid value raises an error."""
-    cli_str = basic_fuse_cli_params.cli_str + ' --dtype unk'
+    cli_str = default_fuse_cli_params.cli_str + ' --dtype unk'
     result = runner.invoke(cli, cli_str.split())
     assert result.exit_code != 0
     assert 'Invalid value' in result.output
 
 
-def test_nodata_error(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
+def test_nodata_error(runner: CliRunner, default_fuse_cli_params: FuseCliParams):
     """Test --nodata with a value that cannot be cast to --dtype raises an error."""
-    cli_str = basic_fuse_cli_params.cli_str + ' --dtype uint8 --nodata nan'
+    cli_str = default_fuse_cli_params.cli_str + ' --dtype uint8 --nodata nan'
     result = runner.invoke(cli, cli_str.split())
     assert result.exit_code != 0
     assert 'nodata' in result.output and 'dtype' in result.output
 
 
-def test_creation_options(runner: CliRunner, basic_fuse_cli_params: FuseCliParams):
+def test_creation_options(runner: CliRunner, default_fuse_cli_params: FuseCliParams):
     """Test -co creation options generate correctly configured output."""
     cli_str = (
-        basic_fuse_cli_params.cli_str + ' -co COMPRESS=LZW -co PREDICTOR=2 -co TILED=NO'
+        default_fuse_cli_params.cli_str
+        + ' -co COMPRESS=LZW -co PREDICTOR=2 -co TILED=NO'
     )
     result = runner.invoke(cli, cli_str.split())
     assert result.exit_code == 0
-    assert basic_fuse_cli_params.corr_file.exists()
-    with rio.open(basic_fuse_cli_params.corr_file, 'r') as out_ds:
+    assert default_fuse_cli_params.corr_file.exists()
+    with rio.open(default_fuse_cli_params.corr_file, 'r') as out_ds:
         assert out_ds.profile['compress'] == 'lzw'
         assert not out_ds.profile['tiled']
 
