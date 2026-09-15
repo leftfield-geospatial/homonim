@@ -16,6 +16,7 @@
 
 import re
 from inspect import getsourcefile
+from os import PathLike
 from pathlib import Path
 
 import numpy as np
@@ -28,6 +29,7 @@ from rasterio.enums import ColorInterp, Resampling
 from rasterio.transform import Affine
 from rasterio.warp import calculate_default_transform, reproject
 
+from homonim.enums import Model, ProcCrs
 from homonim.raster_array import RasterArray
 
 # path to the test data root
@@ -41,6 +43,29 @@ def str_contain_no_space(str1: str, str2: str) -> bool:
     str1 = re.sub(r'\s+', '', str1.lower())
     str2 = re.sub(r'\s+', '', str2.lower())
     return str1 in str2
+
+
+def create_corr_filename(
+    src_file: str | PathLike,
+    proc_crs: ProcCrs,
+    model: Model,
+    kernel_shape: tuple[int, int],
+) -> str:
+    """Return a CLI corrected image filename, given the source image filename and
+    correction parameters.
+    """
+    src_file = Path(src_file)
+    postfix = (
+        f'FUSE_c{proc_crs.upper()}_m{model.upper()}_k{kernel_shape[0]}_'
+        f'{kernel_shape[1]}.tif'
+    )
+    return f'{src_file.stem}_{postfix}'
+
+
+def create_param_filename(corr_file: str | PathLike) -> str:
+    """Return a CLI parameter image filename, given the corrected image filename."""
+    corr_file = Path(corr_file)
+    return f'{corr_file.stem}_PARAM{corr_file.suffix}'
 
 
 # TODO: where fixtures are only used in one module, move them there

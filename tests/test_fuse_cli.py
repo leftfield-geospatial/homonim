@@ -28,9 +28,12 @@ from rasterio.warp import Resampling
 from homonim import utils
 from homonim.cli import cli
 from homonim.enums import Driver, Model, ProcCrs
-from homonim.fuse import RasterFuse
 from homonim.kernel_model import KernelModel
-from tests.conftest import str_contain_no_space
+from tests.conftest import (
+    create_corr_filename,
+    create_param_filename,
+    str_contain_no_space,
+)
 
 
 @dataclass
@@ -53,13 +56,16 @@ class FuseDefaults:
         """Path of the corrected image."""
         model = KernelModel._default_config['model']
         kernel_shape = KernelModel._default_config['kernel_shape']
-        post_fix = utils.create_out_postfix(self.proc_crs, model, kernel_shape)
-        return self.out_dir.joinpath(self.src_file.stem + post_fix)
+        corr_file = create_corr_filename(
+            self.src_file, self.proc_crs, model, kernel_shape
+        )
+        return self.out_dir.joinpath(corr_file)
 
     @cached_property
     def param_file(self) -> Path:
         """Path of the parameter image."""
-        return utils.create_param_filename(self.corr_file)
+        param_file = create_param_filename(self.corr_file)
+        return self.out_dir.joinpath(param_file)
 
 
 @pytest.fixture
@@ -98,10 +104,8 @@ def test_fuse(
     """Test fuse CLI output with different models and kernel shapes."""
     ref_file = file_rgb_100cm_float
     src_file = file_rgb_100cm_float
-    post_fix = utils.create_out_postfix(
-        ProcCrs.ref, model, kernel_shape, RasterFuse.create_out_profile()['driver']
-    )
-    corr_file = tmp_path.joinpath(src_file.stem + post_fix)
+    corr_file = create_corr_filename(src_file, ProcCrs.ref, model, kernel_shape)
+    corr_file = tmp_path.joinpath(corr_file)
     cli_str = (
         f'fuse -m {model.value} -k {kernel_shape[0]} {kernel_shape[1]} -od {tmp_path} '
         f'{src_file} {ref_file}'

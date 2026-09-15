@@ -106,24 +106,6 @@ def validate_threads(threads: int) -> int:
     return threads
 
 
-def create_out_postfix(
-    proc_crs: ProcCrs, model: Model, kernel_shape: tuple[int, int], *args
-) -> str:
-    """Create a filename postfix, including extension, for the corrected image file."""
-    # TODO: move to conftest.py and remove *args
-    return (
-        f'_FUSE_c{proc_crs.name.upper()}_m{model.upper()}_k{kernel_shape[0]}_'
-        f'{kernel_shape[1]}.tif'
-    )
-
-
-def create_param_filename(filename: str | Path) -> Path:
-    """Create a parameter image filename, given the corrected image filename."""
-    # TODO: move to conftest.py
-    filename = Path(filename)
-    return filename.parent.joinpath(f'{filename.stem}_PARAM{filename.suffix}')
-
-
 def north_up(im: DatasetReader) -> bool:
     """Return True if im is in a standard North-up orientation."""
     return (
