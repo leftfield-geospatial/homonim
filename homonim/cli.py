@@ -42,36 +42,29 @@ from homonim.version import __version__
 logger = logging.getLogger(__name__)
 
 
-class HomonimCommand(click.Command):
-    """click.Command subclass for formatting help with RST markup."""
+def _wrap_text(text: str, *args, **kwargs) -> str:
+    """click.formatting.wrap_text() replacement that strips some RST markup from help
+    text for CLI display.
+    """
+    subs = {
+        # convert from '``literal``' to 'literal'
+        '``(.*?)``': r'\g<1>',
+        # convert ':option:`--name <group-command --name>`' or ':option:`--name`' to
+        # '--name'
+        r':option:`(.*?)(\s+<.*?>)?`': r'\g<1>',
+        # convert from '`name <link>`__' to 'name'
+        r'`(.*?)(\s+<.*?>)?`_+': r'\g<1>',
+    }
 
-    def get_help(self, ctx: click.Context):
-        """Strip some RST markup from the help text for CLI display.  Will not work with grid tables."""
+    for sub_key, sub_value in subs.items():
+        text = re.sub(sub_key, sub_value, text, flags=re.DOTALL)
 
-        # Note that this can't easily be done in __init__, as each sub-command's __init__ gets called,
-        # which ends up re-assigning self.wrap_text to reformat_text
-        if not hasattr(self, 'wrap_text'):
-            self.wrap_text = click.formatting.wrap_text
-        sub_strings = {
-            '\b\n': '\n\b',  # convert from RST friendly to click literal (unwrapped) block marker
-            r'\| ': '',  # strip RST literal (unwrapped) marker in e.g. tables and bullet lists
-            r'\n\.\. _.*:\n': '',  # strip RST ref directive '\n.. _<name>:\n'
-            '::': ':',  # convert from RST '::' to ':'
-            '``(.*?)``': r'\g<1>',  # convert from RST '``literal``' to 'literal'
-            ':option:`(.*?)( <.*?>)?`': r'\g<1>',  # convert ':option:`--name <group-command --name>`' to '--name'
-            ':option:`(.*?)`': r'\g<1>',  # convert ':option:`--name`' to '--name'
-            '`([^<]*) <([^>]*)>`_': r'\g<1>',  # convert from RST cross-ref '`<name> <<link>>`_' to 'name'
-        }
+    return click_wrap_text(text, *args, **kwargs)
 
-        def reformat_text(text: str, width: int, **kwargs):
-            for sub_key, sub_value in sub_strings.items():
-                text = re.sub(sub_key, sub_value, text, flags=re.DOTALL)
-            wr_text = self.wrap_text(text, width, **kwargs)
-            # change double newline to single newline separated list
-            return re.sub(r'\n\n(\s*?)- ', '\n- ', wr_text, flags=re.DOTALL)
 
-        click.formatting.wrap_text = reformat_text
-        return click.Command.get_help(self, ctx)
+# patch click.formatting.wrap_text
+click_wrap_text = click.formatting.wrap_text
+click.formatting.wrap_text = _wrap_text
 
 
 @contextmanager
@@ -258,7 +251,6 @@ def cli(ctx: click.Context, verbose: int, quiet: int):
 
 
 @cli.command(
-    cls=HomonimCommand,
     short_help='Correct images to surface reflectance.',
     epilog='See https://homonim.readthedocs.io/ for more detail on usage.',
 )
@@ -534,7 +526,6 @@ def fuse(
 
 
 @cli.command(
-    cls=HomonimCommand,
     short_help='Compare images with a reference.',
     epilog='See https://homonim.readthedocs.io/ for more detail on usage.',
 )
@@ -643,7 +634,6 @@ def compare(
 
 
 @cli.command(
-    cls=HomonimCommand,
     short_help='Report parameter statistics.',
     epilog='See https://homonim.readthedocs.io/ for more detail on usage.',
 )
@@ -655,12 +645,8 @@ def compare(
 )
 @output_option
 def stats(param_files: tuple[Path, ...], output: Path):
-    """
-    Report statistics of PARAMETER images.
-
-    Report the minimum, maximum, mean etc. values of parameter images generated with
-    the :option:`--param-image <homonim-fuse --param-image>` option of the ``fuse``
-    command.
+    """Report statistics of PARAMETER images generated with the :option:`--param-image
+    <homonim-fuse --param-image>` option of the ``fuse`` command.
     """
     stats_dict = {}
     meta_dict = {}
