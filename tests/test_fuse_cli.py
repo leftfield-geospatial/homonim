@@ -115,7 +115,7 @@ def test_fuse(
     assert corr_file.exists()
 
     with rio.open(src_file, 'r') as src_ds, rio.open(corr_file, 'r') as out_ds:
-        assert out_ds.tags()['FUSE_MODEL'] == model.name
+        assert out_ds.tags()['FUSE_MODEL'] == model
         assert out_ds.tags()['FUSE_KERNEL_SHAPE'] == str(kernel_shape)
 
         src_array = src_ds.read(indexes=src_ds.indexes)

@@ -70,12 +70,11 @@ class RasterCompare(MatchedPairReader):
 
         Reference extents must encompass those of the source.
 
-        The reference should contain bands that are approximate wavelength matches to
-        the source bands.  When source and reference bands are RGB, or have
-        ``center_wavelength`` tags, bands are matched automatically based on
-        wavelength.  Otherwise, source and reference bands are assumed to be in
-        matching order.  Subsets and ordering of bands can be specified with the
-        ``src_bands`` and ``ref_bands`` parameters.
+        Source bands should be compared with reference bands of a similar wavelength.
+        When source and reference bands are RGB, or have ``center_wavelength`` tags,
+        bands are matched automatically.  Otherwise, source and reference bands are
+        assumed to be in matching order.  Subsets and ordering of bands can be
+        specified with the ``src_bands`` and ``ref_bands`` parameters.
 
         :param src_filename:
             Path or URI of a source image.

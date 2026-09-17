@@ -14,6 +14,7 @@
 # Homonim. If not, see <https://www.gnu.org/licenses/>.
 
 import logging
+import os
 from contextlib import contextmanager
 from multiprocessing import cpu_count
 from os import PathLike
@@ -177,10 +178,9 @@ def get_nonalpha_bands(im: DatasetReader | DatasetWriter) -> tuple[int, ...]:
 
 def validate_param_image(param_file: str | PathLike):
     """Validate the given parameter image."""
-    # TODO: move to stats module & modify to work with URI if necessary
-    param_file = Path(param_file)
-    if not param_file.exists():
-        raise FileNotFoundError(f'{param_file} does not exist')
+    # TODO: move to stats module
+    param_file = os.fspath(param_file)
+    param_name = Path(param_file).name
 
     with rio.open(param_file) as param_im:
         tags = param_im.tags()
@@ -191,7 +191,7 @@ def validate_param_image(param_file: str | PathLike):
             or not {'FUSE_MODEL', 'FUSE_KERNEL_SHAPE', 'FUSE_PROC_CRS', 'FUSE_REF_FILE'}
             <= set(tags)
         ):
-            raise ImageFormatError(f'{param_file.name} is not a valid parameter image.')
+            raise ImageFormatError(f'{param_name} is not a valid parameter image.')
 
         # check band descriptions end with the expected suffixes
         n_refl_bands = int(param_im.count / 3)
@@ -204,4 +204,4 @@ def validate_param_image(param_file: str | PathLike):
                 for suffix, desc in zip(suffixes, param_im.descriptions, strict=True)
             ]
         ):
-            raise ImageFormatError(f'{param_file.name} is not a valid parameter image.')
+            raise ImageFormatError(f'{param_name} is not a valid parameter image.')

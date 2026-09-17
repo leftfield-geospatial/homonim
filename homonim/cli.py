@@ -15,6 +15,7 @@
 
 import json
 import logging
+import posixpath
 import re
 import warnings
 from contextlib import contextmanager
@@ -99,6 +100,20 @@ def _configure_logging(verbosity: int):
         pkg_logger.setLevel(pkg_log_level)
 
 
+def _join_path_uri(base: str, file: str) -> str:
+    """Join base and file into a POSIX path if base is a path, or a URI if base is a
+    URI.
+    """
+    if '://' in base or base.startswith('/vsi'):
+        # If base is a standard / GDAL URI, use posixpath.join(), which joins with a
+        # single /, without altering base or file. pathlib.Path normalises // into /,
+        # so shouldn't be used with URIs (including GDAL URIs which can contain //).
+        return posixpath.join(base, file)
+    else:
+        # otherwise, if base is a path, use pathlib.Path which normalises slashes
+        return Path(base).joinpath(file).as_posix()
+
+
 def _conf_cb(ctx: click.Context, param: click.Option, value):
     """Click callback set default option values from a YAML configuration file."""
     # adapted from: https://jwodder.github.io/kbits/posts/click-config/
@@ -165,25 +180,15 @@ def _creation_options_cb(ctx: click.Context, param: click.Option, value):
 
 
 # define click options and arguments common to more than one command
-# TODO: allow URIs for all image options/args?
-# TODO: test for path/URI existence here or leave it to called code?
 ref_file_arg = click.argument(
-    'ref_file',
-    nargs=1,
-    metavar='REFERENCE',
-    type=click.Path(exists=False, dir_okay=False, path_type=Path),
+    'ref_file', nargs=1, metavar='REFERENCE', type=click.Path(dir_okay=False)
 )
 src_file_arg = click.argument(
-    'src_files',
-    nargs=-1,
-    metavar='SOURCE...',
-    type=click.Path(exists=False, dir_okay=False, path_type=Path),
+    'src_files', nargs=-1, metavar='SOURCE...', type=click.Path(dir_okay=False)
 )
 threads_option = click.option(
     '-t',
     '--threads',
-    # TODO: make this range 0 to num_cpus?  the docs range will render to the
-    #  num_cpus of the docs building server though.
     type=click.INT,
     default=RasterFuse._default_config['threads'],
     show_default=True,
@@ -218,7 +223,7 @@ upsampling_option = click.option(
 output_option = click.option(
     '-op',
     '--output',
-    type=click.Path(exists=False, dir_okay=False, writable=True, path_type=Path),
+    type=click.Path(dir_okay=False, writable=True, path_type=Path),
     help='Path of a JSON file to write results to.',
 )
 ref_bands_option = click.option(
@@ -287,10 +292,10 @@ def cli(ctx: click.Context, verbose: int, quiet: int):
 @click.option(
     '-od',
     '--out-dir',
-    type=click.Path(exists=True, file_okay=False, writable=True, path_type=Path),
-    default=Path.cwd(),
+    type=click.Path(file_okay=False),
+    default=str(Path.cwd()),
     show_default='current working directory',
-    help='Path of the output image directory.',
+    help='Path or URI of the output image directory.',
 )
 @click.option(
     '-o',
@@ -304,9 +309,9 @@ def cli(ctx: click.Context, verbose: int, quiet: int):
     '-cmp',
     '--compare',
     'cmp_file',
-    type=click.Path(exists=False, dir_okay=False, path_type=Path),
-    help="Path of an image to compare source and corrected images with. If ``'ref'``,"
-    ' source and corrected images are compared with the REFERENCE.',
+    type=click.Path(dir_okay=False),
+    help='Path or URI of an image to compare source and corrected images with.  If '
+    "``'ref'``, source and corrected images are compared with the REFERENCE.",
 )
 @click.option(
     '-cb',
@@ -329,7 +334,7 @@ def cli(ctx: click.Context, verbose: int, quiet: int):
 @click.option(
     '-c',
     '--conf',
-    type=click.Path(exists=True, dir_okay=False, readable=True, path_type=Path),
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
     callback=_conf_cb,
     expose_value=False,
     is_eager=True,
@@ -420,14 +425,14 @@ def cli(ctx: click.Context, verbose: int, quiet: int):
 @click.pass_context
 def fuse(
     ctx: click.Context,
-    src_files: tuple[Path, ...],
-    ref_file: Path,
+    src_files: tuple[str, ...],
+    ref_file: str,
     model: Model,
     kernel_shape: tuple[int, int],
     src_bands: tuple[int, ...],
     ref_bands: tuple[int, ...],
-    out_dir: Path,
-    cmp_file: Path,
+    out_dir: str,
+    cmp_file: str,
     cmp_bands: tuple[int, ...],
     proc_crs: ProcCrs,
     param_image: bool,
@@ -437,20 +442,20 @@ def fuse(
     """
     Correct SOURCE images to surface reflectance by fusion with a REFERENCE.
 
-    For best results, source and reference images should be concurrent. Reference
-    extents must encompass those of the source.
+    SOURCE and REFERENCE images can be provided as paths or URIs.  For best results,
+    these images should be concurrent.  Reference extents must encompass those of the
+    source.
 
-    The reference should contain bands that are approximate wavelength matches to the
-    source bands.  When source and reference bands are RGB, or have
-    ``center_wavelength`` tags, bands are matched automatically based on wavelength.
-    Otherwise, source and reference bands are assumed to be in matching order.
-    Subsets and ordering of bands can be specified with the :option:`--src-band
-    <homonim-fuse --src-band>` and :option:`--ref-band <homonim-fuse --ref-band>`
-    parameters.
+    Source bands should be fused with reference bands of a similar wavelength.  When
+    source and reference bands are RGB, or have ``center_wavelength`` tags, bands are
+    matched automatically.  Otherwise, source and reference bands are assumed to be
+    in matching order.  Subsets and ordering of bands can be specified with
+    :option:`--src-band <homonim-fuse --src-band>` and :option:`--ref-band
+    <homonim-fuse --ref-band>`.
 
-    Option values can be provided via a YAML configuration file with :option:`--conf
-    <homonim-fuse --conf>`.  When options are provided on the command line and in the
-    configuration file, command line values take precedence.
+    :option:`--conf <homonim-fuse --conf>` allows option values to be provided via a
+    YAML configuration file.  When options are provided on the command line and in
+    the configuration file, command line values take precedence.
 
     Output images are written to the current directory by default.  This can be
     changed with :option:`--out-dir <homonim-fuse --out-dir>`.  Images are named
@@ -460,7 +465,9 @@ def fuse(
 
     # iterate over and correct source files
     for src_i, src_file in enumerate(src_files):
-        tqdm.write(f'\nCorrecting {src_file.name} ({src_i + 1} of {len(src_files)})')
+        tqdm.write(
+            f'\nCorrecting {Path(src_file).name} ({src_i + 1} of {len(src_files)})'
+        )
         try:
             with RasterFuse(
                 src_file,
@@ -471,13 +478,13 @@ def fuse(
                 force=force_match,
             ) as fuse:
                 # construct output filenames
-                postfix = (
-                    f'FUSE_c{fuse.proc_crs.upper()}_m{model.upper()}_'
-                    f'k{kernel_shape[0]}_{kernel_shape[1]}'
+                corr_file = (
+                    f'{Path(src_file).stem}_FUSE_c{fuse.proc_crs.upper()}_'
+                    f'm{model.upper()}_k{kernel_shape[0]}_{kernel_shape[1]}.tif'
                 )
-                corr_file = out_dir.joinpath(f'{src_file.stem}_{postfix}.tif')
+                corr_file = _join_path_uri(out_dir, corr_file)
                 param_file = (
-                    out_dir.joinpath(f'{corr_file.stem}_PARAM.tif')
+                    _join_path_uri(out_dir, f'{Path(corr_file).stem}_PARAM.tif')
                     if param_image
                     else None
                 )
@@ -557,8 +564,8 @@ def fuse(
 )
 @force_match_option
 def compare(
-    src_files: tuple[Path, ...],
-    ref_file: Path,
+    src_files: tuple[str, ...],
+    ref_file: str,
     src_bands: tuple[int, ...],
     ref_bands: tuple[int, ...],
     output: Path,
@@ -576,15 +583,15 @@ def compare(
     reflectance correction, by comparing uncorrected and corrected images with a new
     reference.
 
-    Reference extents must encompass those of the source.
+    SOURCE and REFERENCE images can be provided as paths or URIs.  Reference extents
+    must encompass those of the source.
 
-    The reference should contain bands that are approximate wavelength matches to the
-    source bands.  When source and reference bands are RGB, or have
-    ``center_wavelength`` tags, bands are matched automatically based on wavelength.
-    Otherwise, source and reference bands are assumed to be in matching order.
-    Subsets and ordering of bands can be specified with the :option:`--src-band
-    <homonim-compare --src-band>` and :option:`--ref-band <homonim-compare
-    --ref-band>` parameters.
+    Source bands should be compared with reference bands of a similar wavelength.  When
+    source and reference bands are RGB, or have ``center_wavelength`` tags, bands are
+    matched automatically.  Otherwise, source and reference bands are assumed to be
+    in matching order.  Subsets and ordering of bands can be specified with
+    :option:`--src-band <homonim-compare --src-band>` and :option:`--ref-band
+    <homonim-compare --ref-band>`.
     """
     stats_dict = {}
     # construct src_bands_list if compare() was invoked from the command line
@@ -595,7 +602,9 @@ def compare(
     for src_i, (src_file, src_bands) in enumerate(
         zip(src_files, src_bands_list, strict=True)
     ):
-        tqdm.write(f'\nComparing {src_file.name} ({src_i + 1} of {len(src_files)})')
+        tqdm.write(
+            f'\nComparing {Path(src_file).name} ({src_i + 1} of {len(src_files)})'
+        )
         start_time = timer()
         try:
             with RasterCompare(
@@ -638,13 +647,10 @@ def compare(
     epilog='See https://homonim.readthedocs.io/ for more detail on usage.',
 )
 @click.argument(
-    'param_files',
-    nargs=-1,
-    metavar='PARAMETER...',
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    'param_files', nargs=-1, metavar='PARAMETER...', type=click.Path(dir_okay=False)
 )
 @output_option
-def stats(param_files: tuple[Path, ...], output: Path):
+def stats(param_files: tuple[str, ...], output: Path):
     """Report statistics of PARAMETER images generated with the :option:`--param-image
     <homonim-fuse --param-image>` option of the ``fuse`` command.
     """
@@ -652,25 +658,25 @@ def stats(param_files: tuple[Path, ...], output: Path):
     meta_dict = {}
 
     # process parameter files, storing results
-    for param_i, param_filename in enumerate(param_files):
+    for param_i, param_file in enumerate(param_files):
         tqdm.write(
-            f'\nProcessing {param_filename.name} ({param_i + 1} of {len(param_files)})'
+            f'\nAnalysing {Path(param_file).name} ({param_i + 1} of {len(param_files)})'
         )
         try:
-            with ParamStats(param_filename) as param_stats:
-                stats_dict[str(param_filename)] = param_stats.stats()
-                meta_dict[str(param_filename)] = param_stats.metadata
+            with ParamStats(param_file) as param_stats:
+                stats_dict[param_file] = param_stats.stats()
+                meta_dict[param_file] = param_stats.metadata
         except (RasterioIOError, HomonimError) as ex:
             raise click.UsageError(str(ex)) from None
 
     # print a key for the following tables
-    tqdm.write(f'\n\n{param_stats.schema_table()}')
+    tqdm.write(f'\n\n{ParamStats.schema_table()}')
 
     # iterate over stored results and print
-    for param_filename in stats_dict.keys():
-        tqdm.write(f'\n{Path(param_filename).name}:\n')
-        tqdm.write(meta_dict[param_filename])
-        tqdm.write(f'Stats:\n\n{ParamStats.stats_table(stats_dict[param_filename])}\n')
+    for param_file in stats_dict.keys():
+        tqdm.write(f'\n{Path(param_file).name}:\n')
+        tqdm.write(meta_dict[param_file])
+        tqdm.write(f'Stats:\n\n{ParamStats.stats_table(stats_dict[param_file])}\n')
 
     if output is not None:
         with open(output, 'w') as file:

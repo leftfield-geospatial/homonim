@@ -12,6 +12,7 @@
 #
 # You should have received a copy of the GNU Affero General Public License along with
 # Homonim. If not, see <https://www.gnu.org/licenses/>.
+
 import warnings
 from typing import Any, ClassVar
 
@@ -102,7 +103,7 @@ class KernelModel:
             include it with the parameters returned by :meth:`fit`.
         :param r2_inpaint_thresh:
             R\N{SUPERSCRIPT TWO} (coefficient of determination) threshold below which to
-            interpolate ("in-paint") model offsets from surrounding values.  Applies
+            interpolate ("inpaint") model offsets from surrounding values.  Applies
             to the :attr:`~enums.Model.gain_offset` model only.  If ``None``, no
             interpolation is performed.
         :param mask_partial:

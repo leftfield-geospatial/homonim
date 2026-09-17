@@ -26,6 +26,7 @@ from typing import Any, ClassVar
 
 import numpy as np
 import rasterio as rio
+from rasterio import shutil
 from rasterio.dtypes import can_cast_dtype
 from rasterio.enums import Resampling
 from rasterio.errors import NotGeoreferencedWarning
@@ -57,6 +58,14 @@ _cog_creation_options = dict(
 )
 
 
+def _dataset_exists(file: str | PathLike) -> bool:
+    """Test if a dataset path or URI exists."""
+    file = os.fspath(file)
+    # note: if file is a URI, this only returns True if file exists and is a valid
+    # dataset
+    return Path(file).exists() or shutil.exists(file)
+
+
 class RasterFuse(MatchedPairReader):
     # default values for process() kwargs
     _default_config: ClassVar[dict[str, Any]] = dict(
@@ -81,12 +90,11 @@ class RasterFuse(MatchedPairReader):
         For best results, source and reference images should be concurrent.
         Reference extents must encompass those of the source.
 
-        The reference should contain bands that are approximate wavelength matches to
-        the source bands.  When source and reference bands are RGB, or have
-        ``center_wavelength`` tags, bands are matched automatically based on
-        wavelength.  Otherwise, source and reference bands are assumed to be in
-        matching order.  Subsets and ordering of bands can be specified with the
-        ``src_bands`` and ``ref_bands`` parameters.
+        Source bands should be fused with reference bands of a similar wavelength.
+        When source and reference bands are RGB, or have ``center_wavelength`` tags,
+        bands are matched automatically.  Otherwise, source and reference bands are
+        assumed to be in matching order.  Subsets and ordering of bands can be
+        specified with the ``src_bands`` and ``ref_bands`` parameters.
 
         :param src_filename:
             Path or URI of a source image.
@@ -170,8 +178,8 @@ class RasterFuse(MatchedPairReader):
             f'FUSE_{k.upper()}': getattr(v, 'name', str(v)) for k, v in kwargs.items()
         }
         im.update_tags(
-            FUSE_SRC_FILE=Path(os.fspath(self._src_filename)).name,
-            FUSE_REF_FILE=Path(os.fspath(self._ref_filename)).name,
+            FUSE_SRC_FILE=Path(self._src_filename).name,
+            FUSE_REF_FILE=Path(self._ref_filename).name,
             FUSE_PROC_CRS=self.proc_crs.name,
             **kwargs_tags,
         )
@@ -481,6 +489,8 @@ class RasterFuse(MatchedPairReader):
         # TODO: is it possible to have an auto block_config that adjusts threads and
         #  block mem to available memory
         self._assert_open()
+        corr_filename = os.fspath(corr_filename)
+        param_filename = os.fspath(param_filename) if param_filename else None
         model_type = Model(model)
         if threads > os.cpu_count():
             raise HomonimError(
@@ -544,11 +554,10 @@ class RasterFuse(MatchedPairReader):
         bar_format = '{l_bar}{bar}|{n_fmt}/{total_fmt} blocks [{elapsed}<{remaining}]'
 
         # open the output files and set their tags
-        # TODO: this does not work with URIs
-        if not overwrite and Path(corr_filename).exists():
-            raise FileExistsError(f"Corrected image exists: '{fspath(corr_filename)}'")
-        if not overwrite and param_filename and Path(param_filename).exists():
-            raise FileExistsError(f"Parameter image exists: '{fspath(param_filename)}'")
+        if not overwrite and _dataset_exists(corr_filename):
+            raise FileExistsError(f"Corrected image exists: '{corr_filename}'")
+        if not overwrite and param_filename and _dataset_exists(param_filename):
+            raise FileExistsError(f"Parameter image exists: '{param_filename}'")
 
         with ExitStack() as stack:
             corr_profile = self._create_corr_profile(

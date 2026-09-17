@@ -158,7 +158,7 @@ def test_find_r2(ra_100cm_float, ra_50cm_float, model: Model, find_r2: bool):
 
 @pytest.mark.parametrize('kernel_shape', [(5, 5), (5, 7), (9, 9)])
 def test_low_r2_inpainting(ra_50cm_float, kernel_shape: tuple[int, int]):
-    """Test low R2 value in-painting."""
+    """Test low R2 value inpainting."""
     # make src and ref the same so we have known parameters == 1
     src_ra = ra_50cm_float
     ref_ra = ra_50cm_float.copy()
