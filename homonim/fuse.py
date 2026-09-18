@@ -20,7 +20,7 @@ import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import ExitStack
 from itertools import product
-from os import PathLike, fspath
+from os import PathLike
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -44,17 +44,17 @@ from homonim.raster_pair import BlockPair
 logger = logging.getLogger(__name__)
 
 # default output image creation options
-_gtiff_creation_options = dict(
-    tiled=True,
-    blockxsize=512,
-    blockysize=512,
-    compress='deflate',
-    interleave='band',
-    photometric='minisblack',
-    bigtiff='if_safer',
-)
-_cog_creation_options = dict(
-    blocksize=512, compress='deflate', interleave='band', bigtiff='if_safer'
+_default_creation_options = dict(
+    gtiff=dict(
+        tiled=True,
+        blockxsize=512,
+        blockysize=512,
+        compress='deflate',
+        interleave='band',
+        photometric='minisblack',
+        bigtiff='if_safer',
+    ),
+    cog=dict(blocksize=512, compress='deflate', interleave='band', bigtiff='if_safer'),
 )
 
 
@@ -142,9 +142,7 @@ class RasterFuse(MatchedPairReader):
                     f"'nodata' value: {nodata} cannot be safely cast to 'dtype': '"
                     f"{dtype}'"
                 )
-        creation_options = creation_options or (
-            _gtiff_creation_options if driver is Driver.gtiff else _cog_creation_options
-        )
+        creation_options = creation_options or _default_creation_options[driver.name]
         return dict(
             driver=str(driver),
             width=self.src_im.width,
@@ -169,7 +167,7 @@ class RasterFuse(MatchedPairReader):
             nodata=RasterArray.default_nodata,
             crs=proc_im.crs,
             transform=proc_im.transform,
-            **_gtiff_creation_options,
+            **_default_creation_options['gtiff'],
         )
 
     def _set_image_tags(self, im: DatasetWriter, **kwargs):
@@ -379,9 +377,7 @@ class RasterFuse(MatchedPairReader):
             stacklevel=2,
         )
         driver = Driver(driver.lower())
-        creation_options = creation_options or (
-            _gtiff_creation_options if driver is Driver.gtiff else _cog_creation_options
-        )
+        creation_options = creation_options or _default_creation_options[driver.name]
         return dict(
             driver=driver, dtype=dtype, nodata=nodata, creation_options=creation_options
         )
