@@ -1,24 +1,19 @@
-"""
-Homonim: Correction of aerial and satellite imagery to surface reflectance.
-Copyright (C) 2021 Dugal Harris
-Email: dugalh@gmail.com
+# Copyright Leftfield Geospatial
+#
+# This file is part of Homonim.
+#
+# Homonim is free software: you can redistribute it and/or modify it under the terms
+# of the GNU Affero General Public License as published by the Free Software
+# Foundation, either version 3 of the License, or (at your option) any later version.
+#
+# Homonim is distributed in the hope that it will be useful, but WITHOUT ANY
+# WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+# PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License along with
+# Homonim. If not, see <https://www.gnu.org/licenses/>.
 
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program.  If not, see <https://www.gnu.org/licenses/>.
-"""
-
-import pathlib
-from typing import Tuple
+from pathlib import Path
 
 import pytest
 import rasterio as rio
@@ -30,6 +25,7 @@ from homonim.cli import cli
 from tests.conftest import create_corr_filename
 
 
+# ruff: ignore[E501]
 @pytest.mark.parametrize(
     'src_files, ref_file, model, kernel_shape, proc_crs, mask_partial, src_bands, exp_proc_crs', [
         ('ngi_src_files', 'modis_ref_file', Model.gain, (1, 1), ProcCrs.auto, False, None, ProcCrs.ref),
@@ -47,24 +43,24 @@ from tests.conftest import create_corr_filename
     ]
 )  # fmt: skip
 def test_fuse_compare(
-    tmp_path: pathlib.Path,
+    tmp_path: Path,
     runner: CliRunner,
     src_files: str,
     ref_file: str,
     model: Model,
-    kernel_shape: Tuple[int, int],
+    kernel_shape: tuple[int, int],
     proc_crs: ProcCrs,
     mask_partial: bool,
-    src_bands: Tuple[int, ...],
+    src_bands: tuple[int, ...],
     exp_proc_crs: ProcCrs,
     request: pytest.FixtureRequest,
 ):
-    """Additional integration tests using 'real' aerial and satellite imagery."""
+    """Test integration using 'real' aerial and satellite imagery."""
     src_files = request.getfixturevalue(src_files)
-    src_files: Tuple[pathlib.Path, ...] = (
+    src_files: tuple[Path, ...] = (
         src_files if isinstance(src_files, tuple) else (src_files,)
     )
-    ref_file: pathlib.Path = request.getfixturevalue(ref_file)
+    ref_file: Path = request.getfixturevalue(ref_file)
     src_file_str = ' '.join([str(fn) for fn in src_files])
     corr_files = [
         create_corr_filename(sf, exp_proc_crs, model, kernel_shape) for sf in src_files
@@ -73,8 +69,8 @@ def test_fuse_compare(
     src_bands_str = ' '.join([f'-sb {bi}' for bi in src_bands]) if src_bands else ''
 
     cli_str = (
-        f'fuse -m {model.value} -k {kernel_shape[0]} {kernel_shape[1]} -od {tmp_path} -pc {proc_crs.value}'
-        f' -mbm 1 {src_bands_str} {src_file_str} {ref_file}'
+        f'fuse -m {model.value} -k {kernel_shape[0]} {kernel_shape[1]} -od {tmp_path} '
+        f'-pc {proc_crs.value} -mbm 1 {src_bands_str} {src_file_str} {ref_file}'
     )
     if mask_partial:
         cli_str += ' --mask-partial'
@@ -82,8 +78,8 @@ def test_fuse_compare(
     assert result.exit_code == 0
     assert all([corr_file.exists() for corr_file in corr_files])
 
-    for src_file, corr_file in zip(src_files, corr_files):
-        # test corr_file improves on src_file (by comparing both to ref_file)
+    for src_file, corr_file in zip(src_files, corr_files, strict=True):
+        # test corr_file improves on src_file by comparing both to ref_file
         with RasterCompare(
             src_file, ref_file, proc_crs=proc_crs, src_bands=src_bands
         ) as src_compare:
@@ -98,19 +94,19 @@ def test_fuse_compare(
 
         # test corr_file mask
         with rio.open(src_file, 'r') as src_ds, rio.open(corr_file, 'r') as corr_ds:
-            src_mask = src_ds.dataset_mask().astype('bool', copy=False)
-            corr_mask = corr_ds.dataset_mask().astype('bool', copy=False)
+            src_mask = src_ds.dataset_mask().view('bool')
+            corr_mask = corr_ds.dataset_mask().view('bool')
             if not mask_partial:
-                # test src and homo masks are identical
+                # test src and corr masks are identical
                 assert corr_res['Mean']['n'] == src_res['Mean']['n']
                 assert (corr_mask == src_mask).all()
             else:
-                # test homo mask is smaller than src mask
+                # test corr mask is smaller than src mask
                 assert corr_res['Mean']['n'] < src_res['Mean']['n']
                 assert corr_mask.sum() > 0
                 assert corr_mask.sum() < src_mask.sum()
                 assert src_mask[corr_mask].all()
-                # test homo mask consists of one blob
+                # test corr mask consists of one blob
                 corr_mask_shapes = list(
                     shapes(
                         corr_mask.astype('uint8', copy=False),
