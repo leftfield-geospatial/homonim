@@ -1,55 +1,42 @@
-"""
-Homonim: Correction of aerial and satellite imagery to surface reflectance
-Copyright (C) 2021 Dugal Harris
-Email: dugalh@gmail.com
+# Copyright Leftfield Geospatial
+#
+# This file is part of Homonim.
+#
+# Homonim is free software: you can redistribute it and/or modify it under the terms
+# of the GNU Affero General Public License as published by the Free Software
+# Foundation, either version 3 of the License, or (at your option) any later version.
+#
+# Homonim is distributed in the hope that it will be useful, but WITHOUT ANY
+# WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+# PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License along with
+# Homonim. If not, see <https://www.gnu.org/licenses/>.
 
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program.  If not, see <https://www.gnu.org/licenses/>.
-"""
-
-import os
+import itertools
 from pathlib import Path
-from typing import Dict, Tuple
 
 import pytest
 import rasterio as rio
 import yaml
 from pytest import FixtureRequest
+from rasterio.enums import MaskFlags
 from rasterio.features import shapes
 from rasterio.vrt import WarpedVRT
 
 from homonim import utils
-from homonim.enums import Model, ProcCrs
+from homonim.enums import Driver, Model, ProcCrs
 from homonim.errors import IoError
-from homonim.fuse import RasterFuse
-from tests.conftest import create_corr_filename, create_param_filename
+from homonim.fuse import RasterFuse, _default_creation_options
+from homonim.kernel_model import KernelModel
+from homonim.raster_array import RasterArray
 
 
-@pytest.mark.parametrize(
-    'src_file, ref_file', [
-        ('src_file_50cm_float', 'ref_file_100cm_float'),
-        ('src_file_100cm_float', 'ref_file_50cm_float'),
-    ]
-)  # yapf: disable
-def test_creation(
-    src_file: str, ref_file: str, tmp_path: Path, request: FixtureRequest
-):
-    """Test creation and configuration of RasterFuse."""
-    src_file: Path = request.getfixturevalue(src_file)
-    ref_file: Path = request.getfixturevalue(ref_file)
-    raster_fuse = RasterFuse(src_file, ref_file)
+def test_init(src_file_50cm_float: Path, ref_file_100cm_float: Path):
+    """Test RasterFuse initialisation and context entry / exit."""
+    raster_fuse = RasterFuse(src_file_50cm_float, ref_file_100cm_float)
     with raster_fuse:
-        assert raster_fuse.proc_crs != ProcCrs.auto
+        assert raster_fuse.proc_crs is ProcCrs.ref
         assert not raster_fuse.closed
     assert raster_fuse.closed
 
@@ -58,21 +45,18 @@ def test_creation(
 def test_overwrite(
     tmp_path: Path, src_file_50cm_float, ref_file_100cm_float, overwrite: bool
 ):
-    """Test overwrite behaviour."""
-    corr_filename = tmp_path.joinpath('corrected.tif')
-    param_filename = tmp_path.joinpath('parameter.tif')
+    """Test the overwrite parameter."""
+    corr_file = tmp_path.joinpath('corrected.tif')
+    param_file = tmp_path.joinpath('parameter.tif')
     params = dict(
-        corr_filename=corr_filename,
-        param_filename=param_filename,
-        model=Model.gain_blk_offset,
-        kernel_shape=(5, 5),
-        overwrite=overwrite,
+        corr_filename=corr_file, param_filename=param_file, overwrite=overwrite
     )
-
     raster_fuse = RasterFuse(
         src_filename=src_file_50cm_float, ref_filename=ref_file_100cm_float
     )
-    corr_filename.touch()
+
+    # test overwriting the corrected image
+    corr_file.touch()
     with raster_fuse:
         if not overwrite:
             with pytest.raises(FileExistsError):
@@ -80,8 +64,9 @@ def test_overwrite(
         else:
             raster_fuse.process(**params)
 
-    corr_filename.unlink()
-    param_filename.touch()
+    # test overwriting the parameter image
+    corr_file.unlink()
+    param_file.touch()
     with raster_fuse:
         if not overwrite:
             with pytest.raises(FileExistsError):
@@ -90,8 +75,10 @@ def test_overwrite(
             raster_fuse.process(**params)
 
 
+# ruff: ignore[E501]
 @pytest.mark.parametrize(
-    'src_file, ref_file, model, kernel_shape, max_block_mem', [
+    'src_file, ref_file, model, kernel_shape, max_block_mem',
+    [
         ('src_file_45cm_float', 'ref_file_100cm_float', Model.gain, (1, 1), 2.e-4),
         ('src_file_45cm_float', 'ref_file_100cm_float', Model.gain_blk_offset, (1, 1), 1.e-3),
         ('src_file_45cm_float', 'ref_file_100cm_float', Model.gain_offset, (5, 5), 1.e-3),
@@ -101,191 +88,269 @@ def test_overwrite(
         ('src_file_45cm_float', 'ref_file_wgs84_sup_float', Model.gain_blk_offset, (1, 1), 1.e-3),
         ('src_file_wgs84_sup_100cm_float', 'ref_file_45cm_float', Model.gain_blk_offset, (1, 1), 1.e-3),
     ]
-)  # yapf: disable
-def test_basic_fusion(
+)  # fmt: skip
+def test_corr_content(
     src_file: str,
     ref_file: str,
     model: Model,
-    kernel_shape: Tuple[int, int],
+    kernel_shape: tuple[int, int],
     max_block_mem: float,
     tmp_path: Path,
     request: FixtureRequest,
 ):
-    """Test fusion output with different src/ref images, and model etc combinations."""
+    """Test the corrected image content with different src / ref images, and model
+    etc combinations.
+    """
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
-    block_config = RasterFuse.create_block_config(max_block_mem=max_block_mem)
-    corr_filename = tmp_path.joinpath('corrected.tif')
+    corr_file = tmp_path.joinpath('corrected.tif')
     raster_fuse = RasterFuse(src_file, ref_file)
     with raster_fuse:
-        raster_fuse.process(
-            corr_filename, model, kernel_shape, block_config=block_config
-        )
-    assert corr_filename.exists()
+        raster_fuse.process(corr_file, model, kernel_shape, max_block_mem=max_block_mem)
+    assert corr_file.exists()
+
     # open src_file in a WarpedVRT to reproject it North-up (if necessary)
     with (
         WarpedVRT(rio.open(src_file, 'r')) as src_ds,
-        rio.open(corr_filename, 'r') as out_ds,
+        rio.open(corr_file, 'r') as corr_ds,
     ):
         src_array = src_ds.read(indexes=1)
         src_mask = src_ds.dataset_mask().astype('bool', copy=False)
-        out_array = out_ds.read(indexes=1)
-        out_mask = out_ds.dataset_mask().astype('bool', copy=False)
+        out_array = corr_ds.read(indexes=1)
+        out_mask = corr_ds.dataset_mask().astype('bool', copy=False)
         assert (out_mask == src_mask).all()
         assert out_array[out_mask] == pytest.approx(src_array[src_mask], abs=2)
 
 
-@pytest.mark.parametrize(
-    'out_profile', [
-        dict(
-            driver='GTiff', dtype='float32', nodata=float('nan'),
-            creation_options=dict(
-                tiled=True, blockxsize=512, blockysize=512, compress='deflate', interleave='band',
-                #photometric='minisblack'
-            )
-        ),
-        dict(
-            driver='GTiff', dtype='uint8', nodata=None,
-            creation_options=dict(
-                tiled=True, blockxsize=64, blockysize=64, compress='jpeg', interleave='pixel', photometric='ycbcr'
-            )
-        ),
-        dict(driver='PNG', dtype='uint16', nodata=0, creation_options=dict()),
-    ]
-)  # yapf: disable
-def test_out_profile(file_rgb_100cm_float, tmp_path: Path, out_profile: Dict):
-    """Test fusion output image format (profile) with different out_profile configurations."""
-    raster_fuse = RasterFuse(file_rgb_100cm_float, file_rgb_100cm_float)
-    corr_filename = tmp_path.joinpath('corrected.tif')
-    with raster_fuse:
-        raster_fuse.process(
-            corr_filename, Model.gain_blk_offset, (3, 3), out_profile=out_profile
-        )
-    assert corr_filename.exists()
-
-    out_profile.update(**out_profile['creation_options'])
-    out_profile.pop('creation_options')
-
-    with (
-        rio.open(file_rgb_100cm_float, 'r') as src_ds,
-        rio.open(corr_filename, 'r') as fuse_ds,
-    ):
-        # test output image has been set with out_profile properties
-        for k, v in out_profile.items():
-            assert (
-                (v is None and k not in fuse_ds.profile) or
-                (fuse_ds.profile[k] == v) or
-                (str(v).lower() in str(fuse_ds.profile[k]).lower())
-            )  # yapf: disable
-
-        # test output image has been set with src image properties not in out_profile
-        if src_ds.profile['driver'].lower() == out_profile['driver'].lower():
-            # source image keys including driver specific creation options, not present in out_profile
-            src_keys = set(src_ds.profile.keys()).difference(out_profile.keys())
-        else:
-            # source image keys excluding driver specific creation options, not present in out_profile
-            src_keys = {
-                'width',
-                'height',
-                'count',
-                'dtype',
-                'crs',
-                'transform',
-            }.difference(out_profile.keys())
-        for k in src_keys:
-            v = src_ds.profile[k]
-            assert (
-                (v is None and k not in fuse_ds.profile) or
-                (fuse_ds.profile[k] == v) or
-                (str(fuse_ds.profile[k]) == str(v))
-            )  # yapf: disable
-
-
-@pytest.mark.parametrize(
-    'model, proc_crs', [
-        (Model.gain, ProcCrs.ref),
-        (Model.gain_blk_offset, ProcCrs.ref),
-        (Model.gain_offset, ProcCrs.ref),
-        (Model.gain, ProcCrs.src),
-        (Model.gain_blk_offset, ProcCrs.src),
-        (Model.gain_offset, ProcCrs.src),
-    ]
-)  # yapf: disable
-def test_param_image(
-    file_rgb_100cm_float, tmp_path: Path, model: Model, proc_crs: ProcCrs
+@pytest.mark.parametrize('driver', Driver)
+def test_corr_profile_defaults(
+    tmp_path: Path, src_file_100cm_float: Path, driver: Driver
 ):
-    """Test creation and masking of parameter image for different model and proc_crs combinations."""
-    corr_filename = tmp_path.joinpath('corrected.tif')
-    param_filename = tmp_path.joinpath('parameter.tif')
-    raster_fuse = RasterFuse(
-        file_rgb_100cm_float, file_rgb_100cm_float, proc_crs=proc_crs
+    """Test the corrected image format with default parameter values for different
+    drivers.
+    """
+    raster_fuse = RasterFuse(src_file_100cm_float, src_file_100cm_float)
+    corr_file = tmp_path.joinpath('corrected.tif')
+    with raster_fuse:
+        raster_fuse.process(corr_file, driver=driver)
+    assert corr_file.exists()
+
+    src_keys = ['crs', 'transform', 'width', 'height', 'count']
+    creation_option_keys = [
+        'tiled',
+        'blockxsize',
+        'blockysize',
+        'compress',
+        'interleave',
+    ]
+    with (
+        rio.open(src_file_100cm_float, 'r') as src_ds,
+        rio.open(corr_file, 'r') as corr_ds,
+    ):
+        assert corr_ds.driver.lower() == 'gtiff'
+        if driver is Driver.cog:
+            # TODO: GDAL 3.13.3 sets LAYOUT=COG for any GeoTIFF with 1 tile so this
+            #  this test will pass for driver=gtiff too
+            im_struct = corr_ds.tags(ns='IMAGE_STRUCTURE')
+            assert im_struct['LAYOUT'].lower() == 'cog'
+
+        assert corr_ds.dtypes[0] == RasterArray.default_dtype
+        assert utils.nan_equals(corr_ds.nodata, RasterArray.default_nodata)
+
+        for k in src_keys:
+            assert corr_ds.profile[k] == src_ds.profile[k]
+
+        # test cog creation options against the gtiff defaults (cogs are read as
+        # gtiffs and default gtiff and cog creation options amount to the same thing)
+        for k in creation_option_keys:
+            assert corr_ds.profile[k] == _default_creation_options['gtiff'][k]
+
+
+@pytest.mark.parametrize(
+    'driver, dtype, nodata',
+    [
+        (Driver.gtiff, 'float64', float('inf')),
+        (Driver.gtiff, 'uint16', 65535),
+        (Driver.cog, 'uint8', None),
+        (Driver.gtiff, 'uint8', None),
+    ],
+)
+def test_corr_profile(
+    tmp_path: Path,
+    src_file_100cm_float: Path,
+    driver: Driver,
+    dtype: str,
+    nodata: float | None,
+):
+    """Test the corrected image format with different driver, dtype and nodata
+    parameters.
+    """
+    raster_fuse = RasterFuse(src_file_100cm_float, src_file_100cm_float)
+    corr_file = tmp_path.joinpath('corrected.tif')
+    with raster_fuse:
+        raster_fuse.process(corr_file, driver=driver, dtype=dtype, nodata=nodata)
+    assert corr_file.exists()
+
+    with rio.open(corr_file, 'r') as corr_ds:
+        assert corr_ds.driver.lower() == 'gtiff'
+        if driver is Driver.cog:
+            im_struct = corr_ds.tags(ns='IMAGE_STRUCTURE')
+            assert im_struct['LAYOUT'].lower() == 'cog'
+        assert corr_ds.dtypes[0] == dtype
+        assert (
+            corr_ds.nodata is None
+            if nodata is None
+            else (utils.nan_equals(corr_ds.nodata, nodata))
+        )
+        assert (
+            corr_ds.mask_flag_enums[0] == [MaskFlags.per_dataset]
+            if nodata is None
+            else [MaskFlags.nodata]
+        )
+
+
+def test_corr_creation_options(tmp_path: Path, file_rgb_100cm_float: Path):
+    """Test the corrected image is formatted according to the creation_options
+    parameter.
+    """
+    raster_fuse = RasterFuse(file_rgb_100cm_float, file_rgb_100cm_float)
+    corr_file = tmp_path.joinpath('corrected.tif')
+    creation_options = dict(
+        tiled=True,
+        blockxsize=64,
+        blockysize=64,
+        compress='jpeg',
+        interleave='pixel',
+        photometric='ycbcr',
     )
     with raster_fuse:
-        raster_fuse.process(corr_filename, model, (5, 5), param_filename=param_filename)
+        raster_fuse.process(corr_file, creation_options=creation_options)
+    assert corr_file.exists()
 
-    assert param_filename.exists()
+    with rio.open(corr_file, 'r') as corr_ds:
+        for k, v in creation_options.items():
+            assert corr_ds.profile[k] == v
 
+
+def test_param_profile(tmp_path: Path, src_file_100cm_float: Path):
+    """Test the parameter image format."""
+    corr_file = tmp_path.joinpath('corrected.tif')
+    param_file = tmp_path.joinpath('parameter.tif')
+    raster_fuse = RasterFuse(src_file_100cm_float, src_file_100cm_float)
+    with raster_fuse:
+        raster_fuse.process(corr_file, param_filename=param_file)
+    assert param_file.exists()
+
+    src_keys = ['crs', 'transform', 'width', 'height']
+    creation_option_keys = [
+        'tiled',
+        'blockxsize',
+        'blockysize',
+        'compress',
+        'interleave',
+    ]
     with (
-        rio.open(file_rgb_100cm_float, 'r') as ref_src_ds,
-        rio.open(param_filename, 'r') as param_ds,
+        rio.open(src_file_100cm_float, 'r') as src_ds,
+        rio.open(param_file, 'r') as param_ds,
     ):
-        assert param_ds.count == ref_src_ds.count * 3
-        param_mask = param_ds.dataset_mask().astype('bool', copy=False)
-        src_ref_mask = ref_src_ds.dataset_mask().astype('bool', copy=False)
-        assert (param_mask == src_ref_mask).all()
+        assert param_ds.driver.lower() == 'gtiff'
+        assert param_ds.dtypes[0] == RasterArray.default_dtype
+        assert utils.nan_equals(param_ds.nodata, RasterArray.default_nodata)
+
+        for k in src_keys:
+            assert param_ds.profile[k] == src_ds.profile[k]
+        assert param_ds.count == src_ds.count * 3
+
+        for k in creation_option_keys:
+            assert param_ds.profile[k] == _default_creation_options['gtiff'][k]
 
 
 @pytest.mark.parametrize(
-    'src_file, ref_file, kernel_shape, proc_crs, mask_partial', [
-        ('src_file_45cm_float', 'ref_file_100cm_float', (1, 1), ProcCrs.auto, False),
-        ('src_file_45cm_float', 'ref_file_100cm_float', (1, 1), ProcCrs.auto, True),
-        ('src_file_45cm_float', 'ref_file_100cm_float', (3, 3), ProcCrs.auto, True),
-        ('src_file_100cm_float', 'ref_file_45cm_float', (1, 1), ProcCrs.auto, False),
-        ('src_file_100cm_float', 'ref_file_45cm_float', (1, 1), ProcCrs.auto, True),
-        ('src_file_100cm_float', 'ref_file_45cm_float', (3, 3), ProcCrs.auto, True),
-    ]
-)  # yapf: disable
+    'model, proc_crs', itertools.product(Model, [ProcCrs.ref, ProcCrs.src])
+)
+def test_param_content(
+    tmp_path: Path,
+    file_rgb_50cm_float: Path,
+    file_rgb_100cm_float: Path,
+    model: Model,
+    proc_crs: ProcCrs,
+):
+    """Test the parameter image content for different model and proc_crs
+    combinations.
+    """
+    corr_file = tmp_path.joinpath('corrected.tif')
+    param_file = tmp_path.joinpath('parameter.tif')
+    src_file, ref_file = (
+        (file_rgb_50cm_float, file_rgb_100cm_float)
+        if proc_crs is ProcCrs.ref
+        else (file_rgb_100cm_float, file_rgb_50cm_float)
+    )
+    raster_fuse = RasterFuse(src_file, ref_file, proc_crs=proc_crs)
+    with raster_fuse:
+        raster_fuse.process(corr_file, model, (5, 5), param_filename=param_file)
+    assert param_file.exists()
+
+    proc_file = ref_file if proc_crs is ProcCrs.ref else src_file
+    with (
+        rio.open(proc_file, 'r') as proc_ds,
+        rio.open(param_file, 'r') as param_ds,
+    ):
+        param_mask = param_ds.dataset_mask().astype('bool', copy=False)
+        proc_mask = proc_ds.dataset_mask().astype('bool', copy=False)
+        assert (param_mask == proc_mask).all()
+
+        param_array = param_ds.read()
+        assert param_array[0:3, param_mask] == pytest.approx(1, abs=0.1)
+        assert param_array[3:6, param_mask] == pytest.approx(0, abs=0.1)
+        assert param_array[6:9, param_mask] == pytest.approx(1, abs=0.1)
+
+
+@pytest.mark.parametrize(
+    'src_file, ref_file, kernel_shape, mask_partial',
+    [
+        ('src_file_45cm_float', 'ref_file_100cm_float', (1, 1), False),
+        ('src_file_45cm_float', 'ref_file_100cm_float', (1, 1), True),
+        ('src_file_45cm_float', 'ref_file_100cm_float', (3, 3), True),
+        ('src_file_100cm_float', 'ref_file_45cm_float', (1, 1), False),
+        ('src_file_100cm_float', 'ref_file_45cm_float', (1, 1), True),
+        ('src_file_100cm_float', 'ref_file_45cm_float', (3, 3), True),
+    ],
+)
 def test_mask_partial(
+    tmp_path: Path,
+    request: FixtureRequest,
     src_file: str,
     ref_file: str,
-    tmp_path: Path,
-    kernel_shape: Tuple[int, int],
-    proc_crs: ProcCrs,
+    kernel_shape: tuple[int, int],
     mask_partial: bool,
-    request: FixtureRequest,
 ):
     """Test partial masking with multiple image blocks."""
     src_file: Path = request.getfixturevalue(src_file)
     ref_file: Path = request.getfixturevalue(ref_file)
-    model_config = RasterFuse.create_model_config(mask_partial=mask_partial)
-    block_config = RasterFuse.create_block_config(max_block_mem=1.0e-1)
     corr_file = tmp_path.joinpath('corrected.tif')
-    raster_fuse = RasterFuse(src_file, ref_file, proc_crs=proc_crs)
+
+    raster_fuse = RasterFuse(src_file, ref_file)
     with raster_fuse:
         raster_fuse.process(
             corr_file,
             Model.gain_blk_offset,
             kernel_shape,
-            model_config=model_config,
-            block_config=block_config,
+            mask_partial=mask_partial,
+            max_block_mem=0.1,
         )
     assert corr_file.exists()
-    with rio.open(src_file, 'r') as src_ds, rio.open(corr_file, 'r') as fuse_ds:
-        fuse_mask = fuse_ds.dataset_mask().astype('bool', copy=False)
+
+    with rio.open(src_file, 'r') as src_ds, rio.open(corr_file, 'r') as corr_ds:
         src_mask = src_ds.dataset_mask().astype('bool', copy=False)
+        corr_mask = corr_ds.dataset_mask().astype('bool', copy=False)
         if not mask_partial:
-            assert (fuse_mask == src_mask).all()
+            assert (corr_mask == src_mask).all()
         else:
-            assert fuse_mask.sum() < src_mask.sum()
-            assert fuse_mask.sum() > 0
-            assert (src_mask[fuse_mask]).all()
+            assert corr_mask.sum() < src_mask.sum()
+            assert corr_mask.sum() > 0
+            assert src_mask[corr_mask].all()
             # check that the output mask consists of 1 blob
-            out_mask_shapes = [
-                shape
-                for shape in shapes(
-                    fuse_mask.astype('uint8', copy=False), mask=fuse_mask
-                )
-            ]
+            out_mask_shapes = [*shapes(corr_mask.view('uint8'), mask=corr_mask)]
             assert len(out_mask_shapes) == 1
 
 
@@ -293,35 +358,32 @@ def test_build_overviews(
     tmp_path: Path, ref_file_100cm_float, monkeypatch: pytest.MonkeyPatch
 ):
     """Test that overviews are built for corrected and parameter files."""
-    corr_filename = tmp_path.joinpath('corrected.tif')
-    param_filename = tmp_path.joinpath('parameter.tif')
+    corr_file = tmp_path.joinpath('corrected.tif')
+    param_file = tmp_path.joinpath('parameter.tif')
     raster_fuse = RasterFuse(ref_file_100cm_float, ref_file_100cm_float)
 
     # patch RasterFuse._build_overviews() to force min_level_pixels==1, otherwise
     # overviews won't be built for the small test raster
-    _build_overviews = RasterFuse._build_overviews
-
     def build_overviews(im):
         _build_overviews(im, min_level_pixels=1)
 
+    _build_overviews = RasterFuse._build_overviews
     monkeypatch.setattr(RasterFuse, '_build_overviews', staticmethod(build_overviews))
 
     with raster_fuse:
         raster_fuse.process(
-            corr_filename,
+            corr_file,
             Model.gain_blk_offset,
             (3, 3),
-            param_filename=param_filename,
+            param_filename=param_file,
             build_ovw=True,
         )
+    assert corr_file.exists()
+    assert param_file.exists()
 
-    assert corr_filename.exists()
-    assert param_filename.exists()
-
-    with rio.open(corr_filename, 'r') as fuse_ds:
+    with rio.open(corr_file, 'r') as fuse_ds:
         assert len(fuse_ds.overviews(1)) > 0
-
-    with rio.open(param_filename, 'r') as param_ds:
+    with rio.open(param_file, 'r') as param_ds:
         for band_i in param_ds.indexes:
             assert len(param_ds.overviews(band_i)) > 0
 
@@ -333,37 +395,15 @@ def test_io_error(tmp_path: Path, ref_file_50cm_float):
         raster_fuse.process(tmp_path, Model.gain_blk_offset, (3, 3))
 
 
-def test_corr_filename(tmp_path: Path, ref_file_50cm_float):
-    """Test corrected file is created."""
-    corr_filename = tmp_path.joinpath('corrected.tif')
-    raster_fuse = RasterFuse(ref_file_50cm_float, ref_file_50cm_float)
-    with raster_fuse:
-        raster_fuse.process(corr_filename, Model.gain_blk_offset, (3, 3))
-
-    assert corr_filename.exists()
-
-
-def test_single_thread(tmp_path: Path, ref_file_50cm_float):
-    """Test single-threaded processing creates a corrected file."""
-    block_config = RasterFuse.create_block_config(threads=1)
-    corr_filename = tmp_path.joinpath('corrected.tif')
-    raster_fuse = RasterFuse(ref_file_50cm_float, ref_file_50cm_float)
-    with raster_fuse:
-        raster_fuse.process(
-            corr_filename, Model.gain_blk_offset, (3, 3), block_config=block_config
-        )
-
-    assert corr_filename.exists()
-
-
 @pytest.mark.parametrize(
-    'src_file, ref_file, proc_crs, exp_proc_crs', [
+    'src_file, ref_file, proc_crs, exp_proc_crs',
+    [
         ('src_file_50cm_float', 'ref_file_100cm_float', ProcCrs.auto, ProcCrs.ref),
         ('src_file_50cm_float', 'ref_file_100cm_float', ProcCrs.src, ProcCrs.src),
         ('src_file_100cm_float', 'ref_file_50cm_float', ProcCrs.auto, ProcCrs.src),
         ('src_file_100cm_float', 'ref_file_50cm_float', ProcCrs.ref, ProcCrs.ref),
-    ]
-)  # yapf: disable
+    ],
+)
 def test_proc_crs(
     tmp_path: Path,
     src_file: str,
@@ -372,7 +412,9 @@ def test_proc_crs(
     exp_proc_crs: ProcCrs,
     request: FixtureRequest,
 ):
-    """Test corrected file creation for forced and auto proc_crs with different src/ref combinations."""
+    """Test corrected image creation for forced and auto proc_crs with different
+    src / ref combinations.
+    """
     src_file: Path = request.getfixturevalue(src_file)
     ref_file: Path = request.getfixturevalue(ref_file)
     corr_filename = tmp_path.joinpath('corrected.tif')
@@ -383,31 +425,25 @@ def test_proc_crs(
     assert corr_filename.exists()
 
 
-def test_tags(tmp_path: Path, ref_file_100cm_float):
-    """Test corrected file metadata."""
+def test_corr_tags(tmp_path: Path, ref_file_100cm_float):
+    """Test the corrected image tags."""
     model = Model.gain_blk_offset
     kernel_shape = (3, 3)
     proc_crs = ProcCrs.ref
-    block_config = RasterFuse.create_block_config()
     raster_fuse = RasterFuse(
         ref_file_100cm_float, ref_file_100cm_float, proc_crs=proc_crs
     )
-    corr_filename = tmp_path.joinpath('corrected.tif')
-    param_filename = tmp_path.joinpath('parameter.tif')
+    corr_file = tmp_path.joinpath('corrected.tif')
+    param_file = tmp_path.joinpath('parameter.tif')
+
     with raster_fuse:
-        raster_fuse.process(
-            corr_filename,
-            model,
-            kernel_shape,
-            param_filename=param_filename,
-            block_config=block_config,
-        )
+        raster_fuse.process(corr_file, model, kernel_shape, param_filename=param_file)
 
-    assert corr_filename.exists()
-    assert param_filename.exists()
-    utils.validate_param_image(param_filename)
+    assert corr_file.exists()
+    assert param_file.exists()
+    utils.validate_param_image(param_file)
 
-    with rio.open(corr_filename, 'r') as out_ds:
+    with rio.open(corr_file, 'r') as out_ds:
         tags = out_ds.tags()
         assert {
             'FUSE_SRC_FILE',
@@ -416,65 +452,69 @@ def test_tags(tmp_path: Path, ref_file_100cm_float):
             'FUSE_KERNEL_SHAPE',
             'FUSE_PROC_CRS',
             'FUSE_MAX_BLOCK_MEM',
-            *{f'FUSE_{k.upper()}' for k in RasterFuse.create_model_config().keys()},
+            *{f'FUSE_{k.upper()}' for k in KernelModel._default_config.keys()},
         } <= set(tags)
         assert tags['FUSE_SRC_FILE'] == ref_file_100cm_float.name
         assert tags['FUSE_REF_FILE'] == ref_file_100cm_float.name
-        assert tags['FUSE_MODEL'] == str(model.name)
-        assert tags['FUSE_PROC_CRS'] == str(proc_crs.name)
+        assert tags['FUSE_MODEL'] == model
+        assert tags['FUSE_PROC_CRS'] == proc_crs
         assert tags['FUSE_KERNEL_SHAPE'] == str(kernel_shape)
-        for key, val in RasterFuse.create_model_config().items():
+
+        for key, val in KernelModel._default_config.items():
             assert (
                 tags[f'FUSE_{key.upper()}'] == val.name
                 if hasattr(val, 'name')
                 else str(val)
             )
         assert (
-            yaml.safe_load(tags['FUSE_MAX_BLOCK_MEM']) == block_config['max_block_mem']
+            yaml.safe_load(tags['FUSE_MAX_BLOCK_MEM'])
+            == RasterFuse._default_config['max_block_mem']
         )
-        # assert yaml.safe_load(tags['FUSE_THREADS']) == block_config['threads']
 
 
+# ruff: ignore[E501]
 @pytest.mark.parametrize(
-    'src_file, ref_file, src_bands, ref_bands, force, exp_bands', [
+    'src_file, ref_file, src_bands, ref_bands, force, exp_bands',
+    [
         ('file_rgb_50cm_float', 'file_rgb_100cm_float', None, None, False, (1, 2, 3)),
         ('file_rgb_50cm_float', 'file_rgb_100cm_float', (3, 2, 1), None, False, (3, 2, 1)),
         ('file_rgb_50cm_float', 'file_rgb_100cm_float', None, (3, 2, 1), False, (1, 2, 3)),
         ('file_rgb_50cm_float', 'file_rgb_100cm_float', (2, 1), (3, 1, 2), False, (2, 1)),
-        ('file_rgb_50cm_float', 'file_rgb_100cm_float', (2, 1), (3, 2, 1), True, (3, 2)),
+        ('file_rgb_50cm_float', 'file_rgb_100cm_float', (2, 1), (3, 2, 1), True, (3, 2))
     ]
-)  # yapf: disable
+)  # fmt: skip
 def test_src_ref_bands(
     src_file: str,
     ref_file: str,
-    src_bands: Tuple[int],
-    ref_bands: Tuple[int],
+    src_bands: tuple[int],
+    ref_bands: tuple[int],
     force: bool,
-    exp_bands: Tuple[int],
+    exp_bands: tuple[int],
     tmp_path: Path,
     request: FixtureRequest,
 ):
-    """Test fusion with the src_bands and ref_bands parameters."""
+    """Test the corrected image content is as expected with the src_bands and
+    ref_bands parameters.
+    """
     src_file: Path = request.getfixturevalue(src_file)
     ref_file: Path = request.getfixturevalue(ref_file)
-    corr_filename = tmp_path.joinpath('corrected.tif')
+    corr_file = tmp_path.joinpath('corrected.tif')
+
     with RasterFuse(
         src_file, ref_file, src_bands=src_bands, ref_bands=ref_bands, force=force
     ) as raster_fuse:
-        raster_fuse.process(
-            corr_filename, model=Model.gain_blk_offset, kernel_shape=(3, 3)
-        )
-    assert corr_filename.exists()
-    # open src_file in a WarpedVRT to reproject it North-up (if necessary)
+        raster_fuse.process(corr_file, model=Model.gain_blk_offset, kernel_shape=(3, 3))
+    assert corr_file.exists()
+
     with (
-        WarpedVRT(rio.open(src_file, 'r')) as src_ds,
-        rio.open(corr_filename, 'r') as out_ds,
+        rio.open(src_file, 'r') as src_ds,
+        rio.open(corr_file, 'r') as corr_ds,
     ):
         src_array = src_ds.read(indexes=exp_bands)
         src_mask = src_ds.dataset_mask().astype('bool', copy=False)
-        out_array = out_ds.read()
-        out_mask = out_ds.dataset_mask().astype('bool', copy=False)
+        out_array = corr_ds.read()
+        out_mask = corr_ds.dataset_mask().astype('bool', copy=False)
 
-        assert out_ds.count == len(exp_bands)
+        assert corr_ds.count == len(exp_bands)
         assert (out_mask == src_mask).all()
         assert out_array[:, out_mask] == pytest.approx(src_array[:, src_mask], abs=2)
