@@ -139,8 +139,8 @@ class RasterFuse(MatchedPairReader):
         with np.errstate(invalid='ignore'):
             if nodata is not None and not can_cast_dtype(nodata, dtype):
                 raise HomonimError(
-                    f"'nodata' value: {nodata} cannot be safely cast to 'dtype': '"
-                    f"{dtype}'"
+                    f"'nodata' value: {nodata} cannot be safely cast to 'dtype': "
+                    f'{dtype}.'
                 )
         creation_options = creation_options or _default_creation_options[driver.name]
         return dict(
@@ -259,8 +259,8 @@ class RasterFuse(MatchedPairReader):
     def create_model_config(
         r2_inpaint_thresh: float = KernelModel._default_config['r2_inpaint_thresh'],
         mask_partial: bool = KernelModel._default_config['mask_partial'],
-        downsampling: Resampling = KernelModel._default_config['downsampling'],
-        upsampling: Resampling = KernelModel._default_config['upsampling'],
+        downsampling: str | Resampling = KernelModel._default_config['downsampling'],
+        upsampling: str | Resampling = KernelModel._default_config['upsampling'],
     ) -> dict[str, Any]:
         """
         Return a model configuration that can be passed as the ``model_config``
@@ -396,8 +396,8 @@ class RasterFuse(MatchedPairReader):
         *,
         r2_inpaint_thresh: float = KernelModel._default_config['r2_inpaint_thresh'],
         mask_partial: bool = KernelModel._default_config['mask_partial'],
-        downsampling: Resampling = KernelModel._default_config['downsampling'],
-        upsampling: Resampling = KernelModel._default_config['upsampling'],
+        downsampling: str | Resampling = KernelModel._default_config['downsampling'],
+        upsampling: str | Resampling = KernelModel._default_config['upsampling'],
         driver: str | Driver = _default_config['driver'],
         dtype: str = RasterArray.default_dtype,
         nodata: int | float | None = RasterArray.default_nodata,

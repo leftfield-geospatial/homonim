@@ -123,8 +123,8 @@ class RasterCompare(MatchedPairReader):
     def create_config(
         threads: int = _default_config['threads'],
         max_block_mem: float = _default_config['max_block_mem'],
-        downsampling: Resampling = _default_config['downsampling'],
-        upsampling: Resampling = _default_config['upsampling'],
+        downsampling: str | Resampling = _default_config['downsampling'],
+        upsampling: str | Resampling = _default_config['upsampling'],
     ) -> dict[str, Any]:
         """
         Return a comparison configuration whose items can be passed as keyword
@@ -164,8 +164,8 @@ class RasterCompare(MatchedPairReader):
         self,
         from_res: tuple[float, float],
         to_res: tuple[float, float],
-        downsampling: Resampling,
-        upsampling: Resampling,
+        downsampling: str | Resampling,
+        upsampling: str | Resampling,
     ) -> Resampling:
         """Return the resampling method for re-projecting from resolution
         ``from_res`` to resolution ``to_res``.
@@ -271,8 +271,8 @@ class RasterCompare(MatchedPairReader):
         self,
         threads: int = _default_config['threads'],
         max_block_mem: float = _default_config['max_block_mem'],
-        downsampling: Resampling = _default_config['downsampling'],
-        upsampling: Resampling = _default_config['upsampling'],
+        downsampling: str | Resampling = _default_config['downsampling'],
+        upsampling: str | Resampling = _default_config['upsampling'],
     ) -> dict[str, dict[str, float | int]]:
         """
         Compare source and reference images.

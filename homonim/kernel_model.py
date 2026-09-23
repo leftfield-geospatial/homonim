@@ -85,8 +85,8 @@ class KernelModel:
         find_r2: bool = False,
         r2_inpaint_thresh: float = _default_config['r2_inpaint_thresh'],
         mask_partial: bool = _default_config['mask_partial'],
-        downsampling: Resampling = _default_config['downsampling'],
-        upsampling: Resampling = _default_config['upsampling'],
+        downsampling: str | Resampling = _default_config['downsampling'],
+        upsampling: str | Resampling = _default_config['upsampling'],
     ):
         """
         Base class for estimating and applying kernel model parameters, where the
