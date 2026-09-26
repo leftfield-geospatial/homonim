@@ -319,14 +319,6 @@ class KernelModel:
         ref_array[~mask] = 0
         src_array[~mask] = 0
 
-        # set up a RasterArray profile for the parameters
-        param_profile = src_ra.profile.copy()
-        param_profile.update(
-            count=3 if self._find_r2 else 2,
-            nodata=RasterArray.default_nodata,
-            dtype=RasterArray.default_dtype,
-        )
-
         # convolve the kernel with src_array and ref_array to get kernel sums (uses
         # DFT for large kernels)
         filter_args = dict(normalize=False, borderType=cv.BORDER_CONSTANT)
@@ -334,7 +326,12 @@ class KernelModel:
         ref_sum = cv.boxFilter(ref_array, -1, kernel_shape[::-1], **filter_args)
 
         # create parameter RasterArray filled with nodata
-        param_ra = RasterArray.from_profile(None, param_profile)
+        param_array = np.full(
+            (3 if self._find_r2 else 2, *src_ra.shape[-2:]),
+            dtype=RasterArray.default_dtype,
+            fill_value=RasterArray.default_nodata,
+        )
+        param_ra = RasterArray(param_array, src_ra.crs, src_ra.transform)
 
         # find sliding kernel gains, avoiding divide by 0
         where_mask = mask & (src_sum != 0)
@@ -409,15 +406,6 @@ class KernelModel:
         ref_array[~mask] = 0
         src_array[~mask] = 0
 
-        # set up a RasterArray profile for the parameters
-        param_profile = src_ra.profile.copy()
-        find_r2 = self._find_r2 or (self._r2_inpaint_thresh is not None)
-        param_profile.update(
-            count=3 if find_r2 else 2,
-            nodata=RasterArray.default_nodata,
-            dtype=RasterArray.default_dtype,
-        )
-
         # find the numerator for the gain i.e N*cov(ref, src)
         # common opencv arguments
         filter_args = dict(normalize=False, borderType=cv.BORDER_CONSTANT)
@@ -441,7 +429,13 @@ class KernelModel:
         m_den_array = (mask_sum * src2_sum) - (src_sum**2)
 
         # create parameter RasterArray filled with nodata
-        param_ra = RasterArray.from_profile(None, param_profile)
+        find_r2 = self._find_r2 or (self._r2_inpaint_thresh is not None)
+        param_array = np.full(
+            (3 if find_r2 else 2, *src_ra.shape[-2:]),
+            dtype=RasterArray.default_dtype,
+            fill_value=RasterArray.default_nodata,
+        )
+        param_ra = RasterArray(param_array, src_ra.crs, src_ra.transform)
 
         # find the gain = cov(ref, src) / var(src), avoiding divide by 0
         where_mask = mask & (m_den_array != 0)
@@ -553,7 +547,7 @@ class KernelModel:
                 "'param_ra' and 'src_ra' must have the same CRS, transform and shape"
             )
         corr_array = (param_ra.array[0] * src_ra.array) + param_ra.array[1]
-        corr_ra = RasterArray.from_profile(corr_array, param_ra.profile)
+        corr_ra = RasterArray(corr_array, param_ra.crs, param_ra.transform)
         return corr_ra
 
 
@@ -576,7 +570,7 @@ class RefSpaceModel(KernelModel):
 
     def apply(self, src_ra, param_ra):
         # remove the R2 band of param_ra (to speed up the re-projection below)
-        _param_ra = RasterArray.from_profile(param_ra.array[:2], param_ra.profile)
+        _param_ra = RasterArray(param_ra.array[:2], param_ra.crs, param_ra.transform)
         # choose resampling method based on whether we are up- or downsampling
         resampling = self._get_resampling(_param_ra.res, src_ra.res)
         # re-project _param_ra to source CRS and grid
@@ -620,7 +614,9 @@ class SrcSpaceModel(KernelModel):
 
         if self._mask_partial:
             # remove R2 band from param_ra
-            _param_ra = RasterArray.from_profile(param_ra.array[:2], param_ra.profile)
+            _param_ra = RasterArray(
+                param_ra.array[:2], param_ra.crs, param_ra.transform
+            )
             # find the mask of fully covered pixels in source CRS and grid, and apply
             # to the parameters
             mask_ra = full_coverage_mask(_param_ra, ref_ra, self.kernel_shape)

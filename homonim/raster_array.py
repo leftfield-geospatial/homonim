@@ -47,8 +47,6 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         crs: CRS,
         transform: Affine,
         nodata: float | None = default_nodata,
-        # TODO: remove window
-        window: Window | None = None,
     ):
         """
         Class for reading, writing and reprojecting a geo-referenced NumPy array.
@@ -59,14 +57,10 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         :param crs:
             Coordinate reference system of ``array``.
         :param transform:
-            Affine transform, which together with ``window`` define the geo-referencing
-            of ``array``.
+            Geo-referencing transform.
         :param nodata:
             Value of nodata (invalid) pixels in ``array``.  Can be ``None`` if there
             are no invalid pixels.
-        :param window:
-            Window defining an offset of ``array`` relative to ``transform``. Can be
-            ``None`` for no offset.
         """
         if (array.ndim < 2) or (array.ndim > 3):
             raise ValueError(
@@ -75,11 +69,6 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
             )
         self._array = array
 
-        if window is not None and (window.height, window.width) != array.shape[-2:]:
-            raise ValueError(
-                "The width and height of 'window' and 'array' should match."
-            )
-
         if isinstance(crs, CRS):
             self._crs = crs
         else:
@@ -87,67 +76,15 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
                 f"'crs' must be a RasterIO 'CRS' instance, not {type(crs)}."
             )
 
-        if isinstance(transform, Affine):
-            if window is not None:
-                self._transform = windows.transform(window, transform)
-            else:
-                self._transform = transform
-        else:
+        if not isinstance(transform, Affine):
             raise TypeError(
                 f"'transform' must be a RasterIO 'Affine' instance, not "
                 f"'{type(transform)}."
             )
 
+        self._transform = transform
         self._nodata = nodata
         self._mask = None
-
-    @classmethod
-    def from_profile(
-        cls,
-        array: np.ndarray | None,
-        profile: dict[str, Any],
-        window: Window | None = None,
-    ) -> 'RasterArray':
-        """
-        Create a RasterArray from an image array and RasterIO profile.
-
-        :param array:
-            Array of image data.  If 3D, it should be in RasterIO ordering (bands
-            along the first dimension).  If ``None``, an array of nodata is created
-            with shape, dtype and nodata defined by ``profile``.
-        :param profile:
-            RasterIO profile.
-        :param window:
-            Window defining an offset of ``array`` relative to the ``transform`` in
-            ``profile``.  Can be ``None`` for no offset.
-
-        :return:
-            RasterArray.
-        """
-        if not {'crs', 'transform', 'nodata'} <= set(profile):
-            raise ImageProfileError(
-                "'profile' should include 'crs', 'transform' and 'nodata' items."
-            )
-
-        # create array filled with nodata
-        if array is None:
-            if not {'width', 'height', 'count', 'dtype'} <= set(profile):
-                raise ImageProfileError(
-                    "'profile' should include 'width', 'height', 'count' and 'dtype' "
-                    'items.'
-                )
-            array_shape = (profile['count'], profile['height'], profile['width'])
-            array = np.full(
-                array_shape, fill_value=profile['nodata'], dtype=profile['dtype']
-            )
-
-        return cls(
-            array,
-            profile['crs'],
-            profile['transform'],
-            nodata=profile['nodata'],
-            window=window,
-        )
 
     @classmethod
     def from_rio_dataset(
@@ -450,7 +387,9 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
 
     def copy(self) -> 'RasterArray':
         """Return a deep copy of the RasterArray."""
-        return RasterArray.from_profile(self._array.copy(), self.profile)
+        return RasterArray(
+            self._array.copy(), self.crs, self.transform, nodata=self.nodata
+        )
 
     def to_rio_dataset(
         self,
