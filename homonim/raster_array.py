@@ -1,51 +1,43 @@
-"""
-Homonim: Correction of aerial and satellite imagery to surface reflectance
-Copyright (C) 2021 Dugal Harris
-Email: dugalh@gmail.com
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program.  If not, see <https://www.gnu.org/licenses/>.
-"""
+# Copyright Leftfield Geospatial
+#
+# This file is part of Homonim.
+#
+# Homonim is free software: you can redistribute it and/or modify it under the terms
+# of the GNU Affero General Public License as published by the Free Software
+# Foundation, either version 3 of the License, or (at your option) any later version.
+#
+# Homonim is distributed in the hope that it will be useful, but WITHOUT ANY
+# WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+# PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License along with
+# Homonim. If not, see <https://www.gnu.org/licenses/>.
 
 import logging
 import multiprocessing
-import pathlib
-import warnings
-from typing import Dict, List, Optional, Tuple, Union
+from os import PathLike
+from typing import Any
 
-import numpy
 import numpy as np
 import rasterio as rio
 from rasterio import Affine, windows
 from rasterio.crs import CRS
+from rasterio.dtypes import can_cast_dtype
 from rasterio.enums import MaskFlags
-from rasterio.errors import NotGeoreferencedWarning
+from rasterio.io import DatasetReader, DatasetWriter
 from rasterio.transform import TransformMethodsMixin
 from rasterio.warp import Resampling, reproject
 from rasterio.windows import Window, WindowMethodsMixin
 
 from homonim import utils
-from homonim.errors import ImageFormatError, ImageFormatWarning, ImageProfileError
+from homonim.enums import Driver
+from homonim.errors import HomonimError, ImageFormatError, ImageProfileError
 
 logger = logging.getLogger(__name__)
 
 
 class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
-    """
-    A class for encapsulating a masked, geo-referenced numpy array.
-    Provides methods for re-projection, and reading/writing from/to rasterio datasets.
-    """
-
+    # TODO: rename with _
     default_nodata = float('nan')  # default internal nodata value
     default_dtype = 'float32'  # default internal data type
 
@@ -54,39 +46,46 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         array: np.ndarray,
         crs: CRS,
         transform: Affine,
-        nodata: Optional[float] = default_nodata,
-        window: Optional[Window] = None,
+        nodata: float | None = default_nodata,
+        # TODO: remove window
+        window: Window | None = None,
     ):
         """
-        Construct a RasterArray.
+        Class for reading, writing and reprojecting a geo-referenced NumPy array.
 
-        Parameters
-        ----------
-        array: numpy.ndarray
-            2 or 3D array of image data, if 3D, bands are along the first dimension.
-        crs: rasterio.crs.CRS
-            ``array`` CRS.
-        transform: rasterio.transform.Affine
-            ``array`` geo-transform.
-        nodata: optional
-            A number or nan, specifying the nodata value for masking the array.
-        window: rasterio.windows.Window, optional
-            Optional window into the transform specifying the array region.
+        :param array:
+            Array of image data.  2D if there is one band, or 3D with bands along the
+            first dimension otherwise.
+        :param crs:
+            Coordinate reference system of ``array``.
+        :param transform:
+            Affine transform, which together with ``window`` define the geo-referencing
+            of ``array``.
+        :param nodata:
+            Value of nodata (invalid) pixels in ``array``.  Can be ``None`` if there
+            are no invalid pixels.
+        :param window:
+            Window defining an offset of ``array`` relative to ``transform``. Can be
+            ``None`` for no offset.
         """
-
         if (array.ndim < 2) or (array.ndim > 3):
             raise ValueError(
-                '`array` must be have 2 or 3 dimensions with bands along the first dimension'
+                "'array' should be have 2 or 3 dimensions with bands along the first "
+                'dimension.'
             )
         self._array = array
 
         if window is not None and (window.height, window.width) != array.shape[-2:]:
-            raise ValueError('`window` and `array` width and height must match')
+            raise ValueError(
+                "The width and height of 'window' and 'array' should match."
+            )
 
         if isinstance(crs, CRS):
             self._crs = crs
         else:
-            raise TypeError('`crs` must be an instance of rasterio.crs.CRS')
+            raise TypeError(
+                f"'crs' must be a RasterIO 'CRS' instance, not {type(crs)}."
+            )
 
         if isinstance(transform, Affine):
             if window is not None:
@@ -95,7 +94,8 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
                 self._transform = transform
         else:
             raise TypeError(
-                '`transform` must be an instance of rasterio.transform.Affine'
+                f"'transform' must be a RasterIO 'Affine' instance, not "
+                f"'{type(transform)}."
             )
 
         self._nodata = nodata
@@ -103,38 +103,38 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
 
     @classmethod
     def from_profile(
-        cls, array: Optional[np.ndarray], profile: Dict, window: Optional[Window] = None
+        cls,
+        array: np.ndarray | None,
+        profile: dict[str, Any],
+        window: Window | None = None,
     ) -> 'RasterArray':
         """
-        Construct a RasterArray from an array of image data and a profile dictionary.
+        Create a RasterArray from an image array and RasterIO profile.
 
-        Parameters
-        ----------
-        array: numpy.ndarray, None
-            2 or 3D array of image data, if 3D, bands are along the first dimension.
-            Can be None, in which case a nodata array is created with the `width`, `height`, `count`, `dtype` and
-            `nodata` fields in ``profile``.
-        profile: dict
-            Configuration dictionary with items specifying the `crs`, `transform` and `nodata` values
-            (as used by rasterio datasets).  If ``array`` is None, this dict should contain the additional fields
-            to create the array.
-        window: rasterio.windows.Window, optional
-            Optional window into ``profile['transform']``, specifying the array region.
+        :param array:
+            Array of image data.  If 3D, it should be in RasterIO ordering (bands
+            along the first dimension).  If ``None``, an array of nodata is created
+            with shape, dtype and nodata defined by ``profile``.
+        :param profile:
+            RasterIO profile.
+        :param window:
+            Window defining an offset of ``array`` relative to the ``transform`` in
+            ``profile``.  Can be ``None`` for no offset.
 
-        Returns
-        -------
-        RasterArray
-            Constructed RasterArray.
+        :return:
+            RasterArray.
         """
         if not {'crs', 'transform', 'nodata'} <= set(profile):
             raise ImageProfileError(
-                "'profile' should include 'crs', 'transform' and 'nodata' keys"
+                "'profile' should include 'crs', 'transform' and 'nodata' items."
             )
 
-        if array is None:  # create array filled with nodata
+        # create array filled with nodata
+        if array is None:
             if not {'width', 'height', 'count', 'dtype'} <= set(profile):
                 raise ImageProfileError(
-                    "'profile' should include 'width', 'height', 'count' and 'dtype' keys"
+                    "'profile' should include 'width', 'height', 'count' and 'dtype' "
+                    'items.'
                 )
             array_shape = (profile['count'], profile['height'], profile['width'])
             array = np.full(
@@ -152,148 +152,131 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
     @classmethod
     def from_rio_dataset(
         cls,
-        rio_dataset: rio.DatasetReader,
-        indexes: Optional[Union[int, List[int]]] = None,
-        window: Optional[Window] = None,
+        dataset: DatasetReader,
+        indexes: int | list[int] | None = None,
+        window: Window | None = None,
+        dtype: str = default_dtype,
+        nodata: float | None = None,
         **kwargs,
     ) -> 'RasterArray':
         """
-        Construct a RasterArray by reading from a rasterio dataset.
+        Create a RasterArray from an open RasterIO dataset.
 
-        Implements 'boundless' reads internally which is faster than using rasterio's boundless=True option.
+        :param dataset:
+            Dataset to read from.
+        :param indexes:
+            Band index(es) to read (1 based).  If ``None``, all non-alpha bands are
+            read.
+        :param window:
+            Boundless region of the dataset to read.  If ``None``, the full
+            dataset extent is read.
+        :param dtype:
+            RasterArray data type.
+        :param nodata:
+            RasterArray nodata value.  If ``None``, it defaults to the dataset's nodata
+            value when it has one, otherwise ``nan``.
+        :param kwargs:
+            Additional keyword arguments to pass to
+            :meth:`~rasterio.io.DatasetReader.read`.
 
-        Parameters
-        ----------
-        rio_dataset: rasterio.DatasetReader
-            Rasterio dataset to be read from.
-        indexes: int, list[int], optional
-            1-based index or list of indexes of the bands to be read from ``rio_dataset``.
-            The default is to read all the ``rio_dataset`` bands.
-        window: rasterio.windows.Window, optional
-            Optional window into ``rio_dataset`` to be read from.
-            This can be a `boundless` window i.e. a window that extends beyond the bounds of ``rio_dataset``,
-            in which case the :attr:`~RasterArray.array` will be filled with nodata outside the ``rio_dataset``
-            bounds.
-        kwargs: dict, optional
-            Additional arguments to be passed to the dataset's read() method.
-
-        Returns
-        -------
-        RasterArray
-            Constructed RasterArray.
+        :return:
+            RasterArray.
         """
-        # form a list of indexes
         if indexes is None:
-            index_list = utils.get_nonalpha_bands(rio_dataset)
-        else:
-            index_list = [indexes] if np.isscalar(indexes) else indexes
+            indexes = utils.get_nonalpha_bands(dataset)
+            indexes = indexes if len(indexes) > 1 else indexes[0]
 
         if window is None:
             # window of the full dataset extent
             window = Window(
-                col_off=0, row_off=0, width=rio_dataset.width, height=rio_dataset.height
+                col_off=0, row_off=0, width=dataset.width, height=dataset.height
             )
 
-        # check bands if bands have masks (i.e. internal/side-car mask or alpha channel), as opposed to nodata value
+        # determine if bands have masks (i.e. internal/side-car mask or alpha channel)
         is_masked = any(
-            [
-                MaskFlags.per_dataset in rio_dataset.mask_flag_enums[bi - 1]
-                for bi in index_list
-            ]
+            MaskFlags.per_dataset in dataset.mask_flag_enums[bi - 1]
+            for bi in ([indexes] if np.ndim(indexes) == 0 else indexes)
         )
 
-        # use the dataset's nodata value if it 'unmasked', and has one, otherwise revert to default
-        nodata = (
-            cls.default_nodata
-            if (is_masked or rio_dataset.nodata is None)
-            else rio_dataset.nodata
+        nodata_changed = False
+        if nodata is None:
+            # use the dataset's nodata when it has one and is not masked, otherwise
+            # use default_nodata
+            nodata = (
+                cls.default_nodata
+                if (is_masked or dataset.nodata is None)
+                else dataset.nodata
+            )
+        elif not utils.nan_equals(nodata, dataset.nodata):
+            nodata_changed = True
+            with np.errstate(invalid='ignore'):
+                if not can_cast_dtype(nodata, dtype):
+                    raise HomonimError(
+                        f"'nodata' value: {nodata} cannot be safely cast to 'dtype': "
+                        f'{dtype}.'
+                    )
+
+        # crop the boundless window to the dataset bounds
+        bounded_window = window.crop(dataset.height, dataset.width)
+
+        # create slices to crop an array corresponding to the boundless window into an
+        # array corresponding to bounded_window
+        bounded_slices = [
+            slice(s.start - off, s.stop - off)
+            for s, off in zip(
+                bounded_window.toslices(),
+                (window.row_off, window.col_off),
+                strict=True,
+            )
+        ]
+        bounded_slices = tuple(bounded_slices)
+
+        # create an array of nodata matching the boundless window dimensions
+        shape = (window.height, window.width)
+        if np.ndim(indexes) > 0:
+            shape = (len(indexes), *shape)
+            bounded_slices = (slice(shape[0]), *bounded_slices)
+        array = np.full(shape, fill_value=nodata, dtype=dtype)
+
+        # read into the bounded region of the array (this is a lot faster than using
+        # read(boundless=True))
+        bounded_array = array[bounded_slices]
+        dataset.read(
+            out=bounded_array,
+            indexes=indexes,
+            window=bounded_window,
+            out_dtype=dtype,
+            **kwargs,
         )
 
-        # construct an array of nodata matching the (possibly boundless) window dimension
-        bounded_window, bounded_slices = cls.bounded_window_slices(rio_dataset, window)
-        # TODO: the below could be tidied and perhaps we should standardise on 3D arrays even if there is only 1 band.
-        if len(index_list) > 1:
-            array = np.full(
-                (len(index_list), window.height, window.width),
-                fill_value=nodata,
-                dtype=cls.default_dtype,
-            )
-            bounded_array = array[
-                (slice(array.shape[0]), *bounded_slices)
-            ]  # a bounded view into array
-            rio_dataset.read(
-                out=bounded_array,
-                indexes=index_list,
-                window=bounded_window,
-                out_dtype=cls.default_dtype,
-                **kwargs,
-            )
-        else:
-            array = np.full(
-                (window.height, window.width),
-                fill_value=nodata,
-                dtype=cls.default_dtype,
-            )
-            bounded_array = array[bounded_slices]  # a bounded view into array
-            rio_dataset.read(
-                out=bounded_array,
-                indexes=index_list[0],
-                window=bounded_window,
-                out_dtype=cls.default_dtype,
-                **kwargs,
-            )
-
-        # read into the bounded section of the array
         if is_masked:
-            # read the mask from dataset and apply it to the array
-            bounded_mask = rio_dataset.dataset_mask(window=bounded_window).astype(
-                'bool', copy=False
-            )
-            if bounded_array.ndim == 2:
-                bounded_array[~bounded_mask] = nodata
-            else:
-                bounded_array[:, ~bounded_mask] = nodata
+            # read the bounded region of the mask and apply it to the array
+            bounded_mask = dataset.dataset_mask(window=bounded_window).view('bool')
+            bounded_array[..., ~bounded_mask] = nodata
+        elif nodata_changed:
+            # change the dataset nodata value to the user value
+            bounded_mask = utils.nan_equals(bounded_array, dataset.nodata)
+            bounded_array[..., bounded_mask] = nodata
 
-        return cls(
-            array, rio_dataset.crs, rio_dataset.transform, nodata=nodata, window=window
-        )
-
-    @staticmethod
-    def bounded_window_slices(
-        rio_dataset: Union[rio.DatasetReader, rio.io.DatasetWriter], window: Window
-    ) -> Tuple[Window, Tuple[slice, slice]]:  # yapf: disable
-        """Bounded array slices and dataset window from dataset and boundless window."""
-
-        # find window UL and BR corners and crop to rio_dataset bounds
-        win_ul = np.array((window.row_off, window.col_off))
-        win_br = win_ul + np.array((window.height, window.width))
-        bounded_ul = np.fmax(win_ul, (0, 0))
-        bounded_br = np.fmin(win_br, rio_dataset.shape)
-
-        # create bounded window and slices from bounded corners
-        bounded_window = Window.from_slices(
-            (bounded_ul[0], bounded_br[0]), (bounded_ul[1], bounded_br[1])
-        )
-        bounded_start = bounded_ul - win_ul
-        bounded_stop = bounded_start + (bounded_br - bounded_ul)
-        bounded_slices = (
-            slice(bounded_start[0], bounded_stop[0], None),
-            slice(bounded_start[1], bounded_stop[1], None)
-        )  # yapf: disable
-        return bounded_window, bounded_slices
+        return cls(array, dataset.crs, dataset.window_transform(window), nodata=nodata)
 
     @property
-    def array(self) -> numpy.ndarray:
-        """2 or 3D array of image data, if 3D, bands are along the first dimension."""
+    def array(self) -> np.ndarray:
+        """Image data array.  2D if there is one band, or 3D with bands along the
+        first dimension otherwise.
+        """
         return self._array
 
     @array.setter
-    def array(self, value: numpy.ndarray):
+    def array(self, value: np.ndarray):
         if np.all(value.shape[-2:] == self._array.shape[-2:]):
             self._array = value
             self._mask = None
         else:
-            raise ValueError("'value' and 'array' shapes must match")
+            raise ValueError(
+                "The 'array' property can only be set to another array with the same "
+                '(row, col) dimensions.'
+            )
 
     @property
     def crs(self) -> CRS:
@@ -311,40 +294,38 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         return self.shape[-2]
 
     @property
-    def shape(self) -> Tuple[int, int]:
-        """Array shape (height, width) in pixels."""
-        return tuple(self._array.shape[-2:])
+    def shape(self) -> tuple[int, int]:
+        """Array (row, col) dimensions in pixels."""
+        return self._array.shape[-2:]
 
     @property
     def count(self) -> int:
-        """Number of bands."""
+        """Number of array bands."""
         return self._array.shape[0] if self.array.ndim == 3 else 1
 
     @property
     def dtype(self) -> str:
-        """Internal data type of the array."""
+        """Array data type."""
         return self._array.dtype.name
 
     @property
     def transform(self) -> Affine:
-        """Affine geo-transform describing the location and orientation of the array in the CRS."""
+        """Array geo-referencing transform."""
         return self._transform
 
     @property
-    def res(self) -> Tuple[float, float]:
-        """Array (x, y) resolution (m)."""
-        return self._transform.a, -self._transform.e
+    def res(self) -> tuple[float, float]:
+        """Array (col, row) resolution in units of the :attr:`crs`."""
+        return abs(self._transform.a), abs(self._transform.e)
 
     @property
-    def bounds(self) -> Tuple[float, ...]:
-        """(left, bottom, right, top) co-ordinates of the array extent."""
-        return windows.bounds(
-            windows.Window(0, 0, self.width, self.height), self._transform
-        )
+    def bounds(self) -> tuple[float, float, float, float]:
+        """(left, bottom, right, top) coordinates of the array extents."""
+        return self.window_bounds(Window(0, 0, self.width, self.height))
 
     @property
-    def profile(self) -> Dict:
-        """RasterArray properties formatted as a dictionary, compatible with rasterio."""
+    def profile(self) -> dict[str, Any]:
+        """RasterIO profile of the array."""
         return dict(
             crs=self._crs,
             transform=self._transform,
@@ -356,17 +337,15 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         )
 
     @property
-    def proj_profile(self) -> Dict:
-        """
-        RasterArray properties relevant to re-projection (i.e. `crs`, `transform` and `shape`) formatted as a
-        dictionary.
-        Useful for expanding to keyword arguments to :meth:`reproject`.
+    def proj_profile(self) -> dict[str, Any]:
+        """The ``crs``, ``transform`` and ``shape`` items of the :attr:`profile` for
+        passing as keyword arguments to :meth:`reproject`.
         """
         return dict(crs=self._crs, transform=self._transform, shape=self.shape)
 
     @property
-    def mask(self) -> numpy.ndarray:
-        """2D boolean mask corresponding to valid pixels in the array."""
+    def mask(self) -> np.ndarray[bool]:
+        """2D (row, col) mask of valid array pixels."""
         if self._mask is None:
             if self._nodata is None:
                 self._mask = np.full(self._array.shape[-2:], True)
@@ -377,66 +356,65 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         return self._mask
 
     @mask.setter
-    def mask(self, value: numpy.ndarray):
-        # TODO: allow nodata=None with a mask or use numpy masked array
-        if self._array.ndim == 2:
-            self._array[~value] = self._nodata
-        else:
-            self._array[:, ~value] = self._nodata
-        # force re-calculation of mask (should not set it to value as there may be other pixels == nodata)
+    def mask(self, value: np.ndarray[bool]):
+        if self._nodata is None:
+            raise ValueError("Cannot set the mask when the 'nodata' property is None.")
+        self._array[..., ~value] = self._nodata
+        # force re-calculation of mask (should not set it to value as there may be
+        # other pixels == nodata)
         self._mask = None
 
     @property
     def mask_ra(self) -> 'RasterArray':
-        """
-        RasterArray containing the 2D mask as a uint8 view, and with nodata=None.
-        Useful for re-projecting the mask.
+        """RasterArray of the :attr:`mask` as a uint8 view, and with :attr:`nodata`
+        as ``None``.
         """
         mask = self.mask.view('uint8')
         return RasterArray(mask, crs=self._crs, transform=self._transform, nodata=None)
 
     @property
-    def nodata(self) -> float:
-        """Nodata value."""
+    def nodata(self) -> float | None:
+        """Value of nodata (invalid) pixels."""
         return self._nodata
 
     @nodata.setter
-    def nodata(self, value: float):
+    def nodata(self, value: float | None):
         if value is None or self._nodata is None:
             # if new nodata value is None, remove the current mask
-            # if current nodata is None, there is no mask, so just set the new nodata value and return
+            # if current nodata is None, there is no mask, so just set the new nodata
+            # value and return
             self._nodata = value
             self._mask = None
         elif not (utils.nan_equals(value, self._nodata)):
             # if the new nodata value is different to the current nodata,
             # set the mask area in array to the new nodata value and return
             nodata_mask = ~self.mask
-            if self._array.ndim == 3:
-                self._array[:, nodata_mask] = value
-            else:
-                self._array[nodata_mask] = value
+            self._array[..., nodata_mask] = value
             self._nodata = value
-            # force re-calculation of mask (there may be pixels other than ~self.mask == new nodata value)
+            # force re-calculation of mask (there may be pixels other than ~self.mask
+            # == to the new nodata value)
             self._mask = None
 
-    def _convert_array_dtype(
-        self, dtype: str, nodata: Union[float, None] = None
-    ) -> np.array:
-        """Return the image array converted to ``dtype``, rounding and clipping when ``dtype`` is integer. Passing
-        ``nodata`` will set nodata areas in the returned array to this value.
+    def _convert_array_dtype(self, dtype: str, nodata: float | None = None) -> np.array:
+        """Return the image array converted to dtype, rounding and clipping when
+        dtype is integer.  Passing nodata will set invalid areas in the returned array
+        to this value.
         """
-        # TODO: can oty common.convert_array_dtype() be used to simplify this?
-        if nodata is not None and not rio.dtypes.can_cast_dtype(nodata, dtype):
-            raise ValueError(
-                f"'nodata' value: {nodata} cannot be safely cast to '{dtype}'"
-            )
+        with np.errstate(invalid='ignore'):
+            if nodata is not None and not can_cast_dtype(nodata, dtype):
+                raise HomonimError(
+                    f"'nodata' value: {nodata} cannot be safely cast to 'dtype': "
+                    f'{dtype}.'
+                )
 
-        # create a copy of the array if nodata, rounding, clipping or casting might change it
+        # create a copy of the array if nodata, rounding, clipping or casting might
+        # change it
         unsafe_cast = not np.can_cast(self.dtype, dtype, casting='safe')
         nodata_change = nodata is not None and not utils.nan_equals(nodata, self.nodata)
         array = self._array
         if nodata_change or unsafe_cast:
-            # promote dtype to be able to represent destination dtype exactly (if possible) to clip correctly
+            # promote dtype to represent destination dtype to allow nodata conversion
+            # and clipping
             array = array.astype(np.promote_types(self.dtype, dtype), copy=True)
 
         # round if converting from float to integer dtype
@@ -458,225 +436,193 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
             if src_info.min < dst_info.min or src_info.max > dst_info.max:
                 np.clip(array, dst_info.min, dst_info.max, out=array)
 
-        # convert dtype (ignoring numpy warnings for float overflow or cast of nan to integer)
+        # convert dtype (ignoring numpy warnings for float overflow or cast of nan to
+        # integer)
         with np.errstate(invalid='ignore', over='ignore'):
             array = array.astype(dtype, copy=False, casting='unsafe')
 
-        # set nodata value if it has changed, or may be invalid after rounding, clipping and casting
+        # set nodata value if it has changed, or may be invalid after rounding,
+        # clipping and casting
         if nodata_change or (nodata is not None and unsafe_cast):
             array[~self.mask] = nodata
 
         return array
 
     def copy(self) -> 'RasterArray':
-        """Create a deep copy of the RasterArray."""
+        """Return a deep copy of the RasterArray."""
         return RasterArray.from_profile(self._array.copy(), self.profile)
-
-    def slice_to_bounds(self, *bounds) -> 'RasterArray':
-        """
-        Create a new RasterArray representing a rectangular subregion of this RasterArray.
-        Note that the created RasterArray is a view into the current array, not a copy.
-
-        Parameters
-        ----------
-        bounds: Tuple
-            Co-ordinate bounds to slice the new array to (left, bottom, right, top), in the current :attr:`crs`.
-
-        Returns
-        -------
-        RasterArray
-            Sliced RasterArray.
-        """
-        window = self.window(*bounds)
-        window = utils.round_window_to_grid(window)
-        ul = np.array((window.row_off, window.col_off))
-        shape = np.array((window.height, window.width))
-        if np.any(ul < 0) or np.any(shape > self._array.shape[-2:]):
-            raise ValueError(
-                f'The provided bounds ({bounds}) lie outside the extent of the RasterArray ({self.bounds})'
-            )
-
-        if self._array.ndim == 2:
-            array = self._array[window.toslices()]
-        else:
-            array = self._array[(slice(self._array.shape[0]), *window.toslices())]
-
-        return RasterArray(
-            array, self._crs, self.window_transform(window), nodata=self._nodata
-        )
 
     def to_rio_dataset(
         self,
-        rio_dataset: rio.io.DatasetWriter,
-        indexes: Optional[Union[int, List[int]]] = None,
-        window: Optional[Window] = None,
+        dataset: DatasetWriter,
+        indexes: int | list[int] | None = None,
+        window: Window | None = None,
         **kwargs,
-    ):
+    ) -> None:
         """
-        Write the RasterArray into a rasterio dataset, converting data types with rounding and clipping when necessary.
+        Write the RasterArray into an open RasterIO dataset.
 
-        The RasterArray mask is written as an internal mask band when the ``rio_dataset`` nodata is None, otherwise
-        no mask is written, and the array is written as is.
+        The :attr:`mask` is written as an internal mask band when ``dataset.nodata``
+        is ``None``, otherwise nodata pixels are converted from the RasterArray to
+        dataset value before writing.
 
-        Parameters
-        ----------
-        rio_dataset: rasterio.io.DatasetWriter
-            An open rasterio dataset into which to write the RasterArray.
-            The dataset CRS must match that of the RasterArray.
-        indexes: int, list[int], optional
-            1-based index or list of indexes of the bands to be written in ``rio_dataset``.
-            It should contain the same number of items as there are RasterArray bands.
-            The default is to write into the first `count` non-alpha bands of the dataset, where `count` is the number
-            of RasterArray bands.
-        window: rasterio.windows.Window, optional
-            Window defining the region in the dataset to write the RasterArray to, and how to crop the
-            RasterArray, if necessary.  If it is a `boundless` window i.e. extended beyond the bounds of the
-            dataset, it is cropped to fit the bounds of the dataset. The RasterArray is cropped to fit the bounds
-            of the window in the dataset.
-            The default is to write the full extent of RasterArray into the corresponding region in the dataset.
-        kwargs: optional
-            Arguments to pass through the dataset's write() method.
+        :param dataset:
+            Dataset to write into.
+        :param indexes:
+            Dataset band index(es) to write (1 based).  Should contain :attr:`count`
+            elements. If ``None``, it defaults to the dataset non-alpha bands.
+        :param window:
+            Boundless region of the dataset to write into.  If ``None``, the full
+            RasterArray extent is written into the corresponding dataset region.
+        :param kwargs:
+            Additional keyword arguments to pass to
+            :meth:`~rasterio.io.DatasetWriter.write`.
         """
-        if not np.all(np.abs(self.res) == np.abs(rio_dataset.res)):
+        # check that the RasterArray lies on the same pixel grid as the dataset
+        ji_offset = ~dataset.transform * (self.transform.xoff, self.transform.yoff)
+        is_int_offset = np.allclose(np.round(ji_offset), ji_offset)
+        if not self.res == dataset.res or not is_int_offset:
             raise ImageFormatError(
-                f'The dataset resolution does not match that of the RasterArray. '
-                f'Dataset res: {rio_dataset.res}, RasterArray res: {self.res}'
+                "'dataset' should lie on the same pixel grid as the RasterArray."
             )
-        if self.crs != rio_dataset.crs:
+        # TODO: this comparison is time-consuming to do for every write - benchmark
+        #  removing it
+        if self.crs != dataset.crs:
             raise ImageFormatError(
-                f'The dataset CRS does not match that of the RasterArray. '
-                f'Dataset CRS: {rio_dataset.crs}, RasterArray CRS: {self.crs}'
+                "'dataset' should have the same CRS as the RasterArray."
             )
 
         if indexes is None:
-            indexes = utils.get_nonalpha_bands(rio_dataset)
+            indexes = utils.get_nonalpha_bands(dataset)
             indexes = indexes if len(indexes) > 1 else indexes[0]
 
-        if np.any((np.array(indexes) < 1) | (np.array(indexes) > rio_dataset.count)):
-            error_indexes = np.array(indexes)[np.array(indexes) > rio_dataset.count]
+        if np.ndim(indexes) == 1 and len(indexes) != self.count:
             raise ValueError(
-                f'Band index(es) {error_indexes} are out of the valid range (1..{rio_dataset.count})'
-            )
-
-        if (not np.isscalar(indexes)) and (len(indexes) > self.count):
-            raise ValueError(
-                f'The length of indexes ({len(indexes)}) exceeds the number of bands in the '
-                f'RasterArray ({self.count})'
+                "'indexes' should contain the same number of elements as the number "
+                'of RasterArray bands.'
             )
 
         if window is None:
-            # a window defining the region in the dataset corresponding to the RasterArray extents
-            window = rio_dataset.window(*self.bounds)
+            # region in the dataset corresponding to the RasterArray extents
+            window = utils.round_window_to_grid(dataset.window(*self.bounds))
 
-        # crop the window to dataset bounds
-        window, _ = self.bounded_window_slices(rio_dataset, window)
-        # crop the RasterArray to match the bounds of the dataset window
-        bounded_ra = self.slice_to_bounds(*rio_dataset.window_bounds(window))
+        # crop the boundless window to the dataset bounds
+        window = window.crop(dataset.height, dataset.width)
 
-        if np.any(bounded_ra.shape != np.array((window.height, window.width))):
+        # create a view into the RasterArray, cropped to the bounds of window
+        ra_window = self.window(*dataset.window_bounds(window))
+        ra_window = utils.round_window_to_grid(ra_window)
+        if (
+            ra_window.col_off < 0
+            or ra_window.row_off < 0
+            or ra_window.width != window.width
+            or ra_window.height != window.height
+        ):
             raise ValueError(
-                f'The bounds of the dataset / window ({rio_dataset.window_bounds(window)}) lie outside the '
-                f'bounds of the RasterArray ({bounded_ra.bounds})'
+                "'window' bounds lie outside the bounds of the RasterArray."
             )
+        slices = ra_window.toslices()
+        if self.count > 1:
+            slices = (slice(self.count), *slices)
+        cropped_ra = RasterArray(
+            self.array[slices],
+            self._crs,
+            self.window_transform(ra_window),
+            nodata=self._nodata,
+        )
 
         # convert data type and write to dataset
-        array = bounded_ra._convert_array_dtype(
-            rio_dataset.dtypes[0], nodata=rio_dataset.nodata
+        # TODO: clip to nbits when it is set in the dataset profile
+        array = cropped_ra._convert_array_dtype(
+            dataset.dtypes[0], nodata=dataset.nodata
         )
-        # TODO: rio is raising warnings when values in the write below are to a 12 bit jpeg and they overflow the 12bit
-        #  bound.  it only does this when writing in a thread (?).
-        rio_dataset.write(array, window=window, indexes=indexes, **kwargs)
-        if rio_dataset.nodata is None and (1 in np.array(indexes)):
-            # write internal mask once (for first band) if nodata is None
-            rio_dataset.write_mask(bounded_ra.mask, window=window)
+        dataset.write(array, window=window, indexes=indexes, **kwargs)
+
+        if dataset.nodata is None and (1 in np.array(indexes)):
+            # TODO: this doesn't work if the dataset is written band-by-band,
+            #  and bands don't have the same masks
+            # write an internal mask (once for the first band, if the dataset is
+            # written band-by-band)
+            dataset.write_mask(cropped_ra.mask, window=window)
 
     def to_file(
-        self, filename: Union[str, pathlib.Path], driver: str = 'GTiff', **kwargs
-    ):
+        self,
+        filename: str | PathLike,
+        driver: Driver | str = Driver.gtiff,
+        **creation_options,
+    ) -> None:
         """
         Write the RasterArray to an image file.
 
-        The RasterArray mask is written as an internal mask band when :attr:`~RasterArray.nodata` is None,
-        otherwise the file's nodata property is set, and the RasterArray array is written as is.
-
-        Parameters
-        ----------
-        filename: str, pathlib.Path
-            Name of the file to create.
-        driver: str, optional
-            Valid rasterio short format driver name - See the `GDAL docs
-            <https://gdal.org/en/stable/drivers/raster/index.html>`_ for available options.
-        kwargs: dict, optional
-            Driver specific creation options e.g. ``compression='deflate'`` for a GeoTiff.
-            See the `GDAL docs <https://gdal.org/en/stable/drivers/raster/index.html>`_ for available keys and values.
+        :param filename:
+            Path or URI of the image file.
+        :param driver:
+            Image driver.
+        :param creation_options:
+            Driver specific creation options as a dictionary of ``name: value``
+            pairs.  See the GDAL `GTiff
+            <https://gdal.org/en/latest/drivers/raster/gtiff.html#creation
+            -options>`__ and `COG <https://gdal.org/en/latest/drivers/raster/cog.html
+            #creation -options>`__ documentation for details on the options for those
+            drivers.
         """
+        driver = Driver(driver.lower())
         with rio.Env(
             GDAL_NUM_THREADS='ALL_CPUs',
             GTIFF_FORCE_RGBA=False,
             CPL_VSIL_USE_TEMP_FILE_FOR_RANDOM_WRITE=True,
         ):
             with rio.open(
-                filename, 'w', driver=driver, **self.profile, **kwargs
-            ) as out_im:
-                out_im.write(
-                    self._array,
-                    indexes=range(1, self.count + 1) if self.count > 1 else 1,
-                )
-                if out_im.nodata is None:
-                    out_im.write_mask(self.mask)
+                filename, 'w', driver=driver, **self.profile, **creation_options
+            ) as ds:
+                ds.write(self._array)
 
     def reproject(
         self,
-        crs: Optional[CRS] = None,
-        transform: Optional[Affine] = None,
-        shape: Optional[Tuple[int, int]] = None,
-        nodata: float = default_nodata,
+        crs: CRS | None = None,
+        transform: Affine | None = None,
+        shape: tuple[int, int] | None = None,
+        nodata: float | None = default_nodata,
         dtype: str = default_dtype,
-        resampling: Resampling = Resampling.lanczos,
+        resampling: str | Resampling = Resampling.lanczos,
         **kwargs,
     ) -> 'RasterArray':
         """
-        Re-project the RasterArray.
+        Reproject the RasterArray.
 
-        Parameters
-        ----------
-        crs: rasterio.crs.CRS, optional
-             CRS to project into.  The default is to use the CRS of this RasterArray.
-        transform: rasterio.transform.Affine, optional
-            Geo-transform to project into.  If ``transform`` is specified, ``shape`` is also required.
-            The default is to use the transform of this RasterArray.
-        shape: tuple, optional
-            (rows, columns) size of the destination array. The default is to use the shape of this RasterArray.
-        nodata: float, int, optional
-            nodata value of the destination array.
-        dtype: type, str, optional
-            Internal data type of destination array.
-        resampling: rasterio.enums.Resampling, optional
+        :param crs:
+            Destination CRS.  If ``None``, use the RasterArray :attr:`crs`.
+        :param transform:
+            Destination geo-referencing transform.  If supplied, ``shape`` is also
+            required.  If ``None``, use the RasterArray :attr:`transform`.
+        :param shape:
+            Destination (row, col) shape.  If ``None``, use the RasterArray
+            :attr:`shape`.
+        :param nodata:
+            Destination nodata value.
+        :param dtype:
+            Destination data type.
+        :param resampling:
             Resampling method to use.
-        kwargs: dict, optional
-            Additional arguments to pass through the rasterio's reproject() function.
+        :param kwargs:
+            Additional keyword arguments to pass to :meth:`~rasterio.warp.reproject`.
 
-        Returns
-        -------
-        RasterArray
+        :return:
             Reprojected RasterArray.
         """
         if transform is not None and shape is None:
-            raise ValueError("If 'transform' is specified, 'shape' is required")
-
+            raise ValueError("If 'transform' is supplied, 'shape' is also required.")
         if isinstance(resampling, str):
-            resampling = Resampling[resampling]
+            resampling = Resampling[resampling.lower()]
+
         crs = crs or self.crs
         shape = shape or self.shape
         dtype = dtype or self.dtype
 
         fill_value = nodata if nodata is not None else 0
-        if self.array.ndim > 2:
-            dst_array = np.full(
-                (self._array.shape[0], *shape), fill_value=fill_value, dtype=dtype
-            )
-        else:
-            dst_array = np.full(shape, fill_value=fill_value, dtype=dtype)
+        if self.count > 1:
+            shape = (self.count, *shape)
+        dst_array = np.full(shape, fill_value=fill_value, dtype=dtype)
 
         _, dst_transform = reproject(
             self._array,
@@ -692,6 +638,3 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
             **kwargs,
         )
         return RasterArray(dst_array, crs=crs, transform=dst_transform, nodata=nodata)
-
-
-##
