@@ -163,8 +163,8 @@ class RasterFuse(MatchedPairReader):
             width=proc_im.width,
             height=proc_im.height,
             count=len(self.src_bands) * 3,
-            dtype=RasterArray.default_dtype,
-            nodata=RasterArray.default_nodata,
+            dtype=RasterArray._default_dtype,
+            nodata=RasterArray._default_nodata,
             crs=proc_im.crs,
             transform=proc_im.transform,
             **_default_creation_options['gtiff'],
@@ -338,8 +338,8 @@ class RasterFuse(MatchedPairReader):
     @staticmethod
     def create_out_profile(
         driver: str | Driver = _default_config['driver'],
-        dtype: str = RasterArray.default_dtype,
-        nodata: int | float | None = RasterArray.default_nodata,
+        dtype: str = RasterArray._default_dtype,
+        nodata: int | float | None = RasterArray._default_nodata,
         creation_options: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
@@ -399,8 +399,8 @@ class RasterFuse(MatchedPairReader):
         downsampling: str | Resampling = KernelModel._default_config['downsampling'],
         upsampling: str | Resampling = KernelModel._default_config['upsampling'],
         driver: str | Driver = _default_config['driver'],
-        dtype: str = RasterArray.default_dtype,
-        nodata: int | float | None = RasterArray.default_nodata,
+        dtype: str = RasterArray._default_dtype,
+        nodata: int | float | None = RasterArray._default_nodata,
         creation_options: dict[str, Any] | None = None,
         threads: int = _default_config['threads'],
         max_block_mem: float = _default_config['max_block_mem'],

@@ -391,7 +391,7 @@ def cli(ctx: click.Context, verbose: int, quiet: int):
 @click.option(
     '--dtype',
     type=click.Choice(list(dtype_fwd.values())[1:8], case_sensitive=False),
-    default=RasterArray.default_dtype,
+    default=RasterArray._default_dtype,
     show_default=True,
     help='Corrected image data type.',
 )
@@ -401,7 +401,7 @@ def cli(ctx: click.Context, verbose: int, quiet: int):
     type=click.STRING,
     callback=_nodata_cb,
     metavar='[NUMBER|null|nan]',
-    default=RasterArray.default_nodata,
+    default=RasterArray._default_nodata,
     show_default=True,
     help='Corrected image nodata value.  If ``null``, an internal mask is written '
     '(recommended for lossy compression).',

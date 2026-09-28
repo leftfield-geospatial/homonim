@@ -154,8 +154,8 @@ def test_corr_profile_defaults(
             im_struct = corr_ds.tags(ns='IMAGE_STRUCTURE')
             assert im_struct['LAYOUT'].lower() == 'cog'
 
-        assert corr_ds.dtypes[0] == RasterArray.default_dtype
-        assert utils.nan_equals(corr_ds.nodata, RasterArray.default_nodata)
+        assert corr_ds.dtypes[0] == RasterArray._default_dtype
+        assert utils.nan_equals(corr_ds.nodata, RasterArray._default_nodata)
 
         for k in src_keys:
             assert corr_ds.profile[k] == src_ds.profile[k]
@@ -254,8 +254,8 @@ def test_param_profile(tmp_path: Path, src_file_100cm_float: Path):
         rio.open(param_file, 'r') as param_ds,
     ):
         assert param_ds.driver.lower() == 'gtiff'
-        assert param_ds.dtypes[0] == RasterArray.default_dtype
-        assert utils.nan_equals(param_ds.nodata, RasterArray.default_nodata)
+        assert param_ds.dtypes[0] == RasterArray._default_dtype
+        assert utils.nan_equals(param_ds.nodata, RasterArray._default_nodata)
 
         for k in src_keys:
             assert param_ds.profile[k] == src_ds.profile[k]

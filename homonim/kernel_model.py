@@ -206,13 +206,13 @@ class KernelModel:
             # if mask is passed, assume that it has been applied to ref_array and
             # src_array, otherwise do that here
             mask = ~utils.nan_equals(
-                src_array, RasterArray.default_nodata
-            ) & ~utils.nan_equals(ref_array, RasterArray.default_nodata)
+                src_array, RasterArray._default_nodata
+            ) & ~utils.nan_equals(ref_array, RasterArray._default_nodata)
             ref_array[~mask] = 0
             src_array[~mask] = 0
         if mask_sum is None:
             mask_sum = cv.boxFilter(
-                mask.astype(RasterArray.default_dtype),
+                mask.astype(RasterArray._default_dtype),
                 -1,
                 kernel_shape[::-1],
                 **filter_args,
@@ -273,8 +273,8 @@ class KernelModel:
             # assign a destination array to write R2 into, if it was not provided
             dest_array = np.full(
                 src_array.shape,
-                fill_value=RasterArray.default_nodata,
-                dtype=RasterArray.default_dtype,
+                fill_value=RasterArray._default_nodata,
+                dtype=RasterArray._default_dtype,
             )
 
         # find R2 = 1 - RSS/TSS, and write into dest_array, avoiding divide by 0
@@ -334,8 +334,8 @@ class KernelModel:
         # create parameter RasterArray filled with nodata
         param_array = np.full(
             (3 if self._find_r2 else 2, *src_ra.shape[-2:]),
-            dtype=RasterArray.default_dtype,
-            fill_value=RasterArray.default_nodata,
+            dtype=RasterArray._default_dtype,
+            fill_value=RasterArray._default_nodata,
         )
         param_ra = RasterArray(param_array, src_ra.crs, src_ra.transform)
 
@@ -377,7 +377,7 @@ class KernelModel:
         norm_model = self._fit_block_norm(src_ra, ref_ra)
 
         # force src nodata to nan so that operation below remains correctly masked
-        src_ra.nodata = RasterArray.default_nodata
+        src_ra.nodata = RasterArray._default_nodata
 
         # apply the normalisation (block gain and offset)
         src_ra.array = (src_ra.array * norm_model[0]) + norm_model[1]
@@ -421,7 +421,7 @@ class KernelModel:
             src_array * ref_array, -1, kernel_shape[::-1], **filter_args
         )
         mask_sum = cv.boxFilter(
-            mask.astype(RasterArray.default_dtype, copy=False),
+            mask.astype(RasterArray._default_dtype, copy=False),
             -1,
             kernel_shape[::-1],
             **filter_args,
@@ -438,8 +438,8 @@ class KernelModel:
         find_r2 = self._find_r2 or (self._r2_inpaint_thresh is not None)
         param_array = np.full(
             (3 if find_r2 else 2, *src_ra.shape[-2:]),
-            dtype=RasterArray.default_dtype,
-            fill_value=RasterArray.default_nodata,
+            dtype=RasterArray._default_dtype,
+            fill_value=RasterArray._default_nodata,
         )
         param_ra = RasterArray(param_array, src_ra.crs, src_ra.transform)
 

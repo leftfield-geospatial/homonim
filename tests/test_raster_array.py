@@ -106,7 +106,7 @@ def test_from_rio_dataset(file_byte: Path, array_byte: np.ndarray):
         ra = RasterArray.from_rio_dataset(ds)
         for name in ['crs', 'transform', 'shape', 'count', 'nodata']:
             assert getattr(ra, name) == getattr(ds, name)
-        assert ra.dtype == RasterArray.default_dtype
+        assert ra.dtype == RasterArray._default_dtype
         assert (ra.array == array_byte).all()
 
         # test parameters

@@ -37,16 +37,15 @@ logger = logging.getLogger(__name__)
 
 
 class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
-    # TODO: rename with _
-    default_nodata = float('nan')  # default internal nodata value
-    default_dtype = 'float32'  # default internal data type
+    _default_nodata = float('nan')  # default internal nodata value
+    _default_dtype = 'float32'  # default internal data type
 
     def __init__(
         self,
         array: np.ndarray,
         crs: CRS,
         transform: Affine,
-        nodata: float | None = default_nodata,
+        nodata: float | None = _default_nodata,
     ):
         """
         Class for reading, writing and reprojecting a geo-referenced NumPy array.
@@ -92,7 +91,7 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         dataset: DatasetReader,
         indexes: int | list[int] | None = None,
         window: Window | None = None,
-        dtype: str = default_dtype,
+        dtype: str = _default_dtype,
         nodata: float | None = None,
         **kwargs,
     ) -> 'RasterArray':
@@ -138,9 +137,9 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         nodata_changed = False
         if nodata is None:
             # use the dataset's nodata when it has one and is not masked, otherwise
-            # use default_nodata
+            # use _default_nodata
             nodata = (
-                cls.default_nodata
+                cls._default_nodata
                 if (is_masked or dataset.nodata is None)
                 else dataset.nodata
             )
@@ -488,8 +487,8 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         crs: CRS | None = None,
         transform: Affine | None = None,
         shape: tuple[int, int] | None = None,
-        nodata: float | None = default_nodata,
-        dtype: str = default_dtype,
+        nodata: float | None = _default_nodata,
+        dtype: str = _default_dtype,
         resampling: str | Resampling = Resampling.lanczos,
         **kwargs,
     ) -> 'RasterArray':
@@ -548,8 +547,8 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
     def reproject_like(
         self,
         array: 'RasterArray',
-        nodata: float | None = default_nodata,
-        dtype: str = default_dtype,
+        nodata: float | None = _default_nodata,
+        dtype: str = _default_dtype,
         resampling: str | Resampling = Resampling.lanczos,
         **kwargs,
     ) -> 'RasterArray':
