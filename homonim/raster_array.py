@@ -20,18 +20,18 @@ from typing import Any
 
 import numpy as np
 import rasterio as rio
-from rasterio import Affine, windows
+from rasterio import Affine
 from rasterio.crs import CRS
 from rasterio.dtypes import can_cast_dtype
 from rasterio.enums import MaskFlags
 from rasterio.io import DatasetReader, DatasetWriter
-from rasterio.transform import TransformMethodsMixin
+from rasterio.transform import TransformMethodsMixin, array_bounds
 from rasterio.warp import Resampling, reproject
 from rasterio.windows import Window, WindowMethodsMixin
 
 from homonim import utils
 from homonim.enums import Driver
-from homonim.errors import HomonimError, ImageFormatError, ImageProfileError
+from homonim.errors import HomonimError, ImageFormatError
 
 logger = logging.getLogger(__name__)
 
@@ -258,7 +258,7 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
     @property
     def bounds(self) -> tuple[float, float, float, float]:
         """(left, bottom, right, top) coordinates of the array extents."""
-        return self.window_bounds(Window(0, 0, self.width, self.height))
+        return array_bounds(*self.shape, self._transform)
 
     @property
     def profile(self) -> dict[str, Any]:
@@ -278,35 +278,16 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         """The ``crs``, ``transform`` and ``shape`` items of the :attr:`profile` for
         passing as keyword arguments to :meth:`reproject`.
         """
+        # TODO: remove if possible and replace with reproject_like?
         return dict(crs=self._crs, transform=self._transform, shape=self.shape)
-
-    @property
-    def mask(self) -> np.ndarray[bool]:
-        """2D (row, col) mask of valid array pixels."""
-        if self._mask is None:
-            if self._nodata is None:
-                self._mask = np.full(self._array.shape[-2:], True)
-            else:
-                self._mask = ~utils.nan_equals(self._array, self._nodata)
-                if self._array.ndim > 2:
-                    self._mask = np.any(self._mask, axis=0)
-        return self._mask
-
-    @mask.setter
-    def mask(self, value: np.ndarray[bool]):
-        if self._nodata is None:
-            raise ValueError("Cannot set the mask when the 'nodata' property is None.")
-        self._array[..., ~value] = self._nodata
-        # force re-calculation of mask (should not set it to value as there may be
-        # other pixels == nodata)
-        self._mask = None
 
     @property
     def mask_ra(self) -> 'RasterArray':
         """RasterArray of the :attr:`mask` as a uint8 view, and with :attr:`nodata`
         as ``None``.
         """
-        mask = self.mask.view('uint8')
+        # TODO: remove and replace with a private function
+        mask = self.mask().view('uint8')
         return RasterArray(mask, crs=self._crs, transform=self._transform, nodata=None)
 
     @property
@@ -317,20 +298,26 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
     @nodata.setter
     def nodata(self, value: float | None):
         if value is None or self._nodata is None:
-            # if new nodata value is None, remove the current mask
-            # if current nodata is None, there is no mask, so just set the new nodata
-            # value and return
             self._nodata = value
-            self._mask = None
         elif not (utils.nan_equals(value, self._nodata)):
             # if the new nodata value is different to the current nodata,
-            # set the mask area in array to the new nodata value and return
-            nodata_mask = ~self.mask
-            self._array[..., nodata_mask] = value
+            # set the mask area in array to the new nodata value
+            self._array[self._array == self._nodata] = value
             self._nodata = value
-            # force re-calculation of mask (there may be pixels other than ~self.mask
-            # == to the new nodata value)
-            self._mask = None
+
+    def _crop_to_window(self, window: Window) -> 'RasterArray':
+        """Return a view into the RasterArray, cropped to the given window bounds."""
+        ranges = np.array(window.toranges()).T
+        if any(ranges[0] < 0) or any(ranges[1] > self.shape):
+            raise ValueError(
+                "'window' bounds lie outside the bounds of the RasterArray."
+            )
+        return RasterArray(
+            self._array[(..., *window.toslices())],
+            self._crs,
+            self.window_transform(window),
+            nodata=self._nodata,
+        )
 
     def _convert_array_dtype(self, dtype: str, nodata: float | None = None) -> np.array:
         """Return the image array converted to dtype, rounding and clipping when
@@ -340,30 +327,32 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         with np.errstate(invalid='ignore'):
             if nodata is not None and not can_cast_dtype(nodata, dtype):
                 raise HomonimError(
-                    f"'nodata' value: {nodata} cannot be safely cast to 'dtype': "
-                    f'{dtype}.'
+                    f"'nodata': {nodata} cannot be safely cast to 'dtype': {dtype}."
                 )
 
-        # create a copy of the array if nodata, rounding, clipping or casting might
-        # change it
-        unsafe_cast = not np.can_cast(self.dtype, dtype, casting='safe')
-        nodata_change = nodata is not None and not utils.nan_equals(nodata, self.nodata)
-        array = self._array
-        if nodata_change or unsafe_cast:
-            # promote dtype to represent destination dtype to allow nodata conversion
-            # and clipping
-            array = array.astype(np.promote_types(self.dtype, dtype), copy=True)
+        # return an array converted to dtype if that is safe and nodata remains
+        # the same
+        safe_cast = np.can_cast(self.dtype, dtype, casting='safe')
+        nodata_unchanged = (
+            nodata is None
+            or self._nodata is None
+            or utils.nan_equals(nodata, self.nodata)
+        )
+        if safe_cast and nodata_unchanged:
+            return self._array.astype(dtype, copy=False)
+
+        # create a copy of the array with promoted dtype to allow nodata conversion
+        # and clipping
+        array = self._array.astype(np.promote_types(self.dtype, dtype), copy=True)
 
         # round if converting from float to integer dtype
-        if (
-            unsafe_cast
-            and np.issubdtype(self.dtype, np.floating)
-            and np.issubdtype(dtype, np.integer)
-        ):
+        rounded = False
+        if np.issubdtype(self.dtype, np.floating) and np.issubdtype(dtype, np.integer):
             np.round(array, out=array)
+            rounded = True
 
         # clip if converting to integer dtype with smaller range than current dtype
-        if unsafe_cast and np.issubdtype(dtype, np.integer):
+        if np.issubdtype(dtype, np.integer):
             src_info = (
                 np.iinfo(self.dtype)
                 if np.issubdtype(self.dtype, np.integer)
@@ -378,18 +367,32 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         with np.errstate(invalid='ignore', over='ignore'):
             array = array.astype(dtype, copy=False, casting='unsafe')
 
-        # set nodata value if it has changed, or may be invalid after rounding,
-        # clipping and casting
-        if nodata_change or (nodata is not None and unsafe_cast):
-            array[~self.mask] = nodata
+        # set the nodata value if it has changed, or may be invalid after rounding
+        if not nodata_unchanged or (
+            nodata is not None and not self._nodata and rounded
+        ):
+            nodata_mask = utils.nan_equals(self._array, self._nodata)
+            array[nodata_mask] = nodata
 
         return array
 
     def copy(self) -> 'RasterArray':
         """Return a deep copy of the RasterArray."""
         return RasterArray(
-            self._array.copy(), self.crs, self.transform, nodata=self.nodata
+            self._array.copy(), self._crs, self._transform, nodata=self._nodata
         )
+
+    def mask(self) -> np.ndarray[bool]:
+        """Return the 2D mask of valid array pixels, as the OR of the individual band
+        masks.
+        """
+        if self._nodata is None:
+            mask = np.full(self._array.shape[-2:], True)
+        else:
+            mask = ~utils.nan_equals(self._array, self._nodata)
+            if mask.ndim > 2:
+                mask = np.any(mask, axis=0)
+        return mask
 
     def to_rio_dataset(
         self,
@@ -418,7 +421,7 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
             :meth:`~rasterio.io.DatasetWriter.write`.
         """
         # check that the RasterArray lies on the same pixel grid as the dataset
-        ji_offset = ~dataset.transform * (self.transform.xoff, self.transform.yoff)
+        ji_offset = ~dataset.transform * (self._transform.xoff, self._transform.yoff)
         is_int_offset = np.allclose(np.round(ji_offset), ji_offset)
         if not self.res == dataset.res or not is_int_offset:
             raise ImageFormatError(
@@ -426,7 +429,7 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
             )
         # TODO: this comparison is time-consuming to do for every write - benchmark
         #  removing it
-        if self.crs != dataset.crs:
+        if self._crs != dataset.crs:
             raise ImageFormatError(
                 "'dataset' should have the same CRS as the RasterArray."
             )
@@ -451,30 +454,11 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         # create a view into the RasterArray, cropped to the bounds of window
         ra_window = self.window(*dataset.window_bounds(window))
         ra_window = utils.round_window_to_grid(ra_window)
-        if (
-            ra_window.col_off < 0
-            or ra_window.row_off < 0
-            or ra_window.width != window.width
-            or ra_window.height != window.height
-        ):
-            raise ValueError(
-                "'window' bounds lie outside the bounds of the RasterArray."
-            )
-        slices = ra_window.toslices()
-        if self.count > 1:
-            slices = (slice(self.count), *slices)
-        cropped_ra = RasterArray(
-            self.array[slices],
-            self._crs,
-            self.window_transform(ra_window),
-            nodata=self._nodata,
-        )
+        crop_ra = self._crop_to_window(ra_window)
 
         # convert data type and write to dataset
         # TODO: clip to nbits when it is set in the dataset profile
-        array = cropped_ra._convert_array_dtype(
-            dataset.dtypes[0], nodata=dataset.nodata
-        )
+        array = crop_ra._convert_array_dtype(dataset.dtypes[0], nodata=dataset.nodata)
         dataset.write(array, window=window, indexes=indexes, **kwargs)
 
         if dataset.nodata is None and (1 in np.array(indexes)):
@@ -482,7 +466,7 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
             #  and bands don't have the same masks
             # write an internal mask (once for the first band, if the dataset is
             # written band-by-band)
-            dataset.write_mask(cropped_ra.mask, window=window)
+            dataset.write_mask(crop_ra.mask(), window=window)
 
     def to_file(
         self,
@@ -554,7 +538,7 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         if isinstance(resampling, str):
             resampling = Resampling[resampling.lower()]
 
-        crs = crs or self.crs
+        crs = crs or self._crs
         shape = shape or self.shape
         dtype = dtype or self.dtype
 
