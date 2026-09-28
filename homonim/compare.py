@@ -310,12 +310,12 @@ class RasterCompare(MatchedPairReader):
                 resampling = self._get_resampling(
                     src_ra.res, ref_ra.res, downsampling, upsampling
                 )
-                src_ra = src_ra.reproject(**ref_ra.proj_profile, resampling=resampling)
+                src_ra = src_ra.reproject_like(ref_ra, resampling=resampling)
             else:
                 resampling = self._get_resampling(
                     ref_ra.res, src_ra.res, downsampling, upsampling
                 )
-                ref_ra = ref_ra.reproject(**src_ra.proj_profile, resampling=resampling)
+                ref_ra = ref_ra.reproject_like(src_ra, resampling=resampling)
 
             # mask invalid pixels so they don't contribute to sums
             src_array = src_ra.array

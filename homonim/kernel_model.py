@@ -52,8 +52,8 @@ def _full_coverage_mask(
         Full coverage mask as an array with uint8 dtype, in the proc_crs CRS and grid.
     """
     # re-project the other_ra mask into the proc_ra CRS and grid
-    mask_ra = _raster_array_mask(other_ra).reproject(
-        **proc_ra.proj_profile, nodata=None, resampling=Resampling.average
+    mask_ra = _raster_array_mask(other_ra).reproject_like(
+        proc_ra, nodata=None, resampling=Resampling.average
     )
     # find the mask of fully covered other_ra & proc_ra pixels in the proc_ra CRS and
     # grid
@@ -569,7 +569,7 @@ class RefSpaceModel(KernelModel):
         # choose resampling method based on whether we are up- or downsampling
         resampling = self._get_resampling(src_ra.res, ref_ra.res)
         # downsample src_ra to reference CRS and grid
-        src_ds_ra = src_ra.reproject(**ref_ra.proj_profile, resampling=resampling)
+        src_ds_ra = src_ra.reproject_like(ref_ra, resampling=resampling)
         # call base class fit with reference and source RasterArrays in the reference
         # CRS & grid
         return KernelModel.fit(self, src_ds_ra, ref_ra)
@@ -580,17 +580,14 @@ class RefSpaceModel(KernelModel):
         # choose resampling method based on whether we are up- or downsampling
         resampling = self._get_resampling(_param_ra.res, src_ra.res)
         # re-project _param_ra to source CRS and grid
-        param_src_ra = _param_ra.reproject(**src_ra.proj_profile, resampling=resampling)
+        param_src_ra = _param_ra.reproject_like(src_ra, resampling=resampling)
 
         if self._mask_partial:
             # find the mask of fully covered pixels in reference CRS and grid
             mask_ra = _full_coverage_mask(_param_ra, src_ra, self.kernel_shape)
             # re-project the mask to source CRS and grid, and apply to the parameters
-            mask_src_ra = mask_ra.reproject(
-                **src_ra.proj_profile,
-                nodata=None,
-                dtype='uint8',
-                resampling=Resampling.nearest,
+            mask_src_ra = mask_ra.reproject_like(
+                src_ra, nodata=None, dtype='uint8', resampling=Resampling.nearest
             )
             nodata_mask = ~mask_src_ra.array.view('bool')
             param_src_ra.array[..., nodata_mask] = param_src_ra.nodata
@@ -612,7 +609,7 @@ class SrcSpaceModel(KernelModel):
     def fit(self, src_ra: RasterArray, ref_ra: RasterArray) -> RasterArray:
         # reproject ref_ra to the source CRS and grid
         resampling = self._get_resampling(ref_ra.res, src_ra.res)
-        ref_src_ra = ref_ra.reproject(**src_ra.proj_profile, resampling=resampling)
+        ref_src_ra = ref_ra.reproject_like(src_ra, resampling=resampling)
 
         # copy the source to avoid in-place changes in fit() below
         _src_ra = src_ra.copy()

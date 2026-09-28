@@ -274,14 +274,6 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         )
 
     @property
-    def proj_profile(self) -> dict[str, Any]:
-        """The ``crs``, ``transform`` and ``shape`` items of the :attr:`profile` for
-        passing as keyword arguments to :meth:`reproject`.
-        """
-        # TODO: remove if possible and replace with reproject_like?
-        return dict(crs=self._crs, transform=self._transform, shape=self.shape)
-
-    @property
     def nodata(self) -> float | None:
         """Value of nodata (invalid) pixels."""
         return self._nodata
@@ -552,3 +544,40 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
             **kwargs,
         )
         return RasterArray(dst_array, crs=crs, transform=dst_transform, nodata=nodata)
+
+    def reproject_like(
+        self,
+        array: 'RasterArray',
+        nodata: float | None = default_nodata,
+        dtype: str = default_dtype,
+        resampling: str | Resampling = Resampling.lanczos,
+        **kwargs,
+    ) -> 'RasterArray':
+        """
+        Reproject the RasterArray to the same :attr:`crs`, :attr:`transform` and
+        :attr:`shape` as a given RasterArray.
+
+        :param array:
+            Template RasterArray defining the destination :attr:`crs`,
+            :attr:`transform` and :attr:`shape`.
+        :param nodata:
+            Destination nodata value.
+        :param dtype:
+            Destination data type.
+        :param resampling:
+            Resampling method to use.
+        :param kwargs:
+            Additional keyword arguments to pass to :meth:`~rasterio.warp.reproject`.
+
+        :return:
+            Reprojected RasterArray.
+        """
+        return self.reproject(
+            crs=array.crs,
+            transform=array.transform,
+            shape=array.shape,
+            nodata=nodata,
+            dtype=dtype,
+            resampling=resampling,
+            **kwargs,
+        )

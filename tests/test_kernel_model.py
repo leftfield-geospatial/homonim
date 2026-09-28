@@ -297,14 +297,14 @@ def test_ref_masking(
         # find and test against the expected mask
         # this test depends on RasterArray.reproject which is a compromise to allow
         # thorough testing here
-        mask_ra = _raster_array_mask(src_ra).reproject(
-            **param_ra.proj_profile, nodata=None, resampling=Resampling.average
+        mask_ra = _raster_array_mask(src_ra).reproject_like(
+            param_ra, nodata=None, resampling=Resampling.average
         )
         # ref pixels fully covered by src
         mask = (mask_ra.array >= 1).astype('uint8', copy=False)
         mask_ra.array = cv2.erode(mask, np.ones(np.add(kernel_shape, 2)))
-        test_mask_ra = mask_ra.reproject(
-            **src_ra.proj_profile, nodata=None, resampling=Resampling.nearest
+        test_mask_ra = mask_ra.reproject_like(
+            src_ra, nodata=None, resampling=Resampling.nearest
         )
         assert (test_mask_ra.array == corr_mask).all()
 
