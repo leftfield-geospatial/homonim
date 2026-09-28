@@ -29,6 +29,12 @@ ONdArray = np.ndarray | None
 OShape = tuple[int, int] | None
 
 
+def _raster_array_mask(ra: RasterArray) -> RasterArray:
+    """Return a RasterArray of ra.mask() as a uint8 with nodata=None."""
+    mask = ra.mask().view('uint8')
+    return RasterArray(mask, crs=ra.crs, transform=ra.transform, nodata=None)
+
+
 def _full_coverage_mask(
     proc_ra: RasterArray, other_ra: RasterArray, kernel_shape: tuple[int, int]
 ) -> RasterArray:
@@ -46,7 +52,7 @@ def _full_coverage_mask(
         Full coverage mask as an array with uint8 dtype, in the proc_crs CRS and grid.
     """
     # re-project the other_ra mask into the proc_ra CRS and grid
-    mask_ra = other_ra.mask_ra.reproject(
+    mask_ra = _raster_array_mask(other_ra).reproject(
         **proc_ra.proj_profile, nodata=None, resampling=Resampling.average
     )
     # find the mask of fully covered other_ra & proc_ra pixels in the proc_ra CRS and

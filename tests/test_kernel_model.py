@@ -21,7 +21,7 @@ from rasterio.enums import Resampling
 from homonim import utils
 from homonim.enums import Model
 from homonim.errors import HomonimError
-from homonim.kernel_model import RefSpaceModel, SrcSpaceModel
+from homonim.kernel_model import RefSpaceModel, SrcSpaceModel, _raster_array_mask
 from homonim.raster_array import RasterArray
 
 
@@ -297,7 +297,7 @@ def test_ref_masking(
         # find and test against the expected mask
         # this test depends on RasterArray.reproject which is a compromise to allow
         # thorough testing here
-        mask_ra = src_ra.mask_ra.reproject(
+        mask_ra = _raster_array_mask(src_ra).reproject(
             **param_ra.proj_profile, nodata=None, resampling=Resampling.average
         )
         # ref pixels fully covered by src

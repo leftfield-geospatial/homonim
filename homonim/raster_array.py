@@ -282,15 +282,6 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         return dict(crs=self._crs, transform=self._transform, shape=self.shape)
 
     @property
-    def mask_ra(self) -> 'RasterArray':
-        """RasterArray of the :attr:`mask` as a uint8 view, and with :attr:`nodata`
-        as ``None``.
-        """
-        # TODO: remove and replace with a private function
-        mask = self.mask().view('uint8')
-        return RasterArray(mask, crs=self._crs, transform=self._transform, nodata=None)
-
-    @property
     def nodata(self) -> float | None:
         """Value of nodata (invalid) pixels."""
         return self._nodata
