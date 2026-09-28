@@ -320,7 +320,7 @@ class RasterCompare(MatchedPairReader):
             # mask invalid pixels so they don't contribute to sums
             src_array = src_ra.array
             ref_array = ref_ra.array
-            mask = ref_ra.mask & src_ra.mask
+            mask = ref_ra.mask() & src_ra.mask()
             src_array[~mask] = 0
             ref_array[~mask] = 0
 

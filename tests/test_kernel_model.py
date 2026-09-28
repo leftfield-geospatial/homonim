@@ -50,12 +50,13 @@ def test_ref_basic_fit(
     param_ra = kernel_model.fit(src_ra, ref_ra.copy())
     assert param_ra.shape == ref_ra.shape
     assert param_ra.transform == ref_ra.transform
-    # given that ref_ra.mask == downsample(src_ra.mask)
-    assert (ref_ra.mask == param_ra.mask).all()
+    # given that ref_ra.mask() == downsample(src_ra.mask())
+    param_mask = param_ra.mask()
+    assert (ref_ra.mask() == param_mask).all()
     # test gain ~1
-    assert param_ra.array[0, param_ra.mask] == pytest.approx(1, abs=1.0e-2)
+    assert param_ra.array[0, param_mask] == pytest.approx(1, abs=1.0e-2)
     # test offset ~0
-    assert param_ra.array[1, param_ra.mask] == pytest.approx(0, abs=1.0e-2)
+    assert param_ra.array[1, param_mask] == pytest.approx(0, abs=1.0e-2)
 
 
 @pytest.mark.parametrize(
@@ -84,12 +85,13 @@ def test_src_basic_fit(
     param_ra = kernel_model.fit(src_ra, ref_ra)
     assert param_ra.shape == src_ra.shape
     assert param_ra.transform == src_ra.transform
-    # given that src_ra.mask == upsample(ref_ra.mask)
-    assert (src_ra.mask == param_ra.mask).all()
-    # gain ~1
-    assert param_ra.array[0, param_ra.mask] == pytest.approx(1, abs=1e-2)
-    # offset ~0
-    assert param_ra.array[1, param_ra.mask] == pytest.approx(0, abs=1e-2)
+    # given that src_ra.mask() == upsample(ref_ra.mask())
+    param_mask = param_ra.mask()
+    assert (src_ra.mask() == param_mask).all()
+    # test gain ~1
+    assert param_ra.array[0, param_mask] == pytest.approx(1, abs=1.0e-2)
+    # test offset ~0
+    assert param_ra.array[1, param_mask] == pytest.approx(0, abs=1.0e-2)
 
 
 def test_ref_basic_apply(ra_100cm_float, ra_50cm_float):
@@ -99,16 +101,17 @@ def test_ref_basic_apply(ra_100cm_float, ra_50cm_float):
 
     # create test parameters == 1
     param_ra = ra_100cm_float.copy()
-    param_mask = param_ra.mask
+    param_mask = param_ra.mask()
     param_ra.array = np.ones((2, *param_ra.shape), dtype=param_ra.dtype)
-    param_ra.mask = param_mask
+    param_ra.array[..., ~param_mask] = param_ra.nodata
 
-    out_ra = kernel_model.apply(src_ra, param_ra)
-    assert out_ra.transform == src_ra.transform
-    assert out_ra.shape == src_ra.shape
-    assert (src_ra.mask == out_ra.mask).all()
-    assert out_ra.array[out_ra.mask] == pytest.approx(
-        src_ra.array[out_ra.mask] + 1, abs=1e-2
+    corr_ra = kernel_model.apply(src_ra, param_ra)
+    assert corr_ra.transform == src_ra.transform
+    assert corr_ra.shape == src_ra.shape
+    corr_mask = corr_ra.mask()
+    assert (src_ra.mask() == corr_mask).all()
+    assert corr_ra.array[corr_mask] == pytest.approx(
+        src_ra.array[corr_mask] + 1, abs=1e-2
     )
 
 
@@ -119,16 +122,17 @@ def test_src_basic_apply(ra_100cm_float):
 
     # create test parameters == 1
     param_ra = ra_100cm_float.copy()
-    param_mask = param_ra.mask
+    param_mask = param_ra.mask()
     param_ra.array = np.ones((2, *param_ra.shape), dtype=param_ra.dtype)
-    param_ra.mask = param_mask
+    param_ra.array[..., ~param_mask] = param_ra.nodata
 
-    out_ra = kernel_model.apply(src_ra, param_ra)
-    assert out_ra.transform == src_ra.transform
-    assert out_ra.shape == src_ra.shape
-    assert (src_ra.mask == out_ra.mask).all()
-    assert out_ra.array[out_ra.mask] == pytest.approx(
-        src_ra.array[out_ra.mask] + 1, abs=1e-2
+    corr_ra = kernel_model.apply(src_ra, param_ra)
+    assert corr_ra.transform == src_ra.transform
+    assert corr_ra.shape == src_ra.shape
+    corr_mask = corr_ra.mask()
+    assert (src_ra.mask() == corr_mask).all()
+    assert corr_ra.array[corr_mask] == pytest.approx(
+        src_ra.array[corr_mask] + 1, abs=1e-2
     )
 
 
@@ -167,7 +171,7 @@ def test_low_r2_inpainting(ra_50cm_float, kernel_shape: tuple[int, int]):
     # for all kernels covering that pixel
     low_r2_loc = np.floor(np.array(ref_ra.shape) / 2).astype('int')
     low_r2_ul = (low_r2_loc - np.floor(np.array(kernel_shape) / 2)).astype('int')
-    low_r2_mask = np.zeros_like(ref_ra.mask).astype('bool')
+    low_r2_mask = np.zeros(ref_ra.shape, dtype='bool')
     low_r2_mask[
         low_r2_ul[0] : low_r2_ul[0] + kernel_shape[0],
         low_r2_ul[1] : low_r2_ul[1] + kernel_shape[1],
@@ -195,21 +199,19 @@ def test_low_r2_inpainting(ra_50cm_float, kernel_shape: tuple[int, int]):
 
     # test r2 values
     for param_ra in [no_inpaint_param_ra, inpaint_param_ra]:
-        assert param_ra.array[2, ~low_r2_mask & ref_ra.mask] == pytest.approx(
+        assert param_ra.array[2, ~low_r2_mask & ref_ra.mask()] == pytest.approx(
             1, abs=1.0e-3
         )
         assert (param_ra.array[2, low_r2_mask] < r2_inpaint_thresh).all()
 
     # test r2 inpainting has improved parameters
-    assert no_inpaint_param_ra.array[1, no_inpaint_param_ra.mask] != pytest.approx(
-        0, abs=1.0e-1
-    )
-    assert inpaint_param_ra.array[1, inpaint_param_ra.mask] == pytest.approx(
-        0, abs=1.0e-1
-    )
+    inpaint_mask = inpaint_param_ra.mask()
+    no_inpaint_mask = no_inpaint_param_ra.mask()
+    assert no_inpaint_param_ra.array[1, no_inpaint_mask] != pytest.approx(0, abs=0.1)
+    assert inpaint_param_ra.array[1, inpaint_mask] == pytest.approx(0, abs=0.1)
     assert (
-        inpaint_param_ra.array[0, inpaint_param_ra.mask].var()
-        < no_inpaint_param_ra.array[0, no_inpaint_param_ra.mask].var()
+        inpaint_param_ra.array[0, inpaint_mask].var()
+        < no_inpaint_param_ra.array[0, no_inpaint_mask].var()
     )
 
 
@@ -277,17 +279,20 @@ def test_ref_masking(
 
     # create test parameters == 1
     param_ra = ra_100cm_float.copy()
-    param_mask = param_ra.mask
+    param_mask = param_ra.mask()
     param_ra.array = np.ones((2, *param_ra.shape), dtype=param_ra.dtype)
-    param_ra.mask = param_mask
+    param_ra.array[..., ~param_mask] = param_ra.nodata
 
-    out_ra = kernel_model.apply(src_ra, param_ra)
+    corr_ra = kernel_model.apply(src_ra, param_ra)
+
+    src_mask = src_ra.mask()
+    corr_mask = corr_ra.mask()
     if not mask_partial:
-        assert (src_ra.mask == out_ra.mask).all()
+        assert (src_mask == corr_mask).all()
     else:
         # test output mask is contained by and smaller than src mask
-        assert src_ra.mask.sum() > out_ra.mask.sum()
-        assert src_ra.mask[out_ra.mask].all()
+        assert src_mask.sum() > corr_mask.sum()
+        assert src_mask[corr_mask].all()
 
         # find and test against the expected mask
         # this test depends on RasterArray.reproject which is a compromise to allow
@@ -301,7 +306,7 @@ def test_ref_masking(
         test_mask_ra = mask_ra.reproject(
             **src_ra.proj_profile, nodata=None, resampling=Resampling.nearest
         )
-        assert (test_mask_ra.array == out_ra.mask).all()
+        assert (test_mask_ra.array == corr_mask).all()
 
 
 @pytest.mark.parametrize(
@@ -324,17 +329,19 @@ def test_src_masking(
     # create test parameters
     param_ra = kernel_model.fit(src_ra, ref_ra)
 
+    src_mask = src_ra.mask()
+    param_mask = param_ra.mask()
     if not mask_partial:
-        assert (src_ra.mask == param_ra.mask).all()
+        assert (src_mask == param_mask).all()
     else:
         # test output mask is contained by and smaller than src mask
-        assert src_ra.mask.sum() > param_ra.mask.sum()
-        assert src_ra.mask[param_ra.mask].all()
+        assert src_mask.sum() > param_mask.sum()
+        assert src_mask[param_mask].all()
         # find and test against the expected mask
         test_mask = cv2.erode(
-            src_ra.mask.astype('uint8'), np.ones(np.array(kernel_shape) + 2)
+            src_mask.astype('uint8'), np.ones(np.array(kernel_shape) + 2)
         )
-        assert (test_mask == param_ra.mask).all()
+        assert (test_mask == param_mask).all()
 
 
 def test_ref_force_proc_crs(ra_100cm_float, ra_50cm_float):
@@ -343,8 +350,10 @@ def test_ref_force_proc_crs(ra_100cm_float, ra_50cm_float):
     src_ra = ra_100cm_float
     ref_ra = ra_50cm_float
     param_ra = kernel_model.fit(src_ra, ref_ra.copy())
-    out_ra = kernel_model.apply(src_ra, param_ra)
-    assert src_ra.array[src_ra.mask] == pytest.approx(out_ra.array[out_ra.mask], abs=2)
+    corr_ra = kernel_model.apply(src_ra, param_ra)
+    assert src_ra.array[src_ra.mask()] == pytest.approx(
+        corr_ra.array[corr_ra.mask()], abs=2
+    )
 
 
 def test_src_force_proc_crs(ra_100cm_float, ra_50cm_float):
@@ -353,8 +362,10 @@ def test_src_force_proc_crs(ra_100cm_float, ra_50cm_float):
     src_ra = ra_50cm_float
     ref_ra = ra_100cm_float
     param_ra = kernel_model.fit(src_ra, ref_ra)
-    out_ra = kernel_model.apply(src_ra, param_ra)
-    assert src_ra.array[src_ra.mask] == pytest.approx(out_ra.array[out_ra.mask], abs=2)
+    corr_ra = kernel_model.apply(src_ra, param_ra)
+    assert src_ra.array[src_ra.mask()] == pytest.approx(
+        corr_ra.array[corr_ra.mask()], abs=2
+    )
 
 
 @pytest.mark.parametrize(

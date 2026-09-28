@@ -29,7 +29,7 @@ ONdArray = np.ndarray | None
 OShape = tuple[int, int] | None
 
 
-def full_coverage_mask(
+def _full_coverage_mask(
     proc_ra: RasterArray, other_ra: RasterArray, kernel_shape: tuple[int, int]
 ) -> RasterArray:
     """
@@ -52,7 +52,7 @@ def full_coverage_mask(
     # find the mask of fully covered other_ra & proc_ra pixels in the proc_ra CRS and
     # grid
     mask = mask_ra.array >= 1
-    mask &= proc_ra.mask
+    mask &= proc_ra.mask()
 
     # Mask out partial kernel coverage.
     # Similar to the block overlap amount, this removes ceil(kernel_shape/2)
@@ -286,7 +286,7 @@ class KernelModel:
         reference arrays match.  (Can be thought of as a basic dark object subtraction).
         """
         norm_model = [0.0, 0.0]
-        mask = ref_ra.mask & src_ra.mask
+        mask = ref_ra.mask() & src_ra.mask()
         if not np.any(mask):
             return tuple(norm_model)
         masked_src = src_ra.array[mask]
@@ -315,7 +315,7 @@ class KernelModel:
         # in *boxFilter()
         ref_array = ref_ra.array
         src_array = src_ra.array
-        mask = ref_ra.mask & src_ra.mask
+        mask = ref_ra.mask() & src_ra.mask()
         ref_array[~mask] = 0
         src_array[~mask] = 0
 
@@ -402,7 +402,7 @@ class KernelModel:
         # in *boxFilter()
         ref_array = ref_ra.array
         src_array = src_ra.array
-        mask = ref_ra.mask & src_ra.mask
+        mask = ref_ra.mask() & src_ra.mask()
         ref_array[~mask] = 0
         src_array[~mask] = 0
 
@@ -490,9 +490,9 @@ class KernelModel:
                 where=~fill_mask & param_mask,
             )
 
-            # re-mask valid parameters (fillnodata() will have filled mask is False
+            # re-mask invalid parameters (fillnodata() will have filled mask is False
             # areas)
-            param_ra.mask = param_mask
+            param_ra.array[..., ~param_mask] = param_ra.nodata
 
         return param_ra
 
@@ -578,7 +578,7 @@ class RefSpaceModel(KernelModel):
 
         if self._mask_partial:
             # find the mask of fully covered pixels in reference CRS and grid
-            mask_ra = full_coverage_mask(_param_ra, src_ra, self.kernel_shape)
+            mask_ra = _full_coverage_mask(_param_ra, src_ra, self.kernel_shape)
             # re-project the mask to source CRS and grid, and apply to the parameters
             mask_src_ra = mask_ra.reproject(
                 **src_ra.proj_profile,
@@ -586,9 +586,10 @@ class RefSpaceModel(KernelModel):
                 dtype='uint8',
                 resampling=Resampling.nearest,
             )
-            param_src_ra.mask = mask_src_ra.array.view('bool')
+            nodata_mask = ~mask_src_ra.array.view('bool')
+            param_src_ra.array[..., nodata_mask] = param_src_ra.nodata
         else:
-            param_src_ra.mask = src_ra.mask
+            param_src_ra.array[..., ~src_ra.mask()] = param_src_ra.nodata
 
         # call base class apply with source and parameter RasterArrays in the source
         # CRS & grid
@@ -619,9 +620,10 @@ class SrcSpaceModel(KernelModel):
             )
             # find the mask of fully covered pixels in source CRS and grid, and apply
             # to the parameters
-            mask_ra = full_coverage_mask(_param_ra, ref_ra, self.kernel_shape)
-            param_ra.mask = mask_ra.array.view('bool')
+            mask_ra = _full_coverage_mask(_param_ra, ref_ra, self.kernel_shape)
+            nodata_mask = ~mask_ra.array.view('bool')
+            param_ra.array[..., nodata_mask] = param_ra.nodata
         else:
-            param_ra.mask = src_ra.mask
+            param_ra.array[..., ~src_ra.mask()] = param_ra.nodata
 
         return param_ra
