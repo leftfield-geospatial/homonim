@@ -32,7 +32,7 @@ from homonim import utils
 from homonim.enums import ProcCrs
 from homonim.errors import HomonimError
 from homonim.matched_pair import MatchedPairReader
-from homonim.raster_pair import BlockPair
+from homonim.raster_pair import BlockPair, assert_open
 
 logger = logging.getLogger(__name__)
 
@@ -267,6 +267,7 @@ class RasterCompare(MatchedPairReader):
             tablefmt=utils.table_format,
         )
 
+    @assert_open
     def process(
         self,
         threads: int = _default_config['threads'],
@@ -291,7 +292,6 @@ class RasterCompare(MatchedPairReader):
         :return:
             Comparison statistic dictionary.
         """
-        self._assert_open()
         if threads > os.cpu_count():
             raise HomonimError(
                 "'threads' should be less than or equal to the number of CPUs"

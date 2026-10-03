@@ -39,7 +39,7 @@ from homonim.errors import HomonimError
 from homonim.kernel_model import KernelModel, RefSpaceModel, SrcSpaceModel
 from homonim.matched_pair import MatchedPairReader
 from homonim.raster_array import RasterArray
-from homonim.raster_pair import BlockPair
+from homonim.raster_pair import BlockPair, assert_open
 
 logger = logging.getLogger(__name__)
 
@@ -176,8 +176,8 @@ class RasterFuse(MatchedPairReader):
             f'FUSE_{k.upper()}': getattr(v, 'name', str(v)) for k, v in kwargs.items()
         }
         im.update_tags(
-            FUSE_SRC_FILE=Path(self._src_filename).name,
-            FUSE_REF_FILE=Path(self._ref_filename).name,
+            FUSE_SRC_FILE=Path(self._src_file).name,
+            FUSE_REF_FILE=Path(self._ref_file).name,
             FUSE_PROC_CRS=self.proc_crs.name,
             **kwargs_tags,
         )
@@ -382,6 +382,7 @@ class RasterFuse(MatchedPairReader):
             driver=driver, dtype=dtype, nodata=nodata, creation_options=creation_options
         )
 
+    @assert_open
     def process(
         self,
         corr_filename: str | PathLike,
@@ -484,7 +485,6 @@ class RasterFuse(MatchedPairReader):
         """
         # TODO: is it possible to have an auto block_config that adjusts threads and
         #  block mem to available memory
-        self._assert_open()
         corr_filename = os.fspath(corr_filename)
         param_filename = os.fspath(param_filename) if param_filename else None
         model_type = Model(model)
@@ -556,6 +556,7 @@ class RasterFuse(MatchedPairReader):
             raise FileExistsError(f"Parameter image exists: '{param_filename}'")
 
         with ExitStack() as stack:
+            stack.enter_context(rio.Env(GDAL_TIFF_INTERNAL_MASK=True))
             corr_profile = self._create_corr_profile(
                 driver=driver,
                 dtype=dtype,
