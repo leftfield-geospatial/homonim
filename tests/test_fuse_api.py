@@ -26,7 +26,6 @@ from rasterio.vrt import WarpedVRT
 
 from homonim import utils
 from homonim.enums import Driver, Model, ProcCrs
-from homonim.errors import IoError
 from homonim.fuse import RasterFuse, _default_creation_options
 from homonim.kernel_model import KernelModel
 from homonim.raster_array import RasterArray
@@ -51,13 +50,12 @@ def test_overwrite(
     params = dict(
         corr_filename=corr_file, param_filename=param_file, overwrite=overwrite
     )
-    raster_fuse = RasterFuse(
-        src_filename=src_file_50cm_float, ref_filename=ref_file_100cm_float
-    )
 
     # test overwriting the corrected image
     corr_file.touch()
-    with raster_fuse:
+    with RasterFuse(
+        src_filename=src_file_50cm_float, ref_filename=ref_file_100cm_float
+    ) as raster_fuse:
         if not overwrite:
             with pytest.raises(FileExistsError):
                 raster_fuse.process(**params)
@@ -67,7 +65,9 @@ def test_overwrite(
     # test overwriting the parameter image
     corr_file.unlink()
     param_file.touch()
-    with raster_fuse:
+    with RasterFuse(
+        src_filename=src_file_50cm_float, ref_filename=ref_file_100cm_float
+    ) as raster_fuse:
         if not overwrite:
             with pytest.raises(FileExistsError):
                 raster_fuse.process(**params)
@@ -85,8 +85,8 @@ def test_overwrite(
         ('src_file_100cm_float', 'ref_file_45cm_float', Model.gain, (1, 1), 2.e-4),
         ('src_file_100cm_float', 'ref_file_45cm_float', Model.gain_blk_offset, (1, 1), 1.e-3),
         ('src_file_100cm_float', 'ref_file_45cm_float', Model.gain_offset, (5, 5), 1.e-3),
-        ('src_file_45cm_float', 'ref_file_wgs84_sup_float', Model.gain_blk_offset, (1, 1), 1.e-3),
-        ('src_file_wgs84_sup_100cm_float', 'ref_file_45cm_float', Model.gain_blk_offset, (1, 1), 1.e-3),
+        ('src_file_45cm_float', 'ref_file_wgs84_100cm_float', Model.gain_blk_offset, (1, 1), 1.e-3),
+        ('src_file_wgs84_100cm_float', 'ref_file_45cm_float', Model.gain_blk_offset, (1, 1), 1.e-3),
     ]
 )  # fmt: skip
 def test_corr_content(
@@ -388,11 +388,13 @@ def test_build_overviews(
             assert len(param_ds.overviews(band_i)) > 0
 
 
-def test_io_error(tmp_path: Path, ref_file_50cm_float):
-    """Test we get an IoError if processing without opening/entering the context."""
+def test_ctx_closed_error(tmp_path: Path, ref_file_50cm_float):
+    """Test that using a closed context raises an error."""
+    corr_file = tmp_path.joinpath('corrected.tif')
     raster_fuse = RasterFuse(ref_file_50cm_float, ref_file_50cm_float)
-    with pytest.raises(IoError):
-        raster_fuse.process(tmp_path, Model.gain_blk_offset, (3, 3))
+    raster_fuse.close()
+    with pytest.raises(RuntimeError, match='closed'):
+        raster_fuse.process(corr_file)
 
 
 @pytest.mark.parametrize(
