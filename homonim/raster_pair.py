@@ -331,12 +331,6 @@ class RasterPairReader:
             block_shape[block_shape.argmax()] /= 2
         block_shape = np.ceil(block_shape).astype('int')
 
-        # TODO: remove and its test
-        if np.any(block_shape < (1, 1)):
-            raise HomonimError(
-                "Block shape is smaller than a pixel.  Increase 'max_block_mem'."
-            )
-
         def totuple(a):
             return tuple(a.tolist())
 

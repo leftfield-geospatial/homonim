@@ -72,11 +72,6 @@ def test_band_count_error(file_rgba, file_byte):
 
 def test_block_shape_error(src_file_50cm_float, ref_file_100cm_float):
     """Test block shape errors."""
-    # test auto block shape smaller than a pixel
-    with RasterPairReader(src_file_50cm_float, ref_file_100cm_float) as rp:
-        with pytest.raises(HomonimError, match='smaller than a pixel'):
-            _ = list(rp.block_pairs(max_block_mem=1.0e-5))
-
     # test auto block shape smaller than overlap
     with RasterPairReader(src_file_50cm_float, ref_file_100cm_float) as rp:
         with pytest.raises(HomonimError, match='smaller than the overlap'):
