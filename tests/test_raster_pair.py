@@ -25,7 +25,6 @@ from rasterio.enums import Resampling
 from rasterio.errors import RasterioIOError
 from rasterio.windows import Window, union
 
-from homonim import utils
 from homonim.enums import ProcCrs
 from homonim.errors import HomonimError
 from homonim.raster_pair import RasterPairReader
@@ -155,7 +154,7 @@ def test_block_pair_continuity(
         # <proc_crs>_in_block's should overlap by exactly overlap, and *out_blocks
         # should be exactly adjacent.  max_block_mem and overlap should be chosen to
         # give a block shape > 2*overlap.
-        block_keys = ['src_in_block', 'ref_in_block', 'src_out_block', 'ref_out_block']
+        fields = ['src_in_block', 'ref_in_block', 'src_out_block', 'ref_out_block']
         # *in_blocks overlap, *out_blocks don't
         overlaps = [overlap, overlap, (0, 0), (0, 0)]
         if rp.proc_crs is ProcCrs.ref:
@@ -172,11 +171,11 @@ def test_block_pair_continuity(
         for block_pair in block_pairs[1:]:
             if block_pair.band_i == prev_block_pair.band_i:
                 # compare each block type with its previous version
-                for block_key, overlap, compare in zip(
-                    block_keys, overlaps, compares, strict=True
+                for field, overlap, compare in zip(
+                    fields, overlaps, compares, strict=True
                 ):
-                    block = getattr(block_pair, block_key)
-                    prev_block = getattr(prev_block_pair, block_key)
+                    block = getattr(block_pair, field)
+                    prev_block = getattr(prev_block_pair, field)
                     compare_blocks(block, prev_block, overlap, compare)
             else:
                 assert block_pair.band_i == prev_block_pair.band_i + 1
@@ -211,39 +210,31 @@ def test_block_pair_coverage(
 
     with RasterPairReader(src_file, ref_file) as rp:
         block_pairs = list(rp.block_pairs(overlap=overlap, max_block_mem=max_block_mem))
-        # a dict to hold combined windows
-        accum_block_pair = block_pairs[0]._asdict()
 
         # find the combined windows for the block pairs
-        for block_pair in block_pairs[1:]:
+        accum_bp = block_pairs[0]
+        for bp in block_pairs[1:]:
             for field in [
                 'src_in_block',
                 'ref_in_block',
                 'src_out_block',
                 'ref_out_block',
             ]:
-                accum_block_pair[field] = union(
-                    getattr(block_pair, field), accum_block_pair[field]
-                )
+                comb_win = union(getattr(accum_bp, field), getattr(bp, field))
+                setattr(accum_bp, field, comb_win)
 
         # test coverage of the combined windows
         if rp.proc_crs is ProcCrs.ref:
-            assert accum_block_pair['ref_in_block'] == rp._ref_win
-            assert accum_block_pair['ref_out_block'] == rp._ref_win
+            assert accum_bp.ref_in_block == rp._ref_win
+            assert accum_bp.ref_out_block == rp._ref_win
             src_win = Window(0, 0, rp.src_im.width, rp.src_im.height)
-            assert accum_block_pair['src_in_block'].intersection(src_win) == src_win
-            assert accum_block_pair['src_out_block'].intersection(src_win) == src_win
+            assert accum_bp.src_in_block.intersection(src_win) == src_win
+            assert accum_bp.src_out_block.intersection(src_win) == src_win
         elif rp.proc_crs is ProcCrs.src:
-            assert accum_block_pair['src_in_block'] == rp._src_win
-            assert accum_block_pair['src_out_block'] == rp._src_win
-            assert (
-                accum_block_pair['ref_in_block'].intersection(rp._ref_win)
-                == rp._ref_win
-            )
-            assert (
-                accum_block_pair['ref_out_block'].intersection(rp._ref_win)
-                == rp._ref_win
-            )
+            assert accum_bp.src_in_block == rp._src_win
+            assert accum_bp.src_out_block == rp._src_win
+            assert accum_bp.ref_in_block.intersection(rp._ref_win) == rp._ref_win
+            assert accum_bp.ref_out_block.intersection(rp._ref_win) == rp._ref_win
 
 
 @pytest.mark.parametrize(

@@ -19,18 +19,19 @@ import threading
 import warnings
 from collections.abc import Callable, Iterable
 from contextlib import ExitStack
+from dataclasses import dataclass
 from functools import wraps
 from itertools import product
 from os import PathLike
 from pathlib import Path
-from typing import NamedTuple, ParamSpec, TypeVar
+from typing import ParamSpec, TypeVar
 
 import numpy as np
 import rasterio as rio
 from rasterio.enums import MaskFlags
 from rasterio.io import DatasetReader
 from rasterio.vrt import WarpedVRT
-from rasterio.windows import Window
+from rasterio.windows import Window, intersection
 
 from homonim import utils
 from homonim.enums import ProcCrs
@@ -57,23 +58,44 @@ def assert_open(meth: Callable[P, R]) -> Callable[P, R]:
     return wrapper
 
 
-class BlockPair(NamedTuple):
-    """A set of matching block windows for a source-reference image pair."""
+@dataclass
+class BlockPair:
+    """Matching block windows for a source-reference image pair."""
 
+    # Band index (0 based)
     band_i: int
-    """Band index (0 based)."""
+    # Overlapping source window
     src_in_block: Window
-    """Overlapping / input source window."""
+    # Overlapping reference window
     ref_in_block: Window
-    """Overlapping / input reference window."""
+    # Adjacent source window
     src_out_block: Window
-    """Non-overlapping / output source window."""
+    # Adjacent reference window
     ref_out_block: Window
-    """Non-overlapping / output reference window."""
-    outer: bool
-    """True if any part of the source blocks touch the source image boundary,
-    otherwise False.
-    """
+
+    @classmethod
+    def from_proc_other(
+        cls,
+        proc_crs: ProcCrs,
+        band_i: int,
+        proc_in_block: Window,
+        proc_out_block: Window,
+        other_in_block: Window,
+        other_out_block: Window,
+    ):
+        """Return a BlockPair for the given proc_crs, and 'proc' & 'other' space
+        windows.
+        """
+        if proc_crs is ProcCrs.ref:
+            return cls(
+                band_i, other_in_block, proc_in_block, other_out_block, proc_out_block
+            )
+        elif proc_crs is ProcCrs.src:
+            return cls(
+                band_i, proc_in_block, other_in_block, proc_out_block, other_out_block
+            )
+        else:
+            raise ValueError("'proc_crs' has not been resolved.")
 
 
 class RasterPairReader:
@@ -192,7 +214,7 @@ class RasterPairReader:
     def closed(self) -> bool:
         """Whether the source and reference datasets are closed."""
         # source & reference should only be both open or both closed, but test with
-        # an or in case
+        # 'or' in case
         return self._src_im.closed or self._ref_im.closed
 
     @staticmethod
@@ -269,14 +291,19 @@ class RasterPairReader:
 
         logger.debug(
             f'Source resolution is {cmp_str} than the reference resolution. Using '
-            f"proc_crs='{proc_crs}'."
+            f'proc_crs={proc_crs}.'
         )
         return proc_crs
 
-    def _find_block_shape(self, max_block_mem: float = np.inf) -> tuple[int, int]:
+    def _find_block_shape(self, max_block_mem: float = 0) -> tuple[int, int]:
         """Find the shape of a proc_crs block that satisfies max_block_mem in the
         highest resolution image.
         """
+        if max_block_mem < 0:
+            raise HomonimError(
+                "'max_block_mem' should be greater than or equal to zero."
+            )
+
         # scale max_block_mem to limit a proc_crs block so that the corresponding
         # highest resolution image block will be limited by the given max_block_mem
         src_area = np.prod(self._src_im.res)
@@ -289,46 +316,46 @@ class RasterPairReader:
             proc_win = self._src_win
         else:
             raise ValueError("'proc_crs' has not been resolved.")
-        max_block_mem = max_block_mem * mem_scale if max_block_mem > 0 else np.inf
+        max_block_mem = np.inf if max_block_mem == 0 else max_block_mem * mem_scale
 
         max_block_mem *= 2**20  # convert MB to bytes
-        # TODO: make dtype a param?
-        # the size of the RasterArray data type
         dtype_size = np.dtype(RasterArray._default_dtype).itemsize
 
-        # TODO: find block_shape ~exacly as sqrt(max_block_mem/dtype_size), possibly
-        #  limiting rows to 512.
-        # set the starting block_shape to correspond to the entire window
-        block_shape = np.array((proc_win.height, proc_win.width)).astype('float')
-
+        # find a block shape that divides the image into equal sized blocks
+        # and satisfies max_block_mem
+        max_block_shape = np.array((proc_win.height, proc_win.width))
+        block_shape = max_block_shape.astype('float', copy=True)
         # keep halving the block_shape along the longest dimension until it satisfies
         # max_block_mem
         while block_shape.prod() * dtype_size > max_block_mem:
             block_shape[block_shape.argmax()] /= 2
+        block_shape = np.ceil(block_shape).astype('int')
 
+        # TODO: remove and its test
         if np.any(block_shape < (1, 1)):
             raise HomonimError(
                 "Block shape is smaller than a pixel.  Increase 'max_block_mem'."
             )
 
-        block_shape = np.ceil(block_shape).astype('int')
-        block_shape_ = tuple(block_shape.tolist())
+        def totuple(a):
+            return tuple(a.tolist())
+
         logger.debug(
-            f'Using block shape: {block_shape_}, of image shape: '
-            f'{(proc_win.height, proc_win.width)} ({self.proc_crs} pixels)'
+            f'Using block shape {totuple(block_shape)} in image shape '
+            f'{totuple(max_block_shape)}.'
         )
 
         # warn if the block shape in the highest res image is less than a typical tile
-        if np.any(block_shape / mem_scale < (256, 256)) and np.any(
-            block_shape < (proc_win.height, proc_win.width)
+        if np.any(
+            (block_shape / mem_scale < (256, 256)) & (block_shape < max_block_shape)
         ):
             warnings.warn(
-                f"Block shape is small: {block_shape_}.  Increasing 'max_block_mem' "
-                f'will improve processing times.',
+                f'Block shape {totuple(block_shape)} is small.  Increasing '
+                f"'max_block_mem' will improve processing times.",
                 category=HomonimWarning,
                 stacklevel=2,
             )
-        return block_shape_
+        return totuple(block_shape)
 
     def close(self):
         """Close the source and reference datasets."""
@@ -371,7 +398,7 @@ class RasterPairReader:
 
     @assert_open
     def block_pairs(
-        self, overlap: tuple[int, int] = (0, 0), max_block_mem: float = np.inf
+        self, overlap: tuple[int, int] = (0, 0), max_block_mem: float = 0
     ) -> Iterable[BlockPair]:
         """
         Generate matched source - reference image blocks.
@@ -380,82 +407,55 @@ class RasterPairReader:
             (row, column) block overlap in pixels of the :attr:`proc_crs` image.
         :param max_block_mem:
             Maximum block size in the highest resolution of the source and reference
-            images (MB).  If ``float('inf')``, a block will correspond to a full
-            image band.
+            images (MB).  If ``0``, a block will correspond to the whole image band.
 
         :return:
             :class:`BlockPair` instance defining matched source - reference image
             blocks.
         """
         # find the proc_crs block shape
-        block_shape = np.array(self._find_block_shape(max_block_mem=max_block_mem))
-        overlap = np.array(overlap).astype('int')
-        if np.any(block_shape <= overlap):
+        block_shape = self._find_block_shape(max_block_mem=max_block_mem)
+        if np.any(np.array(block_shape) <= overlap):
             raise HomonimError(
                 f'Block shape {block_shape} is smaller than the overlap {overlap}.  '
                 f"Increase 'max_block_mem'."
             )
 
         # initialise block formation variables
-        # blocks are first formed in proc_crs, then transformed to the 'other'
-        # image crs, so here we assign the src/ref windows etc. to proc_* equivalents
         if self.proc_crs is ProcCrs.ref:
             proc_win, proc_im, other_im = (self._ref_win, self._ref_im, self._src_im)
         else:
             proc_win, proc_im, other_im = (self._src_win, self._src_im, self._ref_im)
-
-        proc_win_ul = np.array((proc_win.row_off, proc_win.col_off))
-        proc_win_br = np.array(
-            (proc_win.height + proc_win.row_off, proc_win.width + proc_win.col_off)
-        )
+        block_ranges = [
+            range(*start_stop, step)
+            for start_stop, step in zip(proc_win.toranges(), block_shape, strict=True)
+        ]
 
         # outer loop over bands so that all blocks in a band are yielded
         # consecutively - this is fastest for reading band interleaved images.
         for band_i in range(len(self._src_bands)):
-            # Inner loop over the upper left corner row, col for each overlapping block
-            # TODO: the start stop of these ranges is strange - see the fmin/fmax below
-            ul_row_range = range(
-                proc_win.row_off - overlap[0],
-                proc_win.row_off + proc_win.height - overlap[0],
-                block_shape[0],
-            )
-            ul_col_range = range(
-                proc_win.col_off - overlap[1],
-                proc_win.col_off + proc_win.width - overlap[1],
-                block_shape[1],
-            )
-            # TODO: it would be clearer if ul_row, ul_col corresponded to the
-            #  non-overlapping blocks, then subtract / add overlap to make the
-            #  overlapping blocks
-            for ul_row, ul_col in product(ul_row_range, ul_col_range):
-                # find UL and BR corners for overlapping block in proc space
-                ul = np.array((ul_row, ul_col))
-                br = ul + block_shape + (2 * overlap)
-                # limit block extents to image window extents
-                in_ul = np.fmax(ul, proc_win_ul)
-                in_br = np.fmin(br, proc_win_br)
-                # find UL and BR corners for non-overlapping block in proc space
-                out_ul = np.fmax(ul + overlap, proc_win_ul)
-                out_br = np.fmin(br - overlap, proc_win_br)
-                # block touches image boundary?
-                outer = np.any(in_ul <= proc_win_ul) or np.any(in_br >= proc_win_br)
-
-                # Create rasterio windows corresponding to above block corners.
-                # Note:
-                # - Consecutive proc_in_block's will overlap by exactly ``overlap``.
+            # inner loop over the upper left (row, col) corner of each non-overlapping
+            # block
+            for ul in product(*block_ranges):
+                # Create 'proc' space windows:
+                # - Consecutive proc_in_block's will overlap by exactly 'overlap'.
                 # - Consecutive proc_out_block's will be exactly adjacent.
-                proc_in_block = Window(*in_ul[::-1], *np.subtract(in_br, in_ul)[::-1])
-                proc_out_block = Window(
-                    *out_ul[::-1], *np.subtract(out_br, out_ul)[::-1]
+                proc_in_block = Window(
+                    ul[1] - overlap[1],
+                    ul[0] - overlap[0],
+                    block_shape[1] + 2 * overlap[1],
+                    block_shape[0] + 2 * overlap[0],
                 )
+                proc_in_block = intersection(proc_in_block, proc_win)
+                proc_out_block = Window(*ul[::-1], *block_shape[::-1])
+                proc_out_block = intersection(proc_out_block, proc_win)
 
-                # Create equivalent rasterio windows in 'other' space.
-                # Note:
-                # - other_in_block boundaries are expanded to ensure that
-                # re-projecting between source/reference CRSs does not mask valid
-                # *_out_block pixels.  This means that consecutive other_in_blocks
-                # may overlap by more than ``overlap``.
-                # - consecutive other_out_block's may overlap by a pixel.
+                # Create matching 'other' space windows:
+                # - other_in_block boundaries are expanded to ensure reprojecting
+                #   between source/reference CRSs does not mask valid *_out_block
+                #   pixels.  This means consecutive other_in_blocks may overlap by more
+                #   than 'overlap'.
+                # - Consecutive other_out_block's may overlap by a pixel.
                 other_in_block = utils.expand_window_to_grid(
                     other_im.window(*proc_im.window_bounds(proc_in_block))
                 )
@@ -463,24 +463,12 @@ class RasterPairReader:
                     other_im.window(*proc_im.window_bounds(proc_out_block))
                 )
 
-                # create the BlockPair named tuple, assigning 'proc' and 'other' back
-                # to 'src' and 'ref' for passing to read()
-                if self.proc_crs is ProcCrs.ref:
-                    block_pair = BlockPair(
-                        band_i,
-                        other_in_block,
-                        proc_in_block,
-                        other_out_block,
-                        proc_out_block,
-                        outer,
-                    )
-                else:
-                    block_pair = BlockPair(
-                        band_i,
-                        proc_in_block,
-                        other_in_block,
-                        proc_out_block,
-                        other_out_block,
-                        outer,
-                    )
-                yield block_pair
+                # yield a BlockPair
+                yield BlockPair.from_proc_other(
+                    self.proc_crs,
+                    band_i,
+                    proc_in_block,
+                    proc_out_block,
+                    other_in_block,
+                    other_out_block,
+                )
