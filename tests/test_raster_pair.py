@@ -27,7 +27,7 @@ from rasterio.windows import Window, union
 
 from homonim.enums import ProcCrs
 from homonim.errors import HomonimError
-from homonim.raster_pair import RasterPairReader
+from homonim.raster_pair import BlockPair, RasterPairReader
 
 
 @pytest.mark.parametrize(
@@ -50,10 +50,10 @@ def test_init(
 
     # enter the context and test block(s) correspond to bands
     with raster_pair as rp:
-        block_pairs = list(rp.block_pairs())
+        block_pairs = list(rp._block_pairs())
         assert len(block_pairs) == 1
         assert block_pairs[0].src_out_block == Window(
-            0, 0, rp.src_im.width, rp.src_im.height
+            0, 0, rp._src_im.width, rp._src_im.height
         )
     assert rp.closed
 
@@ -75,7 +75,7 @@ def test_block_shape_error(src_file_50cm_float, ref_file_100cm_float):
     # test auto block shape smaller than overlap
     with RasterPairReader(src_file_50cm_float, ref_file_100cm_float) as rp:
         with pytest.raises(HomonimError, match='smaller than the overlap'):
-            _ = list(rp.block_pairs(overlap=(5, 5), max_block_mem=1.0e-4))
+            _ = list(rp._block_pairs(overlap=(5, 5), max_block_mem=1.0e-4))
 
 
 def test_non_nup_error(src_file_100cm_float, src_file_sup_100cm_float):
@@ -91,11 +91,12 @@ def test_non_nup_error(src_file_100cm_float, src_file_sup_100cm_float):
 def test_ctx_closed_error(src_file_50cm_float, ref_file_100cm_float):
     """Test that using a closed context raises an error."""
     rp = RasterPairReader(src_file_50cm_float, ref_file_100cm_float)
+    bp = next(iter(rp._block_pairs()))
     rp.close()
     with pytest.raises(RuntimeError, match='closed'):
-        _ = list(rp.block_pairs())
+        _ = list(rp._block_pairs())
     with pytest.raises(RuntimeError, match='closed'):
-        _ = list(rp.read())
+        _ = rp._read(bp)
     with pytest.raises(RuntimeError, match='closed'):
         with rp:
             pass
@@ -161,7 +162,9 @@ def test_block_pair_continuity(
             # should be exact
             compares = [np.equal, np.less_equal, np.equal, np.equal]
 
-        block_pairs = list(rp.block_pairs(overlap=overlap, max_block_mem=max_block_mem))
+        block_pairs = list(
+            rp._block_pairs(overlap=overlap, max_block_mem=max_block_mem)
+        )
         prev_block_pair = block_pairs[0]
         for block_pair in block_pairs[1:]:
             if block_pair.band_i == prev_block_pair.band_i:
@@ -204,7 +207,9 @@ def test_block_pair_coverage(
     ref_file: Path = request.getfixturevalue(ref_file)
 
     with RasterPairReader(src_file, ref_file) as rp:
-        block_pairs = list(rp.block_pairs(overlap=overlap, max_block_mem=max_block_mem))
+        block_pairs = list(
+            rp._block_pairs(overlap=overlap, max_block_mem=max_block_mem)
+        )
 
         # find the combined windows for the block pairs
         accum_bp = block_pairs[0]
@@ -222,7 +227,7 @@ def test_block_pair_coverage(
         if rp.proc_crs is ProcCrs.ref:
             assert accum_bp.ref_in_block == rp._ref_win
             assert accum_bp.ref_out_block == rp._ref_win
-            src_win = Window(0, 0, rp.src_im.width, rp.src_im.height)
+            src_win = Window(0, 0, rp._src_im.width, rp._src_im.height)
             assert accum_bp.src_in_block.intersection(src_win) == src_win
             assert accum_bp.src_out_block.intersection(src_win) == src_win
         elif rp.proc_crs is ProcCrs.src:
@@ -277,14 +282,14 @@ def test_block_pair_io(
                 src_sampling = Resampling.average
 
             with (
-                src_mf.open(**rp.src_im.meta) as test_src_ds,
-                ref_mf.open(**rp.ref_im.meta) as test_ref_ds,
+                src_mf.open(**rp._src_im.meta) as test_src_ds,
+                ref_mf.open(**rp._ref_im.meta) as test_ref_ds,
             ):
                 # read, reproject and write block pairs to their respective datasets
-                for block_pair in rp.block_pairs(
+                for block_pair in rp._block_pairs(
                     overlap=overlap, max_block_mem=max_block_mem
                 ):
-                    src_ra, ref_ra = rp.read(block_pair)
+                    src_ra, ref_ra = rp._read(block_pair)
                     if reproj_ra == 'src':
                         src_ra_ = src_ra.reproject_like(ref_ra, resampling=ref_sampling)
                         src_ra__ = src_ra_.reproject_like(
@@ -339,8 +344,8 @@ def test_crs(src_file: str, ref_file: str, proc_crs: ProcCrs, request: FixtureRe
     src_file: Path = request.getfixturevalue(src_file)
     ref_file: Path = request.getfixturevalue(ref_file)
     with RasterPairReader(src_file, ref_file, proc_crs=proc_crs) as rp:
-        for block_pair in rp.block_pairs():
-            src_ra, ref_ra = rp.read(block_pair)
+        for block_pair in rp._block_pairs():
+            src_ra, ref_ra = rp._read(block_pair)
             src_ra_ = src_ra.reproject_like(ref_ra, resampling=Resampling.bilinear)
             assert ref_ra.array == pytest.approx(src_ra_.array, abs=1, nan_ok=True)
             assert np.all(src_ra_.mask()[ref_ra.mask()])

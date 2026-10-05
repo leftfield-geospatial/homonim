@@ -96,6 +96,9 @@ class RasterFuse(MatchedPairReader):
         assumed to be in matching order.  Subsets and ordering of bands can be
         specified with the ``src_bands`` and ``ref_bands`` parameters.
 
+        Can be used as a context manager to automatically close source and reference
+        images on exiting.
+
         :param src_filename:
             Path or URI of a source image.
         :param ref_filename:
@@ -145,19 +148,19 @@ class RasterFuse(MatchedPairReader):
         creation_options = creation_options or _default_creation_options[driver.name]
         return dict(
             driver=str(driver),
-            width=self.src_im.width,
-            height=self.src_im.height,
+            width=self._src_im.width,
+            height=self._src_im.height,
             count=len(self.src_bands),
             dtype=str(dtype),
             nodata=nodata,
-            crs=self.src_im.crs,
-            transform=self.src_im.transform,
+            crs=self._src_im.crs,
+            transform=self._src_im.transform,
             **creation_options,
         )
 
     def _create_param_profile(self) -> dict[str, Any]:
         """Return a RasterIO profile for the parameter image."""
-        proc_im = self.ref_im if self.proc_crs is ProcCrs.ref else self.src_im
+        proc_im = self._ref_im if self.proc_crs is ProcCrs.ref else self._src_im
         return dict(
             driver='GTiff',
             width=proc_im.width,
@@ -189,8 +192,8 @@ class RasterFuse(MatchedPairReader):
         #  below...  keep in mind the --compare option and command.
         geedim_tags = ['center_wavelength', 'name', 'description']
         for corr_band, ref_band in enumerate(self.ref_bands, start=1):
-            im.set_band_description(corr_band, self.ref_im.descriptions[ref_band - 1])
-            ref_band_tags = self.ref_im.tags(ref_band)
+            im.set_band_description(corr_band, self._ref_im.descriptions[ref_band - 1])
+            ref_band_tags = self._ref_im.tags(ref_band)
             ref_band_tags = {k: v for k, v in ref_band_tags.items() if k in geedim_tags}
             im.update_tags(corr_band, **ref_band_tags)
 
@@ -199,7 +202,7 @@ class RasterFuse(MatchedPairReader):
         for param_band, (param_name, ref_band) in enumerate(
             product(['GAIN', 'OFFSET', 'R2'], self.ref_bands), start=1
         ):
-            ref_desc = self.ref_im.descriptions[ref_band - 1] or f'B{ref_band}'
+            ref_desc = self._ref_im.descriptions[ref_band - 1] or f'B{ref_band}'
             im.set_band_description(param_band, f'{ref_desc}_{param_name}')
 
     @staticmethod
@@ -229,7 +232,7 @@ class RasterFuse(MatchedPairReader):
         supplied image dataset(s).
         """
         # read source and reference blocks
-        src_ra, ref_ra = self.read(block_pair)
+        src_ra, ref_ra = self._read(block_pair)
         # fit and apply the sliding kernel models
         param_ra = model.fit(src_ra, ref_ra)
         corr_ra = model.apply(src_ra, param_ra)
@@ -565,7 +568,7 @@ class RasterFuse(MatchedPairReader):
             )
             corr_im = stack.enter_context(rio.open(corr_filename, 'w', **corr_profile))
             corr_im.colorinterp = [
-                self.src_im.colorinterp[sb - 1] for sb in self.src_bands
+                self._src_im.colorinterp[sb - 1] for sb in self.src_bands
             ]
             tag_kwargs = dict(
                 model=model_type,
@@ -601,7 +604,7 @@ class RasterFuse(MatchedPairReader):
                 executor.submit(
                     self._process_block, block_pair, model, corr_im, param_im
                 )
-                for block_pair in self.block_pairs(overlap, max_block_mem)
+                for block_pair in self._block_pairs(overlap, max_block_mem)
             ]
 
             for future in tqdm(

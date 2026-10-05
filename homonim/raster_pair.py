@@ -46,13 +46,13 @@ R = TypeVar('R')
 
 def assert_open(meth: Callable[P, R]) -> Callable[P, R]:
     """Decorator for RasterPairReader and subclass methods to ensure source and
-    reference datasets are open.
+    reference images are open.
     """
 
     @wraps(meth)
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
         if args and getattr(args[0], 'closed', False):
-            raise RuntimeError('Source and reference datasets are closed.')
+            raise RuntimeError('Source and reference images are closed.')
         return meth(*args, **kwargs)
 
     return wrapper
@@ -112,6 +112,9 @@ class RasterPairReader:
         Reference extents must encompass those of the source.
 
         Source and reference bands should be in wavelength matched order.
+
+        Can be used as a context manager to automatically close source and reference
+        images on exiting.
 
         :param src_filename:
             Path or URI of a source image.
@@ -184,16 +187,6 @@ class RasterPairReader:
         self._ref_lock = threading.Lock()
 
     @property
-    def src_im(self) -> DatasetReader:
-        """Source dataset."""
-        return self._src_im
-
-    @property
-    def ref_im(self) -> DatasetReader:
-        """Reference dataset."""
-        return self._ref_im
-
-    @property
     def src_bands(self) -> tuple[int, ...]:
         """Source non-alpha band indices (1-based)."""
         return self._src_bands
@@ -212,7 +205,7 @@ class RasterPairReader:
 
     @property
     def closed(self) -> bool:
-        """Whether the source and reference datasets are closed."""
+        """Whether the source and reference images are closed."""
         # source & reference should only be both open or both closed, but test with
         # 'or' in case
         return self._src_im.closed or self._ref_im.closed
@@ -238,34 +231,6 @@ class RasterPairReader:
             and im.transform.d == 0
         ):
             raise HomonimError(f"'{name}' is not in a standard North-up orientation.")
-
-    def _match_bands(
-        self, src_im: DatasetReader, ref_im: DatasetReader
-    ) -> tuple[tuple[int, ...], tuple[int, ...]]:
-        """Validate and match source and reference bands."""
-        # retrieve non-alpha bands
-        src_name = Path(src_im.name).name
-        ref_name = Path(ref_im.name).name
-        src_bands = utils.get_nonalpha_bands(src_im)
-        logger.debug(f'{src_name} non-alpha bands: {src_bands}')
-        ref_bands = utils.get_nonalpha_bands(ref_im)
-        logger.debug(f'{ref_name} non-alpha bands: {ref_bands}')
-
-        # check reference has enough bands
-        if len(src_bands) > len(ref_bands):
-            raise HomonimError(
-                f"Reference '{ref_name}' has fewer non-alpha bands than source '"
-                f"{src_name}'."
-            )
-        # warn if source and reference band counts don't match
-        if len(src_bands) != len(ref_bands):
-            warnings.warn(
-                f'Source and reference non-alpha band counts don`t match. Using the '
-                f'first {len(src_bands)} non-alpha bands of the reference.',
-                category=HomonimWarning,
-                stacklevel=2,
-            )
-        return src_bands, ref_bands
 
     @staticmethod
     def _resolve_proc_crs(
@@ -294,6 +259,34 @@ class RasterPairReader:
             f'proc_crs={proc_crs}.'
         )
         return proc_crs
+
+    def _match_bands(
+        self, src_im: DatasetReader, ref_im: DatasetReader
+    ) -> tuple[tuple[int, ...], tuple[int, ...]]:
+        """Validate and match source and reference bands."""
+        # retrieve non-alpha bands
+        src_name = Path(src_im.name).name
+        ref_name = Path(ref_im.name).name
+        src_bands = utils.get_nonalpha_bands(src_im)
+        logger.debug(f'{src_name} non-alpha bands: {src_bands}')
+        ref_bands = utils.get_nonalpha_bands(ref_im)
+        logger.debug(f'{ref_name} non-alpha bands: {ref_bands}')
+
+        # check reference has enough bands
+        if len(src_bands) > len(ref_bands):
+            raise HomonimError(
+                f"Reference '{ref_name}' has fewer non-alpha bands than source '"
+                f"{src_name}'."
+            )
+        # warn if source and reference band counts don't match
+        if len(src_bands) != len(ref_bands):
+            warnings.warn(
+                f'Source and reference non-alpha band counts don`t match. Using the '
+                f'first {len(src_bands)} non-alpha bands of the reference.',
+                category=HomonimWarning,
+                stacklevel=2,
+            )
+        return src_bands, ref_bands
 
     def _find_block_shape(self, max_block_mem: float = 0) -> tuple[int, int]:
         """Find the shape of a proc_crs block that satisfies max_block_mem in the
@@ -351,10 +344,6 @@ class RasterPairReader:
             )
         return totuple(block_shape)
 
-    def close(self):
-        """Close the source and reference datasets."""
-        self._stack.close()
-
     @assert_open
     def __enter__(self):
         return self
@@ -363,19 +352,10 @@ class RasterPairReader:
         self._stack.__exit__(exc_type, exc_val, exc_tb)
 
     @assert_open
-    def read(self, block_pair: BlockPair) -> tuple[RasterArray, RasterArray]:
+    def _read(self, block_pair: BlockPair) -> tuple[RasterArray, RasterArray]:
+        """Read source and reference image blocks defined by the given BlockPair
+        (thread safe).
         """
-        Read source and reference image blocks (thread safe).
-
-        :param block_pair:
-            :class:`BlockPair` instance defining the source and reference blocks to
-            read.
-
-        :return:
-            (Source, reference) blocks.
-        """
-        # TODO: could block_pairs() be simplified by just passing a proc_crs window &
-        #  overlap here, and working out the block_pair windows?
         with self._src_lock:
             src_ra = RasterArray.from_rio_dataset(
                 self._src_im,
@@ -391,21 +371,12 @@ class RasterPairReader:
         return src_ra, ref_ra
 
     @assert_open
-    def block_pairs(
+    def _block_pairs(
         self, overlap: tuple[int, int] = (0, 0), max_block_mem: float = 0
     ) -> Iterable[BlockPair]:
-        """
-        Generate matched source - reference image blocks.
-
-        :param overlap:
-            (row, column) block overlap in pixels of the :attr:`proc_crs` image.
-        :param max_block_mem:
-            Maximum block size in the highest resolution of the source and reference
-            images (MB).  If ``0``, a block will correspond to the whole image band.
-
-        :return:
-            :class:`BlockPair` instance defining matched source - reference image
-            blocks.
+        """Generate matched overlappping source - reference image blocks,
+        given overlap (in proc_crs pixels), and max_block_mem defining the maximum
+        block size (in the highest resolution image).
         """
         # find the proc_crs block shape
         block_shape = self._find_block_shape(max_block_mem=max_block_mem)
@@ -466,3 +437,7 @@ class RasterPairReader:
                     other_in_block,
                     other_out_block,
                 )
+
+    def close(self):
+        """Close the source and reference images."""
+        self._stack.close()

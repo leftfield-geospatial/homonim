@@ -76,6 +76,9 @@ class RasterCompare(MatchedPairReader):
         assumed to be in matching order.  Subsets and ordering of bands can be
         specified with the ``src_bands`` and ``ref_bands`` parameters.
 
+        Can be used as a context manager to automatically close source and reference
+        images on exiting.
+
         :param src_filename:
             Path or URI of a source image.
         :param ref_filename:
@@ -217,8 +220,8 @@ class RasterCompare(MatchedPairReader):
             # prefer ref band name as key: with multiple source images compared with
             # one reference, this makes the comparison tables easier to interpret
             band_desc = (
-                self.ref_im.descriptions[self.ref_bands[band_i] - 1]
-                or self.src_im.descriptions[self.src_bands[band_i] - 1]
+                self._ref_im.descriptions[self.ref_bands[band_i] - 1]
+                or self._src_im.descriptions[self.src_bands[band_i] - 1]
                 or f'Ref. band {self.ref_bands[band_i]}'
             )
             image_stats[band_desc] = band_stats
@@ -303,7 +306,7 @@ class RasterCompare(MatchedPairReader):
             block.
             """
             # read src and ref blocks
-            src_ra, ref_ra = self.read(block_pair)
+            src_ra, ref_ra = self._read(block_pair)
 
             # re-project so that both source and reference are in proc_crs
             if self.proc_crs == ProcCrs.ref:
@@ -345,7 +348,7 @@ class RasterCompare(MatchedPairReader):
             executor = stack.enter_context(ThreadPoolExecutor(max_workers=threads))
             futures = [
                 executor.submit(get_block_sums, block_pair)
-                for block_pair in self.block_pairs(max_block_mem=max_block_mem)
+                for block_pair in self._block_pairs(max_block_mem=max_block_mem)
             ]
 
             # wait for threads
