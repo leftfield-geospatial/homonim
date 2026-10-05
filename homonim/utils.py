@@ -57,9 +57,9 @@ def nan_equals(a: np.ndarray | float, b: np.ndarray | float) -> np.ndarray:
             return obj == scalar
 
     # use _nan_equals() to speed up the special cases where a or b is a scalar
-    if np.isscalar(a):
+    if np.ndim(a) == 0:
         return _nan_equals(b, a)
-    elif np.isscalar(b):
+    elif np.ndim(b) == 0:
         return _nan_equals(a, b)
     else:
         return (a == b) | (np.isnan(a) & np.isnan(b))
@@ -82,13 +82,13 @@ def expand_window_to_grid(
 def round_window_to_grid(win: Window) -> Window:
     """Return the given RasterIO window with rounded extents."""
     row_range, col_range = win.toranges()
-    row_range = np.round(row_range).astype('int')
-    col_range = np.round(col_range).astype('int')
+    row_range = np.round(row_range)
+    col_range = np.round(col_range)
     return Window(
-        col_off=col_range[0],
-        row_off=row_range[0],
-        width=np.diff(col_range)[0],
-        height=np.diff(row_range)[0],
+        col_off=int(col_range[0]),
+        row_off=int(row_range[0]),
+        width=int(col_range[1] - col_range[0]),
+        height=int(row_range[1] - row_range[0]),
     )
 
 
@@ -107,69 +107,9 @@ def validate_threads(threads: int) -> int:
     return threads
 
 
-def north_up(im: DatasetReader) -> bool:
-    """Return True if im is in a standard North-up orientation."""
-    return (
-        (np.sign(im.transform.a) == 1)
-        and (np.sign(im.transform.e) == -1)
-        and (im.transform.b == 0)
-        and (im.transform.d == 0)
-    )
-
-
-def same_orientation_crs(
-    src_im: DatasetReader, ref_im: DatasetReader, proc_crs: ProcCrs = None
-) -> tuple[DatasetReader, DatasetReader]:
-    """Reproject src_im and ref_im (as necessary) so they are both oriented north-up,
-    and in the same CRS.  Reproject the proc_crs image into the CRS of the other when
-    their CRSs are not the same.
-    """
-    # Note: without transform etc arguments, WarpedVRT re-projects to north-up
-    resampling = Resampling.bilinear
-    same_crs = src_im.crs == ref_im.crs
-    if not north_up(src_im) and (same_crs or proc_crs is not ProcCrs.src):
-        src_im = WarpedVRT(src_im, crs=src_im.crs, resampling=resampling)
-    if not north_up(ref_im) and (same_crs or proc_crs is ProcCrs.src):
-        ref_im = WarpedVRT(ref_im, crs=ref_im.crs, resampling=resampling)
-    if not same_crs and (proc_crs is ProcCrs.src):
-        src_im = WarpedVRT(src_im, crs=ref_im.crs, resampling=resampling)
-    if not same_crs and (proc_crs is not ProcCrs.src):
-        ref_im = WarpedVRT(ref_im, crs=src_im.crs, resampling=resampling)
-    return src_im, ref_im
-
-
-@contextmanager
-def same_orientation_crs_ctx(
-    src_im: DatasetReader, ref_im: DatasetReader, proc_crs: ProcCrs = None
-) -> tuple[DatasetReader, DatasetReader]:
-    """Context manager wrapping same_orientation_crs()."""
-    try:
-        src_im, ref_im = same_orientation_crs(src_im, ref_im, proc_crs=proc_crs)
-        yield (src_im, ref_im)
-    finally:
-        # TODO: this may be closing the dataset(s) if they are not wrapped in WarpedVRT
-        #  by same_orientation_crs()
-        src_im.close()
-        ref_im.close()
-
-
-def covers_bounds(
-    im1: DatasetReader, im2: DatasetReader, expand_pixels: tuple[int, int] = (0, 0)
-) -> bool:
-    """Return True if the extents of im1 encompass those of im2 expanded by
-    expand_pixels, otherwise False.
-    """
-    with same_orientation_crs_ctx(im1, im2) as (im1, im2):
-        im1_win = im1.window(*im2.bounds)
-    if not np.all(np.array(expand_pixels) == 0):
-        im1_win = expand_window_to_grid(im1_win, expand_pixels)
-    win_ul = np.array((im1_win.row_off, im1_win.col_off))
-    win_shape = np.array((im1_win.height, im1_win.width))
-    return False if np.any(win_ul < 0) or np.any(win_shape > im1.shape) else True
-
-
 def get_nonalpha_bands(im: DatasetReader | DatasetWriter) -> tuple[int, ...]:
     """Return a list of non-alpha band indices for the given Rasterio dataset."""
+
     bands = tuple(
         [bi + 1 for bi in range(im.count) if im.colorinterp[bi] != ColorInterp.alpha]
     )
