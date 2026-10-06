@@ -42,14 +42,14 @@ def _full_coverage_mask(
     Find the full coverage mask.
 
     :param proc_ra:
-        proc_crs array, in the proc_crs CRS and grid.
+        proc_crs array, in the proc_crs pixel grid.
     :param other_ra:
-        Other (non-proc_crs) array in the non-proc_crs CRS and grid.
+        Other (non-proc_crs) array in the non-proc_crs pixel grid.
     :param kernel_shape:
         Kernel (height, width) in pixels.
 
     :return:
-        Full coverage mask as an array with uint8 dtype, in the proc_crs CRS and grid.
+        Full coverage mask as an array with uint8 dtype, in the proc_crs pixel grid.
     """
     # re-project the other_ra mask into the proc_ra CRS and grid
     mask_ra = _raster_array_mask(other_ra).reproject_like(

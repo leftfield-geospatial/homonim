@@ -104,9 +104,9 @@ class RasterFuse(MatchedPairReader):
         :param ref_filename:
             Path or URI of a reference image.
         :param proc_crs:
-            Which of the source or reference CRS and pixel grids should be used for
-            estimating correction parameters.  By default, the CRS and pixel grid with
-            the lowest resolution is used (recommended).
+            Which of the source or reference pixel grids to use for estimating
+            correction parameters.  By default, the grid with the lowest resolution is
+            used (recommended).
         :param src_bands:
             Indexes of source bands to be corrected (1 based).  Defaults to all bands
             with a ``center_wavelength`` tag if any exist, otherwise to all non-alpha

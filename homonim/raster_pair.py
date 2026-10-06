@@ -121,12 +121,8 @@ class RasterPairReader:
         :param ref_filename:
             Path or URI of a reference image.
         :param proc_crs:
-            # TODO: this doc is not accurate (here and elsewhere) - source and
-                reference are projected to the source CRS for proc_crs=ref and vice
-                versa.
-            Which of the source or reference CRS and pixel grids to use for
-            processing.  By default, the CRS and pixel grid with the lowest
-            resolution is used (recommended).
+            Which of the source or reference pixel grids to use for processing.  By
+            default, the grid with the lowest resolution is used (recommended).
         """
         self._src_file = os.fspath(src_filename)
         self._ref_file = os.fspath(ref_filename)
@@ -172,7 +168,10 @@ class RasterPairReader:
             self._ref_win = utils.expand_window_to_grid(ref_im.window(*src_im.bounds))
             ref_ranges = np.array(self._ref_win.toranges()).T
             if any(ref_ranges[0] < 0) or any(ref_ranges[1] > ref_im.shape):
-                raise HomonimError('Reference extent does not cover source image')
+                raise HomonimError(
+                    f"Reference '{ref_name}' extent does does not cover the source "
+                    f"'{src_name}'."
+                )
             self._src_win = utils.expand_window_to_grid(
                 src_im.window(*ref_im.window_bounds(self._ref_win))
             )
@@ -392,8 +391,10 @@ class RasterPairReader:
         else:
             proc_win, proc_im, other_im = (self._src_win, self._src_im, self._ref_im)
         block_ranges = [
-            range(*start_stop, step)
-            for start_stop, step in zip(proc_win.toranges(), block_shape, strict=True)
+            range(start, stop, step)
+            for (start, stop), step in zip(
+                proc_win.toranges(), block_shape, strict=True
+            )
         ]
 
         # outer loop over bands so that all blocks in a band are yielded

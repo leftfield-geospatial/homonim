@@ -378,8 +378,8 @@ def cli(ctx: click.Context, verbose: int, quiet: int):
     type=click.Choice(ProcCrs, case_sensitive=False),
     default=ProcCrs.auto,
     show_default=True,
-    help='Which of the source or reference CRS and pixel grids should be used for '
-    'estimating correction parameters (``auto`` is recommended).',
+    help='Which of the source or reference pixel grids should be used for estimating '
+    'correction parameters (``auto`` is recommended).',
 )
 @click.option(
     '--driver',
@@ -559,8 +559,8 @@ def fuse(
     type=click.Choice(ProcCrs, case_sensitive=False),
     default=ProcCrs.auto,
     show_default=True,
-    help='Which of the source or reference CRS and pixel grids should be used for '
-    'comparing (``auto`` recommended).',
+    help='Which of the source or reference pixel grids should be used for comparing '
+    '(``auto`` recommended).',
 )
 @force_match_option
 def compare(
