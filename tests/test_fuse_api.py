@@ -98,8 +98,8 @@ def test_corr_content(
     tmp_path: Path,
     request: FixtureRequest,
 ):
-    """Test the corrected image content with different src / ref images, and model
-    etc combinations.
+    """Test the corrected image content with different source / reference images,
+    and model etc combinations.
     """
     src_file = request.getfixturevalue(src_file)
     ref_file = request.getfixturevalue(ref_file)
@@ -415,7 +415,7 @@ def test_proc_crs(
     request: FixtureRequest,
 ):
     """Test corrected image creation for forced and auto proc_crs with different
-    src / ref combinations.
+    source and reference combinations.
     """
     src_file: Path = request.getfixturevalue(src_file)
     ref_file: Path = request.getfixturevalue(ref_file)
@@ -429,8 +429,6 @@ def test_proc_crs(
 
 def test_corr_tags(tmp_path: Path, ref_file_100cm_float):
     """Test the corrected image tags."""
-    model = Model.gain_blk_offset
-    kernel_shape = (3, 3)
     proc_crs = ProcCrs.ref
     raster_fuse = RasterFuse(
         ref_file_100cm_float, ref_file_100cm_float, proc_crs=proc_crs
@@ -439,7 +437,7 @@ def test_corr_tags(tmp_path: Path, ref_file_100cm_float):
     param_file = tmp_path.joinpath('parameter.tif')
 
     with raster_fuse:
-        raster_fuse.process(corr_file, model, kernel_shape, param_filename=param_file)
+        raster_fuse.process(corr_file, param_filename=param_file)
 
     assert corr_file.exists()
     assert param_file.exists()
@@ -458,16 +456,10 @@ def test_corr_tags(tmp_path: Path, ref_file_100cm_float):
         } <= set(tags)
         assert tags['FUSE_SRC_FILE'] == ref_file_100cm_float.name
         assert tags['FUSE_REF_FILE'] == ref_file_100cm_float.name
-        assert tags['FUSE_MODEL'] == model
         assert tags['FUSE_PROC_CRS'] == proc_crs
-        assert tags['FUSE_KERNEL_SHAPE'] == str(kernel_shape)
 
         for key, val in KernelModel._default_config.items():
-            assert (
-                tags[f'FUSE_{key.upper()}'] == val.name
-                if hasattr(val, 'name')
-                else str(val)
-            )
+            assert tags[f'FUSE_{key.upper()}'] == getattr(val, 'name', str(val))
         assert (
             yaml.safe_load(tags['FUSE_MAX_BLOCK_MEM'])
             == RasterFuse._default_config['max_block_mem']
