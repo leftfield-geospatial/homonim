@@ -15,21 +15,17 @@
 
 import logging
 import os
-from contextlib import contextmanager
-from multiprocessing import cpu_count
 from os import PathLike
 from pathlib import Path
 
 import numpy as np
 import rasterio as rio
-from rasterio.enums import ColorInterp, Resampling
+from rasterio.enums import ColorInterp
 from rasterio.io import DatasetReader, DatasetWriter
-from rasterio.vrt import WarpedVRT
 from rasterio.windows import Window
 from tabulate import DataRow, Line, TableFormat, tabulate
 
-from homonim.enums import Model, ProcCrs
-from homonim.errors import ImageFormatError
+from homonim.errors import HomonimError, ImageFormatError
 
 logger = logging.getLogger(__name__)
 tabulate.MIN_PADDING = 0
@@ -93,18 +89,18 @@ def round_window_to_grid(win: Window) -> Window:
 
 
 def validate_threads(threads: int) -> int:
-    """Validate the number of threads for concurent processing of image blocks."""
+    """Validate and convert the threads parameter for concurent processing of image
+    blocks.
+    """
     # TODO: Memory increases ~linearly with number of threads, but does processing
     #  speed?  The bottleneck is often file IO & I am not sure >2 threads as a
     #  default is justified.
-    _cpu_count = cpu_count()
-    threads = _cpu_count if threads == 0 else threads
-    if threads < 0 or threads > _cpu_count:
-        raise ValueError(
-            f"'threads' should be greater than or equal to zero, and less than the "
-            f'number of processors ({_cpu_count})'
+    if threads > os.cpu_count():
+        raise HomonimError(
+            f"'threads' should be less than or equal to the number of CPUs: "
+            f'{os.cpu_count()}.'
         )
-    return threads
+    return threads if threads > 0 else os.cpu_count()
 
 
 def get_nonalpha_bands(im: DatasetReader | DatasetWriter) -> tuple[int, ...]:

@@ -156,7 +156,7 @@ class RasterCompare(MatchedPairReader):
             stacklevel=2,
         )
         return dict(
-            threads=utils.validate_threads(threads),
+            threads=threads,
             max_block_mem=max_block_mem,
             downsampling=downsampling,
             upsampling=upsampling,
@@ -294,11 +294,7 @@ class RasterCompare(MatchedPairReader):
         :return:
             Comparison statistic dictionary.
         """
-        if threads > os.cpu_count():
-            raise HomonimError(
-                "'threads' should be less than or equal to the number of CPUs"
-            )
-        threads = threads if threads > 0 else os.cpu_count()
+        threads = utils.validate_threads(threads)
 
         def get_block_sums(block_pair: BlockPair):
             """Thread-safe function to find the source / reference etc. sums for a

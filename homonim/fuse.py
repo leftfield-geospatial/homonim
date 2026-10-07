@@ -145,9 +145,9 @@ class RasterFuse(MatchedPairReader):
                     f"'nodata' value: {nodata} cannot be safely cast to 'dtype': "
                     f'{dtype}.'
                 )
-        creation_options = creation_options or _default_creation_options[driver.name]
+        creation_options = creation_options or _default_creation_options[driver.value]
         return dict(
-            driver=str(driver),
+            driver=driver.value,
             width=self._src_im.width,
             height=self._src_im.height,
             count=len(self.src_bands),
@@ -181,7 +181,7 @@ class RasterFuse(MatchedPairReader):
         im.update_tags(
             FUSE_SRC_FILE=Path(self._src_file).name,
             FUSE_REF_FILE=Path(self._ref_file).name,
-            FUSE_PROC_CRS=self.proc_crs.name,
+            FUSE_PROC_CRS=self.proc_crs.value,
             **kwargs_tags,
         )
 
@@ -334,9 +334,7 @@ class RasterFuse(MatchedPairReader):
             category=DeprecationWarning,
             stacklevel=2,
         )
-        return dict(
-            threads=utils.validate_threads(threads), max_block_mem=max_block_mem
-        )
+        return dict(threads=threads, max_block_mem=max_block_mem)
 
     @staticmethod
     def create_out_profile(
@@ -380,7 +378,7 @@ class RasterFuse(MatchedPairReader):
             stacklevel=2,
         )
         driver = Driver(driver.lower())
-        creation_options = creation_options or _default_creation_options[driver.name]
+        creation_options = creation_options or _default_creation_options[driver.value]
         return dict(
             driver=driver, dtype=dtype, nodata=nodata, creation_options=creation_options
         )
@@ -491,11 +489,6 @@ class RasterFuse(MatchedPairReader):
         corr_filename = os.fspath(corr_filename)
         param_filename = os.fspath(param_filename) if param_filename else None
         model_type = Model(model)
-        if threads > os.cpu_count():
-            raise HomonimError(
-                "'threads' should be less than or equal to the number of CPUs"
-            )
-        threads = threads if threads > 0 else os.cpu_count()
 
         # convert deprecated *_config argument items to keyword arguments
         warn_msg = (
@@ -536,6 +529,7 @@ class RasterFuse(MatchedPairReader):
             block_config = self.create_block_config(**block_config)
             threads = block_config['threads']
             max_block_mem = block_config['max_block_mem']
+        threads = utils.validate_threads(threads)
 
         # create the KernelModel according to proc_crs
         model_cls = SrcSpaceModel if self.proc_crs == ProcCrs.src else RefSpaceModel
@@ -546,7 +540,7 @@ class RasterFuse(MatchedPairReader):
             upsampling=upsampling,
         )
         model = model_cls(
-            model, kernel_shape, find_r2=param_filename is not None, **model_kwargs
+            model_type, kernel_shape, find_r2=param_filename is not None, **model_kwargs
         )
 
         # tqdm progress bar format
