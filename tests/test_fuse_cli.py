@@ -107,7 +107,7 @@ def test_fuse(
     corr_file = create_corr_filename(src_file, ProcCrs.ref, model, kernel_shape)
     corr_file = tmp_path.joinpath(corr_file)
     cli_str = (
-        f'fuse -m {model.value} -k {kernel_shape[0]} {kernel_shape[1]} -od {tmp_path} '
+        f'fuse -m {model} -k {kernel_shape[0]} {kernel_shape[1]} -od {tmp_path} '
         f'{src_file} {ref_file}'
     )
     result = runner.invoke(cli, cli_str.split())

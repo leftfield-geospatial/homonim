@@ -13,19 +13,13 @@
 # You should have received a copy of the GNU Affero General Public License along with
 # Homonim. If not, see <https://www.gnu.org/licenses/>.
 
-from enum import Enum
+from enum import StrEnum
 
 
-class _StrChoiceEnum(str, Enum):
-    """String value enumeration class that can be used with a ``click.Choice()``
-    parameter type.
+class _StrChoiceEnum(StrEnum):
+    """StrEnum subclass workaround to use enum values rather than names in
+    ``click.Choice()`` options.
     """
-
-    def __repr__(self):
-        return self._value_
-
-    def __str__(self):
-        return self._value_
 
     @property
     def name(self):
@@ -44,34 +38,29 @@ class Model(_StrChoiceEnum):
     """
 
     gain = 'gain'
-    """ 
-    Gain-only model, suitable for haze-free and zero offset images (i.e. images where a 
-    surface reflectance of zero corresponds to a pixel value of ± zero). 
+    """Gain-only model, suitable for haze-free and zero offset images (i.e. images 
+    where a surface reflectance of zero corresponds to a pixel value of ± zero).
     """
     gain_blk_offset = 'gain-blk-offset'
-    """ 
-    Gain-only model applied to offset normalised image blocks.  Suitable for most 
+    """Gain-only model applied to offset normalised image blocks.  Suitable for most 
     source - reference combinations.
     """
     gain_offset = 'gain-offset'
-    """
-    Gain and offset model.  The most accurate model, but sensitive to differences 
+    """Gain and offset model.  The most accurate model, but sensitive to differences 
     between source and reference, such as shadowing and land cover changes.  Suitable 
-    for well-matched source - reference image pairs.  
+    for well-matched source - reference image pairs.
     """
 
 
 class ProcCrs(_StrChoiceEnum):
-    """
-    CRS and pixel grid in which correction parameters are estimated.
-    """
+    """Pixel grid in which processing takes place."""
 
     auto = 'auto'
-    """Lowest resolution of the source and reference image CRSs (recommended)."""
+    """Lowest resolution of the source and reference grids (recommended)."""
     src = 'src'
-    """Source image CRS."""
+    """Source grid."""
     ref = 'ref'
-    """Reference image CRS."""
+    """Reference grid."""
 
 
 class Driver(_StrChoiceEnum):
