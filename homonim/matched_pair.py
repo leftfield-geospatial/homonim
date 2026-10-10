@@ -19,12 +19,13 @@ from os import PathLike
 from pathlib import Path
 
 import numpy as np
-import rasterio as rio
 from rasterio.enums import ColorInterp
+from rasterio.io import DatasetReader
 from tabulate import tabulate
 
+from homonim import utils
 from homonim.enums import ProcCrs
-from homonim.errors import BandMatchWarning
+from homonim.errors import HomonimError, HomonimWarning
 from homonim.raster_pair import RasterPairReader
 
 logger = logging.getLogger(__name__)
@@ -44,26 +45,27 @@ class MatchedPairReader(RasterPairReader):
         force: bool = False,
     ):
         """
-        Class for reading matching blocks from a source - reference image pair.
+        Base class for processing matching blocks from a source and reference image
+        pair.
 
-        For best results, source and reference images should be concurrent.
         Reference extents must encompass those of the source.
 
-        The reference should contain bands that are approximate wavelength matches to
-        the source bands.  When source and reference bands are RGB, or have
-        ``center_wavelength`` tags, bands are matched automatically based on
-        wavelength.  Otherwise, source and reference bands are assumed to be in
-        matching order.  Subsets and ordering of bands to use can be specified with
-        the ``src_bands`` and ``ref_bands`` parameters.
+        Source bands should be matched with reference bands of a similar wavelength.
+        When source and reference bands are RGB, or have ``center_wavelength`` tags,
+        bands are matched automatically.  Otherwise, source and reference bands are
+        assumed to be in matching order.  Subsets and ordering of bands can be
+        specified with the ``src_bands`` and ``ref_bands`` parameters.
+
+        Can be used as a context manager to automatically close source and reference
+        images on exiting.
 
         :param src_filename:
             Path or URI of a source image.
         :param ref_filename:
             Path or URI of a reference image.
         :param proc_crs:
-            Which of the source or reference CRS and pixel grids should be used for
-            estimating correction parameters.  By default, the CRS and pixel grid with
-            the lowest resolution is used (recommended).
+            Which of the source or reference pixel grids to use for processing.  By
+            default, the grid with the lowest resolution is used (recommended).
         :param src_bands:
             Indexes of source bands to be corrected (1 based).  Defaults to all bands
             with a ``center_wavelength`` tag if any exist, otherwise to all non-alpha
@@ -73,106 +75,53 @@ class MatchedPairReader(RasterPairReader):
             Defaults to all bands with a ``center_wavelength`` tag if any exist,
             otherwise to all non-alpha bands.
         :param force:
-            Whether to bypass wavelength band matching.
+            Whether to bypass wavelength band matching, and match source and reference
+            bands in their given order.
         """
         self._src_bands = src_bands
         self._ref_bands = ref_bands
         self._force = force
         super().__init__(src_filename, ref_filename, proc_crs=proc_crs)
-
-    @property
-    def src_bands(self) -> tuple[int, ...]:
-        """Matched source band indices (1-based)."""
-        return self._src_bands
-
-    @property
-    def ref_bands(self) -> tuple[int, ...]:
-        """Matched reference band indices (1-based)."""
-        return self._ref_bands
+        if logger.getEffectiveLevel() <= logging.DEBUG:
+            logger.debug('Matched bands:\n\n' + self.matched_band_table() + '\n')
 
     @staticmethod
     def _get_band_info(
-        im: rio.DatasetReader,
+        im: DatasetReader,
         bands: tuple[int, ...] | None = None,
-        name: str | None = None,
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """Return band indices, corresponding names, and center wavelengths (if any)."""
-        # TODO: remove geedim *mask / *dist band check and simplify where possible
-        name = name or Path(im.name).name or ''
-        # if not alpha band or geedim mask band
-        non_alpha_bands = np.array(
-            [
-                i + 1
-                for i in range(im.count)
-                if (
-                    (im.colorinterp[i] != ColorInterp.alpha)
-                    and not (
-                        im.descriptions[i]
-                        and (
-                            im.descriptions[i].endswith('_MASK')
-                            or im.descriptions[i].endswith('_DIST')
-                        )
-                    )
-                )
-            ]
-        )
-        refl_bands = np.array(
-            [bi for bi in non_alpha_bands if 'center_wavelength' in im.tags(bi)]
-        )
+        param_name: str = 'bands',
+    ) -> tuple[np.ndarray[int], np.ndarray[str], np.ndarray[float]]:
+        """Return reflectance / non-alpha band indices, corresponding names,
+        and center wavelengths for the given dataset, if bands is not provided.
+        Otherwise validate the given bands and return them with their corresponding
+        names and center wavelengths.
+        """
+        im_name = Path(im.name).name
+        nonalpha_bands = utils.get_nonalpha_bands(im)
+        refl_bands = [bi for bi in nonalpha_bands if 'center_wavelength' in im.tags(bi)]
 
-        # test bands are valid
-        if (bands is not None) and (not set(bands).issubset(range(1, im.count + 1))):
-            invalid_bands = list(set(bands).difference(range(1, im.count + 1)))
-            raise ValueError(
-                f'User specified {name} bands contain invalid band(s) {invalid_bands}.'
-            )
-        # test bands do not contain alpha bands
-        if (bands is not None) and (not set(bands).issubset(non_alpha_bands)):
-            alpha_bands = list(set(bands).difference(non_alpha_bands))
-            raise ValueError(
-                f'User specified {name} bands contain alpha band(s) {alpha_bands}.'
-            )
-        # warn if some but not all bands have center wavelength metadata
-        if (
-            (bands is not None)
-            and len(refl_bands)
-            and (not set(bands).issubset(refl_bands))
-        ):
-            non_refl_bands = list(set(bands).difference(refl_bands))
+        # form a list of center wavelengths for each band, using nan where no
+        # center wavelength can be found
+
+        # extract center wavelengths from any geedim tags
+        center_wavelengths = [
+            float(im.tags(bi).get('center_wavelength', 'nan'))
+            for bi in range(1, im.count + 1)
+        ]
+
+        def no_center_wavelengths() -> bool:
+            """Return whether no non-alpha bands have center wavelengths."""
+            return np.isnan([center_wavelengths[bi - 1] for bi in nonalpha_bands]).all()
+
+        # assign standard RGB wavelengths if there are 3 non-alpha bands with no
+        # geedim tags
+        if no_center_wavelengths() and len(nonalpha_bands) == 3:
             warnings.warn(
-                f'User specified {name} bands contain non-reflectance band index(es) '
-                f'{non_refl_bands}.',
-                category=BandMatchWarning,
+                f"Using standard RGB center wavelengths for '{im_name}'.",
+                category=HomonimWarning,
                 stacklevel=2,
             )
-
-        log_prefix = f'Using {name} bands '
-        if (bands is not None) and (len(bands) > 0):
-            # use bands if it was specified
-            bands = np.array(bands)
-        elif len(refl_bands) > 0:
-            # else use bands with center wavelengths if any
-            log_prefix = f'Using {name} reflectance bands '
-            bands = np.array(refl_bands)
-        elif len(non_alpha_bands) > 0:
-            # else use non-alpha bands
-            log_prefix = f'Using {name} non-alpha bands '
-            bands = np.array(non_alpha_bands)
-        else:
-            raise ValueError(f'There are no non-alpha/reflectance {name} bands to use.')
-
-        # center wavelengths for all bands
-        center_wavelengths = np.array(
-            [
-                float(im.tags(bi)['center_wavelength'])
-                if 'center_wavelength' in im.tags(bi)
-                else np.nan
-                for bi in range(1, im.count + 1)
-            ]
-        )
-
-        # assign standard RGB center wavelengths
-        if len(non_alpha_bands) == 3:
+            # use the dataset colorinterp property to differentiate R/G/B
             std_rgb_cws = dict(
                 zip(
                     [ColorInterp.red, ColorInterp.green, ColorInterp.blue],
@@ -180,256 +129,207 @@ class MatchedPairReader(RasterPairReader):
                     strict=True,
                 )
             )
-            log_list = []
-            # assign standard RGB center wavelengths according to valid colorinterp's
-            for bi in non_alpha_bands:
-                if not np.isnan(center_wavelengths[bi - 1]):
-                    continue  # don't overwrite existing center wavelengths
-                if im.colorinterp[bi - 1] in std_rgb_cws:
-                    center_wavelengths[bi - 1] = std_rgb_cws[im.colorinterp[bi - 1]]
-                    log_list.append(im.colorinterp[bi - 1].name)
-            if len(log_list) > 0:
+            for bi in nonalpha_bands:
+                center_wavelengths[bi - 1] = std_rgb_cws.get(
+                    im.colorinterp[bi - 1], center_wavelengths[bi - 1]
+                )
+
+            if no_center_wavelengths():
+                # if colorinterp was not R/G/B, assume bands are in RGB order
+                for i, cw in enumerate(std_rgb_cws.values()):
+                    center_wavelengths[nonalpha_bands[i] - 1] = cw
+
+        if bands:
+            # validate the provided bands
+            invalid_bands = tuple(set(bands).difference(range(1, im.count + 1)))
+            if invalid_bands:
+                raise HomonimError(
+                    f"'{param_name}' for '{im_name}' contains out of range indexes "
+                    f'{invalid_bands}.'
+                )
+            alpha_bands = tuple(set(bands).difference(nonalpha_bands))
+            if alpha_bands:
+                raise HomonimError(
+                    f"'{param_name}' for '{im_name}' contains alpha band indexes "
+                    f'{alpha_bands}.'
+                )
+            nonrefl_bands = tuple(set(bands).difference(refl_bands))
+            if refl_bands and nonrefl_bands:
                 warnings.warn(
-                    f'Assigning standard {", ".join(log_list)} center wavelengths for '
-                    f'{name}.',
-                    category=BandMatchWarning,
+                    f"'{param_name}' for '{im_name}' contains non-reflectance "
+                    f'indexes {nonrefl_bands}.',
+                    category=HomonimWarning,
                     stacklevel=2,
                 )
+        else:
+            # default bands to center wavelength ('reflectance') bands if any exist,
+            # otherwise to non-alpha bands
+            bands = refl_bands or nonalpha_bands
+            if not bands:
+                raise HomonimError(f"'{im_name}' has no non-alpha bands.")
 
-            # if the image has no valid RGB colorinterp's or center wavelengths
-            if sum(np.isnan(center_wavelengths[non_alpha_bands - 1])) == 3:
-                # assume RGB and assign center wavelengths in that order
-                warnings.warn(
-                    f'Assuming image is RGB, and assigning standard center '
-                    f'wavelengths for {name}.',
-                    category=BandMatchWarning,
-                    stacklevel=2,
-                )
-                center_wavelengths[non_alpha_bands - 1] = list(std_rgb_cws.values())
+        names = [im.descriptions[bi - 1] or str(bi) for bi in bands]
+        # center wavelengths corresponding to bands
+        center_wavelengths = [center_wavelengths[bi - 1] for bi in bands]
 
-        center_wavelengths = center_wavelengths[bands - 1]
-        band_names = np.array(
-            [
-                im.descriptions[bi - 1] if im.descriptions[bi - 1] else str(bi)
-                for bi in bands
-            ]
+        return np.array(bands), np.array(names), np.array(center_wavelengths)
+
+    @staticmethod
+    def _greedy_match(dist: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Greedy match of reference to source bands based on the provided wavelength
+        distance matrix.  Source bands must be down the rows, and reference bands
+        along the cols.
+
+        Matches one reference band for each source band until either all source or
+        all reference bands have been matched.  Works for all cases where
+        len(src_bands) != len(ref_bands).
+
+        Returns the matched reference band indexes and wavelength distances for each
+        source band.
+        """
+        # match_idx[i] is the index of the reference band that matches with the ith
+        # source band
+        match_idx = np.array([np.nan] * dist.shape[0])
+        # distances corresponding to the matches in match_idx
+        match_dist = np.array([np.nan] * dist.shape[0])
+
+        # use masked array rather than nan pass-through to avoid all-nan slice warnings
+        dist = np.ma.array(dist, mask=np.isnan(dist))
+
+        # repeat until all source or reference bands have been matched
+        while not dist.mask.all():
+            # find the row with the smallest distance in it
+            min_dist = dist.min(axis=1)
+            min_dist_row_idx = np.ma.argmin(min_dist)
+            min_dist_row = dist[min_dist_row_idx, :]
+            # store match idx and distance for this row
+            match_idx[min_dist_row_idx] = np.ma.argmin(min_dist_row)
+            match_dist[min_dist_row_idx] = min_dist[min_dist_row_idx]
+            # mask the matched row and col, so that it is not used again
+            dist[:, int(match_idx[min_dist_row_idx])] = np.ma.masked
+            dist[min_dist_row_idx, :] = np.ma.masked
+
+        return match_idx, match_dist
+
+    def _match_bands(
+        self, src_im: DatasetReader, ref_im: DatasetReader
+    ) -> tuple[tuple[int, ...], tuple[int, ...]]:
+        """Return matched source and reference band indices for the given datasets."""
+        # get source & reference bands, names and center wavelengths
+        src_bands, src_names, src_wavelengths = MatchedPairReader._get_band_info(
+            src_im, bands=self._src_bands, param_name='src_bands'
         )
-        logger.debug(f'{log_prefix} {band_names.tolist()}.')
-        return bands, band_names, center_wavelengths
-
-    def _get_pair_band_table(
-        self,
-        src_im: rio.DatasetReader,
-        ref_im: rio.DatasetReader,
-        src_bands: tuple[int, ...] | None = None,
-        ref_bands: tuple[int, ...] | None = None,
-    ):
-        """Return a table of source and reference metadata for the given bands."""
-        num_bands = min(len(src_bands), len(ref_bands))
-        src_bands = src_bands[:num_bands]
-        ref_bands = ref_bands[:num_bands]
-
-        # retrieve src/ref image band metadata as lists of dicts
-        src_band_list = []
-        ref_band_list = []
-        band_keys = {
-            'name': 'Name',
-            'description': 'Description',
-            'center_wavelength': 'Wavelen',
-        }
-        for band_list, im, bands in zip(
-            [src_band_list, ref_band_list],
-            [src_im, ref_im],
-            [src_bands, ref_bands],
-            strict=True,
-        ):
-            for band in bands:
-                band_dict = {}
-                if 'name' not in im.tags(band):
-                    band_dict.update(Name=im.descriptions[band - 1] or str(band))
-                band_tags = im.tags(band)
-                band_dict.update(
-                    **{
-                        bkn: band_tags[bk]
-                        for bk, bkn in band_keys.items()
-                        if bk in band_tags
-                    }
-                )
-                band_list.append(band_dict)
-
-        # combine src and ref lists of dicts into one
-        def prefix_dict_keys(band_dict: dict, prefix: str):
-            return {f'{prefix}\n{k}': v for k, v in band_dict.items()}
-
-        band_list = []
-        super_keys = dict()
-        for src_band_dict, ref_band_dict in zip(
-            src_band_list, ref_band_list, strict=True
-        ):
-            band_dict = {}
-            band_dict.update(prefix_dict_keys(src_band_dict, 'Source'))
-            band_dict.update(prefix_dict_keys(ref_band_dict, 'Ref'))
-            band_list.append(band_dict)
-            super_keys.update(dict.fromkeys(band_dict.keys()))
-
-        # update missing keys with empty string vals
-        for band_dict in band_list:
-            update_keys = [k for k in super_keys if k not in band_dict.keys()]
-            update_vals = [''] * len(update_keys)
-            band_dict.update(zip(update_keys, update_vals, strict=True))
-
-        return tabulate(band_list, headers='keys', maxcolwidths=20, tablefmt='simple')
-
-    def _match_pair_bands(
-        self, src_im: rio.DatasetReader, ref_im: rio.DatasetReader
-    ) -> tuple[tuple[int], tuple[int]]:
-        """Validate and match source and reference bands."""
-        # retrieve non-alpha bands
-        src_bands, src_band_names, src_wavelengths = MatchedPairReader._get_band_info(
-            src_im, bands=self._src_bands
-        )
-        ref_bands, ref_band_names, ref_wavelengths = MatchedPairReader._get_band_info(
-            ref_im, bands=self._ref_bands
+        ref_bands, ref_names, ref_wavelengths = MatchedPairReader._get_band_info(
+            ref_im, bands=self._ref_bands, param_name='ref_bands'
         )
         src_name = Path(src_im.name).name
         ref_name = Path(ref_im.name).name
 
+        if self._force:
+            # match bands in their given order
+            min_num_bands = min(len(src_bands), len(ref_bands))
+            src_bands = src_bands[:min_num_bands]
+            ref_bands = ref_bands[:min_num_bands]
+            return tuple(src_bands.tolist()), tuple(ref_bands.tolist())
+
         if len(src_bands) > len(ref_bands):
-            if not self._force:
-                raise ValueError(f'{ref_name} has fewer bands than {src_name}.')
-            else:
-                warnings.warn(
-                    f'{ref_name} has fewer bands than {src_name}.',
-                    category=BandMatchWarning,
-                    stacklevel=2,
-                )
+            raise HomonimError('There are fewer reference than source bands.')
 
-        match_bands = np.array([np.nan] * len(src_bands))
-        # match src with ref bands based on center wavelength metadata, bypassing if
-        # force==True
-        if any(src_wavelengths) and any(ref_wavelengths) and not self._force:
-            # TODO: consider using a linear programming type optimisation here,
-            #  e.g. https://stackoverflow.com/questions/67368093/find-optimal-unique-neighbour-pairs-based-on-closest-distance
+        # matching ref_bands indexes for each source band in src_bands
+        match_idx = np.array([np.nan] * len(src_bands))
 
-            # absolute & relative distance matrix between src and ref center wavelengths
+        # match source with reference bands using center wavelengths, if any
+        if any(~np.isnan(src_wavelengths)) and any(~np.isnan(ref_wavelengths)):
+            # match based on the relative distance between source and reference
+            # wavelengths
             abs_dist = np.abs(
                 src_wavelengths[:, np.newaxis] - ref_wavelengths[np.newaxis, :]
             )
             rel_dist = abs_dist / src_wavelengths[:, np.newaxis]
-
-            def greedy_match(dist: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-                """Greedy matching of src to ref bands based on the provided center
-                wavelength distance matrix. src bands must be down the rows, and ref
-                bands along the cols.
-
-                Matches one ref band for each src band until either all src or all
-                ref bands have been matched.  Works for all cases where
-                len(src_bands) != len(ref_bands).
-                """
-                # match_idx[i] is the index of the ref band that matches with the ith
-                # src band
-                match_idx = np.array([np.nan] * dist.shape[0])
-                match_dist = np.array(
-                    [np.nan] * dist.shape[0]
-                )  # distances corresponding to the above matches
-
-                # use masked array rather than nan pass-through to avoid all-nan
-                # slice warnings
-                dist = np.ma.array(dist, mask=np.isnan(dist))
-
-                # repeat until all src or ref bands have been matched
-                while not dist.mask.all():
-                    # find the row with the smallest distance in it
-                    min_dist = dist.min(axis=1)
-                    min_dist_row_idx = np.ma.argmin(min_dist)
-                    min_dist_row = dist[min_dist_row_idx, :]
-                    # store match idx and distance for this row
-                    match_idx[min_dist_row_idx] = np.ma.argmin(min_dist_row)
-                    match_dist[min_dist_row_idx] = min_dist[min_dist_row_idx]
-                    # set the matched row and col to nan, so that it is not used again
-                    dist[:, int(match_idx[min_dist_row_idx])] = np.ma.masked
-                    dist[min_dist_row_idx, :] = np.ma.masked
-
-                return match_dist, match_idx
-
-            match_dist, match_idx = greedy_match(rel_dist)
+            match_idx, match_dist = self._greedy_match(rel_dist)
 
             # if any of the matched distances are greater than a threshold, raise an
             # informative error
-            if any(match_dist > MatchedPairReader._max_rel_wavelength_diff):
-                err_idx = match_dist > MatchedPairReader._max_rel_wavelength_diff
-                src_err_band_names = list(src_band_names[err_idx])
-                ref_err_band_names = list(ref_band_names[np.int64(match_idx[err_idx])])
-                err_dists = list(match_dist[err_idx].round(3))
-                raise ValueError(
-                    f'{src_name} band(s) {src_err_band_names} could not be '
-                    f'auto-matched.  The nearest {ref_name} band(s) were '
-                    f'{ref_err_band_names}, at center wavelength difference(s) of '
-                    f'{err_dists} (um) respectively.'
+            err_mask = match_dist > self._max_rel_wavelength_diff
+            if any(err_mask):
+                src_err_names = tuple(src_names[err_mask].tolist())
+                ref_err_names = tuple(
+                    ref_names[match_idx[err_mask].astype('int')].tolist()
+                )
+                err_dists = tuple(match_dist[err_mask].round(3).tolist())
+                raise HomonimError(
+                    f"Source '{src_name}' bands {src_err_names} could not be "
+                    f"wavelength matched.  The nearest reference '{ref_name}' bands "
+                    f'were {ref_err_names}, with corresponding relative wavelength '
+                    f'differences of {err_dists}.'
                 )
 
-            src_matched = ~np.isnan(match_idx)
-            match_bands[src_matched] = ref_bands[np.int64(match_idx[src_matched])]
-            logger.debug(
-                f'Matching {src_name} band(s) {src_band_names[src_matched].tolist()} '
-                f'with {ref_name} band(s) '
-                f'{ref_band_names[np.int64(match_idx[src_matched])].tolist()}, '
-                f'at center wavelength difference(s) of '
-                f'{match_dist[src_matched].round(3).tolist()} (um) respectively.'
-            )
-
-        # match any remaining bands that don't have center wavelength metadata
-        if sum(~np.isnan(match_bands)) < min(len(src_bands), len(ref_bands)):
-            unmatched = np.isnan(match_bands)
-            unmatch_ref_idx = np.array(
-                [i for i, bi in enumerate(ref_bands) if bi not in match_bands],
-                dtype=int,
-            )
-            unmatch_ref_bands = ref_bands[unmatch_ref_idx]
-            unmatch_ref_band_names = ref_band_names[unmatch_ref_idx]
+        # match any remaining bands without center wavelengths
+        src_unmatch_mask = np.isnan(match_idx)
+        if sum(~src_unmatch_mask) < len(match_idx):
+            ref_unmatch_idx = set(range(len(ref_bands))).difference(match_idx)
+            ref_unmatch_idx = sorted(ref_unmatch_idx)
             if len(src_bands) == len(ref_bands):
-                # assume unmatched src and ref image bands are in matching order
-                match_bands[unmatched] = unmatch_ref_bands
-                logger.debug(
-                    f'Matching {src_name} band(s) '
-                    f'{src_band_names[unmatched].tolist()} in file order with '
-                    f'{ref_name} band(s) {unmatch_ref_band_names.tolist()}.'
-                )
-            elif self._force:
-                # match the remaining N src bands with the first N unmatched ref
-                # bands (N=sum(unmatched))
-                unmatch_ref_bands = unmatch_ref_bands[: sum(unmatched)]
-                unmatch_ref_band_names = unmatch_ref_band_names[: sum(unmatched)]
-                # if there are not N unmatched ref bands, truncate unmatched to just
-                # match what we can
-                unmatched = np.where(unmatched)[0][: len(unmatch_ref_bands)]
-                match_bands[unmatched] = unmatch_ref_bands
-                logger.debug(
-                    f'Matching {src_name} band(s) {src_bands[unmatched].tolist()} in '
-                    f'file order with {ref_name} band(s): '
-                    f'{unmatch_ref_band_names.tolist()}.'
-                )
+                # assume unmatched source and reference image bands are in matching
+                # order
+                match_idx[src_unmatch_mask] = ref_unmatch_idx
             else:
-                # raise an error when remaining unmatched bands counts do not match
-                # and self._force is False
-                raise ValueError(
-                    f'Could not match {src_name} band(s) '
-                    f'{src_bands[unmatched].tolist()} with {ref_name} band(s) '
-                    f'{unmatch_ref_band_names.tolist()}.  Ensure {src_name} and '
-                    f'{ref_name} non-alpha band counts match, {src_name} and '
-                    f'{ref_name} have ``center_wavelength`` tags for each band, '
-                    f'or set `force` to True.'
+                # raise an error when the remaining unmatched source / reference band
+                # counts are unequal
+                src_unmatch_names = tuple(src_names[src_unmatch_mask].tolist())
+                ref_unmatch_names = tuple(ref_names[ref_unmatch_idx].tolist())
+                raise HomonimError(
+                    f"Could not match source '{src_name}' bands {src_unmatch_names}"
+                    f" with reference '{ref_name}' bands {ref_unmatch_names}.  Ensure "
+                    f'source and reference band counts match, or that there are center '
+                    f"wavelength tags for each band.  Alternatively, set 'force' to "
+                    f'True.'
                 )
-        # Truncate src and ref to reflect the matched bands
-        src_matched = ~np.isnan(match_bands)
-        src_bands = src_bands[src_matched]
-        ref_matched = np.array(
-            [list(ref_bands).index(bi) for bi in match_bands[src_matched]]
-        )
-        ref_bands = ref_bands[ref_matched]
-        logger.debug(
-            'Matched band(s):\n\n'
-            + self._get_pair_band_table(src_im, ref_im, src_bands, ref_bands)
-            + '\n'
-        )
+
+        ref_bands = ref_bands[match_idx.astype('int')]
         return tuple(src_bands.tolist()), tuple(ref_bands.tolist())
+
+    def matched_band_table(self):
+        """Return a table string with each row describing a source and matched
+        reference band.
+        """
+        # TODO: can standard RGB wavelengths be included when used?  center
+        #  wavelengths would need to become members / properties
+        num_bands = min(len(self._src_bands), len(self._ref_bands))
+        src_bands = self._src_bands[:num_bands]
+        ref_bands = self._ref_bands[:num_bands]
+
+        def get_bands_list(im: DatasetReader, bands: tuple[int, ...]) -> list[dict]:
+            """Return a list of band metadata dictionaries."""
+            tag_keys = ['name', 'description', 'center_wavelength']
+            bands_list = []
+            for bi in bands:
+                tag_dict = im.tags(bi)
+                band_dict = dict(name=im.descriptions[bi - 1] or str(bi))
+                band_dict.update(**{k: tag_dict[k] for k in tag_keys if k in tag_dict})
+                bands_list.append(band_dict)
+            return bands_list
+
+        # get lists of source and reference band metadata
+        src_bands_list = get_bands_list(self._src_im, src_bands)
+        ref_bands_list = get_bands_list(self._ref_im, ref_bands)
+
+        # zip the lists together, changing tag keys to column headings
+        bands_list = []
+        heading_map = {
+            'name': 'Name',
+            'description': 'Description',
+            'center_wavelength': 'Wavelen',
+        }
+
+        def convert_dict_keys(band_dict: dict, prefix: str) -> dict:
+            return {f'{prefix}{heading_map[k]}': v for k, v in band_dict.items()}
+
+        for src_band_dict, ref_band_dict in zip(
+            src_bands_list, ref_bands_list, strict=True
+        ):
+            src_band_dict = convert_dict_keys(src_band_dict, 'Source\n')
+            ref_band_dict = convert_dict_keys(ref_band_dict, 'Ref\n')
+            bands_list.append(dict(**src_band_dict, **ref_band_dict))
+
+        return tabulate(bands_list, headers='keys', maxcolwidths=20, tablefmt='simple')
