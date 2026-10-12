@@ -29,6 +29,7 @@ from homonim.enums import Driver, Model, ProcCrs
 from homonim.fuse import RasterFuse, _default_creation_options
 from homonim.kernel_model import KernelModel
 from homonim.raster_array import RasterArray
+from homonim.stats import _validate_param_image
 
 
 def test_init(src_file_50cm_float: Path, ref_file_100cm_float: Path):
@@ -441,7 +442,7 @@ def test_corr_tags(tmp_path: Path, ref_file_100cm_float):
 
     assert corr_file.exists()
     assert param_file.exists()
-    utils.validate_param_image(param_file)
+    _validate_param_image(param_file)
 
     with rio.open(corr_file, 'r') as out_ds:
         tags = out_ds.tags()

@@ -29,6 +29,7 @@ from homonim import utils
 from homonim.cli import cli
 from homonim.enums import Driver, Model, ProcCrs
 from homonim.kernel_model import KernelModel
+from homonim.stats import _validate_param_image
 from tests.conftest import (
     create_corr_filename,
     create_param_filename,
@@ -281,7 +282,7 @@ def test_param_image(runner: CliRunner, fuse_defaults: FuseDefaults):
     assert result.exit_code == 0
     assert fuse_defaults.corr_file.exists()
     assert fuse_defaults.param_file.exists()
-    utils.validate_param_image(fuse_defaults.param_file)
+    _validate_param_image(fuse_defaults.param_file)
 
 
 def test_mask_partial(runner: CliRunner, fuse_defaults: FuseDefaults):

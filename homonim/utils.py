@@ -25,7 +25,7 @@ from rasterio.io import DatasetReader, DatasetWriter
 from rasterio.windows import Window
 from tabulate import DataRow, Line, TableFormat, tabulate
 
-from homonim.errors import HomonimError, ImageFormatError
+from homonim.errors import HomonimError
 
 logger = logging.getLogger(__name__)
 tabulate.MIN_PADDING = 0
@@ -105,39 +105,7 @@ def validate_threads(threads: int) -> int:
 
 def get_nonalpha_bands(im: DatasetReader | DatasetWriter) -> tuple[int, ...]:
     """Return a list of non-alpha band indices for the given Rasterio dataset."""
-
     bands = tuple(
         [bi + 1 for bi in range(im.count) if im.colorinterp[bi] != ColorInterp.alpha]
     )
     return bands
-
-
-def validate_param_image(param_file: str | PathLike):
-    """Validate the given parameter image."""
-    # TODO: move to stats module
-    param_file = os.fspath(param_file)
-    param_name = Path(param_file).name
-
-    with rio.open(param_file) as param_im:
-        tags = param_im.tags()
-        # check band count is a multiple of 3 and that expected metadata tags exist
-        if (
-            param_im.count == 0
-            or divmod(param_im.count, 3)[1] != 0
-            or not {'FUSE_MODEL', 'FUSE_KERNEL_SHAPE', 'FUSE_PROC_CRS', 'FUSE_REF_FILE'}
-            <= set(tags)
-        ):
-            raise ImageFormatError(f'{param_name} is not a valid parameter image.')
-
-        # check band descriptions end with the expected suffixes
-        n_refl_bands = int(param_im.count / 3)
-        suffixes = (
-            ['gain'] * n_refl_bands + ['offset'] * n_refl_bands + ['r2'] * n_refl_bands
-        )
-        if not all(
-            [
-                desc.lower().endswith(suffix)
-                for suffix, desc in zip(suffixes, param_im.descriptions, strict=True)
-            ]
-        ):
-            raise ImageFormatError(f'{param_name} is not a valid parameter image.')
