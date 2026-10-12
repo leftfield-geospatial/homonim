@@ -332,4 +332,10 @@ class MatchedPairReader(RasterPairReader):
             ref_band_dict = convert_dict_keys(ref_band_dict, 'Ref\n')
             bands_list.append(dict(**src_band_dict, **ref_band_dict))
 
-        return tabulate(bands_list, headers='keys', maxcolwidths=20, tablefmt='simple')
+        return tabulate(
+            bands_list,
+            headers='keys',
+            floatfmt='.3f',
+            maxcolwidths=20,
+            tablefmt='simple',
+        )

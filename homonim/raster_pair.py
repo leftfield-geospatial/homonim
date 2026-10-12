@@ -132,11 +132,7 @@ class RasterPairReader:
 
         try:
             # open and validate the image pair
-            env = rio.Env(
-                GDAL_NUM_THREADS='ALL_CPUS',
-                GTIFF_FORCE_RGBA=False,
-                CPL_VSIL_USE_TEMP_FILE_FOR_RANDOM_WRITE=True,
-            )
+            env = rio.Env(GDAL_NUM_THREADS='ALL_CPUS')
             stack.enter_context(env)
             src_im = stack.enter_context(rio.open(self._src_file, 'r'))
             ref_im = stack.enter_context(rio.open(self._ref_file, 'r'))
@@ -187,12 +183,12 @@ class RasterPairReader:
 
     @property
     def src_bands(self) -> tuple[int, ...]:
-        """Source non-alpha band indices (1-based)."""
+        """Matched source band indices (1-based)."""
         return self._src_bands
 
     @property
     def ref_bands(self) -> tuple[int, ...]:
-        """Reference non-alpha band indices (1-based)."""
+        """Matched reference band indices (1-based)."""
         return self._ref_bands
 
     @property

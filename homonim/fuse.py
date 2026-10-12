@@ -553,7 +553,15 @@ class RasterFuse(MatchedPairReader):
             raise FileExistsError(f"Parameter image exists: '{param_filename}'")
 
         with ExitStack() as stack:
-            stack.enter_context(rio.Env(GDAL_TIFF_INTERNAL_MASK=True))
+            # GDAL config for writing images (GDAL_NUM_THREADS is set in the parent
+            # context)
+            stack.enter_context(
+                rio.Env(
+                    GDAL_TIFF_INTERNAL_MASK=True,
+                    GTIFF_FORCE_RGBA=False,
+                    CPL_VSIL_USE_TEMP_FILE_FOR_RANDOM_WRITE=True,
+                )
+            )
             corr_profile = self._create_corr_profile(
                 driver=driver,
                 dtype=dtype,
