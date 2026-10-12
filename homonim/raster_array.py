@@ -31,7 +31,7 @@ from rasterio.windows import Window, WindowMethodsMixin
 
 from homonim import utils
 from homonim.enums import Driver
-from homonim.errors import HomonimError, ImageFormatError
+from homonim.errors import HomonimError
 
 logger = logging.getLogger(__name__)
 
@@ -406,15 +406,13 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
         ji_offset = ~dataset.transform * (self._transform.xoff, self._transform.yoff)
         is_int_offset = np.allclose(np.round(ji_offset), ji_offset)
         if not self.res == dataset.res or not is_int_offset:
-            raise ImageFormatError(
+            raise HomonimError(
                 "'dataset' should lie on the same pixel grid as the RasterArray."
             )
         # TODO: this comparison is time-consuming to do for every write - benchmark
         #  removing it
         if self._crs != dataset.crs:
-            raise ImageFormatError(
-                "'dataset' should have the same CRS as the RasterArray."
-            )
+            raise HomonimError("'dataset' should have the same CRS as the RasterArray.")
 
         if indexes is None:
             indexes = utils.get_nonalpha_bands(dataset)

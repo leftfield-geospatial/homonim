@@ -113,9 +113,8 @@ def test_match(
 
     with warnings.catch_warnings():
         # test there are no all-nan warnings by turning RuntimeWarning into an
-        # error, while allowing HomonimWarning which sub-classes RuntimeWarning
+        # error
         warnings.simplefilter('error', category=RuntimeWarning)
-        warnings.simplefilter('default', category=HomonimWarning)
         with MatchedPairReader(
             src_file, ref_file, src_bands=src_bands, ref_bands=ref_bands, force=force
         ) as mp:

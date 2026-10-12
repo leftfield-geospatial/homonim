@@ -25,7 +25,7 @@ from rasterio.warp import transform_bounds
 from rasterio.windows import Window
 
 from homonim import utils
-from homonim.errors import HomonimError, ImageFormatError
+from homonim.errors import HomonimError
 from homonim.raster_array import RasterArray
 
 
@@ -246,19 +246,19 @@ def test_to_rio_dataset_error(ra_rgb_byte, tmp_path: Path):
     profile = ra_rgb_byte.profile
     profile.update(crs=CRS.from_epsg(4326))
     with rio.open(ds_file, 'w', driver='GTiff', **profile) as ds:
-        with pytest.raises(ImageFormatError, match='CRS'):
+        with pytest.raises(HomonimError, match='CRS'):
             ra_rgb_byte.to_rio_dataset(ds)
 
     # dataset and RasterArray are not on the same pixel grid
     profile = ra_rgb_byte.profile
     profile.update(transform=Affine.identity() * Affine.translation(0.5, 0.5))
     with rio.open(ds_file, 'w', driver='GTiff', **profile) as ds:
-        with pytest.raises(ImageFormatError, match='pixel grid'):
+        with pytest.raises(HomonimError, match='pixel grid'):
             ra_rgb_byte.to_rio_dataset(ds)
 
     profile.update(transform=Affine.identity() * Affine.scale(0.5, 0.5))
     with rio.open(ds_file, 'w', driver='GTiff', **profile) as ds:
-        with pytest.raises(ImageFormatError, match='pixel grid'):
+        with pytest.raises(HomonimError, match='pixel grid'):
             ra_rgb_byte.to_rio_dataset(ds)
 
 
