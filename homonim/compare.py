@@ -14,7 +14,6 @@
 # Homonim. If not, see <https://www.gnu.org/licenses/>.
 
 import logging
-import os
 import threading
 import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -30,9 +29,8 @@ from tqdm.auto import tqdm
 
 from homonim import utils
 from homonim.enums import ProcCrs
-from homonim.errors import HomonimError
 from homonim.matched_pair import MatchedPairReader
-from homonim.raster_pair import BlockPair, assert_open
+from homonim.raster_pair import BlockPair
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +108,7 @@ class RasterCompare(MatchedPairReader):
 
     @staticmethod
     def schema_table() -> str:
-        """Return a table string describing the :meth:`RasterCompare.process`
+        """Return a table string describing the :meth:`~RasterCompare.process`
         statistics.
         """
         headers = {
@@ -245,7 +243,7 @@ class RasterCompare(MatchedPairReader):
         Tabulate the provided comparison statistics.
 
         :param stats_dict:
-            Comparison statistics, as returned by :meth:`RasterCompare.process`.
+            Comparison statistics, as returned by :meth:`~RasterCompare.process`.
         :param key_heading:
             Column heading for the ``stats_dict`` keys.
 
@@ -269,7 +267,7 @@ class RasterCompare(MatchedPairReader):
             tablefmt=utils.table_format,
         )
 
-    @assert_open
+    @utils.assert_open
     def process(
         self,
         threads: int = _default_config['threads'],
@@ -296,7 +294,7 @@ class RasterCompare(MatchedPairReader):
         """
         threads = utils.validate_threads(threads)
 
-        def get_block_sums(block_pair: BlockPair):
+        def get_block_sums(block_pair: BlockPair) -> dict[str, Any]:
             """Thread-safe function to find the source / reference etc. sums for a
             block.
             """
@@ -332,7 +330,7 @@ class RasterCompare(MatchedPairReader):
                 res2_sum=((ref_array - src_array) ** 2).sum(),
                 mask_sum=mask.sum(),
             )
-            return sums_dict, block_pair
+            return sums_dict
 
         with ExitStack() as stack:
             # ignore NotGeoreferencedWarning from RasterArray.reproject()
@@ -341,10 +339,10 @@ class RasterCompare(MatchedPairReader):
 
             # read and sum image blocks in threads
             executor = stack.enter_context(ThreadPoolExecutor(max_workers=threads))
-            futures = [
-                executor.submit(get_block_sums, block_pair)
-                for block_pair in self._block_pairs(max_block_mem=max_block_mem)
-            ]
+            futures_dict = {
+                executor.submit(get_block_sums, bp): bp
+                for bp in self._block_pairs(max_block_mem=max_block_mem)
+            }
 
             # wait for threads
             image_sums = [{} for _ in self.src_bands]
@@ -352,17 +350,22 @@ class RasterCompare(MatchedPairReader):
                 '{l_bar}{bar}|{n_fmt}/{total_fmt} blocks [{elapsed}<{remaining}]'
             )
             for future in tqdm(
-                as_completed(futures),
+                as_completed(futures_dict),
                 bar_format=bar_format,
-                total=len(futures),
+                total=len(futures_dict),
                 dynamic_ncols=True,
             ):
-                # get block sums and accumulate over the image
-                block_sums_dict, block_pair = future.result()
-                image_sums[block_pair.band_i] = {
-                    k: image_sums[block_pair.band_i].get(k, 0) + v
-                    for k, v in block_sums_dict.items()
-                }
+                try:
+                    # get block sums and accumulate over the image
+                    block_sums_dict = future.result()
+                    block_pair = futures_dict[future]
+                    image_sums[block_pair.band_i] = {
+                        k: image_sums[block_pair.band_i].get(k, 0) + v
+                        for k, v in block_sums_dict.items()
+                    }
+                except Exception as ex:
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    raise RuntimeError('Could not process block.') from ex
 
         # return the comparison statistics for the accumulated block sums
         return self._get_image_stats(image_sums)
