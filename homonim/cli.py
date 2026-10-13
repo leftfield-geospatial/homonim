@@ -23,10 +23,10 @@ from pathlib import Path
 from timeit import default_timer as timer
 
 import click
-import rasterio as rio
 import yaml
 from rasterio.dtypes import dtype_fwd
 from rasterio.errors import RasterioIOError
+from rasterio.warp import SUPPORTED_RESAMPLING
 from tqdm.auto import tqdm
 from tqdm.contrib.logging import _TqdmLoggingHandler
 from yaml import YAMLError
@@ -207,7 +207,7 @@ max_block_mem_option = click.option(
 downsampling_option = click.option(
     '-ds',
     '--downsampling',
-    type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
+    type=click.Choice([r.name for r in SUPPORTED_RESAMPLING]),
     default=KernelModel._default_config['downsampling'].name,
     show_default=True,
     help='Resampling method to use when downsampling.',
@@ -215,7 +215,7 @@ downsampling_option = click.option(
 upsampling_option = click.option(
     '-us',
     '--upsampling',
-    type=click.Choice([r.name for r in rio.warp.SUPPORTED_RESAMPLING]),
+    type=click.Choice([r.name for r in SUPPORTED_RESAMPLING]),
     default=KernelModel._default_config['upsampling'].name,
     show_default=True,
     help='Resampling method to use when upsampling.',
@@ -649,8 +649,9 @@ def compare(
 @click.argument(
     'param_files', nargs=-1, metavar='PARAMETER...', type=click.Path(dir_okay=False)
 )
+@threads_option
 @output_option
-def stats(param_files: tuple[str, ...], output: Path):
+def stats(param_files: tuple[str, ...], threads: int, output: Path):
     """Report statistics of PARAMETER images generated with the :option:`--param-image
     <homonim-fuse --param-image>` option of the ``fuse`` command.
     """
@@ -664,7 +665,7 @@ def stats(param_files: tuple[str, ...], output: Path):
         )
         try:
             with ParamStats(param_file) as param_stats:
-                stats_dict[param_file] = param_stats.stats()
+                stats_dict[param_file] = param_stats.stats(threads=threads)
                 meta_dict[param_file] = param_stats.metadata
         except (RasterioIOError, HomonimError) as ex:
             raise click.UsageError(str(ex)) from None
