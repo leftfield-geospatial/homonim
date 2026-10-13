@@ -1,262 +1,297 @@
-"""
-    Homonim: Correction of aerial and satellite imagery to surface reflectance
-    Copyright (C) 2021 Dugal Harris
-    Email: dugalh@gmail.com
-
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Affero General Public License as
-    published by the Free Software Foundation, either version 3 of the
-    License, or any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
-
-    You should have received a copy of the GNU Affero General Public License
-    along with this program.  If not, see <https://www.gnu.org/licenses/>.
-"""
+# Copyright Leftfield Geospatial
+#
+# This file is part of Homonim.
+#
+# Homonim is free software: you can redistribute it and/or modify it under the terms
+# of the GNU Affero General Public License as published by the Free Software
+# Foundation, either version 3 of the License, or (at your option) any later version.
+#
+# Homonim is distributed in the hope that it will be useful, but WITHOUT ANY
+# WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+# PARTICULAR PURPOSE.  See the GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License along with
+# Homonim. If not, see <https://www.gnu.org/licenses/>.
 
 import logging
-import pathlib
+import os
 import threading
-from concurrent import futures
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import ExitStack
-from multiprocessing import cpu_count
-from typing import List, Dict, Tuple, Union, Optional
+from itertools import product
+from os import PathLike
+from pathlib import Path
+from typing import Any
 
 import numpy as np
 import rasterio as rio
 import yaml
-from rasterio.windows import get_data_window, intersect, union, Window
+from rasterio.windows import Window
 from tabulate import tabulate
 from tqdm.auto import tqdm
-from tqdm.contrib.logging import logging_redirect_tqdm
 
-from homonim import utils, errors
+from homonim import utils
 from homonim.enums import Model
+from homonim.errors import HomonimError
 
 logger = logging.getLogger(__name__)
 
+# description of the statistics returned by ParamStats.stats()
+_stats_schema = dict(
+    band=dict(abbrev='Band'),
+    mean=dict(abbrev='Mean'),
+    std=dict(abbrev='Std.', description='Standard deviation'),
+    min=dict(abbrev='Min.', description='Minimum'),
+    max=dict(abbrev='Max.', description='Maximum'),
+    inpaint_p=dict(
+        abbrev='Inpaint (%)', description='Portion of inpainted pixels (%).'
+    ),
+)
+
+
+def _validate_param_image(param_file: str | PathLike):
+    """Validate the given parameter image."""
+    param_file = os.fspath(param_file)
+    param_name = Path(param_file).name
+
+    err_msg = f"'{param_name}' is not a valid parameter image."
+    with rio.open(param_file) as param_im:
+        tags = param_im.tags()
+        # check band count is a multiple of 3 and that expected metadata tags exist
+        if (
+            not param_im.count
+            or param_im.count % 3 != 0
+            or not {'FUSE_MODEL', 'FUSE_KERNEL_SHAPE', 'FUSE_PROC_CRS', 'FUSE_REF_FILE'}
+            <= set(tags)
+        ):
+            raise HomonimError(err_msg)
+
+        # check band descriptions end with the expected suffixes
+        n_refl_bands = int(param_im.count / 3)
+        suffixes = (
+            ['gain'] * n_refl_bands + ['offset'] * n_refl_bands + ['r2'] * n_refl_bands
+        )
+        if not all(
+            desc.lower().endswith(suffix)
+            for suffix, desc in zip(suffixes, param_im.descriptions, strict=True)
+        ):
+            raise HomonimError(err_msg)
+
+        if not np.isnan(param_im.nodata):
+            raise HomonimError(err_msg)
+
 
 class ParamStats:
-
-    def __init__(self, param_filename: Union[pathlib.Path, str]):
+    def __init__(self, param_filename: str | PathLike):
         """
         Class to calculate the statistics of a parameter image.
 
-        Parameters
-        ----------
-        param_filename: pathlib.Path, str
-            Path to a parameter image file, as created by :meth:`homonim.RasterFuse.process` with the
-            ``param_filename`` argument specified.
+        Can be used as a context manager to automatically close the parameter image
+        on exiting.
+
+        :param param_filename:
+            Path or URI of a parameter image, as created by
+            :meth:`homonim.fuse.RasterFuse.process` with the ``param_filename``
+            argument provided.
         """
-        self._param_filename = pathlib.Path(param_filename)
+        param_filename = os.fspath(param_filename)
+        _validate_param_image(param_filename)
+        self._stack = ExitStack()
+        try:
+            self._stack.enter_context(rio.Env(GDAL_NUM_THREADS='ALL_CPUs'))
+            self._param_im = self._stack.enter_context(rio.open(param_filename, 'r'))
 
-        utils.validate_param_image(self._param_filename)
-
-        # read some parameters from the metadata
-        self._param_im: rio.DatasetReader
-        with rio.open(self._param_filename, 'r') as self._param_im:
+            # read some parameters from the tags
             self._tags = self._param_im.tags()
             self._model = self._tags['FUSE_MODEL'].replace('_', '-')
-            self._r2_inpaint_thresh = yaml.safe_load(self._tags['FUSE_R2_INPAINT_THRESH'])
+            self._r2_inpaint_thresh = yaml.safe_load(
+                self._tags['FUSE_R2_INPAINT_THRESH']
+            )
 
-    schema = dict(
-        band=dict(abbrev='Band'),
-        mean=dict(abbrev='Mean'),
-        std=dict(abbrev='Std.'),
-        min=dict(abbrev='Min.'),
-        max=dict(abbrev='Max.'),
-        inpaint_p=dict(abbrev='Inpaint (%)', description='Portion of inpainted pixels (%).'),
-    )  # yapf: disable
-    """ Dictionary describing the statistics returned by :meth:`ParamStats.stats`. """
+        except Exception:
+            self._stack.close()
+            raise
 
     @property
     def closed(self) -> bool:
-        """ True if the parameter file is closed, otherwise False. """
-        return not self._param_im or self._param_im.closed
+        """Whether the parameter image is closed."""
+        return self._param_im.closed
 
     @property
     def metadata(self) -> str:
-        """ Parameter metadata string. """
+        """Parameter metadata string."""
         res_str = (
             f'Model: {self._model}\n'
             f'Kernel shape: {self._tags["FUSE_KERNEL_SHAPE"]}\n'
             f'Processing CRS: {self._tags["FUSE_PROC_CRS"]}\n'
             f'Reference: {self._tags["FUSE_REF_FILE"]}\n'
         )
-        if self._model == 'gain-offset':
-            res_str += f'R\N{SUPERSCRIPT TWO} inpaint threshold: {self._r2_inpaint_thresh}\n'
+        if self._model == Model.gain_offset:
+            res_str += (
+                f'R\N{SUPERSCRIPT TWO} inpaint threshold: {self._r2_inpaint_thresh}\n'
+            )
         return res_str
 
     @staticmethod
     def schema_table() -> str:
-        """ Return a table string describing statistics returned by :meth:`ParamStats.stats`. """
-        schema_list = [v for k, v in ParamStats.schema.items() if 'description' in v]
-        schema_list.append(dict(abbrev='*_R2', description='R\N{SUPERSCRIPT TWO} coefficient of determination.'))
+        """Return a table string describing the statistics returned by
+        :meth:`~ParamStats.stats`.
+        """
+        schema_list = [v for k, v in _stats_schema.items() if 'description' in v]
+        schema_list.append(
+            dict(
+                abbrev='*_R2',
+                description='R\N{SUPERSCRIPT TWO} coefficient of determination.',
+            )
+        )
         headers = {k: k.upper() for k in schema_list[0].keys()}
         return tabulate(schema_list, headers=headers, tablefmt=utils.table_format)
 
     @staticmethod
-    def stats_table(stats_list: List[Dict]) -> str:
+    def stats_table(stats_list: list[dict[str, float]]) -> str:
         """
-        Return a table string for the provided parameter statistics.
+        Tabulate the provided parameter image statistics.
 
-        Parameters
-        ----------
-        stats_list: list of dict
-            Parameter statistics to tabulate, as returned by :meth:`ParamStats.stats`.
+        :param stats_list:
+            Parameter statistics, as returned by :meth:`~ParamStats.stats`.
 
-        Returns
-        -------
-        str
-            A table string.
+        :return:
+            Table string.
         """
-        headers = {k: v['abbrev'] for k, v in ParamStats.schema.items() if k in stats_list[-1]}
-        return tabulate(stats_list, headers=headers, floatfmt='.3f', stralign='right', tablefmt=utils.table_format)
+        headers = {
+            k: v['abbrev'] for k, v in _stats_schema.items() if k in stats_list[-1]
+        }
+        return tabulate(
+            stats_list,
+            headers=headers,
+            floatfmt='.3f',
+            stralign='right',
+            tablefmt=utils.table_format,
+        )
 
+    @utils.assert_open
     def __enter__(self):
-        self._stack = ExitStack()
-        self._stack.enter_context(rio.Env(GDAL_NUM_THREADS='ALL_CPUs', GTIFF_FORCE_RGBA=False))
-        self._stack.enter_context(logging_redirect_tqdm([logging.getLogger(__package__)]))
-        self._param_im = rio.open(self._param_filename, 'r')
-        self._stack.enter_context(self._param_im)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._stack.__exit__(exc_type, exc_val, exc_tb)
 
-    def _assert_open(self):
-        """ Utility method to raise an exception if the parameter file is not open. """
-        if self.closed:
-            raise errors.IoError(f'The parameter file has not been opened: {self._param_filename.name}')
-
-    def _get_data_window(self, threads: int = cpu_count()) -> Window:
-        """ Threaded function to accumulate the parameter image data window over blocks.  """
-        self._assert_open()
-        read_lock = threading.Lock()
-
-        def get_block_data_window(block_win: Window) -> Optional[Window]:
-            """ Return a window of valid data corresponding to a given block.  """
-            with read_lock:
-                mask = self._param_im.read_masks(indexes=1, window=block_win)
-            _block_data_win = get_data_window(mask, nodata=0)
-
-            if _block_data_win.width == 0 or _block_data_win.height == 0:
-                # return None if there is no valid data in the block
-                return None
-            # offset _block_data_win to the UL corner of block_win and return
-            return Window(
-                block_win.col_off + _block_data_win.col_off, block_win.row_off + _block_data_win.row_off,
-                _block_data_win.width, _block_data_win.height
-            )
-
-        # combine valid block windows into a valid image window
-        im_data_win: Optional[Window] = None
-        bar_format = 'Finding window: {l_bar}{bar}|{n_fmt}/{total_fmt} blocks [{elapsed}<{remaining}]'
-        with futures.ThreadPoolExecutor(max_workers=threads) as executor:
-            # create threads to get valid block windows
-            win_futures = [
-                executor.submit(get_block_data_window, block_win)
-                for block_ij, block_win in self._param_im.block_windows(1)
-            ]  # yapf: disable
-
-            # wait for threads and combine returned windows
-            for future in tqdm(
-                futures.as_completed(win_futures), bar_format=bar_format, total=len(win_futures), dynamic_ncols=True,
-                leave=False,
-            ):  # yapf: disable
-                block_data_win: Window = future.result()
-                if block_data_win:
-                    im_data_win = union(im_data_win, block_data_win) if im_data_win else block_data_win
-        return im_data_win
-
-    def _get_image_stats(self, image_accum: List[Dict]) -> List[Dict]:
-        """ Utility method to calculate image statistics from accumulated results. """
+    def _get_image_stats(
+        self, image_accum: list[dict[str, Any]]
+    ) -> list[dict[str, float]]:
+        """Calculate the image statistics from the accumulated sum etc. values."""
         image_stats = []
         for band_i, band_accum in enumerate(image_accum):
             band_stats = dict(
                 band=self._param_im.descriptions[band_i],
-                mean=band_accum['sum'] / band_accum['n'],
+                mean=float(band_accum['sum'] / band_accum['n']),
                 # formula for cumulative std dev from:
                 # https://rosettacode.org/wiki/Cumulative_standard_deviation#Python
-                std=np.sqrt((band_accum['sum2'] / band_accum['n']) - (band_accum['sum'] ** 2 / band_accum['n'] ** 2)),
-                min=band_accum['min'],
-                max=band_accum['max'],
-            )  # yapf: disable
+                std=float(
+                    np.sqrt(
+                        (band_accum['sum2'] / band_accum['n'])
+                        - (band_accum['sum'] ** 2 / band_accum['n'] ** 2)
+                    )
+                ),
+                min=float(band_accum['min']),
+                max=float(band_accum['max']),
+            )
 
             if 'inpaint_sum' in band_accum:
-                band_stats['inpaint_p'] = 100 * band_accum['inpaint_sum'] / band_accum['n']
+                band_stats['inpaint_p'] = float(
+                    100 * band_accum['inpaint_sum'] / band_accum['n']
+                )
+
             image_stats.append(band_stats)
+
         return image_stats
 
-    def stats(self, threads: int = 0) -> List[Dict]:
+    def close(self):
+        """Close the parameter image."""
+        self._stack.close()
+
+    @utils.assert_open
+    def stats(self, threads: int = 0) -> list[dict[str, float]]:
         """
         Find parameter image statistics.
 
-        Statistics are accumulated over image blocks to limit memory usage for large images.
+        :param threads:
+            Number of image blocks to process concurrently.  If ``0``, the number of
+            CPUs is used.
 
-        Parameters
-        ----------
-        threads: int, optional
-            Number of image blocks to process concurrently.  A maximum of the number of processors on your
-            system is allowed.  Increasing this number will increase the memory required for processing.
-            0 = use all processors.
-
-        Returns
-        -------
-        list of dict
-            A list of parameter band statistics.
+        :return:
+            List of dictionaries of parameter band statistics.
         """
-        self._assert_open()
         threads = utils.validate_threads(threads)
-        data_win = self._get_data_window(threads=threads)  # get valid data window
         read_lock = threading.Lock()
 
-        def get_block_sums(band_i: int, block_win: rio.windows.Window) -> Tuple[Dict, int]:
-            """ Thread-safe function read a block and find its sums etc. """
+        def get_block_stats(band_i: int, block_win: Window) -> dict[str, Any]:
+            """Thread-safe function read a block and find its sums etc."""
             with read_lock:
-                array: np.ma.masked_array = self._param_im.read(
-                    indexes=band_i + 1, window=block_win, masked=True, out_dtype='float64',
+                array = self._param_im.read(
+                    indexes=band_i + 1, window=block_win, out_dtype='float64'
                 )
-            _block_dict = dict(
-                min=array.min(), max=array.max(), sum=array.sum(), sum2=(array ** 2).sum(), n=array.count()
+
+            mask = ~np.isnan(array)
+            array_ = array[mask]
+            block_dict = dict(
+                min=array_.min(initial=np.inf),
+                max=array_.max(initial=-np.inf),
+                sum=array_.sum(initial=0),
+                sum2=(array_**2).sum(initial=0),
+                n=mask.sum(initial=0),
             )
-            if (self._model == Model.gain_offset) and (band_i >= self._param_im.count * 2 / 3):
-                # find the sum of inpainted pixels, if this is a R2 band and a gain-offset model
-                _block_dict.update(inpaint_sum=(array < self._r2_inpaint_thresh).sum())
-            return _block_dict, band_i
+            if (self._model == Model.gain_offset) and (
+                band_i >= self._param_im.count * 2 / 3
+            ):
+                # find the sum of inpainted pixels if this is a R2 band and a
+                # gain-offset model
+                inpaint_sum = (array_ < self._r2_inpaint_thresh).sum(initial=0)
+                block_dict.update(inpaint_sum=inpaint_sum)
 
-        # find block sums, min, max etc. in threads, and accumulate over the image
+            return block_dict
+
+        # find block sums etc. in a thread pool, and accumulate over the image in the
+        # main thread
         image_accum = [{} for _ in range(self._param_im.count)]
-        bar_format = 'Finding stats: {l_bar}{bar}|{n_fmt}/{total_fmt} blocks [{elapsed}<{remaining}]'
-        with futures.ThreadPoolExecutor(max_workers=threads) as executor:
-            # create threads to get block sums etc.
-            stats_futures = [
-                executor.submit(get_block_sums, band_i, block_win)
-                for band_i in range(self._param_im.count)
-                for block_ij, block_win in self._param_im.block_windows(band_i + 1)
-                if intersect(data_win, block_win)
-            ]  # yapf: disable
+        bar_format = '{l_bar}{bar}|{n_fmt}/{total_fmt} blocks [{elapsed}<{remaining}]'
 
-            # wait for threads, and accumulate block results over the image
-            for future in tqdm(
-                futures.as_completed(stats_futures), bar_format=bar_format, total=len(stats_futures),
-                dynamic_ncols=True,
-            ):  # yapf: disable
-                block_dict, band_i = future.result()
-                image_accum[band_i].update(
-                    min=np.nanmin((image_accum[band_i].get('min', np.inf), block_dict['min'])),
-                    max=np.nanmax((image_accum[band_i].get('max', -np.inf), block_dict['max'])),
-                    sum=np.nansum((image_accum[band_i].get('sum', 0), block_dict['sum'])),
-                    sum2=np.nansum((image_accum[band_i].get('sum2', 0), block_dict['sum2'])),
-                    n=np.nansum((image_accum[band_i].get('n', 0), block_dict['n']))
+        with ThreadPoolExecutor(max_workers=threads) as executor:
+            futures_dict = {
+                executor.submit(get_block_stats, band_i, block_win): band_i
+                for band_i, (_, block_win) in product(
+                    range(self._param_im.count), self._param_im.block_windows(1)
                 )
-                if 'inpaint_sum' in block_dict:
-                    image_accum[band_i].update(
-                        inpaint_sum=np.nansum((image_accum[band_i].get('inpaint_sum', 0), block_dict['inpaint_sum']))
+            }
+
+            for future in tqdm(
+                as_completed(futures_dict),
+                bar_format=bar_format,
+                total=len(futures_dict),
+                dynamic_ncols=True,
+            ):
+                try:
+                    block_dict = future.result()
+                    band_accum = image_accum[futures_dict[future]]
+                    band_accum.update(
+                        min=np.min((band_accum.get('min', np.inf), block_dict['min'])),
+                        max=np.max((band_accum.get('max', -np.inf), block_dict['max'])),
+                        sum=np.sum((band_accum.get('sum', 0), block_dict['sum'])),
+                        sum2=np.sum((band_accum.get('sum2', 0), block_dict['sum2'])),
+                        n=np.sum((band_accum.get('n', 0), block_dict['n'])),
                     )
 
-        # find the image statistics and return
+                    if 'inpaint_sum' in block_dict:
+                        inpaint_sum = np.sum(
+                            (
+                                band_accum.get('inpaint_sum', 0),
+                                block_dict['inpaint_sum'],
+                            )
+                        )
+                        band_accum.update(inpaint_sum=inpaint_sum)
+                except Exception as ex:
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    raise RuntimeError('Could not process block.') from ex
+
+        # convert the accumulated sums etc. to image stats
         return self._get_image_stats(image_accum)
