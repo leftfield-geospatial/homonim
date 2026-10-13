@@ -39,7 +39,7 @@ from homonim.errors import HomonimError
 from homonim.kernel_model import KernelModel, RefSpaceModel, SrcSpaceModel
 from homonim.matched_pair import MatchedPairReader
 from homonim.raster_array import RasterArray
-from homonim.raster_pair import BlockPair, assert_open
+from homonim.raster_pair import BlockPair
 
 logger = logging.getLogger(__name__)
 
@@ -383,7 +383,7 @@ class RasterFuse(MatchedPairReader):
             driver=driver, dtype=dtype, nodata=nodata, creation_options=creation_options
         )
 
-    @assert_open
+    @utils.assert_open
     def process(
         self,
         corr_filename: str | PathLike,

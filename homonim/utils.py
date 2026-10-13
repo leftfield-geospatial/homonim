@@ -15,11 +15,11 @@
 
 import logging
 import os
-from os import PathLike
-from pathlib import Path
+from collections.abc import Callable
+from functools import wraps
+from typing import ParamSpec, TypeVar
 
 import numpy as np
-import rasterio as rio
 from rasterio.enums import ColorInterp
 from rasterio.io import DatasetReader, DatasetWriter
 from rasterio.windows import Window
@@ -41,6 +41,9 @@ table_format = TableFormat(
     padding=0,
     with_header_hide=['lineabove', 'linebelow'],
 )
+
+P = ParamSpec('P')
+R = TypeVar('R')
 
 
 def nan_equals(a: np.ndarray | float, b: np.ndarray | float) -> np.ndarray:
@@ -109,3 +112,17 @@ def get_nonalpha_bands(im: DatasetReader | DatasetWriter) -> tuple[int, ...]:
         [bi + 1 for bi in range(im.count) if im.colorinterp[bi] != ColorInterp.alpha]
     )
     return bands
+
+
+def assert_open(meth: Callable[P, R]) -> Callable[P, R]:
+    """Method decorator for context managers that raises an error if a closed
+    attribute is True.
+    """
+
+    @wraps(meth)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        if args and getattr(args[0], 'closed', False):
+            raise RuntimeError('Context is closed.')
+        return meth(*args, **kwargs)
+
+    return wrapper

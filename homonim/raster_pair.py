@@ -17,14 +17,12 @@ import logging
 import os
 import threading
 import warnings
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 from contextlib import ExitStack
 from dataclasses import dataclass
-from functools import wraps
 from itertools import product
 from os import PathLike
 from pathlib import Path
-from typing import ParamSpec, TypeVar
 
 import numpy as np
 import rasterio as rio
@@ -39,23 +37,6 @@ from homonim.errors import HomonimError, HomonimWarning
 from homonim.raster_array import RasterArray
 
 logger = logging.getLogger(__name__)
-
-P = ParamSpec('P')
-R = TypeVar('R')
-
-
-def assert_open(meth: Callable[P, R]) -> Callable[P, R]:
-    """Decorator for RasterPairReader and subclass methods to ensure source and
-    reference images are open.
-    """
-
-    @wraps(meth)
-    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
-        if args and getattr(args[0], 'closed', False):
-            raise RuntimeError('Source and reference images are closed.')
-        return meth(*args, **kwargs)
-
-    return wrapper
 
 
 @dataclass
@@ -153,8 +134,8 @@ class RasterPairReader:
                     src_im = stack.enter_context(WarpedVRT(src_im, crs=ref_im.crs))
                 warnings.warn(
                     "The {} '{}' will be reprojected into the CRS of the {} '{}'.  "
-                    'Processing times can be improved if source and reference are in '
-                    'the same CRS.'.format(*warn_names),
+                    'Processing times may be improved if source and reference are '
+                    'provided in the same CRS.'.format(*warn_names),
                     category=HomonimWarning,
                     stacklevel=2,
                 )
@@ -339,14 +320,14 @@ class RasterPairReader:
             )
         return totuple(block_shape)
 
-    @assert_open
+    @utils.assert_open
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._stack.__exit__(exc_type, exc_val, exc_tb)
 
-    @assert_open
+    @utils.assert_open
     def _read(self, block_pair: BlockPair) -> tuple[RasterArray, RasterArray]:
         """Read source and reference image blocks defined by the given BlockPair
         (thread safe).
@@ -365,13 +346,13 @@ class RasterPairReader:
             )
         return src_ra, ref_ra
 
-    @assert_open
+    @utils.assert_open
     def _block_pairs(
         self, overlap: tuple[int, int] = (0, 0), max_block_mem: float = 0
     ) -> Iterable[BlockPair]:
-        """Generate matched overlappping source - reference image blocks,
-        given overlap (in proc_crs pixels), and max_block_mem defining the maximum
-        block size (in the highest resolution image).
+        """Generate matched source - reference image blocks, given overlap (in
+        proc_crs pixels), and max_block_mem defining the maximum block size (in the
+        highest resolution image).
         """
         # find the proc_crs block shape
         block_shape = self._find_block_shape(max_block_mem=max_block_mem)
