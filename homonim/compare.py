@@ -313,22 +313,20 @@ class RasterCompare(MatchedPairReader):
                 )
                 ref_ra = ref_ra.reproject_like(src_ra, resampling=resampling)
 
-            # mask invalid pixels so they don't contribute to sums
-            src_array = src_ra.array
-            ref_array = ref_ra.array
+            # exclude invalid pixels from the sums
             mask = ref_ra.mask() & src_ra.mask()
-            src_array[~mask] = 0
-            ref_array[~mask] = 0
+            src_array = src_ra.array[mask]
+            ref_array = ref_ra.array[mask]
 
             # find the required sums and return
             sums_dict = dict(
-                src_sum=src_array.sum(),
-                ref_sum=ref_array.sum(),
-                src2_sum=(src_array**2).sum(),
-                ref2_sum=(ref_array**2).sum(),
-                src_ref_sum=(src_array * ref_array).sum(),
-                res2_sum=((ref_array - src_array) ** 2).sum(),
-                mask_sum=mask.sum(),
+                src_sum=src_array.sum(initial=0),
+                ref_sum=ref_array.sum(initial=0),
+                src2_sum=(src_array**2).sum(initial=0),
+                ref2_sum=(ref_array**2).sum(initial=0),
+                src_ref_sum=(src_array * ref_array).sum(initial=0),
+                res2_sum=((ref_array - src_array) ** 2).sum(initial=0),
+                mask_sum=mask.sum(initial=0),
             )
             return sums_dict
 
