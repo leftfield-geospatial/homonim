@@ -206,9 +206,11 @@ class RasterCompare(MatchedPairReader):
             pcc = pcc_num / pcc_den
 
             # find RMSE and rRMSE
-            rmse = np.sqrt(res2_sum / mask_sum).item()
+            rmse = np.sqrt(res2_sum / mask_sum)
             rrmse = rmse / ref_mean
-            return dict(r2=pcc**2, rmse=rmse, rrmse=rrmse, n=int(mask_sum))
+            return dict(
+                r2=float(pcc**2), rmse=float(rmse), rrmse=float(rrmse), n=int(mask_sum)
+            )
 
         image_stats = {}
         sum_over_bands = {}
@@ -226,11 +228,9 @@ class RasterCompare(MatchedPairReader):
                 k: sum_over_bands.get(k, 0) + v for k, v in band_stats.items()
             }
 
-        # find mean of each statistic over the bands, retaining int types
-        mean_stats = {
-            k: int(v / len(image_sums)) if isinstance(v, int) else (v / len(image_sums))
-            for k, v in sum_over_bands.items()
-        }
+        # find mean of each statistic over the bands
+        mean_stats = {k: v / len(image_sums) for k, v in sum_over_bands.items()}
+        mean_stats['n'] = int(mean_stats['n'])
         # add the means to the list of bands
         image_stats['Mean'] = mean_stats
         return image_stats
