@@ -22,8 +22,19 @@ from pytest import FixtureRequest
 
 from homonim.cli import cli
 from homonim.errors import HomonimError
-from homonim.stats import ParamStats, _stats_schema
+from homonim.stats import ParamStats
 from tests.conftest import str_contain_no_space
+
+# expected ParamStats.stats_table() contents for the param_file fixture
+_exp_table = """B1_GAIN    1.000 0.000  1.000 1.000
+    B2_GAIN    1.000 0.000  1.000 1.000
+    B3_GAIN    1.000 0.000  1.000 1.000
+    B1_OFFSET -0.000 0.000 -0.001 0.000
+    B2_OFFSET -0.000 0.000 -0.001 0.000
+    B3_OFFSET -0.000 0.000 -0.001 0.000
+    B1_R2      1.000 0.000  1.000 1.000     0.000
+    B2_R2      1.000 0.000  1.000 1.000     0.000
+    B3_R2      1.000 0.000  1.000 1.000     0.000"""
 
 
 def _test_vals(param_stats: list[dict]):
@@ -74,36 +85,12 @@ def test_api__ctx_error(param_file: Path):
 
 
 def test_api__tables(param_file: Path):
-    """Test ParamStats.schema_table() and stats_table()."""
+    """Test ParamStats.stats_table()."""
     with ParamStats(param_file) as stats:
         param_stats = stats.stats()
 
-    schema_table = stats.schema_table()
-    assert len(schema_table) > 0
-
     param_table = stats.stats_table(param_stats)
-    assert len(param_table) > 0
-
-    # test stats data are in table
-    for band_stats in param_stats:
-        for v in band_stats.values():
-            assert (
-                (f'{v:.3f}' in param_table)
-                if isinstance(v, float)
-                else (v in param_table)
-            )
-
-    # test stats abbreviations are in table
-    for schema_dict in _stats_schema.values():
-        assert schema_dict['abbrev'] in param_table
-
-
-@pytest.mark.parametrize('threads', [1, 0])
-def test_api__threads(param_file: Path, threads: int):
-    """Test ParamStats.stats() works with single and multiple threads."""
-    with ParamStats(param_file) as stats:
-        param_stats = stats.stats(threads=threads)
-    _test_vals(param_stats)
+    assert str_contain_no_space(_exp_table, param_table)
 
 
 def test_api__invalid_file_error(file_rgb_100cm_float: Path):
@@ -121,16 +108,7 @@ def test_cli(runner: CliRunner, param_file_str: str, request: FixtureRequest):
     assert result.exit_code == 0
     assert param_file.name in result.output
 
-    res_str = """B1_GAIN    1.000 0.000  1.000 1.000
-    B2_GAIN    1.000 0.000  1.000 1.000
-    B3_GAIN    1.000 0.000  1.000 1.000
-    B1_OFFSET -0.000 0.000 -0.001 0.000
-    B2_OFFSET -0.000 0.000 -0.001 0.000
-    B3_OFFSET -0.000 0.000 -0.001 0.000
-    B1_R2      1.000 0.000  1.000 1.000     0.000
-    B2_R2      1.000 0.000  1.000 1.000     0.000
-    B3_R2      1.000 0.000  1.000 1.000     0.000"""
-    assert str_contain_no_space(res_str, result.output)
+    assert str_contain_no_space(_exp_table, result.output)
 
 
 def test_cli__out_file(tmp_path: Path, runner: CliRunner, param_file: Path):
@@ -146,8 +124,7 @@ def test_cli__out_file(tmp_path: Path, runner: CliRunner, param_file: Path):
 
     param_file = str(param_file)
     assert param_file in stats_dict
-    param_stats = stats_dict[param_file]
-    _test_vals(param_stats)
+    _test_vals(stats_dict[param_file])
 
 
 def test_cli__mult_inputs(
@@ -165,8 +142,8 @@ def test_cli__mult_inputs(
 
     assert str(param_file) in stats_dict
     assert str(param_file_tile_10x20) in stats_dict
-    for stats_list in stats_dict.values():
-        _test_vals(stats_list)
+    for param_stats in stats_dict.values():
+        _test_vals(param_stats)
 
 
 def test_cli__invalid_file_error(runner: CliRunner, file_rgb_100cm_float):

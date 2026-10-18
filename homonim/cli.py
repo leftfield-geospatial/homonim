@@ -478,6 +478,8 @@ def fuse(
                 force=force_match,
             ) as fuse:
                 # construct output filenames
+                # TODO: consider simplifying corrected & param file names, the model
+                #  etc params are in the metadata
                 corr_file = (
                     f'{Path(src_file).stem}_FUSE_c{fuse.proc_crs.upper()}_'
                     f'm{model.upper()}_k{kernel_shape[0]}_{kernel_shape[1]}.tif'
@@ -649,9 +651,8 @@ def compare(
 @click.argument(
     'param_files', nargs=-1, metavar='PARAMETER...', type=click.Path(dir_okay=False)
 )
-@threads_option
 @output_option
-def stats(param_files: tuple[str, ...], threads: int, output: Path):
+def stats(param_files: tuple[str, ...], output: Path):
     """Report statistics of PARAMETER images generated with the :option:`--param-image
     <homonim-fuse --param-image>` option of the ``fuse`` command.
     """
@@ -665,19 +666,16 @@ def stats(param_files: tuple[str, ...], threads: int, output: Path):
         )
         try:
             with ParamStats(param_file) as param_stats:
-                stats_dict[param_file] = param_stats.stats(threads=threads)
+                stats_dict[param_file] = param_stats.stats()
                 meta_dict[param_file] = param_stats.metadata
         except (RasterioIOError, HomonimError) as ex:
             raise click.UsageError(str(ex)) from None
 
-    # print a key for the following tables
-    tqdm.write(f'\n\n{ParamStats.schema_table()}')
-
-    # iterate over stored results and print
+    # print results
     for param_file in stats_dict.keys():
         tqdm.write(f'\n{Path(param_file).name}:\n')
         tqdm.write(meta_dict[param_file])
-        tqdm.write(f'Stats:\n\n{ParamStats.stats_table(stats_dict[param_file])}\n')
+        tqdm.write(f'{ParamStats.stats_table(stats_dict[param_file])}\n')
 
     if output is not None:
         with open(output, 'w') as file:
