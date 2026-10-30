@@ -149,8 +149,10 @@ class RasterCompare(MatchedPairReader):
             Configuration dictionary.
         """
         warnings.warn(
-            'This method is deprecated and will be removed in a future release.',
-            category=DeprecationWarning,
+            "'RasterCompare.create_config()' is deprecated and will be removed in a "
+            "future release.  Please pass its arguments to 'RasterCompare.process()' "
+            'directly',
+            category=FutureWarning,
             stacklevel=2,
         )
         return dict(

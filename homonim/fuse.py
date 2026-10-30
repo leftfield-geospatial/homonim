@@ -292,9 +292,10 @@ class RasterFuse(MatchedPairReader):
             Configuration dictionary.
         """
         warnings.warn(
-            'This method is deprecated and will be removed in a future release. '
-            "Please pass the arguments to 'RasterFuse.process()' directly.",
-            category=DeprecationWarning,
+            "'RasterFuse.create_model_config()' is deprecated and will be removed in a "
+            "future release.  Please pass its arguments to 'RasterFuse.process()' "
+            'directly.',
+            category=FutureWarning,
             stacklevel=2,
         )
         return dict(
@@ -329,9 +330,10 @@ class RasterFuse(MatchedPairReader):
             Configuration dictionary.
         """
         warnings.warn(
-            'This method is deprecated and will be removed in a future release. '
-            "Please pass the arguments to 'RasterFuse.process()' directly.",
-            category=DeprecationWarning,
+            "'RasterFuse.create_block_config()' is deprecated and will be removed in a "
+            "future release.  Please pass its arguments to 'RasterFuse.process()' "
+            'directly.',
+            category=FutureWarning,
             stacklevel=2,
         )
         return dict(threads=threads, max_block_mem=max_block_mem)
@@ -372,9 +374,10 @@ class RasterFuse(MatchedPairReader):
             Profile dictionary.
         """
         warnings.warn(
-            'This method is deprecated and will be removed in a future release. '
-            "Please pass the arguments to 'RasterFuse.process()' directly.",
-            category=DeprecationWarning,
+            "'RasterFuse.create_out_profile()' is deprecated and will be removed in a "
+            "future release.  Please pass its arguments to 'RasterFuse.process()' "
+            'directly.',
+            category=FutureWarning,
             stacklevel=2,
         )
         driver = Driver(driver.lower())
@@ -499,7 +502,7 @@ class RasterFuse(MatchedPairReader):
         if model_config:
             warnings.warn(
                 warn_msg.format('model_config'),
-                category=DeprecationWarning,
+                category=FutureWarning,
                 stacklevel=2,
             )
             model_config = self.create_model_config(**model_config)
@@ -511,7 +514,7 @@ class RasterFuse(MatchedPairReader):
         if out_profile:
             warnings.warn(
                 warn_msg.format('out_profile'),
-                category=DeprecationWarning,
+                category=FutureWarning,
                 stacklevel=2,
             )
             out_profile = self.create_out_profile(**out_profile)
@@ -523,7 +526,7 @@ class RasterFuse(MatchedPairReader):
         if block_config:
             warnings.warn(
                 warn_msg.format('block_config'),
-                category=DeprecationWarning,
+                category=FutureWarning,
                 stacklevel=2,
             )
             block_config = self.create_block_config(**block_config)
