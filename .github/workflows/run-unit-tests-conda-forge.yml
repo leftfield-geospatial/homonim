@@ -1,0 +1,43 @@
+name: Tests (conda-forge)
+
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * 1'  # run weekly
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash -el {0}
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: [ '3.11', '3.14' ]
+        os: [ macos-latest, ubuntu-latest, windows-latest ]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up conda
+        uses: conda-incubator/setup-miniconda@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          miniforge-version: latest
+          activate-environment: homonim-test
+          conda-solver: libmamba
+
+      - name: Install dependencies
+        run: |
+          conda info
+          conda install rasterio "opencv * headless*" numpy click tqdm pyyaml tabulate pytest pytest-xdist 
+          conda list
+
+      - name: Run unit tests
+        timeout-minutes: 5
+        run: |
+          python -m pytest -v -n auto ./tests
