@@ -18,6 +18,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 import rasterio as rio
+from conftest import create_profile
 from rasterio.crs import CRS
 from rasterio.enums import MaskFlags, Resampling
 from rasterio.transform import Affine, array_bounds, from_bounds
@@ -29,38 +30,33 @@ from homonim.errors import HomonimError
 from homonim.raster_array import RasterArray
 
 
-def test_read_only_properties(array_byte, profile_byte):
+def test_read_only_properties(array_byte):
     """Test RasterArray read-only properties."""
+    profile = create_profile(array_byte, rio.Affine.identity())
     ra = RasterArray(
         array_byte,
-        profile_byte['crs'],
-        profile_byte['transform'],
-        nodata=profile_byte['nodata'],
+        profile['crs'],
+        profile['transform'],
+        nodata=profile['nodata'],
     )
     for name in ['crs', 'transform', 'width', 'height', 'count', 'dtype']:
-        assert getattr(ra, name) == profile_byte[name]
+        assert getattr(ra, name) == profile[name]
     assert ra.shape == array_byte.shape
-    assert ra.res == (ra.transform.a, -ra.transform.e)
-    profile = profile_byte.copy()
+    assert ra.res == (abs(ra.transform.a), abs(ra.transform.e))
+
     profile.pop('driver')
     assert ra.profile == profile
     assert ra.bounds == pytest.approx(array_bounds(*ra.shape, ra.transform))
 
 
-def test_array_property(array_byte, profile_byte):
+def test_array_property(ra_byte):
     """Test getting & setting the array property."""
-    ra = RasterArray(
-        array_byte,
-        profile_byte['crs'],
-        profile_byte['transform'],
-        nodata=profile_byte['nodata'],
-    )
-    assert (ra.array == array_byte).all()
-
     # test set with 1 band
-    array = array_byte / 2
+    ra = ra_byte.copy()
+    array = ra.array / 2
     ra.array = array
     assert (ra.array == array).all()
+    assert ra.dtype == array.dtype
 
     # test set with >1 bands
     array = np.stack((array, array), axis=0)
@@ -316,11 +312,7 @@ def test_reprojection(ra_rgb_byte):
     ],
 )
 def test_convert_array_dtype(
-    profile_100cm_float: dict,
-    src_dtype: str,
-    src_nodata: float,
-    dst_dtype: str,
-    dst_nodata: float,
+    src_dtype: str, src_nodata: float, dst_dtype: str, dst_nodata: float
 ):
     """Test dtype conversion with combinations covering rounding, clipping (with and
     w/o type promotion) and re-masking.
@@ -346,8 +338,8 @@ def test_convert_array_dtype(
     array = np.pad(array, (1, 1), constant_values=src_nodata)
     src_ra = RasterArray(
         array,
-        crs=profile_100cm_float['crs'],
-        transform=profile_100cm_float['transform'],
+        crs=CRS.from_epsg(3857),
+        transform=rio.Affine.identity(),
         nodata=src_nodata,
     )
 
@@ -384,5 +376,5 @@ def test_convert_array_dtype_error(ra_100cm_float: RasterArray):
     the conversion dtype.
     """
     test_ra = ra_100cm_float.copy()
-    with pytest.raises(HomonimError, match='cast') as ex:
+    with pytest.raises(HomonimError, match='cast'):
         test_ra._convert_array_dtype('uint8', nodata=float('nan'))
