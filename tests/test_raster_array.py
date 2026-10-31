@@ -18,7 +18,6 @@ from pathlib import Path
 import numpy as np
 import pytest
 import rasterio as rio
-from conftest import create_profile
 from rasterio.crs import CRS
 from rasterio.enums import MaskFlags, Resampling
 from rasterio.transform import Affine, array_bounds, from_bounds
@@ -32,19 +31,24 @@ from homonim.raster_array import RasterArray
 
 def test_read_only_properties(array_byte):
     """Test RasterArray read-only properties."""
-    profile = create_profile(array_byte, rio.Affine.identity())
-    ra = RasterArray(
-        array_byte,
-        profile['crs'],
-        profile['transform'],
-        nodata=profile['nodata'],
+    transform = Affine.identity() * Affine.scale(2, -1)
+    profile = dict(
+        crs=CRS.from_epsg(3857),
+        transform=transform,
+        width=array_byte.shape[1],
+        height=array_byte.shape[0],
+        count=1,
+        dtype=array_byte.dtype.name,
+        nodata=255,
     )
-    for name in ['crs', 'transform', 'width', 'height', 'count', 'dtype']:
+    ra = RasterArray(
+        array_byte, profile['crs'], profile['transform'], nodata=profile['nodata']
+    )
+    for name in profile:
         assert getattr(ra, name) == profile[name]
     assert ra.shape == array_byte.shape
     assert ra.res == (abs(ra.transform.a), abs(ra.transform.e))
 
-    profile.pop('driver')
     assert ra.profile == profile
     assert ra.bounds == pytest.approx(array_bounds(*ra.shape, ra.transform))
 
