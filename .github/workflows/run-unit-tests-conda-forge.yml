@@ -1,11 +1,12 @@
 name: Tests (conda-forge)
 
 on:
-  pull_request:
-    branches: [ main ]
-  workflow_dispatch:
-  schedule:
-    - cron: '0 2 * * 1'  # run weekly
+  push:
+#  pull_request:
+#    branches: [ main ]
+#  workflow_dispatch:
+#  schedule:
+#    - cron: '0 2 * * 1'  # run weekly
 
 jobs:
   test:
