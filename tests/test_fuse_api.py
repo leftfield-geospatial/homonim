@@ -481,10 +481,10 @@ def test_corr_tags(tmp_path: Path, ref_file_100cm_float):
 def test_src_ref_bands(
     src_file: str,
     ref_file: str,
-    src_bands: tuple[int],
-    ref_bands: tuple[int],
+    src_bands: tuple[int, ...] | None,
+    ref_bands: tuple[int, ...] | None,
     force: bool,
-    exp_bands: tuple[int],
+    exp_bands: tuple[int, ...],
     tmp_path: Path,
     request: FixtureRequest,
 ):

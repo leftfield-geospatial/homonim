@@ -142,10 +142,10 @@ def test_api_src_ref_bands(
     request: FixtureRequest,
     src_file: str,
     ref_file: str,
-    src_bands: tuple[int],
-    ref_bands: tuple[int],
+    src_bands: tuple[int, ...] | None,
+    ref_bands: tuple[int, ...] | None,
     force: bool,
-    exp_bands: tuple[int],
+    exp_bands: tuple[int, ...],
 ):
     """Test comparison results and band matching with different src_bands, ref_bands
     and force values.
@@ -330,10 +330,10 @@ def test_cli__proc_crs(
     ],
 )
 def test_cli__src_ref_bands(
-    src_bands: tuple[int],
-    ref_bands: tuple[int],
+    src_bands: tuple[int, ...],
+    ref_bands: tuple[int, ...] | None,
     force: bool,
-    exp_bands: tuple[int],
+    exp_bands: tuple[int, ...],
     file_rgb_50cm_float,
     file_rgb_100cm_float,
     tmp_path: Path,

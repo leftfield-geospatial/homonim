@@ -21,10 +21,11 @@ import pytest
 import rasterio as rio
 
 from homonim import utils
-from homonim.errors import HomonimError, HomonimWarning
+from homonim.errors import HomonimError
 from homonim.matched_pair import MatchedPairReader
 
 
+# ruff: ignore[E501]
 @pytest.mark.parametrize(
     ['file', 'bands', 'exp_bands', 'exp_names', 'exp_wavelengths'],
     [
@@ -74,6 +75,7 @@ def test_get_band_info_invalid_band_error(file_rgba):
             MatchedPairReader._get_band_info(im, bands=(4, 1, 0, 2, 5))
 
 
+# ruff: ignore[E501]
 @pytest.mark.parametrize(
     ['src_file', 'ref_file', 'src_bands', 'ref_bands', 'exp_src_bands', 'exp_ref_bands', 'force'],
     [

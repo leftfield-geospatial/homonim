@@ -121,8 +121,6 @@ def array_byte() -> np.ndarray:
     return array
 
 
-# TODO: the array_*cm_fixtures naming is not intuitive as they aren't georeferenced.
-#  array_byte doesn't have a *cm part to its name.  would they be better named by shape?
 @pytest.fixture
 def array_100cm_float(array_byte: np.ndarray) -> np.ndarray:
     """2D float32 gradient image with a single pixel nodata border."""
@@ -227,11 +225,6 @@ def ra_50cm_float(array_50cm_float, transform_50cm) -> RasterArray:
     )
 
 
-# TODO: what is the difference between the file_*, file_src_* & file_ref_* fixtures.
-#  i think all the ref_file_* fixtures cover all the src_file_* fixtures.  the 45cm
-#  and wgs84 src fixtures have different (sometimes expanded?) extents compared to
-#  the other src fixtures.  to be able to use these src fixtures with a ref file,
-#  the ref file extents must be >= to the src file.  hence the src & ref file fixtures
 @pytest.fixture
 def file_byte(tmp_path: Path, array_byte, transform_100cm) -> Path:
     """Single band uint8 GeoTIFF."""

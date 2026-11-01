@@ -27,7 +27,7 @@ from rasterio.windows import Window, union
 
 from homonim.enums import ProcCrs
 from homonim.errors import HomonimError
-from homonim.raster_pair import BlockPair, RasterPairReader
+from homonim.raster_pair import RasterPairReader
 
 
 @pytest.mark.parametrize(

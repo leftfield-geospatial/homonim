@@ -69,8 +69,8 @@ def test_fuse_compare(
     src_bands_str = ' '.join([f'-sb {bi}' for bi in src_bands]) if src_bands else ''
 
     cli_str = (
-        f'fuse -m {model.value} -k {kernel_shape[0]} {kernel_shape[1]} -od {tmp_path} '
-        f'-pc {proc_crs.value} -mbm 1 {src_bands_str} {src_file_str} {ref_file}'
+        f'fuse -m {model} -k {kernel_shape[0]} {kernel_shape[1]} -od {tmp_path} '
+        f'-pc {proc_crs} -mbm 1 {src_bands_str} {src_file_str} {ref_file}'
     )
     if mask_partial:
         cli_str += ' --mask-partial'

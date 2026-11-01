@@ -482,10 +482,10 @@ def test_creation_options(runner: CliRunner, fuse_defaults: FuseDefaults):
 def test_src_ref_bands(
     runner: CliRunner,
     tmp_path: Path,
-    src_bands: tuple[int],
-    ref_bands: tuple[int],
+    src_bands: tuple[int, ...],
+    ref_bands: tuple[int, ...] | None,
     force: bool,
-    exp_bands: tuple[int],
+    exp_bands: tuple[int, ...],
     fuse_rgb_defaults: FuseDefaults,
 ):
     """Test fuse with --src_band, --ref_band and --force-match parameters."""
@@ -527,12 +527,12 @@ def test_src_ref_bands(
 def test_src_ref_cmp_bands(
     runner: CliRunner,
     tmp_path: Path,
-    src_bands: tuple[int],
-    ref_bands: tuple[int],
-    cmp_bands: tuple[int],
+    src_bands: tuple[int, ...] | None,
+    ref_bands: tuple[int, ...] | None,
+    cmp_bands: tuple[int, ...] | None,
     force: bool,
     cmp_ref: bool,
-    exp_bands: tuple[int],
+    exp_bands: tuple[int, ...],
     fuse_rgb_defaults: FuseDefaults,
 ):
     """Test fuse --compare with --src_band, --ref_band, --force-match and --cmp-band
