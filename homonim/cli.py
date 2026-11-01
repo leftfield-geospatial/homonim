@@ -427,8 +427,6 @@ def fuse(
     ctx: click.Context,
     src_files: tuple[str, ...],
     ref_file: str,
-    model: Model,
-    kernel_shape: tuple[int, int],
     src_bands: tuple[int, ...],
     ref_bands: tuple[int, ...],
     out_dir: str,
@@ -478,27 +476,16 @@ def fuse(
                 force=force_match,
             ) as fuse:
                 # construct output filenames
-                # TODO: consider simplifying corrected & param file names, the model
-                #  etc params are in the metadata
-                corr_file = (
-                    f'{Path(src_file).stem}_FUSE_c{fuse.proc_crs.upper()}_'
-                    f'm{model.upper()}_k{kernel_shape[0]}_{kernel_shape[1]}.tif'
-                )
-                corr_file = _join_path_uri(out_dir, corr_file)
+                src_stem = Path(src_file).stem
+                corr_file = _join_path_uri(out_dir, f'{src_stem}_CORR.tif')
                 param_file = (
-                    _join_path_uri(out_dir, f'{Path(corr_file).stem}_PARAM.tif')
+                    _join_path_uri(out_dir, f'{src_stem}_PARAM.tif')
                     if param_image
                     else None
                 )
 
                 start_time = timer()
-                fuse.process(
-                    corr_file,
-                    Model(model),
-                    kernel_shape,
-                    param_filename=param_file,
-                    **kwargs,
-                )
+                fuse.process(corr_file, param_filename=param_file, **kwargs)
         except (RasterioIOError, FileExistsError, HomonimError) as ex:
             raise click.UsageError(str(ex)) from None
 

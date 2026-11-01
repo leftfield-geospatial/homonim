@@ -22,7 +22,6 @@ from rasterio.features import shapes
 
 from homonim import Model, ProcCrs, RasterCompare
 from homonim.cli import cli
-from tests.conftest import create_corr_filename
 
 
 # ruff: ignore[E501]
@@ -62,10 +61,7 @@ def test_fuse_compare(
     )
     ref_file: Path = request.getfixturevalue(ref_file)
     src_file_str = ' '.join([str(fn) for fn in src_files])
-    corr_files = [
-        create_corr_filename(sf, exp_proc_crs, model, kernel_shape) for sf in src_files
-    ]
-    corr_files = [tmp_path.joinpath(cf) for cf in corr_files]
+    corr_files = [tmp_path.joinpath(f'{sf.stem}_CORR.tif') for sf in src_files]
     src_bands_str = ' '.join([f'-sb {bi}' for bi in src_bands]) if src_bands else ''
 
     cli_str = (

@@ -28,13 +28,8 @@ from rasterio.warp import Resampling
 from homonim import utils
 from homonim.cli import cli
 from homonim.enums import Driver, Model, ProcCrs
-from homonim.kernel_model import KernelModel
 from homonim.stats import _validate_param_image
-from tests.conftest import (
-    create_corr_filename,
-    create_param_filename,
-    str_contain_no_space,
-)
+from tests.conftest import str_contain_no_space
 
 
 @dataclass
@@ -55,18 +50,12 @@ class FuseDefaults:
     @cached_property
     def corr_file(self) -> Path:
         """Path of the corrected image."""
-        model = KernelModel._default_config['model']
-        kernel_shape = KernelModel._default_config['kernel_shape']
-        corr_file = create_corr_filename(
-            self.src_file, self.proc_crs, model, kernel_shape
-        )
-        return self.out_dir.joinpath(corr_file)
+        return self.out_dir.joinpath(f'{self.src_file.stem}_CORR.tif')
 
     @cached_property
     def param_file(self) -> Path:
         """Path of the parameter image."""
-        param_file = create_param_filename(self.corr_file)
-        return self.out_dir.joinpath(param_file)
+        return self.out_dir.joinpath(f'{self.src_file.stem}_PARAM.tif')
 
 
 @pytest.fixture
@@ -105,8 +94,7 @@ def test_fuse(
     """Test fuse CLI output with different models and kernel shapes."""
     ref_file = file_rgb_100cm_float
     src_file = file_rgb_100cm_float
-    corr_file = create_corr_filename(src_file, ProcCrs.ref, model, kernel_shape)
-    corr_file = tmp_path.joinpath(corr_file)
+    corr_file = tmp_path.joinpath(f'{src_file.stem}_CORR.tif')
     cli_str = (
         f'fuse -m {model} -k {kernel_shape[0]} {kernel_shape[1]} -od {tmp_path} '
         f'{src_file} {ref_file}'
@@ -185,7 +173,7 @@ def test_compare(runner: CliRunner, fuse_defaults: FuseDefaults):
            Mean 1.000  0.000   0.000 144"""
         assert str_contain_no_space(src_cmp_str, result.output)
 
-        corr_cmp_str = """float_100cm_src_FUSE_cREF_mGAIN-BLK-OFFSET_k5_5.tif:
+        corr_cmp_str = """float_100cm_src_CORR.tif:
            Band      r²   RMSE   rRMSE   N
     ----------- ----- ------ ------- ---
     Ref. band 1 1.000  0.000   0.000 144
@@ -193,9 +181,9 @@ def test_compare(runner: CliRunner, fuse_defaults: FuseDefaults):
         assert str_contain_no_space(corr_cmp_str, result.output)
 
         sum_cmp_str = """File    r²   RMSE   rRMSE   N
-    --------------------------------------------------- ----- ------ ------- ---
-                                    float_100cm_src.tif 1.000  0.000   0.000 144
-    float_100cm_src_FUSE_cREF_mGAIN-BLK-OFFSET_k5_5.tif 1.000  0.000   0.000 144"""
+    ------------------------ ----- ------ ------- ---
+         float_100cm_src.tif 1.000  0.000   0.000 144
+    float_100cm_src_CORR.tif 1.000  0.000   0.000 144"""
         assert str_contain_no_space(sum_cmp_str, result.output)
 
 
@@ -514,7 +502,6 @@ def test_src_ref_bands(
             )
 
 
-# TODO: test --src-band / --ref-band errors
 @pytest.mark.parametrize(
     'src_bands, ref_bands, cmp_bands, force, cmp_ref, exp_bands',
     [
@@ -581,7 +568,7 @@ def test_src_ref_cmp_bands(
             )
 
     test_str = """File    r²   RMSE   rRMSE   N
---------------------------------------------------- ----- ------ ------- ---
-                                float_100cm_rgb.tif 1.000  0.000   0.000 144
-float_100cm_rgb_FUSE_cREF_mGAIN-BLK-OFFSET_k5_5.tif 1.000  0.000   0.000 144"""
+------------------------ ----- ------ ------- ---
+     float_100cm_rgb.tif 1.000  0.000   0.000 144
+float_100cm_rgb_CORR.tif 1.000  0.000   0.000 144"""
     assert str_contain_no_space(test_str, result.output)

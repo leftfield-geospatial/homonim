@@ -45,29 +45,6 @@ def str_contain_no_space(str1: str, str2: str) -> bool:
     return str1 in str2
 
 
-def create_corr_filename(
-    src_file: str | PathLike,
-    proc_crs: ProcCrs,
-    model: Model,
-    kernel_shape: tuple[int, int],
-) -> str:
-    """Return a CLI corrected image filename, given the source image filename and
-    correction parameters.
-    """
-    src_file = Path(src_file)
-    postfix = (
-        f'FUSE_c{proc_crs.upper()}_m{model.upper()}_k{kernel_shape[0]}_'
-        f'{kernel_shape[1]}.tif'
-    )
-    return f'{src_file.stem}_{postfix}'
-
-
-def create_param_filename(corr_file: str | PathLike) -> str:
-    """Return a CLI parameter image filename, given the corrected image filename."""
-    corr_file = Path(corr_file)
-    return f'{corr_file.stem}_PARAM{corr_file.suffix}'
-
-
 def get_nodata(dtype) -> int | float:
     """Return a nodata value for the given dtype."""
     return np.iinfo(dtype).max if np.issubdtype(dtype, np.integer) else float('nan')
