@@ -64,8 +64,9 @@ class MatchedPairReader(RasterPairReader):
         :param ref_filename:
             Path or URI of a reference image.
         :param proc_crs:
-            Which of the source or reference pixel grids to use for processing.  By
-            default, the grid with the lowest resolution is used (recommended).
+            Which of the source or reference CRS and pixel grids to use for
+            processing. By default, the CRS and grid with the lowest resolution is
+            used (recommended).
         :param src_bands:
             Indexes of source bands to be corrected (1 based).  Defaults to all bands
             with a ``center_wavelength`` tag if any exist, otherwise to all non-alpha

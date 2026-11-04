@@ -28,7 +28,8 @@ import numpy as np
 import rasterio as rio
 from rasterio.enums import MaskFlags
 from rasterio.io import DatasetReader
-from rasterio.vrt import WarpedVRT
+from rasterio.transform import array_bounds
+from rasterio.warp import transform_bounds
 from rasterio.windows import Window, intersection
 
 from homonim import utils
@@ -102,8 +103,9 @@ class RasterPairReader:
         :param ref_filename:
             Path or URI of a reference image.
         :param proc_crs:
-            Which of the source or reference pixel grids to use for processing.  By
-            default, the grid with the lowest resolution is used (recommended).
+            Which of the source or reference CRS and pixel grids to use for
+            processing. By default, the CRS and grid with the lowest resolution is
+            used (recommended).
         """
         self._src_file = os.fspath(src_filename)
         self._ref_file = os.fspath(ref_filename)
@@ -123,35 +125,22 @@ class RasterPairReader:
             # match bands and resolve proc_crs=ProcCrs.auto
             self._src_bands, self._ref_bands = self._match_bands(src_im, ref_im)
             self._proc_crs = self._resolve_proc_crs(src_im, ref_im, proc_crs)
-
-            if src_im.crs != ref_im.crs:
-                # reproject so that both images are in the same CRS
-                if self._proc_crs is ProcCrs.ref:
-                    warn_names = ('reference', ref_name, 'source', src_name)
-                    ref_im = stack.enter_context(WarpedVRT(ref_im, crs=src_im.crs))
-                else:
-                    warn_names = ('source', src_name, 'reference', ref_name)
-                    src_im = stack.enter_context(WarpedVRT(src_im, crs=ref_im.crs))
-                warnings.warn(
-                    "The {} '{}' will be reprojected into the CRS of the {} '{}'.  "
-                    'Processing times may be improved if source and reference are '
-                    'provided in the same CRS.'.format(*warn_names),
-                    category=HomonimWarning,
-                    stacklevel=2,
-                )
+            logger.debug(f"Resolved 'proc_crs' to '{self._proc_crs}'.")
 
             # create windows of the source / reference extents that allow reprojections
             # without loss of data
-            self._ref_win = utils.expand_window_to_grid(ref_im.window(*src_im.bounds))
+            src_bounds = transform_bounds(src_im.crs, ref_im.crs, *src_im.bounds)
+            self._ref_win = utils.expand_window_to_grid(ref_im.window(*src_bounds))
             ref_ranges = np.array(self._ref_win.toranges()).T
             if any(ref_ranges[0] < 0) or any(ref_ranges[1] > ref_im.shape):
                 raise HomonimError(
                     f"Reference '{ref_name}' extent does does not cover the source "
                     f"'{src_name}'."
                 )
-            self._src_win = utils.expand_window_to_grid(
-                src_im.window(*ref_im.window_bounds(self._ref_win))
+            ref_bounds = transform_bounds(
+                ref_im.crs, src_im.crs, *ref_im.window_bounds(self._ref_win)
             )
+            self._src_win = utils.expand_window_to_grid(src_im.window(*ref_bounds))
         except Exception:
             stack.close()
             raise
@@ -209,32 +198,29 @@ class RasterPairReader:
             raise HomonimError(f"'{name}' is not in a standard North-up orientation.")
 
     @staticmethod
+    def _get_pixel_areas(
+        src_im: DatasetReader, ref_im: DatasetReader
+    ) -> tuple[float, float]:
+        """Return the src_im and ref_im pixel areas in src_im units."""
+        ref_bounds = array_bounds(1, 1, ref_im.transform)
+        ref_bounds = np.array(transform_bounds(ref_im.crs, src_im.crs, *ref_bounds))
+        ref_area = np.abs(ref_bounds[2:] - ref_bounds[:2]).prod()
+        src_ara = np.prod(src_im.res)
+        return float(src_ara), float(ref_area)
+
+    @staticmethod
     def _resolve_proc_crs(
         src_im: DatasetReader, ref_im: DatasetReader, proc_crs: ProcCrs
     ) -> ProcCrs:
-        """Return a ProcCrs instance defining which of the source or reference CRS
-        and pixel grids should be used for processing.
+        """Return a ProcCrs instance defining which of the src_im or ref_im CRS and
+        pixel grids should be used for processing.
         """
         proc_crs = ProcCrs(proc_crs)
         if proc_crs is not ProcCrs.auto:
             return proc_crs
 
-        with ExitStack() as stack:
-            if src_im.crs != ref_im.crs:
-                # project reference into source CRS, so their resolutions are in the
-                # same units for comparison
-                ref_im = stack.enter_context(WarpedVRT(ref_im, crs=src_im.crs))
-            src_smaller = np.prod(src_im.res) <= np.prod(ref_im.res)
-
-        proc_crs, cmp_str = (
-            (ProcCrs.ref, 'smaller') if src_smaller else (ProcCrs.src, 'larger')
-        )
-
-        logger.debug(
-            f'Source resolution is {cmp_str} than the reference resolution. Using '
-            f'proc_crs={proc_crs}.'
-        )
-        return proc_crs
+        src_area, ref_area = RasterPairReader._get_pixel_areas(src_im, ref_im)
+        return ProcCrs.ref if src_area <= ref_area else ProcCrs.src
 
     def _match_bands(
         self, src_im: DatasetReader, ref_im: DatasetReader
@@ -275,8 +261,7 @@ class RasterPairReader:
 
         # scale max_block_mem to limit a proc_crs block so that the corresponding
         # highest resolution image block will be limited by the given max_block_mem
-        src_area = np.prod(self._src_im.res)
-        ref_area = np.prod(self._ref_im.res)
+        src_area, ref_area = self._get_pixel_areas(self._src_im, self._ref_im)
         if self.proc_crs is ProcCrs.ref:
             mem_scale = src_area / ref_area if ref_area > src_area else 1.0
             proc_win = self._ref_win
@@ -399,11 +384,17 @@ class RasterPairReader:
                 #   pixels.  This means consecutive other_in_blocks may overlap by more
                 #   than 'overlap'.
                 # - Consecutive other_out_block's may overlap by a pixel.
+                proc_in_bounds = transform_bounds(
+                    proc_im.crs, other_im.crs, *proc_im.window_bounds(proc_in_block)
+                )
                 other_in_block = utils.expand_window_to_grid(
-                    other_im.window(*proc_im.window_bounds(proc_in_block))
+                    other_im.window(*proc_in_bounds)
+                )
+                proc_out_bounds = transform_bounds(
+                    proc_im.crs, other_im.crs, *proc_im.window_bounds(proc_out_block)
                 )
                 other_out_block = utils.round_window_to_grid(
-                    other_im.window(*proc_im.window_bounds(proc_out_block))
+                    other_im.window(*proc_out_bounds)
                 )
 
                 # yield a BlockPair
