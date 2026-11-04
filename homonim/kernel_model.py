@@ -165,18 +165,6 @@ class KernelModel:
         """
         return self._find_r2
 
-    def _get_resampling(
-        self, from_res: tuple[float, float], to_res: tuple[float, float]
-    ) -> Resampling:
-        """Return the resampling method for re-projecting from resolution
-        ``from_res`` to resolution ``to_res``.
-        """
-        return (
-            self._downsampling
-            if np.prod(np.abs(from_res)) <= np.prod(np.abs(to_res))
-            else self._upsampling
-        )
-
     def _r2_array(
         self,
         ref_array: np.ndarray,
@@ -566,9 +554,10 @@ class RefSpaceModel(KernelModel):
     """
 
     def fit(self, src_ra: RasterArray, ref_ra: RasterArray) -> RasterArray:
-        # choose resampling method based on whether we are up- or downsampling
-        resampling = self._get_resampling(src_ra.res, ref_ra.res)
-        # downsample src_ra to reference CRS and grid
+        # reproject src_ra to reference CRS and grid
+        resampling = utils.get_resampling(
+            src_ra, ref_ra, self._downsampling, self._upsampling
+        )
         src_ds_ra = src_ra.reproject_like(ref_ra, resampling=resampling)
         # call base class fit with reference and source RasterArrays in the reference
         # CRS & grid
@@ -577,9 +566,10 @@ class RefSpaceModel(KernelModel):
     def apply(self, src_ra, param_ra):
         # remove the R2 band of param_ra (to speed up the re-projection below)
         _param_ra = RasterArray(param_ra.array[:2], param_ra.crs, param_ra.transform)
-        # choose resampling method based on whether we are up- or downsampling
-        resampling = self._get_resampling(_param_ra.res, src_ra.res)
-        # re-project _param_ra to source CRS and grid
+        # reproject _param_ra to source CRS and grid
+        resampling = utils.get_resampling(
+            _param_ra, src_ra, self._downsampling, self._upsampling
+        )
         param_src_ra = _param_ra.reproject_like(src_ra, resampling=resampling)
 
         if self._mask_partial:
@@ -608,7 +598,9 @@ class SrcSpaceModel(KernelModel):
 
     def fit(self, src_ra: RasterArray, ref_ra: RasterArray) -> RasterArray:
         # reproject ref_ra to the source CRS and grid
-        resampling = self._get_resampling(ref_ra.res, src_ra.res)
+        resampling = utils.get_resampling(
+            ref_ra, src_ra, self._downsampling, self._upsampling
+        )
         ref_src_ra = ref_ra.reproject_like(src_ra, resampling=resampling)
 
         # copy the source to avoid in-place changes in fit() below

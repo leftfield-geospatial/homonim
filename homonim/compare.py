@@ -82,8 +82,9 @@ class RasterCompare(MatchedPairReader):
         :param ref_filename:
             Path or URI of a reference image.
         :param proc_crs:
-            Which of the source or reference pixel grids to use for comparing.  By
-            default, the grid with the lowest resolution is used (recommended).
+            Which of the source or reference CRS and pixel grids to use for
+            comparing.  By default, the CRS and grid with the lowest resolution is
+            used (recommended).
         :param src_bands:
             Indexes of source bands to be compared (1 based).  Defaults to all bands
             with a ``center_wavelength`` tag if any exist, otherwise to all non-alpha
@@ -160,22 +161,6 @@ class RasterCompare(MatchedPairReader):
             max_block_mem=max_block_mem,
             downsampling=downsampling,
             upsampling=upsampling,
-        )
-
-    def _get_resampling(
-        self,
-        from_res: tuple[float, float],
-        to_res: tuple[float, float],
-        downsampling: str | Resampling,
-        upsampling: str | Resampling,
-    ) -> Resampling:
-        """Return the resampling method for re-projecting from resolution
-        ``from_res`` to resolution ``to_res``.
-        """
-        return (
-            downsampling
-            if np.prod(np.abs(from_res)) <= np.prod(np.abs(to_res))
-            else upsampling
         )
 
     def _get_image_stats(
@@ -303,15 +288,15 @@ class RasterCompare(MatchedPairReader):
             # read src and ref blocks
             src_ra, ref_ra = self._read(block_pair)
 
-            # re-project so that both source and reference are in proc_crs
-            if self.proc_crs == ProcCrs.ref:
-                resampling = self._get_resampling(
-                    src_ra.res, ref_ra.res, downsampling, upsampling
+            # re-project so that source and reference are in proc_crs
+            if self.proc_crs is ProcCrs.ref:
+                resampling = utils.get_resampling(
+                    src_ra, ref_ra, downsampling, upsampling
                 )
                 src_ra = src_ra.reproject_like(ref_ra, resampling=resampling)
             else:
-                resampling = self._get_resampling(
-                    ref_ra.res, src_ra.res, downsampling, upsampling
+                resampling = utils.get_resampling(
+                    ref_ra, src_ra, downsampling, upsampling
                 )
                 ref_ra = ref_ra.reproject_like(src_ra, resampling=resampling)
 
