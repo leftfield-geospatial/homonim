@@ -20,12 +20,15 @@ from functools import wraps
 from typing import ParamSpec, TypeVar
 
 import numpy as np
-from rasterio.enums import ColorInterp
+from rasterio.enums import ColorInterp, Resampling
 from rasterio.io import DatasetReader, DatasetWriter
+from rasterio.transform import array_bounds
+from rasterio.warp import transform_bounds
 from rasterio.windows import Window
 from tabulate import DataRow, Line, TableFormat, tabulate
 
 from homonim.errors import HomonimError
+from homonim.raster_array import RasterArray
 
 logger = logging.getLogger(__name__)
 tabulate.MIN_PADDING = 0
@@ -126,3 +129,21 @@ def assert_open(meth: Callable[P, R]) -> Callable[P, R]:
         return meth(*args, **kwargs)
 
     return wrapper
+
+
+def get_resampling(
+    from_ra: RasterArray,
+    to_ra: RasterArray,
+    downsampling: Resampling,
+    upsampling: Resampling,
+) -> Resampling:
+    """Return ``upsampling`` when ``from_ra`` is a lower resolution than ``to_ra``,
+    otherwise return ``downsampling``.
+    """
+    # find the from_ra and to_ra pixel areas in the same units
+    from_bounds = array_bounds(1, 1, from_ra.transform)
+    from_bounds = np.array(transform_bounds(from_ra.crs, to_ra.crs, *from_bounds))
+    from_area = np.abs(from_bounds[2:] - from_bounds[:2]).prod()
+    to_area = np.prod(to_ra.res)
+
+    return downsampling if from_area <= to_area else upsampling
