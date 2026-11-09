@@ -17,10 +17,12 @@ import logging
 import os
 from collections.abc import Callable
 from functools import wraps
+from math import ceil, prod
 from typing import ParamSpec, TypeVar
 
 import numpy as np
-from rasterio.enums import ColorInterp
+from rasterio._io import Affine
+from rasterio.enums import ColorInterp, Resampling
 from rasterio.io import DatasetReader, DatasetWriter
 from rasterio.windows import Window
 from tabulate import DataRow, Line, TableFormat, tabulate
@@ -70,24 +72,22 @@ def expand_window_to_grid(
     """Return the given RasterIO window expanded by expand_pixels to whole number
     extents.
     """
-    col_off, col_frac = np.divmod(win.col_off - expand_pixels[1], 1)
-    row_off, row_frac = np.divmod(win.row_off - expand_pixels[0], 1)
-    width = np.ceil(win.width + 2 * expand_pixels[1] + col_frac)
-    height = np.ceil(win.height + 2 * expand_pixels[0] + row_frac)
-    exp_win = Window(int(col_off), int(row_off), int(width), int(height))
-    return exp_win
+    col_off, col_frac = divmod(win.col_off - expand_pixels[1], 1)
+    row_off, row_frac = divmod(win.row_off - expand_pixels[0], 1)
+    width = ceil(win.width + 2 * expand_pixels[1] + col_frac)
+    height = ceil(win.height + 2 * expand_pixels[0] + row_frac)
+    return Window(int(col_off), int(row_off), width, height)
 
 
 def round_window_to_grid(win: Window) -> Window:
     """Return the given RasterIO window with rounded extents."""
-    row_range, col_range = win.toranges()
-    row_range = np.round(row_range)
-    col_range = np.round(col_range)
+    ranges = win.toranges()
+    row_range, col_range = [[round(s) for s in r] for r in ranges]
     return Window(
-        col_off=int(col_range[0]),
-        row_off=int(row_range[0]),
-        width=int(col_range[1] - col_range[0]),
-        height=int(row_range[1] - row_range[0]),
+        col_off=col_range[0],
+        row_off=row_range[0],
+        width=col_range[1] - col_range[0],
+        height=row_range[1] - row_range[0],
     )
 
 
@@ -126,3 +126,32 @@ def assert_open(meth: Callable[P, R]) -> Callable[P, R]:
         return meth(*args, **kwargs)
 
     return wrapper
+
+
+def get_resampling(
+    from_res: tuple[float, float],
+    to_res: tuple[float, float],
+    downsampling: Resampling,
+    upsampling: Resampling,
+) -> Resampling:
+    """Return ``upsampling`` when ``from_res`` is a lower resolution than ``to_res``,
+    otherwise return ``downsampling``.
+    """
+    from_area = abs(prod(from_res))
+    to_area = abs(prod(to_res))
+    return downsampling if from_area <= to_area else upsampling
+
+
+def from_bounds(
+    left: float, bottom: float, right: float, top: float, transform: Affine
+) -> Window:
+    """Return a window given its bounds and geo-referencing ``transform``.
+
+    This is a replacement for ``rasterio.windows.from_bounds()`` that uses Python
+    rather than NumPy floats for better precision.
+    """
+    cnrs = [(left, top), (right, top), (right, bottom), (left, bottom)]
+    cols, rows = zip(*[~transform * cnr for cnr in cnrs], strict=True)
+    row_start, row_stop = min(rows), max(rows)
+    col_start, col_stop = min(cols), max(cols)
+    return Window(col_start, row_start, col_stop - col_start, row_stop - row_start)
