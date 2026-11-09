@@ -14,7 +14,6 @@
 # Homonim. If not, see <https://www.gnu.org/licenses/>.
 import re
 from inspect import getsourcefile
-from os import PathLike
 from pathlib import Path
 
 import numpy as np
@@ -23,10 +22,9 @@ import rasterio as rio
 from click.testing import CliRunner
 from rasterio.crs import CRS
 from rasterio.enums import ColorInterp, Resampling
-from rasterio.transform import Affine, array_bounds
-from rasterio.warp import calculate_default_transform, reproject
+from rasterio.transform import Affine
+from rasterio.warp import reproject
 
-from homonim.enums import Model, ProcCrs
 from homonim.raster_array import RasterArray
 
 # path to the test data root
@@ -274,13 +272,11 @@ def ref_file_100cm_float(tmp_path: Path, array_100cm_float, transform_100cm) -> 
     src_file_100cm_float, but padded with an extra nodata pixel.
     """
     file = tmp_path.joinpath('float_100cm_ref.tif')
-    shape = [s + 2 for s in array_100cm_float.shape]
-    dtype = array_100cm_float.dtype
-    array = np.full(shape, get_nodata(dtype), dtype=dtype)
-    array[1:-1, 1:-1] = array_100cm_float
+    nodata = get_nodata(array_100cm_float.dtype)
+    array = np.pad(array_100cm_float, 1, 'constant', constant_values=nodata)
     transform = transform_100cm * Affine.translation(-1, -1)
-    profile = create_profile(array, transform)
 
+    profile = create_profile(array, transform)
     with rio.open(file, 'w', **profile) as ds:
         ds.write(array, indexes=1)
     return file
@@ -302,13 +298,11 @@ def ref_file_50cm_float(tmp_path: Path, array_50cm_float, transform_50cm) -> Pat
     src_file_50cm_float, but padded with an extra nodata pixel.
     """
     file = tmp_path.joinpath('float_50cm_ref.tif')
-    shape = [s + 2 for s in array_50cm_float.shape]
-    dtype = array_50cm_float.dtype
-    array = np.full(shape, get_nodata(dtype), dtype=dtype)
-    array[1:-1, 1:-1] = array_50cm_float
+    nodata = get_nodata(array_50cm_float.dtype)
+    array = np.pad(array_50cm_float, 1, 'constant', constant_values=nodata)
     transform = transform_50cm * Affine.translation(-1, -1)
-    profile = create_profile(array, transform)
 
+    profile = create_profile(array, transform)
     with rio.open(file, 'w', **profile) as ds:
         ds.write(array, indexes=1)
     return file
@@ -330,13 +324,11 @@ def ref_file_45cm_float(tmp_path: Path, array_45cm_float, transform_45cm) -> Pat
     src_file_45cm_float, but padded with an extra nodata pixel.
     """
     file = tmp_path.joinpath('float_45cm_ref.tif')
-    shape = [s + 2 for s in array_45cm_float.shape]
-    dtype = array_45cm_float.dtype
-    array = np.full(shape, get_nodata(dtype), dtype=dtype)
-    array[1:-1, 1:-1] = array_45cm_float
+    nodata = get_nodata(array_45cm_float.dtype)
+    array = np.pad(array_45cm_float, 1, 'constant', constant_values=nodata)
     transform = transform_45cm * Affine.translation(-1, -1)
-    profile = create_profile(array, transform)
 
+    profile = create_profile(array, transform)
     with rio.open(file, 'w', **profile) as ds:
         ds.write(array, indexes=1)
     return file
@@ -395,15 +387,22 @@ def src_file_wgs84_100cm_float(
 ) -> Path:
     """Single band float32 GeoTIFF with 100cm resolution in WGS84."""
     file = tmp_path.joinpath('float_100cm_wgs84_src.tif')
+    nodata = get_nodata(array_100cm_float.dtype)
+    array = np.full_like(array_100cm_float, nodata)
     crs = CRS.from_epsg('4326')
-    bounds = array_bounds(*array_100cm_float.shape, transform_100cm)
-    transform, _, _ = calculate_default_transform(
-        _webmerc_crs, crs, *array_100cm_float.shape[::-1], *bounds
+    _, transform = reproject(
+        array_100cm_float,
+        destination=array,
+        src_crs=_webmerc_crs,
+        dst_crs=crs,
+        src_transform=transform_100cm,
+        src_nodata=nodata,
+        resampling=Resampling.bilinear,
     )
-    profile = create_profile(array_100cm_float, transform, crs=crs)
 
+    profile = create_profile(array, transform, crs=crs)
     with rio.open(file, 'w', **profile) as ds:
-        ds.write(array_100cm_float, indexes=1)
+        ds.write(array, indexes=1)
     return file
 
 
@@ -415,19 +414,22 @@ def ref_file_wgs84_100cm_float(
     src_file_wgs84_100cm_float, but padded with an extra nodata pixel.
     """
     file = tmp_path.joinpath('float_100cm_wgs84_ref.tif')
-    shape = [s + 2 for s in array_100cm_float.shape]
-    dtype = array_100cm_float.dtype
-    array = np.full(shape, get_nodata(dtype), dtype=dtype)
-    array[1:-1, 1:-1] = array_100cm_float
-
+    nodata = get_nodata(array_100cm_float.dtype)
+    array = np.full_like(array_100cm_float, nodata)
     crs = CRS.from_epsg('4326')
-    bounds = array_bounds(*array_100cm_float.shape, transform_100cm)
-    transform, _, _ = calculate_default_transform(
-        _webmerc_crs, crs, *array_100cm_float.shape[::-1], *bounds
+    _, transform = reproject(
+        array_100cm_float,
+        destination=array,
+        src_crs=_webmerc_crs,
+        dst_crs=crs,
+        src_transform=transform_100cm,
+        src_nodata=nodata,
+        resampling=Resampling.bilinear,
     )
+    array = np.pad(array, 1, 'constant', constant_values=nodata)
     transform *= Affine.translation(-1, -1)
-    profile = create_profile(array, transform, crs=crs)
 
+    profile = create_profile(array, transform, crs=crs)
     with rio.open(file, 'w', **profile) as ds:
         ds.write(array, indexes=1)
     return file
