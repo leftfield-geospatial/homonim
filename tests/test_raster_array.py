@@ -157,17 +157,23 @@ def test_from_rio_dataset_masked(file: str, count: int, request: pytest.FixtureR
 
 def test_crop_to_window(ra_byte):
     """Test _crop_to_window()."""
-    # test valid window
+    # test bounded window
     win = Window(1, 1, ra_byte.width - 2, ra_byte.height - 2)
     crop_ra = ra_byte._crop_to_window(win)
     assert crop_ra.bounds == pytest.approx(ra_byte.window_bounds(win))
     assert (crop_ra.array == ra_byte.array[win.toslices()]).all()
 
-    # test invalid windows
-    with pytest.raises(ValueError, match='window'):
-        ra_byte._crop_to_window(Window(-1, -1, ra_byte.width, ra_byte.height))
-    with pytest.raises(ValueError, match='window'):
-        ra_byte._crop_to_window(Window(1, 1, ra_byte.width, ra_byte.height))
+    # test boundless window
+    win = Window(-1, -1, ra_byte.width, ra_byte.height)
+    crop_ra = ra_byte._crop_to_window(win)
+    win = win.crop(*ra_byte.shape)
+    assert crop_ra.bounds == pytest.approx(ra_byte.window_bounds(win))
+    assert (crop_ra.array == ra_byte.array[win.toslices()]).all()
+
+    # test empty window
+    win = Window(1, 1, ra_byte.width - 2, 0)
+    crop_ra = ra_byte._crop_to_window(win)
+    assert crop_ra.shape == (win.height, win.width)
 
 
 def test_to_rio_dataset(ra_byte, tmp_path: Path):
