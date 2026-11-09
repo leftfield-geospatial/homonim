@@ -289,11 +289,8 @@ class RasterArray(TransformMethodsMixin, WindowMethodsMixin):
 
     def _crop_to_window(self, window: Window) -> 'RasterArray':
         """Return a view into the RasterArray, cropped to the given window bounds."""
-        ranges = np.array(window.toranges()).T
-        if any(ranges[0] < 0) or any(ranges[1] > self.shape):
-            raise ValueError(
-                "'window' bounds lie outside the bounds of the RasterArray."
-            )
+        # crop boundless window so that toslices() are valid
+        window = window.crop(*self.shape)
         return RasterArray(
             self._array[(..., *window.toslices())],
             self._crs,
