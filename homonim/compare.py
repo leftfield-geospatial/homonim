@@ -44,7 +44,7 @@ class RasterCompare(MatchedPairReader):
         ),
         rmse=dict(abbrev='RMSE', description='Root Mean Square Error'),
         rrmse=dict(abbrev='rRMSE', description='Relative RMSE (RMSE/mean(ref))'),
-        n=dict(abbrev='N', description='Number of pixels'),
+        n=dict(abbrev='N', description='Number of valid pixels'),
     )
     # default values for process() kwargs
     _default_config: ClassVar[dict[str, str]] = dict(
@@ -160,22 +160,6 @@ class RasterCompare(MatchedPairReader):
             max_block_mem=max_block_mem,
             downsampling=downsampling,
             upsampling=upsampling,
-        )
-
-    def _get_resampling(
-        self,
-        from_res: tuple[float, float],
-        to_res: tuple[float, float],
-        downsampling: str | Resampling,
-        upsampling: str | Resampling,
-    ) -> Resampling:
-        """Return the resampling method for re-projecting from resolution
-        ``from_res`` to resolution ``to_res``.
-        """
-        return (
-            downsampling
-            if np.prod(np.abs(from_res)) <= np.prod(np.abs(to_res))
-            else upsampling
         )
 
     def _get_image_stats(
@@ -303,14 +287,14 @@ class RasterCompare(MatchedPairReader):
             # read src and ref blocks
             src_ra, ref_ra = self._read(block_pair)
 
-            # re-project so that both source and reference are in proc_crs
-            if self.proc_crs == ProcCrs.ref:
-                resampling = self._get_resampling(
+            # re-project so that source and reference are in proc_crs
+            if self.proc_crs is ProcCrs.ref:
+                resampling = utils.get_resampling(
                     src_ra.res, ref_ra.res, downsampling, upsampling
                 )
                 src_ra = src_ra.reproject_like(ref_ra, resampling=resampling)
             else:
-                resampling = self._get_resampling(
+                resampling = utils.get_resampling(
                     ref_ra.res, src_ra.res, downsampling, upsampling
                 )
                 ref_ra = ref_ra.reproject_like(src_ra, resampling=resampling)
