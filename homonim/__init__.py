@@ -14,13 +14,25 @@
 # Homonim. If not, see <https://www.gnu.org/licenses/>.
 
 import logging
-import os
-import pathlib
 
 from homonim.compare import RasterCompare
 from homonim.enums import Driver, Model, ProcCrs
+from homonim.errors import HomonimError, HomonimWarning
 from homonim.fuse import RasterFuse
 from homonim.stats import ParamStats
+from homonim.version import __version__
+
+__all__ = [
+    'Driver',
+    'HomonimError',
+    'HomonimWarning',
+    'Model',
+    'ParamStats',
+    'ProcCrs',
+    'RasterCompare',
+    'RasterFuse',
+    '__version__',
+]
 
 # Add a NullHandler to the package logger to hide logs by default.  Applications can
 # then add their own handler(s).
