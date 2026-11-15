@@ -2,17 +2,16 @@
 # See https://homonim.readthedocs.io/en/latest/cli.html#homonim-fuse for documentation on options
 
 # Correction configuration
-param_image: True
-mask_partial: True
+param_image: False
+mask_partial: False
 threads: 0
-max_block_mem: 1
-force_match: False
+max_block_mem: 100
+proc_crs: auto
 
 # Model configuration
 downsampling: average
 upsampling: cubic_spline
 r2_inpaint_thresh: 0.25
-proc_crs: auto
 
 # Format of output (corrected) image
 driver: GTiff
