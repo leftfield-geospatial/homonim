@@ -12,8 +12,8 @@
 #
 # You should have received a copy of the GNU Affero General Public License along with
 # Homonim. If not, see <https://www.gnu.org/licenses/>.
-
 from collections.abc import Callable
+from contextlib import ExitStack
 from pathlib import Path
 
 import numpy as np
@@ -25,6 +25,7 @@ from rasterio.enums import Resampling
 from rasterio.errors import RasterioIOError
 from rasterio.windows import Window, union
 
+from homonim import utils
 from homonim.enums import ProcCrs
 from homonim.errors import HomonimError
 from homonim.raster_pair import RasterPairReader
@@ -135,6 +136,10 @@ def test_block_pair_continuity(
         compare: Callable = np.equal,
     ):
         """Test block continuity."""
+        # NOTE: max_block_mem and overlap should be chosen so that only the last
+        # column or row of in_blocks gets cropped to the image window, otherwise
+        # prev_block.width / prev_block.height below will be cropped for preceding
+        # column(s) / row(s), and the compare will fail
         if block.row_off == prev_block.row_off:  # blocks in the same row
             assert compare(
                 block.col_off, prev_block.col_off + prev_block.width - 2 * overlap[1]
@@ -144,40 +149,39 @@ def test_block_pair_continuity(
                 block.row_off, prev_block.row_off + prev_block.height - 2 * overlap[0]
             )
 
-    with RasterPairReader(src_file, ref_file) as rp:
-        # Create lists of compare_blocks() parameters for each block in a BlockPair.
-        # NOTE: the <other crs>_in_block may overlap more than overlap, but
-        # <proc_crs>_in_block's should overlap by exactly overlap, and *out_blocks
-        # should be exactly adjacent.  max_block_mem and overlap should be chosen to
-        # give a block shape > 2*overlap.
-        fields = ['src_in_block', 'ref_in_block', 'src_out_block', 'ref_out_block']
-        # *in_blocks overlap, *out_blocks don't
-        overlaps = [overlap, overlap, (0, 0), (0, 0)]
-        if rp.proc_crs is ProcCrs.ref:
-            # the src_in_block can overlap by more than overlap, the other blocks
-            # should be exact
-            compares = [np.less_equal, np.equal, np.equal, np.equal]
-        else:
-            # the ref_in_block can overlap by more than overlap, the other blocks
-            # should be exact
-            compares = [np.equal, np.less_equal, np.equal, np.equal]
-
-        block_pairs = list(
-            rp._block_pairs(overlap=overlap, max_block_mem=max_block_mem)
-        )
-        prev_block_pair = block_pairs[0]
-        for block_pair in block_pairs[1:]:
-            if block_pair.band_i == prev_block_pair.band_i:
-                # compare each block type with its previous version
-                for field, overlap, compare in zip(
-                    fields, overlaps, compares, strict=True
-                ):
-                    block = getattr(block_pair, field)
-                    prev_block = getattr(prev_block_pair, field)
-                    compare_blocks(block, prev_block, overlap, compare)
+    for proc_crs in [ProcCrs.ref, ProcCrs.src]:
+        with RasterPairReader(src_file, ref_file, proc_crs=proc_crs) as rp:
+            # Create lists of compare_blocks() parameters for each block in a BlockPair.
+            fields = ['src_in_block', 'ref_in_block', 'src_out_block', 'ref_out_block']
+            # source / reference resolution scale
+            scale = np.array(rp._src_im.res) / np.array(rp._ref_im.res)
+            if rp.proc_crs is ProcCrs.ref:
+                # the src_in_block can overlap by more than overlap (scaled to ref
+                # space), the other blocks should be exact
+                overlaps = [overlap / scale, overlap, (0, 0), (0, 0)]
+                compares = [np.less_equal, np.equal, np.equal, np.equal]
             else:
-                assert block_pair.band_i == prev_block_pair.band_i + 1
-            prev_block_pair = block_pair
+                # the ref_in_block can overlap by more than overlap (scaled to src
+                # space), the other blocks should be exact
+                overlaps = [overlap, overlap * scale, (0, 0), (0, 0)]
+                compares = [np.equal, np.less_equal, np.equal, np.equal]
+
+            block_pairs = list(
+                rp._block_pairs(overlap=overlap, max_block_mem=max_block_mem)
+            )
+            prev_bp = block_pairs[0]
+            for bp in block_pairs[1:]:
+                if bp.band_i == prev_bp.band_i:
+                    # compare each block type with its previous version
+                    for field, overlap, compare in zip(
+                        fields, overlaps, compares, strict=True
+                    ):
+                        block = getattr(bp, field)
+                        prev_block = getattr(prev_bp, field)
+                        compare_blocks(block, prev_block, overlap, compare)
+                else:
+                    assert bp.band_i == prev_bp.band_i + 1
+                prev_bp = bp
 
 
 @pytest.mark.parametrize(
@@ -267,62 +271,57 @@ def test_block_pair_io(
     src_file: Path = request.getfixturevalue(src_file)
     ref_file: Path = request.getfixturevalue(ref_file)
 
-    # test re-projections from src->ref->src and ref->src->ref
-    for reproj_ra in ['src', 'ref']:
-        with (
-            RasterPairReader(src_file, ref_file) as rp,
-            MemoryFile() as src_mf,
-            MemoryFile() as ref_mf,
-        ):
-            if rp.proc_crs is ProcCrs.ref:
-                ref_sampling = Resampling.average
-                src_sampling = Resampling.cubic_spline
-            else:
-                ref_sampling = Resampling.cubic_spline
-                src_sampling = Resampling.average
+    # test re-projections from src->ref->src when proc_crs is ref, and from
+    # ref->src->ref when proc_crs is src, to simulate RefSpaceModel and SrcSpaceModel
+    # reprojections
+    with ExitStack() as stack:
+        for proc_crs in [ProcCrs.src, ProcCrs.ref]:
+            rp = stack.enter_context(
+                RasterPairReader(src_file, ref_file, proc_crs=proc_crs)
+            )
+            src_mf = stack.enter_context(MemoryFile())
+            ref_mf = stack.enter_context(MemoryFile())
+            downsampling = Resampling.average
+            upsampling = Resampling.cubic_spline
+            ref_sampling = utils.get_resampling(
+                rp._src_im.res, rp._ref_im.res, downsampling, upsampling
+            )
+            src_sampling = utils.get_resampling(
+                rp._ref_im.res, rp._src_im.res, downsampling, upsampling
+            )
 
             with (
-                src_mf.open(**rp._src_im.meta) as test_src_ds,
-                ref_mf.open(**rp._ref_im.meta) as test_ref_ds,
+                src_mf.open(**rp._src_im.meta) as test_src_im,
+                ref_mf.open(**rp._ref_im.meta) as test_ref_im,
             ):
-                # read, reproject and write block pairs to their respective datasets
-                for block_pair in rp._block_pairs(
-                    overlap=overlap, max_block_mem=max_block_mem
-                ):
-                    src_ra, ref_ra = rp._read(block_pair)
-                    if reproj_ra == 'src':
-                        src_ra_ = src_ra.reproject_like(ref_ra, resampling=ref_sampling)
-                        src_ra__ = src_ra_.reproject_like(
+                for bp in rp._block_pairs(overlap=overlap, max_block_mem=max_block_mem):
+                    src_ra, ref_ra = rp._read(bp)
+
+                    if proc_crs is ProcCrs.ref:
+                        ref_ra_ = src_ra.reproject_like(ref_ra, resampling=ref_sampling)
+                        src_ra_ = ref_ra_.reproject_like(
                             src_ra, resampling=src_sampling
                         )
-                        src_ra_.to_rio_dataset(
-                            test_ref_ds, window=block_pair.ref_out_block
-                        )
-                        src_ra__.to_rio_dataset(
-                            test_src_ds, window=block_pair.src_out_block
-                        )
+                        ref_ra_.to_rio_dataset(test_ref_im, window=bp.ref_out_block)
+                        src_ra_.to_rio_dataset(test_src_im, window=bp.src_out_block)
                     else:
-                        ref_ra_ = ref_ra.reproject_like(src_ra, resampling=src_sampling)
-                        ref_ra__ = ref_ra_.reproject_like(
+                        src_ra_ = ref_ra.reproject_like(src_ra, resampling=src_sampling)
+                        ref_ra_ = src_ra_.reproject_like(
                             ref_ra, resampling=ref_sampling
                         )
-                        ref_ra__.to_rio_dataset(
-                            test_ref_ds, window=block_pair.ref_out_block
-                        )
-                        ref_ra_.to_rio_dataset(
-                            test_src_ds, window=block_pair.src_out_block
-                        )
+                        src_ra_.to_rio_dataset(test_src_im, window=bp.src_out_block)
+                        ref_ra_.to_rio_dataset(test_ref_im, window=bp.ref_out_block)
 
             # test the written datasets contain same valid areas as the original
             # source and reference files
-            with rio.open(src_file, 'r') as src_ds, src_mf.open() as test_src_ds:
-                src_mask = src_ds.read_masks(indexes=1).view('bool')
-                test_mask = test_src_ds.read_masks(indexes=1).view('bool')
+            with rio.open(src_file, 'r') as src_im, src_mf.open() as test_src_im:
+                src_mask = src_im.read_masks(indexes=1).view('bool')
+                test_mask = test_src_im.read_masks(indexes=1).view('bool')
                 assert (test_mask[src_mask]).all()
 
-            with rio.open(ref_file, 'r') as ref_ds, ref_mf.open() as test_ref_ds:
-                ref_mask = ref_ds.read_masks(indexes=1).view('bool')
-                test_mask = test_ref_ds.read_masks(indexes=1).view('bool')
+            with rio.open(ref_file, 'r') as ref_im, ref_mf.open() as test_ref_im:
+                ref_mask = ref_im.read_masks(indexes=1).view('bool')
+                test_mask = test_ref_im.read_masks(indexes=1).view('bool')
                 assert (test_mask[ref_mask]).all()
 
 
@@ -346,12 +345,12 @@ def test_crs(src_file: str, ref_file: str, proc_crs: ProcCrs, request: FixtureRe
     with RasterPairReader(src_file, ref_file, proc_crs=proc_crs) as rp:
         for block_pair in rp._block_pairs():
             src_ra, ref_ra = rp._read(block_pair)
-            src_ra_ = src_ra.reproject_like(ref_ra, resampling=Resampling.bilinear)
-            assert ref_ra.array == pytest.approx(src_ra_.array, abs=1, nan_ok=True)
-            assert np.all(src_ra_.mask()[ref_ra.mask()])
-            ref_ra_ = ref_ra.reproject_like(src_ra, resampling=Resampling.bilinear)
-            assert src_ra.array == pytest.approx(ref_ra_.array, abs=1, nan_ok=True)
-            assert np.all(ref_ra_.mask()[src_ra.mask()])
+            ref_ra_ = src_ra.reproject_like(ref_ra, resampling=Resampling.bilinear)
+            assert ref_ra.array == pytest.approx(ref_ra_.array, abs=1, nan_ok=True)
+            assert np.all(ref_ra_.mask()[ref_ra.mask()])
+            src_ra_ = ref_ra.reproject_like(src_ra, resampling=Resampling.bilinear)
+            assert src_ra.array == pytest.approx(src_ra_.array, abs=1, nan_ok=True)
+            assert np.all(src_ra_.mask()[src_ra.mask()])
 
 
 def test_url():
