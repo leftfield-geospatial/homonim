@@ -22,12 +22,7 @@ from homonim.enums import Driver, Model, ProcCrs
 from homonim.fuse import RasterFuse
 from homonim.stats import ParamStats
 
-# Add a NullHandler to the package logger to hide logs by default.  Applications can then add
-# their own handler(s).
+# Add a NullHandler to the package logger to hide logs by default.  Applications can
+# then add their own handler(s).
 log = logging.getLogger(__name__)
 log.addHandler(logging.NullHandler())
-
-if '__file__' in globals():
-    root_path = pathlib.Path(__file__).absolute().parents[1]
-else:
-    root_path = pathlib.Path(os.getcwd())
