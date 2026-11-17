@@ -169,21 +169,21 @@ def test_compare(runner: CliRunner, fuse_defaults: FuseDefaults):
         src_cmp_str = """float_100cm_src.tif:
            Band    r²   RMSE   rRMSE   N
     ----------- ----- ------ ------- ---
-    Ref. band 1 1.000  0.000   0.000 144
-           Mean 1.000  0.000   0.000 144"""
+    Ref. band 1 1.000  0.000   0.000 172
+           Mean 1.000  0.000   0.000 172"""
         assert str_contain_no_space(src_cmp_str, result.output)
 
         corr_cmp_str = """float_100cm_src_CORR.tif:
            Band      r²   RMSE   rRMSE   N
     ----------- ----- ------ ------- ---
-    Ref. band 1 1.000  0.000   0.000 144
-           Mean 1.000  0.000   0.000 144"""
+    Ref. band 1 1.000  0.000   0.000 172
+           Mean 1.000  0.000   0.000 172"""
         assert str_contain_no_space(corr_cmp_str, result.output)
 
         sum_cmp_str = """File    r²   RMSE   rRMSE   N
     ------------------------ ----- ------ ------- ---
-         float_100cm_src.tif 1.000  0.000   0.000 144
-    float_100cm_src_CORR.tif 1.000  0.000   0.000 144"""
+         float_100cm_src.tif 1.000  0.000   0.000 172
+    float_100cm_src_CORR.tif 1.000  0.000   0.000 172"""
         assert str_contain_no_space(sum_cmp_str, result.output)
 
 
@@ -569,6 +569,6 @@ def test_src_ref_cmp_bands(
 
     test_str = """File    r²   RMSE   rRMSE   N
 ------------------------ ----- ------ ------- ---
-     float_100cm_rgb.tif 1.000  0.000   0.000 144
-float_100cm_rgb_CORR.tif 1.000  0.000   0.000 144"""
+     float_100cm_rgb.tif 1.000  0.000   0.000 172
+float_100cm_rgb_CORR.tif 1.000  0.000   0.000 172"""
     assert str_contain_no_space(test_str, result.output)

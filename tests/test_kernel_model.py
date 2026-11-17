@@ -301,8 +301,8 @@ def test_ref_masking(
             param_ra, nodata=None, resampling=Resampling.average
         )
         # ref pixels fully covered by src
-        mask = (mask_ra.array >= 1).astype('uint8', copy=False)
-        mask_ra.array = cv2.erode(mask, np.ones(np.add(kernel_shape, 2)))
+        mask = (mask_ra.array >= 1).view('uint8')
+        mask_ra.array = cv2.erode(mask, np.ones(np.add(kernel_shape, 2)), borderValue=0)
         test_mask_ra = mask_ra.reproject_like(
             src_ra, nodata=None, resampling=Resampling.nearest
         )
@@ -339,7 +339,7 @@ def test_src_masking(
         assert src_mask[param_mask].all()
         # find and test against the expected mask
         test_mask = cv2.erode(
-            src_mask.astype('uint8'), np.ones(np.array(kernel_shape) + 2)
+            src_mask.view('uint8'), np.ones(np.add(kernel_shape, 2)), borderValue=0
         )
         assert (test_mask == param_mask).all()
 

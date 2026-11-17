@@ -22,7 +22,6 @@ import yaml
 from pytest import FixtureRequest
 from rasterio.enums import MaskFlags
 from rasterio.features import shapes
-from rasterio.vrt import WarpedVRT
 
 from homonim import utils
 from homonim.enums import Driver, Model, ProcCrs
@@ -110,11 +109,7 @@ def test_corr_content(
         raster_fuse.process(corr_file, model, kernel_shape, max_block_mem=max_block_mem)
     assert corr_file.exists()
 
-    # open src_file in a WarpedVRT to reproject it North-up (if necessary)
-    with (
-        WarpedVRT(rio.open(src_file, 'r')) as src_ds,
-        rio.open(corr_file, 'r') as corr_ds,
-    ):
+    with rio.open(src_file, 'r') as src_ds, rio.open(corr_file, 'r') as corr_ds:
         src_array = src_ds.read(indexes=1)
         src_mask = src_ds.dataset_mask().astype('bool', copy=False)
         out_array = corr_ds.read(indexes=1)

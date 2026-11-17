@@ -88,17 +88,20 @@ def param_file_tile_10x20() -> Path:
 
 @pytest.fixture
 def array_byte() -> np.ndarray:
-    """2D uint8 gradient image with a single pixel nodata border."""
-    array = np.array(range(1, 201), dtype='uint8').reshape(20, 10)
+    """2D uint8 gradient image with a partial single pixel nodata border."""
+    array = np.array(range(10, 210), dtype='uint8').reshape(20, 10)
+    # set some of the boundary pixels to nodata
     nodata = get_nodata(array.dtype)
-    array[:, [0, -1]] = nodata
-    array[[0, -1], :] = nodata
+    array[0, :5] = nodata
+    array[:10, 0] = nodata
+    array[-1, 5:] = nodata
+    array[10:, -1] = nodata
     return array
 
 
 @pytest.fixture
 def array_100cm_float(array_byte: np.ndarray) -> np.ndarray:
-    """2D float32 gradient image with a single pixel nodata border."""
+    """2D float32 gradient image with a partial single pixel nodata border."""
     array = array_byte.astype('float32')
     array[array == get_nodata(array_byte.dtype)] = get_nodata(array.dtype)
     return array
@@ -106,11 +109,8 @@ def array_100cm_float(array_byte: np.ndarray) -> np.ndarray:
 
 @pytest.fixture
 def array_50cm_float(array_100cm_float) -> np.ndarray:
-    """array_100cm_float 2x upsampled with a double pixel nodata border."""
+    """array_100cm_float 2x upsampled with a partial double pixel nodata border."""
     array = np.kron(array_100cm_float, np.ones((2, 2), dtype=array_100cm_float.dtype))
-    nodata = get_nodata(array.dtype)
-    array[:, [0, 1, -2, -1]] = nodata
-    array[[0, 1, -2, -1], :] = nodata
     return array
 
 
@@ -276,9 +276,12 @@ def ref_file_100cm_float(tmp_path: Path, array_100cm_float, transform_100cm) -> 
     array = np.pad(array_100cm_float, 1, 'constant', constant_values=nodata)
     transform = transform_100cm * Affine.translation(-1, -1)
 
-    profile = create_profile(array, transform)
+    # profile = create_profile(array, transform)
+    # with rio.open(file, 'w', **profile) as ds:
+    #     ds.write(array, indexes=1)
+    profile = create_profile(array_100cm_float, transform_100cm)
     with rio.open(file, 'w', **profile) as ds:
-        ds.write(array, indexes=1)
+        ds.write(array_100cm_float, indexes=1)
     return file
 
 
@@ -302,9 +305,12 @@ def ref_file_50cm_float(tmp_path: Path, array_50cm_float, transform_50cm) -> Pat
     array = np.pad(array_50cm_float, 1, 'constant', constant_values=nodata)
     transform = transform_50cm * Affine.translation(-1, -1)
 
-    profile = create_profile(array, transform)
+    # profile = create_profile(array, transform)
+    # with rio.open(file, 'w', **profile) as ds:
+    #     ds.write(array, indexes=1)
+    profile = create_profile(array_50cm_float, transform_50cm)
     with rio.open(file, 'w', **profile) as ds:
-        ds.write(array, indexes=1)
+        ds.write(array_50cm_float, indexes=1)
     return file
 
 
@@ -328,9 +334,12 @@ def ref_file_45cm_float(tmp_path: Path, array_45cm_float, transform_45cm) -> Pat
     array = np.pad(array_45cm_float, 1, 'constant', constant_values=nodata)
     transform = transform_45cm * Affine.translation(-1, -1)
 
-    profile = create_profile(array, transform)
+    # profile = create_profile(array, transform)
+    # with rio.open(file, 'w', **profile) as ds:
+    #     ds.write(array, indexes=1)
+    profile = create_profile(array_45cm_float, transform_45cm)
     with rio.open(file, 'w', **profile) as ds:
-        ds.write(array, indexes=1)
+        ds.write(array_45cm_float, indexes=1)
     return file
 
 
@@ -426,8 +435,8 @@ def ref_file_wgs84_100cm_float(
         src_nodata=nodata,
         resampling=Resampling.bilinear,
     )
-    array = np.pad(array, 1, 'constant', constant_values=nodata)
-    transform *= Affine.translation(-1, -1)
+    # array = np.pad(array, 1, 'constant', constant_values=nodata)
+    # transform *= Affine.translation(-1, -1)
 
     profile = create_profile(array, transform, crs=crs)
     with rio.open(file, 'w', **profile) as ds:

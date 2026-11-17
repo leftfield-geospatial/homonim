@@ -170,10 +170,10 @@ def test_cli(runner: CliRunner, file_rgb_50cm_float, file_rgb_100cm_float):
     result = runner.invoke(cli, cli_str.split())
     assert result.exit_code == 0
 
-    res_str = """Ref. band 1 1.000  0.000  0.000   144
-Ref. band 2 1.000  0.000  0.000   144
-Ref. band 3 1.000  0.000  0.000   144
-Mean   1.000  0.000  0.000   144"""
+    res_str = """Ref. band 1 1.000  0.000  0.000   172
+Ref. band 2 1.000  0.000  0.000   172
+Ref. band 3 1.000  0.000  0.000   172
+Mean   1.000  0.000  0.000   172"""
     assert str_contain_no_space(res_str, result.output)
 
 
