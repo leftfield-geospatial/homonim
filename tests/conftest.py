@@ -276,12 +276,9 @@ def ref_file_100cm_float(tmp_path: Path, array_100cm_float, transform_100cm) -> 
     array = np.pad(array_100cm_float, 1, 'constant', constant_values=nodata)
     transform = transform_100cm * Affine.translation(-1, -1)
 
-    # profile = create_profile(array, transform)
-    # with rio.open(file, 'w', **profile) as ds:
-    #     ds.write(array, indexes=1)
-    profile = create_profile(array_100cm_float, transform_100cm)
+    profile = create_profile(array, transform)
     with rio.open(file, 'w', **profile) as ds:
-        ds.write(array_100cm_float, indexes=1)
+        ds.write(array, indexes=1)
     return file
 
 
@@ -305,12 +302,9 @@ def ref_file_50cm_float(tmp_path: Path, array_50cm_float, transform_50cm) -> Pat
     array = np.pad(array_50cm_float, 1, 'constant', constant_values=nodata)
     transform = transform_50cm * Affine.translation(-1, -1)
 
-    # profile = create_profile(array, transform)
-    # with rio.open(file, 'w', **profile) as ds:
-    #     ds.write(array, indexes=1)
-    profile = create_profile(array_50cm_float, transform_50cm)
+    profile = create_profile(array, transform)
     with rio.open(file, 'w', **profile) as ds:
-        ds.write(array_50cm_float, indexes=1)
+        ds.write(array, indexes=1)
     return file
 
 
@@ -334,12 +328,9 @@ def ref_file_45cm_float(tmp_path: Path, array_45cm_float, transform_45cm) -> Pat
     array = np.pad(array_45cm_float, 1, 'constant', constant_values=nodata)
     transform = transform_45cm * Affine.translation(-1, -1)
 
-    # profile = create_profile(array, transform)
-    # with rio.open(file, 'w', **profile) as ds:
-    #     ds.write(array, indexes=1)
-    profile = create_profile(array_45cm_float, transform_45cm)
+    profile = create_profile(array, transform)
     with rio.open(file, 'w', **profile) as ds:
-        ds.write(array_45cm_float, indexes=1)
+        ds.write(array, indexes=1)
     return file
 
 
@@ -435,8 +426,8 @@ def ref_file_wgs84_100cm_float(
         src_nodata=nodata,
         resampling=Resampling.bilinear,
     )
-    # array = np.pad(array, 1, 'constant', constant_values=nodata)
-    # transform *= Affine.translation(-1, -1)
+    array = np.pad(array, 1, 'constant', constant_values=nodata)
+    transform *= Affine.translation(-1, -1)
 
     profile = create_profile(array, transform, crs=crs)
     with rio.open(file, 'w', **profile) as ds:
